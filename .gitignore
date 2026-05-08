@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Claude Code agent folder (may contain credentials/tokens)
+.claude/settings.local.json
+
