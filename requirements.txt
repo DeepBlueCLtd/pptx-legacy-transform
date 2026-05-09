@@ -1,0 +1,4 @@
+# Single runtime dependency for the migration pipeline.
+# Pinned with `~=` per research.md R12 so air-gapped wheelhouse rebuilds
+# stay predictable. Tests use only the standard library (FR-017).
+python-pptx ~= 1.0

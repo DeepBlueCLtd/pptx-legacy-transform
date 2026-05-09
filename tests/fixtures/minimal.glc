@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GAPS_Lite_configuration>
+  <data_source>
+    <filename>W:\AAAC\Nordik\gram12.PNG</filename>
+    <bitmap_crop_values>
+      <top_crop>1</top_crop>
+      <bottom_crop>271</bottom_crop>
+    </bitmap_crop_values>
+  </data_source>
+  <playback>
+    <time_offset>1234567890</time_offset>
+  </playback>
+  <settings>
+    <lofar>
+      <bandwidth>400</bandwidth>
+    </lofar>
+  </settings>
+</GAPS_Lite_configuration>
