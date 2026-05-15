@@ -85,26 +85,40 @@ Open `extracted.csv` in Excel. The reviewer:
 
 ```bash
 python generate_dita.py --csv extracted.csv \
-                        --out output/ \
-                        --image-root tests/fixtures/sample-content
+                        --out dita/ \
+                        --image-root tests/fixtures/sample-content \
+                        --clean
 ```
 
-Expected output under `output/`:
+Expected output under `dita/`:
 
 - `main/<chapter-slug>/gram_NN_lofarM.dita` for every GLC row
+- `main/<chapter-slug>/gram_NN_lofarM.png` — the referenced image
+  asset, copied and renamed to match the topic's stem (FR-022). For
+  WAV-stub rows the copied file is the `.wav`; for analysis rows it is
+  whatever extension the source carried.
 - `main/<chapter-slug>/gram_NN_analysis.dita` for every analysis row
-- `progress-test-N/...` flat trees for any test publications
+  (plus the matching renamed asset)
+- `progress-test-N/...` flat trees for any test publications, with
+  topics and assets sitting side-by-side
 - `ditamaps/main.ditamap` plus one ditamap per progress test
-- `manifest.txt` listing every file produced
+- `manifest.txt` listing every file produced (topics + assets +
+  ditamaps)
 - `skipped.txt` if any rows were skipped (e.g. `wav_treatment=TBD`)
+
+If a referenced asset is missing on disk, the generator logs a warning
+and still emits the topic with the intended local href. Dropping the
+asset in at the expected source path and re-running resolves the
+dangling reference without churning the topic XML.
 
 ## 7. Verify idempotency
 
-Run the same generator command a second time. Expect output files to
-be byte-identical to the first run (SC-004). On Linux:
+Run the same generator command a second time. Expect output files —
+including the copied assets — to be byte-identical to the first run
+(SC-004). On Linux:
 
 ```bash
-md5sum -c <(find output -type f -exec md5sum {} \; > checksums.txt; cat checksums.txt)
+md5sum -c <(find dita -type f -exec md5sum {} \; > checksums.txt; cat checksums.txt)
 ```
 
 On Windows, `certutil -hashfile` per file or a `fc` recursive compare.
@@ -120,14 +134,33 @@ In the publishing project, build:
 
 Both profiles must build clean (SC-005).
 
-## 9. Run the orchestrator (Windows only)
+## 9. Optional: HTML preview via DITA-OT
+
+`publish_html.py` automates the DITA-OT invocation documented in the
+README's "Publishing to HTML (optional)" section. It stages a copy of
+`dita/` under `.dita-build/`, injects the DITA Topic and Map DOCTYPEs
+that DITA-OT requires (the source DITA tree omits these per the §0
+contract — Oxygen handles validation), promotes each ditamap to the
+staged root with hrefs rewritten so DITA-OT does not bury the output,
+and writes HTML5 to `html/<ditamap-stem>/`.
+
+```bash
+python publish_html.py --dita-ot /path/to/dita-ot-4.2.4
+```
+
+The script is a development convenience; Oxygen remains the
+production publishing path (FR-021). DITA-OT is not bundled — the
+maintainer transfers it across the air-gap manually and supplies its
+path via `--dita-ot`.
+
+## 10. Run the orchestrator (Windows only)
 
 ```bat
 run_pipeline.bat W:\training\content
 ```
 
 The wrapper runs `extract_to_csv.py`, pauses for CSV review, then runs
-`generate_dita.py` against `output/`. Any non-zero exit from either
+`generate_dita.py` against `dita/`. Any non-zero exit from either
 stage propagates to the wrapper's exit code.
 
 ---
