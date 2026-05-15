@@ -55,7 +55,7 @@ Substitutions:
 | `NN` | `gram_id` numeric portion (zero-padded as it appears) |
 | `M` | `sequence` |
 | `vessel_name` | CSV column; if empty, the entire `<ph>` element is omitted |
-| `image_href` | `png_path` resolved against `--image-root`, expressed relative to the topic's directory |
+| `image_href` | The asset is copied next to the topic and renamed to match the topic's stem (see §10). The href is the bare local filename, e.g. `gram_12_lofar1.png`. |
 | `time_end` | CSV column; if empty, literal `""` is written |
 | `freq_end` | CSV column; if empty, literal `""` is written |
 
@@ -92,7 +92,7 @@ Produced for every CSV row whose `wav_treatment` is `gaps-lite`.
   <body>
     <section>
       <note>This gram requires GAPS-Lite playback.</note>
-      <p><xref href="{wav_href}" format="wav" scope="external">{display_text}</xref></p>
+      <p><xref href="{wav_href}" format="wav" scope="local">{display_text}</xref></p>
     </section>
   </body>
   <related-links>
@@ -101,12 +101,16 @@ Produced for every CSV row whose `wav_treatment` is `gaps-lite`.
 </topic>
 ```
 
-`wav_href` is taken from the row's `link_href` column when `glc_path` is
-empty and `link_href` ends in `.wav`; the `<xref>` element's visible
-text comes from `display_text`. The extractor never conflates the two:
-`display_text` is the human-readable label exactly as it appeared in
-the PPTX run; `link_href` is the raw URI. (See R8 and the WAV-row rule
-in `csv-schema.md`.)
+The WAV referenced by the row's `link_href` column (or `glc_path` as a
+fallback) is copied next to the topic and renamed to match the topic's
+stem (see §10). `wav_href` is therefore the bare local filename, e.g.
+`gram_05_lofar1.wav`. The `<xref>` element's visible text comes from
+`display_text`. The extractor never conflates the two: `display_text`
+is the human-readable label exactly as it appeared in the PPTX run;
+`link_href` is the raw URI used to locate the source asset.
+`scope="local"` records that the WAV sits inside the publication, even
+though the player is invoked externally via GAPS-Lite. (See R8 and the
+WAV-row rule in `csv-schema.md`.)
 
 ## 4. WAV row with `wav_treatment="screenshot"`
 
@@ -196,12 +200,15 @@ silently widens to three digits.
 ├── main/
 │   ├── {chapter-slug-1}/
 │   │   ├── gram_NN_lofarM.dita
+│   │   ├── gram_NN_lofarM.png   ← asset copied + renamed (see §10)
 │   │   ├── gram_NN_analysis.dita
+│   │   ├── gram_NN_analysis.png
 │   │   └── ...
 │   └── {chapter-slug-2}/
 │       └── ...
 ├── progress-test-1/
 │   ├── gram_NN_lofarM.dita
+│   ├── gram_NN_lofarM.png
 │   └── gram_NN_analysis.dita
 ├── progress-test-2/
 │   └── ...
@@ -212,3 +219,70 @@ silently widens to three digits.
 ├── manifest.txt
 └── skipped.txt   (only when at least one row was skipped)
 ```
+
+## 10. Asset copy and rename
+
+The DITA-writing phase is responsible for materialising a
+self-contained publication tree. For every topic that references an
+external asset (PNG screenshot, WAV file, or analysis sheet), the
+generator:
+
+1. Resolves the source path as `--image-root` joined with the relevant
+   CSV column (`png_path` for §1 and §2 topics; `link_href` then
+   `glc_path` as fallback for §3 WAV-stub topics).
+2. Copies the source file into the same directory as the topic.
+3. Renames the copy to `{topic_stem}{original_extension}`, where
+   `topic_stem` is the topic's filename without its `.dita` suffix.
+   For example, the asset referenced by `gram_12_lofar1.dita` is copied
+   to `gram_12_lofar1.png` (or `.wav`, `.docx`, etc. depending on the
+   source extension).
+4. Uses the bare local filename as the topic's `href`. References
+   never traverse out of the chapter directory.
+
+Renaming to the topic stem keeps the topic↔asset relationship self-
+evident on disk and prevents collisions when two grams within the same
+chapter happen to reference assets with the same original filename
+(e.g. both have a `Lofar 1.png`).
+
+Asset copies use `shutil.copy2`, which preserves the source's modification
+time. Two consecutive generator runs against an unchanged source tree
+therefore produce byte- and stat-identical assets, satisfying the
+idempotency contract (R9).
+
+If a referenced source file is missing, the generator logs a warning
+and emits the topic with the *intended* local href anyway. This keeps
+the topic XML stable across runs: dropping the asset into the source
+tree at the expected path and re-running the generator resolves the
+dangling reference without touching the topic file.
+
+The manifest (`§7`) lists every file the generator writes — topics,
+ditamaps, **and** copied assets — relative to `{out}`.
+
+## 11. HTML preview (development only)
+
+The DITA tree at `{out}` is the production deliverable, consumed by
+Oxygen XML Author for publishing. For development sanity-checks, the
+project ships `publish_html.py`, which renders the same tree to HTML5
+using DITA-OT. The HTML output is not delivered to the air-gapped
+target — Oxygen remains the production publishing path (FR-021).
+
+`publish_html.py` operates on `{out}` non-destructively:
+
+1. Stages a copy of `{out}` under `.dita-build/` and prepends the OASIS
+   DITA Topic and Map DOCTYPE declarations (the source DITA omits
+   DOCTYPEs per §0; Oxygen handles validation at publish time, but
+   DITA-OT requires them to classify elements).
+2. Promotes each ditamap from `ditamaps/{name}.ditamap` to
+   `.dita-build/{name}.ditamap`, rewriting `href="../…"` entries so
+   that all topic references descend into the staged tree from the
+   ditamap's directory. Without this step DITA-OT preserves the
+   parent-walking path structure and buries the HTML under a deep
+   subdirectory.
+3. Invokes DITA-OT once per staged ditamap with
+   `--format=html5 --processing-mode=lax`, writing to
+   `html/{ditamap-stem}/`.
+4. Removes the staging directory once publishing completes.
+
+The script's only inputs are `--dita` (default `dita/`), `--out`
+(default `html/`), and `--dita-ot` (path to a DITA-OT installation
+that the maintainer transfers across the air-gap per FR-021).

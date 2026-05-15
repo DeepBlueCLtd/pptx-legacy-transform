@@ -321,9 +321,9 @@ produces the expected output tree on continue.
 - **FR-010**: The DITA generator MUST emit `gram_xx_lofarN.dita` for each
   GLC row, including a `gram-config` table with `time-start=0`,
   `time-end` from CSV, `freq-start=0`, `freq-end` from CSV, an image
-  reference resolved against the image root, a related-link back to the
-  gram index, and a title in which the vessel name is wrapped in
-  `<ph audience="-trainee">`.
+  reference (a topic-relative local filename — see FR-022), a
+  related-link back to the gram index, and a title in which the vessel
+  name is wrapped in `<ph audience="-trainee">`.
 - **FR-011**: The DITA generator MUST emit `gram_xx_analysis.dita` for
   each analysis row, marked instructor-only, referencing the analysis
   image, and MUST emit a stub topic with a manual-review marker for WAV
@@ -390,7 +390,27 @@ produces the expected output tree on continue.
   instructions and invokes DITA-OT as an ad-hoc step after generation,
   separately from the automated pipeline. The README MUST also state
   that Oxygen remains the production publishing path and that the
-  DITA-OT preview is for inspection only.
+  DITA-OT preview is for inspection only. The project MUST ship a
+  `publish_html.py` helper that automates the DITA-OT invocation
+  (DOCTYPE injection into a staging copy, per-ditamap rendering, output
+  under a root-level `html/` tree); the script depends on Python
+  standard library only and takes the DITA-OT installation path as a
+  command-line argument.
+- **FR-022**: The DITA generator MUST produce self-contained
+  publication trees. For every topic that references an external asset
+  (PNG, WAV, analysis sheet) the generator MUST copy the source asset
+  into the same directory as the topic, rename the copy to match the
+  topic's filename stem (e.g. the asset referenced by
+  `gram_12_lofar1.dita` is copied to `gram_12_lofar1.png`), and emit
+  the bare local filename as the topic's `href`. References MUST NOT
+  traverse out of the chapter directory. Asset copies MUST preserve
+  source modification time so that the idempotency requirement
+  (FR-013) holds for the asset tree as well as the topic XML. When a
+  referenced source asset is missing, the generator MUST log a warning
+  and emit the topic with its intended local href anyway, so that
+  dropping the asset into the source tree at the expected path and
+  re-running the generator resolves the dangling reference without
+  touching the topic file.
 
 ### Key Entities *(include if feature involves data)*
 

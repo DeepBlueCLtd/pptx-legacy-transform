@@ -16,8 +16,8 @@ echo.
 echo Review extracted.csv now. Press any key to continue with DITA generation.
 pause > nul
 
-echo [Stage 4] Generating DITA into output\ ...
-python generate_dita.py --csv extracted.csv --out output\ --image-root %1
+echo [Stage 4] Generating DITA into dita\ ...
+python generate_dita.py --csv extracted.csv --out dita\ --image-root %1
 if errorlevel 1 goto error
 
 goto end
@@ -29,5 +29,5 @@ exit /b 1
 
 :end
 echo.
-echo Pipeline complete. See output\ for DITA topics and ditamaps.
+echo Pipeline complete. See dita\ for DITA topics and ditamaps.
 exit /b 0

@@ -56,7 +56,8 @@ rebuilds remain predictable.
 | `mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
-| `generate_dita.py` | Consume the signed-off CSV and emit DITA topics + ditamaps (Story 1, MVP). |
+| `generate_dita.py` | Consume the signed-off CSV and emit DITA topics, copied assets, and ditamaps (Story 1, MVP). |
+| `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
 | `run_pipeline.bat` | Windows orchestrator: extract → manual review → generate (Story 6). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
@@ -77,7 +78,7 @@ python introspect_pptx.py --input mock_instructor.pptx --out mock_report.txt
 python extract_to_csv.py --input-root path/to/content --out extracted.csv
 # ...review extracted.csv in Excel...
 python generate_dita.py --csv extracted.csv \
-                        --out output/ \
+                        --out dita/ \
                         --image-root path/to/content
 ```
 
@@ -114,9 +115,18 @@ A more detailed walkthrough lives in
    detection happy.
 
 5. **Stage 5 — DITA generation.** `generate_dita.py` consumes the
-   signed-off CSV and writes the DITA tree, ditamaps, manifest, and
-   skipped report. Output is deterministic: re-running the same CSV
-   produces byte-identical files.
+   signed-off CSV and writes a self-contained DITA tree: each topic
+   under `dita/<publication>/<chapter>/`, every referenced asset (PNG,
+   WAV, analysis sheet) copied next to its topic and renamed to match
+   the topic's stem (so `gram_12_lofar1.dita` sits beside
+   `gram_12_lofar1.png` and the topic's `href` is just that filename —
+   no `../` traversal). Ditamaps, manifest, and skipped report are
+   written alongside. Output is deterministic: re-running the same CSV
+   produces byte-identical files (including the copied assets). If a
+   referenced asset is missing on disk, the generator logs a warning
+   and still emits the topic with the intended local href — dropping
+   the asset in at the expected source path and re-running resolves
+   the dangling reference without churning the topic XML.
 
 6. **Stage 6 — Build verification (Oxygen).** Build both the instructor
    profile (no audience exclusion) and the trainee profile (excluding
@@ -196,11 +206,47 @@ When a test fails on the air-gapped network:
 | `NotImplementedError: Shape grouping is not implemented yet.` | Expected pre-handover (FR-015). | Run introspection against a real instructor PPTX, answer the five questions in the stub's docstring, then implement the function. |
 | `extract_to_csv.py` exits 0 with empty CSV. | `--input-root` does not contain any `.pptx`. | Verify the path; the walker is recursive. |
 | CSV opens with garbled non-ASCII vessel names in Excel. | The file lost its BOM during Save As. | Re-export from Excel via *File → Save As → CSV UTF-8*. |
-| `generate_dita.py` writes some topics but Oxygen reports image not found. | `png_path` is resolved relative to `--image-root` but the file does not exist on disk. | Check the path in the CSV row, or pass a different `--image-root`. |
+| `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | `GLC missing bottom_crop` / `bandwidth` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `freq_end` directly or accept the empty defaults. |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
 | `WAV link; treatment required` warning. | A WAV-targeted link with no `wav_treatment`. | Author sets `wav_treatment` to one of `screenshot`, `gaps-lite`, or `TBD`. |
 | Generator produces `skipped.txt` rows. | `wav_treatment=TBD`, empty, or unknown (R8). | Either set the treatment to `screenshot` / `gaps-lite`, or accept the skip. |
+
+## Publishing to HTML (optional)
+
+DITA-OT renders the generated DITA tree to HTML5 for development
+sanity-checks. **Oxygen XML Author remains the production publishing
+path** — the DITA-OT preview is for inspection only, and is not part of
+the automated pipeline.
+
+DITA-OT and its Java runtime are **not bundled** with this project. The
+maintainer transfers the installers across the air-gap manually:
+
+1. From an internet-connected machine, download DITA-OT 4.2.4 (or
+   newer) from <https://www.dita-ot.org/download> and a matching Java
+   runtime (JDK 17+).
+2. Verify checksums against the project's vendor records.
+3. Transfer to the air-gapped target via the approved removable-media
+   procedure.
+4. Unzip DITA-OT to a stable location (e.g. `C:\dita-ot-4.2.4`) and
+   confirm `bin\dita.bat --version` runs.
+
+Render the generated tree:
+
+```bash
+python publish_html.py --dita-ot /path/to/dita-ot-4.2.4
+# Windows: python publish_html.py --dita-ot C:\dita-ot-4.2.4
+```
+
+`publish_html.py` (standard-library only) stages a copy of `dita/`
+under `.dita-build/`, injects the DOCTYPE declarations DITA-OT needs
+(the source DITA omits these per the schema contract — Oxygen handles
+validation), and writes HTML5 under `html/<ditamap-stem>/` per
+ditamap. The staging directory is cleaned up after each run.
+
+See the full recipe in
+[`specs/001-pptx-dita-migration/contracts/dita-topic-schema.md`](specs/001-pptx-dita-migration/contracts/dita-topic-schema.md)
+§11.
 
 ## Known limitations
 
