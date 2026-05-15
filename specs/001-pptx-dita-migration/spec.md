@@ -327,9 +327,9 @@ produces the expected output tree on continue.
 - **FR-010**: The DITA generator MUST emit `gram_xx_lofarN.dita` for each
   GLC row, including a `gram-config` table with `time-start=0`,
   `time-end` from CSV, `freq-start=0`, `freq-end` from CSV, an image
-  reference resolved against the image root, a related-link back to the
-  gram index, and a title in which the vessel name is wrapped in
-  `<ph audience="-trainee">`.
+  reference (a topic-relative local filename — see FR-022), a
+  related-link back to the gram index, and a title in which the vessel
+  name is wrapped in `<ph audience="-trainee">`.
 - **FR-011**: The DITA generator MUST emit `gram_xx_analysis.dita` for
   each analysis row, marked instructor-only, referencing the analysis
   image, and MUST emit a stub topic with a manual-review marker for WAV
@@ -396,8 +396,28 @@ produces the expected output tree on continue.
   instructions and invokes DITA-OT as an ad-hoc step after generation,
   separately from the automated pipeline. The README MUST also state
   that Oxygen remains the production publishing path and that the
-  DITA-OT preview is for inspection only.
-- **FR-022**: The pipeline MUST include an analysis-sheet normalisation
+  DITA-OT preview is for inspection only. The project MUST ship a
+  `publish_html.py` helper that automates the DITA-OT invocation
+  (DOCTYPE injection into a staging copy, per-ditamap rendering, output
+  under a root-level `html/` tree); the script depends on Python
+  standard library only and takes the DITA-OT installation path as a
+  command-line argument.
+- **FR-022**: The DITA generator MUST produce self-contained
+  publication trees. For every topic that references an external asset
+  (PNG, WAV, analysis sheet) the generator MUST copy the source asset
+  into the same directory as the topic, rename the copy to match the
+  topic's filename stem (e.g. the asset referenced by
+  `gram_12_lofar1.dita` is copied to `gram_12_lofar1.png`), and emit
+  the bare local filename as the topic's `href`. References MUST NOT
+  traverse out of the chapter directory. Asset copies MUST preserve
+  source modification time so that the idempotency requirement
+  (FR-013) holds for the asset tree as well as the topic XML. When a
+  referenced source asset is missing, the generator MUST log a warning
+  and emit the topic with its intended local href anyway, so that
+  dropping the asset into the source tree at the expected path and
+  re-running the generator resolves the dangling reference without
+  touching the topic file.
+- **FR-023**: The pipeline MUST include an analysis-sheet normalisation
   stage that operates per gram *folder* (not per gram instance on a
   slide, not per CSV row) and runs before extraction emits any analysis
   row. For every gram folder under the content root, the stage MUST
@@ -411,7 +431,10 @@ produces the expected output tree on continue.
   renderer binary is unavailable, so that the air-gapped maintainer can
   triage affected folders from the log and from the resulting CSV row
   (where `png_path` and/or `analysis_docx_path` are left empty and the
-  `warnings` column records the failure).
+  `warnings` column records the failure). FR-023 runs upstream of the
+  FR-022 asset copy: by the time the DITA generator copies the
+  `Analysis.png` next to its topic, FR-023 has guaranteed the PNG
+  exists.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -422,7 +445,7 @@ produces the expected output tree on continue.
 - **Gram Placeholder**: A logical unit on a content slide consisting of
   a title shape (gram identifier and vessel name, with a hyperlink to an
   analysis sheet — either an `Analysis Sheet.docx` or an `Analysis.png`
-  in the gram folder; see FR-022 for the normalisation that guarantees
+  in the gram folder; see FR-023 for the normalisation that guarantees
   both forms exist before extraction) and a link text box (one to four
   hyperlinked runs to GLC or WAV configurations); 15 placeholders are
   arranged on a 3×5 grid per content slide.
@@ -430,7 +453,7 @@ produces the expected output tree on continue.
   gram's analysis, carried on disk as either `Analysis Sheet.docx` or
   `Analysis.png` (or both). One Analysis Sheet exists per gram folder,
   irrespective of how many times that gram is referenced from a slide.
-  FR-022 normalisation guarantees both forms exist before extraction
+  FR-023 normalisation guarantees both forms exist before extraction
   consumes the folder.
 - **GLC Configuration**: An XML file describing a spectrogram analysis
   view; contributes the source-image filename, the time end (from
@@ -537,6 +560,6 @@ produces the expected output tree on continue.
   is the default expectation; an equivalent that exposes a
   command-line `.docx → image` conversion is acceptable). The renderer
   binary is discoverable on PATH or via a configurable command. It is
-  used only by the FR-022 normalisation stage and never at runtime by
+  used only by the FR-023 normalisation stage and never at runtime by
   any other stage; like DITA-OT (FR-021) it is installed-by-the-user,
   documented in the README, and not bundled in the project delivery.

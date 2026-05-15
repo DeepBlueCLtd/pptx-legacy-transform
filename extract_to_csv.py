@@ -27,6 +27,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Iterable, Iterator
 
 from pptx import Presentation
+from pptx.oxml.ns import qn
 
 
 CSV_COLUMNS: tuple[str, ...] = (
@@ -35,7 +36,12 @@ CSV_COLUMNS: tuple[str, ...] = (
     "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
 )
 
-DEFAULT_TEST_PATTERN: str = "progress_test"
+DEFAULT_TEST_PATTERN: str = "progress test"
+
+# Prefixes that identify the welcome / exit framing slides emitted by
+# ``mock_pptx.py``. These slides carry no gram content and must not
+# contribute rows to the CSV.
+FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
 
 LOGGER = logging.getLogger(__name__)
 
@@ -207,33 +213,196 @@ class GramPlaceholder:
     glc_links: list[GlcLink]
 
 
-def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
-    """Return the gram placeholders on ``slide`` (currently a documented stub).
+def _shape_level_hyperlink(shape) -> str | None:
+    """Return the shape-level hyperlink target, or None.
 
-    NOT YET IMPLEMENTED. Replacement requires the introspection report
-    (User Story 3) against a real instructor PPTX to answer:
-
-      1. Is the analysis-PNG hyperlink attached at the shape level on
-         every gram, or does it sometimes ride on a text run?
-      2. Does the link text box always sit immediately below its title
-         rectangle, and is "immediately below" measured in EMUs or in a
-         layout-relative coordinate system?
-      3. Are the title and link-box shapes reliably named (e.g.
-         "Rectangle 12") or do real authors rename them ad hoc?
-      4. Is spatial proximity (top/left distance) sufficient to pair a
-         title with its link box, or are there overlap/edge cases?
-      5. Are some grams wrapped in GROUP shapes (shape_type=6) that need
-         to be expanded before the grouping logic can match them?
-
-    Until that report has been produced, raising explicitly is safer
-    than silently producing partial CSV output that the technical author
-    would have to undo on the air-gapped network.
+    Walks the lxml element so we don't depend on python-pptx exposing a
+    high-level accessor (it doesn't, for shape-level clicks).
     """
-    raise NotImplementedError(
-        "Shape grouping is not implemented yet. Run introspection against a real "
-        "instructor PPTX (see introspect_pptx.py) and use the report to answer "
-        "the five questions in this docstring before replacing the stub."
-    )
+    nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
+    if nv_sp_pr is None:
+        return None
+    c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
+    if c_nv_pr is None:
+        return None
+    hlink = c_nv_pr.find(qn("a:hlinkClick"))
+    if hlink is None:
+        return None
+    rel_id = hlink.get(qn("r:id"))
+    if not rel_id:
+        return None
+    try:
+        return shape.part.rels[rel_id].target_ref
+    except KeyError:
+        return None
+
+
+def _run_hyperlinks_in_shape(shape) -> list[tuple[str, str]]:
+    """Return a list of ``(visible_text, href)`` per hyperlinked text run.
+
+    Only runs whose ``a:hlinkClick`` resolves to an external relationship
+    target are returned. Plain runs without hyperlinks are skipped.
+    """
+    pairs: list[tuple[str, str]] = []
+    if not shape.has_text_frame:
+        return pairs
+    for paragraph in shape.text_frame.paragraphs:
+        for run in paragraph.runs:
+            try:
+                href = run.hyperlink.address
+            except Exception:
+                href = None
+            if href:
+                pairs.append((run.text or "", href))
+    return pairs
+
+
+def _bbox(shape) -> tuple[int, int, int, int]:
+    """Return ``(left, top, right, bottom)`` in EMUs."""
+    left = shape.left or 0
+    top = shape.top or 0
+    width = shape.width or 0
+    height = shape.height or 0
+    return (left, top, left + width, top + height)
+
+
+def _iter_leaf_shapes(shapes):
+    """Yield every leaf shape on a slide, expanding GROUPs (shape_type=6)."""
+    for shape in shapes:
+        if getattr(shape, "shape_type", None) == 6:  # MSO_SHAPE_TYPE.GROUP
+            yield from _iter_leaf_shapes(shape.shapes)
+        else:
+            yield shape
+
+
+def is_framing_slide(slide) -> bool:
+    """Return True for welcome / exit slides that should be skipped.
+
+    Detection is by title text prefix (``"Welcome to "`` / ``"End of "``)
+    so it survives slide-position shuffles and is robust against real
+    decks that may add or remove framing slides.
+    """
+    for shape in slide.shapes:
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        text = (shape.text_frame.text or "").strip()
+        if not text:
+            continue
+        if text.startswith(FRAMING_TITLE_PREFIXES):
+            return True
+    return False
+
+
+def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
+    """Return the gram placeholders on ``slide`` per reverse-spec §4.
+
+    Each gram tile has:
+
+    - a header shape carrying a *shape-level* hyperlink to an Analysis
+      Sheet (``.docx`` or ``.png``); its text is a ``"Gram N: <detail>"``
+      descriptor (split at the first colon — left side is the
+      student-visible label, right side is instructor-visible);
+    - one or more text-frame shapes positioned beneath the header
+      containing text *runs* hyperlinked to ``.glc`` (and occasionally
+      ``.wav``) files in the same gram folder.
+
+    Grouping is done by spatial proximity: for each header we collect
+    every Lofar text run carried by text-frame shapes whose bounding
+    box sits below the header and overlaps its horizontal extent. This
+    survives renamed shapes, ad-hoc shape ordering, and GROUP wrappers.
+    """
+    leaves = list(_iter_leaf_shapes(slide.shapes))
+
+    # 1) Identify headers (shape-level hyperlink + text frame holding the descriptor).
+    headers: list[tuple[object, str]] = []  # (shape, analysis_href)
+    for shape in leaves:
+        href = _shape_level_hyperlink(shape)
+        if href is None:
+            continue
+        if not shape.has_text_frame:
+            continue
+        headers.append((shape, href))
+
+    # 2) Identify candidate Lofar boxes (text frame with at least one .glc/.wav run).
+    candidates: list[tuple[object, list[tuple[str, str]]]] = []
+    header_ids = {id(s) for s, _ in headers}
+    for shape in leaves:
+        if id(shape) in header_ids:
+            continue
+        pairs = _run_hyperlinks_in_shape(shape)
+        if not pairs:
+            continue
+        keep = [(t, h) for t, h in pairs if h.lower().endswith((".glc", ".wav"))]
+        if keep:
+            candidates.append((shape, keep))
+
+    # 3) Pair each header with the closest Lofar box below that horizontally overlaps.
+    grams: list[GramPlaceholder] = []
+    used_candidate_ids: set[int] = set()
+    # Sort headers in reading order so gram_id sequencing matches CSV order.
+    headers.sort(key=lambda hb: (hb[0].top or 0, hb[0].left or 0))
+
+    for header, analysis_href in headers:
+        h_left, h_top, h_right, h_bottom = _bbox(header)
+        best: tuple[float, object, list[tuple[str, str]]] | None = None
+        for cand, pairs in candidates:
+            if id(cand) in used_candidate_ids:
+                continue
+            c_left, c_top, c_right, c_bottom = _bbox(cand)
+            # Must sit at or below the header's top (we want neighbours under it).
+            if c_top < h_top:
+                continue
+            # Horizontal overlap with header.
+            overlap = min(h_right, c_right) - max(h_left, c_left)
+            if overlap <= 0:
+                continue
+            vertical_distance = max(0, c_top - h_bottom)
+            score = vertical_distance - 0.1 * overlap  # prefer close + well-aligned
+            if best is None or score < best[0]:
+                best = (score, cand, pairs)
+        if best is None:
+            LOGGER.warning(
+                "Slide %d: gram header at top=%d left=%d has no Lofar box",
+                slide_num, h_top, h_left,
+            )
+            lofar_pairs: list[tuple[str, str]] = []
+        else:
+            _, chosen, lofar_pairs = best
+            used_candidate_ids.add(id(chosen))
+
+        descriptor = "".join(
+            run.text or "" for para in header.text_frame.paragraphs for run in para.runs
+        ).strip()
+        gram_id, instructor_detail = _split_descriptor(descriptor)
+
+        glc_links = [GlcLink(display_text=t.strip(), href=h) for t, h in lofar_pairs]
+        grams.append(GramPlaceholder(
+            gram_id=gram_id,
+            vessel_name=instructor_detail,
+            png_href=analysis_href,
+            glc_links=glc_links,
+        ))
+    return grams
+
+
+def _split_descriptor(descriptor: str) -> tuple[str, str]:
+    """Split a `"Gram N: <detail>"` descriptor at the first colon.
+
+    Returns ``(gram_id, instructor_detail)``. If no colon is present, the
+    whole text is treated as the gram_id and instructor_detail is empty.
+    Gram_id is normalised to ``"Gram NN"`` (zero-padded to 2 digits) when
+    the left side parses cleanly.
+    """
+    if not descriptor:
+        return ("", "")
+    left, sep, right = descriptor.partition(":")
+    left = left.strip()
+    right = right.strip() if sep else ""
+    # Normalise "Gram 7" → "Gram 07" for consistency with csv-schema's "Gram NN" example.
+    m = re.match(r"^Gram\s+(\d+)$", left, re.IGNORECASE)
+    if m:
+        left = f"Gram {int(m.group(1)):02d}"
+    return (left, right)
 
 
 # -----------------------------------------------------------------------------
@@ -276,7 +445,11 @@ def gram_to_rows(
                 warnings.append("GLC not found")
                 glc_path = href
             else:
-                glc_path = str(resolved.relative_to(content_root)) if resolved.is_relative_to(content_root) else str(resolved)
+                root_abs = content_root.resolve()
+                if resolved.is_relative_to(root_abs):
+                    glc_path = str(resolved.relative_to(root_abs))
+                else:
+                    glc_path = str(resolved)
                 glc = parse_glc(resolved)
                 warnings.extend(glc.warnings)
                 time_end = glc.time_end
@@ -376,8 +549,9 @@ def main(argv: Iterable[str] | None = None) -> int:
                 LOGGER.error("Cannot open PPTX %s: %s", pptx, exc)
                 return 1
             for slide_num, slide in enumerate(prs.slides, start=1):
-                if slide_num == 1:
-                    continue  # welcome slide
+                if is_framing_slide(slide):
+                    LOGGER.info("Skipping framing slide %d in %s", slide_num, pptx.name)
+                    continue
                 grams = extract_grams_from_slide(slide, slide_num)
                 for gram in grams:
                     gram_rows = gram_to_rows(

@@ -31,8 +31,8 @@ generator never re-reads PPTX or GLC files.
 | 10 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved `.glc` path relative to source folder; empty when the link target was a `.wav` |
 | 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 13 | `png_path` | string | yes (glc rows) | resolved relative to source folder; for analysis rows, populated from the gram folder's `Analysis.png` after FR-022 normalisation (may be empty if the renderer failed) |
-| 14 | `analysis_docx_path` | string | yes (non-analysis rows; analysis rows when renderer failed) | resolved relative to source folder; populated for analysis rows from the gram folder's `Analysis Sheet.docx` after FR-022 normalisation. Carried for the author's review trail; the generator does not consume it. |
+| 13 | `png_path` | string | yes (glc rows) | resolved relative to source folder; for analysis rows, populated from the gram folder's `Analysis.png` after FR-023 normalisation (may be empty if the renderer failed) |
+| 14 | `analysis_docx_path` | string | yes (non-analysis rows; analysis rows when renderer failed) | resolved relative to source folder; populated for analysis rows from the gram folder's `Analysis Sheet.docx` after FR-023 normalisation. Carried for the author's review trail; the generator does not consume it. |
 | 15 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
 | 16 | `warnings` | string | yes | comma-joined, free-form |
 
@@ -58,9 +58,9 @@ should never happen because the unique key drives the filename.
    carries the visible link label, never the URL.
 5. Warnings accumulate in column order: GLC parse warnings first, then
    path-resolution warnings, then shape warnings, then
-   analysis-sheet-normalisation warnings (from FR-022).
+   analysis-sheet-normalisation warnings (from FR-023).
 6. Analysis rows carry both `png_path` and `analysis_docx_path` after
-   FR-022 normalisation runs over the gram folder. Either column may be
+   FR-023 normalisation runs over the gram folder. Either column may be
    empty when the renderer was unavailable or failed; the `warnings`
    column records which direction failed
    (`"analysis renderer failed: docx→png"` or

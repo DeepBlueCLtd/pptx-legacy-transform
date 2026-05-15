@@ -92,7 +92,7 @@ docstring contract on the stub.
 | `display_text` | `str` | e.g. `"LOFAR 1"` |
 | `href` | `str` | relative URI from the run's hyperlink, may be `.glc` or `.wav` |
 
-### 1.7 `AnalysisSheet` *(produced by the FR-022 normalisation stage)*
+### 1.7 `AnalysisSheet` *(produced by the FR-023 normalisation stage)*
 
 The analysis artefact attached to a gram *folder* on disk. Exactly one
 record per gram folder regardless of how many slide instances reference
@@ -152,8 +152,8 @@ row per resulting DITA topic. The unique key per row is
 | `glc_path` | `str` | resolved relative to source folder | empty for analysis rows and for WAV-targeted rows |
 | `time_end` | `str` | from `GlcDocument.time_end` | empty for analysis rows |
 | `freq_end` | `str` | from `GlcDocument.freq_end` | empty for analysis rows |
-| `png_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.png_path` for analysis rows | empty for glc rows whose link target was a `.glc`; populated for analysis rows post-FR-022 unless renderer failed |
-| `analysis_docx_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.docx_path` | empty for glc rows; populated for analysis rows post-FR-022 unless renderer failed |
+| `png_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.png_path` for analysis rows | empty for glc rows whose link target was a `.glc`; populated for analysis rows post-FR-023 unless renderer failed |
+| `analysis_docx_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.docx_path` | empty for glc rows; populated for analysis rows post-FR-023 unless renderer failed |
 | `wav_treatment` | `str` | author-supplied | empty unless link was .wav; values: `screenshot`, `gaps-lite`, `TBD`, empty |
 | `warnings` | `str` | comma-joined warning list | empty if clean |
 
@@ -173,7 +173,7 @@ row per resulting DITA topic. The unique key per row is
 5. The warnings column accumulates *all* recoverable issues for the row,
    joined by `", "`.
 6. Analysis rows carry both `png_path` and `analysis_docx_path`
-   populated after FR-022 normalisation. Either may be empty (with a
+   populated after FR-023 normalisation. Either may be empty (with a
    `warnings` entry such as `"analysis renderer failed: docx→png"` or
    `"analysis renderer failed: png→docx"`) when the renderer was
    unavailable or failed for that gram folder. The DITA generator
@@ -354,7 +354,7 @@ SourcePresentation 1───* Slide 1───* Shape 1───* Run
                                                   ├── 1 analysis-sheet hyperlink (→ AnalysisSheet)
                                                   └── 0..* GLC files (parsed → GlcDocument)
 
-GramFolder        ──> AnalysisSheet  (1-1, produced by FR-022 normalisation)
+GramFolder        ──> AnalysisSheet  (1-1, produced by FR-023 normalisation)
 GramPlaceholder   ──> CsvRow*        (one per GLC link + one analysis row;
                                       the analysis row's png_path and
                                       analysis_docx_path are sourced from

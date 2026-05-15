@@ -57,6 +57,22 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(ph, "vessel name should be wrapped in <ph audience='-trainee'>")
         self.assertIn("Nordik Jockey", (ph.text or ""))
 
+    def test_glc_topic_asset_copied_with_relative_href(self) -> None:
+        """When the referenced asset exists, the generator copies it next to
+        the topic (renamed to match the topic stem) and emits a topic-relative
+        href."""
+        _run(self.out)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.dita"
+        copied = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.png"
+        original = FIXTURES / "images" / "gram12.png"
+        self.assertTrue(copied.is_file(), "asset must be copied next to topic")
+        self.assertEqual(copied.read_bytes(), original.read_bytes())
+        root = ET.parse(topic).getroot()
+        image = root.find(".//image")
+        self.assertIsNotNone(image)
+        self.assertEqual(image.get("href"), "gram_12_lofar1.png",
+                         "href must be topic-relative, not an outward path")
+
     def test_analysis_topic_audience_attribute(self) -> None:
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_analysis.dita"
@@ -96,8 +112,12 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(root.find(".//note"))
         xref = root.find(".//xref")
         self.assertIsNotNone(xref)
-        # xref href must be the link URL, not the human-readable label.
-        self.assertEqual(xref.get("href"), "supporting/gram05/audio_clip.wav")
+        # The generator copies the WAV next to the topic, renamed to match
+        # the topic stem, and emits a topic-relative href. The fixture WAV
+        # does not exist on disk, so no file is copied, but the href still
+        # reflects the intended local name so re-running with the asset
+        # present resolves the link without touching the topic XML.
+        self.assertEqual(xref.get("href"), "gram_05_lofar1.wav")
         self.assertEqual(xref.text, "Audio sample")
 
     def test_skipped_report_emitted_for_tbd_wav(self) -> None:

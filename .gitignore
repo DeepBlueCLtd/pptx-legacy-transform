@@ -226,3 +226,6 @@ tests/_tmp/
 mock_instructor.pptx
 extracted.csv
 
+
+# DITA-OT staging directory (publish_html.py)
+.dita-build/

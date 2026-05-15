@@ -91,10 +91,10 @@ def extract_shape_hyperlink(shape) -> tuple[str | None, str]:
         nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
         if nv_sp_pr is None:
             return (None, "")
-        nv_pr = nv_sp_pr.find(qn("p:nvPr"))
-        if nv_pr is None:
+        c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
+        if c_nv_pr is None:
             return (None, "")
-        hlink = nv_pr.find(qn("a:hlinkClick"))
+        hlink = c_nv_pr.find(qn("a:hlinkClick"))
         if hlink is None:
             return (None, "")
         rel_id = hlink.get(qn("r:id"))
@@ -181,7 +181,10 @@ def render_summary(filename: str, total_slides: int, all_records: list[ShapeReco
                 targets_by_ext[_ext_of(run.hyperlink)] += 1
 
     deviating: list[int] = []
-    for slide_num in range(2, total_slides + 1):
+    # Slide 1 (welcome) and the last slide (exit) are framing slides — they
+    # carry only a title + subtitle text box, not the gram grid, so the
+    # deviation check excludes them.
+    for slide_num in range(2, total_slides):
         count = by_slide.get(slide_num, 0)
         if abs(count - EXPECTED_SHAPES_PER_CONTENT_SLIDE) > SHAPE_DEVIATION_TOLERANCE:
             deviating.append(slide_num)

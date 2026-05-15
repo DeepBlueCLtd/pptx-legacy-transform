@@ -1,192 +1,616 @@
-"""Synthetic instructor PPTX generator (User Story 4).
+"""Synthetic instructor PPTX corpus generator (User Story 4, Phase 10 redesign).
 
-Builds a deck shaped like a real AAAC training instructor presentation so
-that the introspection, extraction, and DITA generator tests can run
-without a binary fixture in the repository. The generator covers every
-structural case the source spec mandates: a welcome slide; content slides
-with a 3 row x 5 col grid of gram placeholders; vessel-named title
-rectangles carrying shape-level click actions to analysis PNGs; link text
-boxes carrying text-run hyperlinks to GLC and (for the configured WAV
-overrides) WAV targets; varying GLC link counts per gram.
+Produces a multi-publication mock corpus structurally faithful to the real
+source disk described in ``source/notes/reverse-spec.md`` — across three
+families (Weeks, Progress Tests, Final Assessment, Pub10_Ed22B), each with
+its own ``<Publication>.pptx`` plus a sibling ``<Publication> Files/`` tree
+of ``Gram N/`` folders containing GLC + image / WAV / Analysis Sheet
+assets.
 
 Run as a script:
 
-    python mock_pptx.py --out tests/_tmp/mock.pptx
+    python mock_pptx.py --out-root source
 
-The constants below (vessel names, link-count tiers, WAV grams, slide and
-grid geometry) are exported so the test suite can assert against them
-without magic-number drift between mock and tests (R5).
+Defaults to writing into the repo's ``source/`` folder so the corpus is a
+committed, reviewable deliverable (per the Phase 10 amendment in
+``specs/001-pptx-dita-migration/tasks.md``).
+
+The corpus uses a fixed RNG seed (``RANDOM_SEED``) so structural choices
+(gram counts, Lofar counts, vessel/codename selection, analysis-sheet
+type per gram) are reproducible. PPTX files themselves are not strictly
+byte-identical across runs because python-pptx writes a small amount of
+state into the OOXML zip; the *content* is deterministic.
+
+All non-PPTX assets (``.glc``, ``.png``, ``.wav``, ``.docx``) are emitted
+using the Python standard library only — no Pillow, no python-docx. The
+GLC follows ``contracts/glc-schema.md`` exactly so the parser tests can
+read every emitted file.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
+import random
+import struct
 import sys
+import wave
+import zipfile
+import zlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from xml.etree import ElementTree as ET
 
 from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 from lxml import etree
 
 
 # -----------------------------------------------------------------------------
-# Module-level constants (R5)
+# Determinism
 # -----------------------------------------------------------------------------
 
+RANDOM_SEED: int = 20260515
+
+
+# -----------------------------------------------------------------------------
+# Corpus shape (reverse-spec §1, §7)
+# -----------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class FamilyParams:
+    grams: int           # approximate gram count
+    slides: int          # content slide count (welcome + exit are added on top)
+    grams_per_slide: int  # nominal layout target
+
+
+# Framing slide subtitle text — also used by the extractor to detect and
+# skip welcome / exit slides during CSV generation.
+FRAMING_SUBTITLE: str = "Instructor Version"
+WELCOME_TITLE_PREFIX: str = "Welcome to "
+EXIT_TITLE_PREFIX: str = "End of "
+
+
+FAMILY_WEEK = FamilyParams(grams=35, slides=3, grams_per_slide=15)
+FAMILY_TEST = FamilyParams(grams=30, slides=2, grams_per_slide=15)
+FAMILY_FINAL = FamilyParams(grams=40, slides=3, grams_per_slide=15)
+FAMILY_PUB10 = FamilyParams(grams=75, slides=5, grams_per_slide=15)
+
+
+@dataclass(frozen=True)
+class Publication:
+    name: str            # folder + .pptx stem
+    family: FamilyParams
+    no_fr: bool = False  # rewrite "FR " prefix out of descriptors
+    batched: bool = False  # Pub10 ten-gram folder batching
+
+
+PUBLICATIONS: tuple[Publication, ...] = (
+    Publication("Instructor Week 1 Grams", FAMILY_WEEK),
+    Publication("Instructor Week 2 Grams", FAMILY_WEEK),
+    Publication("Instructor Week 3 Grams", FAMILY_WEEK),
+    Publication("Instructor Week 4 Grams_Updated", FAMILY_WEEK),
+    Publication("Instructor Progress Test 1 Grams", FAMILY_TEST),
+    Publication("Instructor Progress Test 2 Grams_Updated", FAMILY_TEST),
+    Publication("Instructor Progress Test 3 Grams", FAMILY_TEST),
+    Publication("Instructor Progress Test 3 Grams No FR", FAMILY_TEST, no_fr=True),
+    Publication("Instructor Progress Test 4 Grams", FAMILY_TEST),
+    Publication("Instructor Progress Final Assessment Grams", FAMILY_FINAL),
+    Publication("Instructor Pub10_Ed22B_Updated", FAMILY_PUB10, batched=True),
+)
+
+
+# -----------------------------------------------------------------------------
+# Vocabulary (reverse-spec §6)
+# -----------------------------------------------------------------------------
+
+# Vessel names / classes — Star Trek + Star Wars
 VESSEL_NAMES: tuple[str, ...] = (
-    "Nordik Jockey", "Arctic Surveyor", "Baltic Trader", "Cape Hopper",
-    "Drift Wanderer", "Eastern Voyager", "Frosted Fjord", "Glacier Hauler",
-    "Harbour Master", "Iceberg Runner", "Jutland Express", "Kelp Forest",
-    "Lighthouse Keeper", "Maritime Crown", "Northern Star", "Ocean Pilot",
-    "Polar Companion", "Quayside Belle", "Reef Patroller", "Saltwater Lark",
-    "Tidal Mariner", "Undertow Drifter", "Vessel Aurora", "Whaler Echo",
-    "Xenia Foam", "Yarrow Sound", "Zephyr Tide", "Anchor Bay",
-    "Beacon Shoal", "Compass Reach",
+    # Star Trek
+    "Enterprise", "Defiant", "Voyager", "Discovery", "Cerritos",
+    "Reliant", "Excelsior", "Stargazer", "Equinox", "Prometheus",
+    "Constitution-class", "Galaxy-class", "Intrepid-class", "Sovereign-class",
+    "Nebula-class", "Akira-class", "Miranda-class", "Defiant-class",
+    # Star Wars
+    "Millennium Falcon", "Tantive IV", "Ghost", "Razor Crest",
+    "Slave I", "Outrider", "Rebel One", "Devastator",
+    "Star Destroyer", "X-wing", "Y-wing", "B-wing", "A-wing",
+    "TIE Fighter", "TIE Bomber", "Lambda Shuttle", "Corellian Corvette",
+    "Mon Calamari Cruiser", "Imperial-class", "Venator-class",
+    "Acclamator-class", "Nebulon-B",
 )
 
-# Gram numbering 1..30 in three tiers with different link-count variation.
-# Tier (low, high) is inclusive on both ends.
-LINK_COUNT_BY_GRAM_RANGE: tuple[tuple[int, int, int], ...] = (
-    (1, 10, 1),    # grams 1..10 -> 1 GLC link
-    (11, 25, 2),   # grams 11..25 -> 2 GLC links
-    (26, 30, 4),   # grams 26..30 -> 4 GLC links
+# Codenames — short fictional tokens reused across publications
+CODENAMES: tuple[str, ...] = (
+    "Tantive", "Defiant", "Tatooine", "Endor", "Hoth", "Yavin",
+    "Dagobah", "Coruscant", "Naboo", "Bespin", "Mustafar",
+    "Romulus", "Vulcan", "Bajor", "Cardassia", "Kronos",
+    "Risa", "Trill", "Betazed", "Kobol", "Caprica",
+    "Dank", "Gandalf",  # deliberate cosmetic noise (cf. reverse-spec §7 examples)
 )
 
-WAV_GRAMS: tuple[int, ...] = (5, 20)
 
-TOTAL_GRAMS: int = 30
-GRAMS_PER_SLIDE: int = 15
-GRID_ROWS: int = 3
-GRID_COLS: int = 5
+# -----------------------------------------------------------------------------
+# Slide geometry
+# -----------------------------------------------------------------------------
+
 SLIDE_WIDTH_IN: float = 13.33
 SLIDE_HEIGHT_IN: float = 7.5
-GRID_TOP_MARGIN_IN: float = 1.0
+TITLE_BAR_HEIGHT_IN: float = 0.6
+GRID_TOP_MARGIN_IN: float = 0.8
 GRID_LEFT_MARGIN_IN: float = 0.4
-TITLE_HEIGHT_IN: float = 0.5
-LINK_BOX_HEIGHT_IN: float = 1.1
+GRID_ROWS: int = 3
+GRID_COLS: int = 5
+TILE_TITLE_HEIGHT_IN: float = 0.4
+TILE_LOFAR_LINE_HEIGHT_IN: float = 0.25
 CELL_GAP_IN: float = 0.1
 
 
 # -----------------------------------------------------------------------------
-# Derived counts (referenced by tests)
+# Hyperlink helpers (R5; both shape-level and text-run forms exercised)
 # -----------------------------------------------------------------------------
 
-CONTENT_SLIDE_COUNT: int = (TOTAL_GRAMS + GRAMS_PER_SLIDE - 1) // GRAMS_PER_SLIDE
-TOTAL_SLIDE_COUNT: int = 1 + CONTENT_SLIDE_COUNT
+HYPERLINK_REL_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+)
 
-
-def link_count_for_gram(gram_num: int) -> int:
-    """Return the number of GLC links the mock attaches to ``gram_num``."""
-    for low, high, count in LINK_COUNT_BY_GRAM_RANGE:
-        if low <= gram_num <= high:
-            return count
-    raise ValueError(f"Gram {gram_num} is outside the configured ranges")
-
-
-# -----------------------------------------------------------------------------
-# Hyperlink helpers
-# -----------------------------------------------------------------------------
 
 def add_shape_level_hyperlink(shape, target: str) -> None:
-    """Attach a shape-level click action to ``shape`` pointing at ``target``.
+    """Attach a shape-level click action via direct lxml manipulation.
 
-    python-pptx exposes text-run hyperlinks but no high-level API for shape
-    click actions, so the underlying lxml element gains an ``a:hlinkClick``
-    under ``p:nvSpPr/p:nvPr`` and the relationship is registered on the
-    slide part.
+    The ``a:hlinkClick`` element belongs inside ``p:cNvPr`` (NonVisualDrawingProps)
+    per ECMA-376. PowerPoint ignores it when placed under ``p:nvPr``.
     """
-    rel_id = shape.part.relate_to(
-        target,
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-        is_external=True,
-    )
+    rel_id = shape.part.relate_to(target, HYPERLINK_REL_TYPE, is_external=True)
     nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
-    nv_pr = nv_sp_pr.find(qn("p:nvPr"))
-    hlink = etree.SubElement(nv_pr, qn("a:hlinkClick"))
+    c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
+    hlink = etree.SubElement(c_nv_pr, qn("a:hlinkClick"))
     hlink.set(qn("r:id"), rel_id)
 
 
 def add_text_run_hyperlink(run, target: str) -> None:
-    """Attach a text-run hyperlink to ``run`` pointing at ``target``."""
+    """Attach a text-run hyperlink. python-pptx handles relative paths fine."""
     run.hyperlink.address = target
 
 
 # -----------------------------------------------------------------------------
-# Slide builders
+# Asset emitters (stdlib only; reverse-spec §5)
 # -----------------------------------------------------------------------------
 
-def add_welcome_slide(prs: Presentation) -> None:
-    """Add the welcome slide (slide 1)."""
-    layout = prs.slide_layouts[0]
-    slide = prs.slides.add_slide(layout)
-    if slide.shapes.title is not None:
-        slide.shapes.title.text = "Welcome to AAAC Training Module 3"
-    for ph in slide.placeholders:
-        if ph.placeholder_format.idx == 1:
-            ph.text = "Instructor Version"
-            break
+def emit_glc(path: Path, *, image_filename: str, time_end: int, freq_end: int) -> None:
+    """Write a GAPS_Lite_configuration XML file per contracts/glc-schema.md."""
+    root = ET.Element("GAPS_Lite_configuration")
+    ds = ET.SubElement(root, "data_source")
+    ET.SubElement(ds, "filename").text = image_filename
+    crops = ET.SubElement(ds, "bitmap_crop_values")
+    ET.SubElement(crops, "top_crop").text = "0"
+    ET.SubElement(crops, "bottom_crop").text = str(time_end)
+    pb = ET.SubElement(root, "playback")
+    ET.SubElement(pb, "time_offset").text = "0"
+    settings = ET.SubElement(root, "settings")
+    lofar = ET.SubElement(settings, "lofar")
+    ET.SubElement(lofar, "bandwidth").text = str(freq_end)
+    tree = ET.ElementTree(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tree.write(path, encoding="utf-8", xml_declaration=True)
 
 
-def build_gram_placeholder(
-    slide,
-    row: int,
-    col: int,
-    gram_num: int,
-    vessel: str,
-    link_count: int,
-    is_wav: bool,
-) -> None:
-    """Place one gram (title rectangle + link text box) on ``slide``.
+def _png_chunk(tag: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(
+        ">I", zlib.crc32(tag + data) & 0xFFFFFFFF
+    )
 
-    The title rectangle gets a shape-level click action to
-    ``../images/gramNN_analysis.png``. The link text box gets one
-    text-run hyperlink per requested link to either
-    ``../gramNN/config_M.glc`` or (if ``is_wav``) a single WAV target.
+
+def emit_png(path: Path, *, width: int = 8, height: int = 8, shade: int = 200) -> None:
+    """Write a tiny valid grayscale PNG using only stdlib (no Pillow)."""
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)  # 8-bit grayscale
+    raw = b""
+    for _ in range(height):
+        raw += b"\x00" + bytes([shade] * width)  # filter byte + pixels
+    idat = zlib.compress(raw, 9)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as fh:
+        fh.write(sig)
+        fh.write(_png_chunk(b"IHDR", ihdr))
+        fh.write(_png_chunk(b"IDAT", idat))
+        fh.write(_png_chunk(b"IEND", b""))
+
+
+def emit_wav(path: Path, *, duration_s: float = 0.1, framerate: int = 8000) -> None:
+    """Write a short silence WAV using stdlib ``wave``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames = int(duration_s * framerate)
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(1)
+        wf.setframerate(framerate)
+        wf.writeframes(b"\x80" * frames)  # silence (mid-level for 8-bit unsigned)
+
+
+_DOCX_CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"""
+
+_DOCX_ROOT_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"""
+
+_DOCX_BODY_TEMPLATE = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t xml:space="preserve">{title}</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Bearing: __</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Frequency: __</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Identification: __</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Notes: __</w:t></w:r></w:p>
+</w:body>
+</w:document>"""
+
+
+def emit_docx(path: Path, *, title: str) -> None:
+    """Write a minimal valid .docx (Word document) using stdlib zipfile."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = _DOCX_BODY_TEMPLATE.format(title=_escape_xml(title))
+    # Use a fixed timestamp inside the zip for deterministic output.
+    fixed_date = (1980, 1, 1, 0, 0, 0)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, content in (
+            ("[Content_Types].xml", _DOCX_CONTENT_TYPES),
+            ("_rels/.rels", _DOCX_ROOT_RELS),
+            ("word/document.xml", body),
+        ):
+            info = zipfile.ZipInfo(filename=name, date_time=fixed_date)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, content)
+
+
+def _escape_xml(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+# -----------------------------------------------------------------------------
+# Per-publication generation
+# -----------------------------------------------------------------------------
+
+@dataclass
+class GramSpec:
+    gram_num: int            # surviving original gram number (gaps allowed)
+    folder_name: str         # on-disk folder name within Files/
+    folder_path: Path        # absolute folder path on disk
+    descriptor: str          # "Gram N: <instructor detail>"
+    rel_analysis: str        # relative href from PPTX to Analysis Sheet
+    analysis_kind: str       # "docx" or "png"
+    lofars: list["LofarSpec"]
+
+
+@dataclass
+class LofarSpec:
+    label: str               # "Lofar 1", etc.
+    rel_glc: str             # relative href from PPTX to .glc
+    rel_media: str           # relative href to .png or .wav referenced by GLC
+    media_kind: str          # "png" or "wav"
+
+
+def _gram_numbers_with_gaps(target: int, rng: random.Random) -> list[int]:
+    """Return ``target`` numbers from a sequence with ~5-10% gaps removed.
+
+    Models the reverse-spec's "occasional gaps from simulated edits" rule:
+    pick a slightly larger pool, then drop a handful of integers.
     """
-    cell_w = (SLIDE_WIDTH_IN - 2 * GRID_LEFT_MARGIN_IN) / GRID_COLS
-    cell_h = (SLIDE_HEIGHT_IN - GRID_TOP_MARGIN_IN - 0.4) / GRID_ROWS
-    left = Inches(GRID_LEFT_MARGIN_IN + col * cell_w)
-    top = Inches(GRID_TOP_MARGIN_IN + row * cell_h)
-    width = Inches(cell_w - CELL_GAP_IN)
+    pool_size = int(target * 1.15) + 2
+    pool = list(range(1, pool_size + 1))
+    drop_count = pool_size - target
+    drops = rng.sample(pool[1:-1], drop_count) if drop_count > 0 else []
+    return [n for n in pool if n not in drops][:target]
 
-    title_top = top
-    title_height = Inches(TITLE_HEIGHT_IN)
-    title_shape = slide.shapes.add_shape(1, left, title_top, width, title_height)
-    title_shape.text_frame.text = f"Gram {gram_num:02d} - {vessel}"
-    add_shape_level_hyperlink(title_shape, f"../images/gram{gram_num:02d}_analysis.png")
 
-    link_top = Inches(GRID_TOP_MARGIN_IN + row * cell_h + TITLE_HEIGHT_IN + 0.05)
-    link_height = Inches(LINK_BOX_HEIGHT_IN)
-    link_box = slide.shapes.add_textbox(left, link_top, width, link_height)
-    tf = link_box.text_frame
-    tf.word_wrap = True
-    for i in range(link_count):
-        if i == 0:
-            paragraph = tf.paragraphs[0]
+def _pick_descriptor(
+    gram_num: int, rng: random.Random, vessel_pool: list[str], no_fr: bool
+) -> str:
+    """Compose a `"Gram N: <instructor detail>"` descriptor with deliberate format variance."""
+    vessel = rng.choice(vessel_pool)
+    codename = rng.choice(CODENAMES)
+    category = rng.randint(1, 4)
+    style = rng.choice(("fielded", "fielded", "fielded", "sentence"))
+    if style == "fielded":
+        prefix = "" if no_fr else "FR "
+        detail = f"{prefix}{vessel}, Category {category}, {codename}"
+    else:
+        detail = f"{vessel} contact bearing {rng.randint(0, 359):03d}, codename {codename}"
+    return f"Gram {gram_num}: {detail}"
+
+
+def _build_lofars(
+    gram_folder: Path,
+    rel_folder_from_pptx: str,
+    rng: random.Random,
+) -> list[LofarSpec]:
+    """Decide Lofar count (1-4) and emit each Lofar's GLC + media asset."""
+    count = rng.randint(1, 4)
+    lofars: list[LofarSpec] = []
+    for i in range(1, count + 1):
+        # ~80% PNG, 20% WAV per reverse-spec §7.
+        media_kind = "wav" if rng.random() < 0.2 else "png"
+        # Filename variants: suffix tokens for realism (reverse-spec §7).
+        suffix = rng.choice(("", "_a", "_b", " I", " ABC", " Loop 1", " Loop 2"))
+        media_stem = f"Lofar {i}{suffix}".strip()
+        glc_path = gram_folder / f"{media_stem}.glc"
+        media_path = gram_folder / f"{media_stem}.{media_kind}"
+        time_end = rng.choice((180, 240, 271, 300, 360))
+        freq_end = rng.choice((100, 200, 400, 800))
+        # GLC references the sibling media file by basename (matches real-corpus convention).
+        emit_glc(glc_path, image_filename=media_path.name,
+                 time_end=time_end, freq_end=freq_end)
+        if media_kind == "png":
+            emit_png(media_path, shade=120 + (i * 20) % 100)
         else:
-            paragraph = tf.add_paragraph()
-        run = paragraph.add_run()
-        run.text = f"LOFAR {i + 1}"
-        if is_wav and i == 0:
-            target = f"../gram{gram_num:02d}/clip_{i + 1}.wav"
+            emit_wav(media_path)
+        lofars.append(LofarSpec(
+            label=f"Lofar {i}",
+            rel_glc=f"{rel_folder_from_pptx}/{glc_path.name}",
+            rel_media=f"{rel_folder_from_pptx}/{media_path.name}",
+            media_kind=media_kind,
+        ))
+    return lofars
+
+
+def _emit_analysis_sheet(
+    gram_folder: Path,
+    rel_folder_from_pptx: str,
+    kind: str,
+    title: str,
+) -> str:
+    """Emit the analysis sheet and return its relative href from the PPTX."""
+    if kind == "docx":
+        name = "Analysis Sheet.docx"
+        emit_docx(gram_folder / name, title=title)
+    else:
+        name = "Analysis.png"
+        emit_png(gram_folder / name, width=16, height=16, shade=240)
+    return f"{rel_folder_from_pptx}/{name}"
+
+
+def build_gram_specs(pub: Publication, files_dir: Path, rng: random.Random) -> list[GramSpec]:
+    """Plan the gram folders + assets for one publication and write the files."""
+    gram_nums = _gram_numbers_with_gaps(pub.family.grams, rng)
+
+    # Cross-publication vessel reuse: keep a stable shuffled pool per publication
+    # so the same vessel reappears across grams (and, by RNG construction, across
+    # publications since we draw from the same VESSEL_NAMES tuple).
+    vessel_pool = list(VESSEL_NAMES)
+    rng.shuffle(vessel_pool)
+
+    specs: list[GramSpec] = []
+    for gram_num in gram_nums:
+        folder_name, rel_folder = _gram_folder_layout(pub, gram_num, len(specs), rng)
+        folder_path = files_dir / folder_name if not pub.batched else files_dir / rel_folder.split("/", 1)[0] / rel_folder.split("/", 1)[1]
+        # For the batched case rel_folder already encodes "<batch>/<gram>".
+        # For flat case the rel_folder is just the gram folder name.
+        if pub.batched:
+            batch_dir, leaf = rel_folder.split("/", 1)
+            folder_path = files_dir / batch_dir / leaf
         else:
-            target = f"../gram{gram_num:02d}/config_{i + 1}.glc"
-        add_text_run_hyperlink(run, target)
+            folder_path = files_dir / rel_folder
+        folder_path.mkdir(parents=True, exist_ok=True)
+
+        descriptor = _pick_descriptor(gram_num, rng, vessel_pool, pub.no_fr)
+        # Hyperlink hrefs are relative to the PPTX (sibling to "<Publication> Files/").
+        files_dir_name = files_dir.name
+        rel_folder_from_pptx = f"{files_dir_name}/{rel_folder}"
+
+        analysis_kind = rng.choice(("docx", "png"))
+        rel_analysis = _emit_analysis_sheet(
+            folder_path, rel_folder_from_pptx, analysis_kind, title=descriptor)
+        lofars = _build_lofars(folder_path, rel_folder_from_pptx, rng)
+
+        specs.append(GramSpec(
+            gram_num=gram_num,
+            folder_name=folder_path.name,
+            folder_path=folder_path,
+            descriptor=descriptor,
+            rel_analysis=rel_analysis,
+            analysis_kind=analysis_kind,
+            lofars=lofars,
+        ))
+    return specs
 
 
-def add_content_slide(prs: Presentation, slide_num: int, gram_start: int, gram_end: int) -> None:
-    """Add a content slide hosting grams ``gram_start..gram_end`` inclusive."""
-    layout = prs.slide_layouts[6]
-    slide = prs.slides.add_slide(layout)
-    for offset, gram_num in enumerate(range(gram_start, gram_end + 1)):
-        row = offset // GRID_COLS
-        col = offset % GRID_COLS
-        vessel = VESSEL_NAMES[(gram_num - 1) % len(VESSEL_NAMES)]
-        link_count = link_count_for_gram(gram_num)
-        is_wav = gram_num in WAV_GRAMS
-        build_gram_placeholder(slide, row, col, gram_num, vessel, link_count, is_wav)
+def _gram_folder_layout(
+    pub: Publication, gram_num: int, index: int, rng: random.Random
+) -> tuple[str, str]:
+    """Return ``(folder_name, rel_path_under_Files)`` for one gram."""
+    if not pub.batched:
+        name = f"Gram {gram_num}"
+        return name, name
+    # Pub10_Ed22B: batches of 10. ``index`` is 0-based across surviving grams,
+    # which maps to batch boundaries cleanly because the SME prunes/edits
+    # surviving grams but the folders are still grouped by original tens.
+    batch_lo = ((gram_num - 1) // 10) * 10 + 1
+    batch_hi = batch_lo + 9
+    batch = f"Pub 10_Ed 2_({batch_lo}-{batch_hi})"
+    # Mild folder-name variance reverse-spec §7 calls out (zero-pad / codename suffix).
+    style = rng.choice(("plain", "plain", "padded", "codename"))
+    if style == "padded":
+        leaf = f"Gram_{gram_num:02d}"
+    elif style == "codename":
+        leaf = f"Gram_{gram_num} {rng.choice(CODENAMES)}"
+    else:
+        leaf = f"Gram_{gram_num}"
+    return leaf, f"{batch}/{leaf}"
+
+
+# -----------------------------------------------------------------------------
+# PPTX construction
+# -----------------------------------------------------------------------------
+
+def _add_title_bar(slide, prs: Presentation, *, title: str) -> None:
+    """Add a coloured title bar with placeholder text (no real org imagery)."""
+    width = prs.slide_width
+    bar = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, 0, 0, width, Inches(TITLE_BAR_HEIGHT_IN)
+    )
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+    bar.line.fill.background()
+    tf = bar.text_frame
+    tf.margin_left = Inches(0.2)
+    tf.margin_right = Inches(0.2)
+    p = tf.paragraphs[0]
+    run = p.add_run()
+    run.text = title
+    run.font.size = Pt(20)
+    run.font.bold = True
+    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+
+def _add_framing_slide(prs: Presentation, *, title: str) -> None:
+    """Add a welcome/exit slide: centred title + 'Instructor Version' subtitle.
+
+    No gram content, no hyperlinks. The extractor identifies these slides
+    by the title prefix and skips them when building the CSV.
+    """
+    blank_layout = prs.slide_layouts[6]
+    slide = prs.slides.add_slide(blank_layout)
+
+    title_box = slide.shapes.add_textbox(
+        Inches(1.0), Inches(2.6),
+        Inches(SLIDE_WIDTH_IN - 2.0), Inches(1.4),
+    )
+    ttf = title_box.text_frame
+    ttf.word_wrap = True
+    tp = ttf.paragraphs[0]
+    tp.alignment = PP_ALIGN.CENTER
+    trun = tp.add_run()
+    trun.text = title
+    trun.font.size = Pt(40)
+    trun.font.bold = True
+    trun.font.color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+
+    sub_box = slide.shapes.add_textbox(
+        Inches(1.0), Inches(4.2),
+        Inches(SLIDE_WIDTH_IN - 2.0), Inches(0.8),
+    )
+    stf = sub_box.text_frame
+    sp = stf.paragraphs[0]
+    sp.alignment = PP_ALIGN.CENTER
+    srun = sp.add_run()
+    srun.text = FRAMING_SUBTITLE
+    srun.font.size = Pt(24)
+    srun.font.color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+
+
+def _add_gram_tile(
+    slide, *, left_in: float, top_in: float, width_in: float, height_in: float,
+    spec: GramSpec,
+) -> None:
+    """Place one gram tile: rounded rectangle + Lofar text labels beneath."""
+    # Rounded rectangle holding the descriptor; shape-level hyperlink to Analysis.
+    title_h = TILE_TITLE_HEIGHT_IN
+    rect = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE,
+        Inches(left_in), Inches(top_in),
+        Inches(width_in), Inches(title_h),
+    )
+    rect.fill.solid()
+    rect.fill.fore_color.rgb = RGBColor(0xE8, 0xEE, 0xF7)
+    rect.line.color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+    tf = rect.text_frame
+    tf.margin_left = Inches(0.05)
+    tf.margin_right = Inches(0.05)
+    p = tf.paragraphs[0]
+    run = p.add_run()
+    run.text = spec.descriptor
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+    add_shape_level_hyperlink(rect, spec.rel_analysis)
+
+    # Lofar text box beneath the rectangle.
+    lofar_top = top_in + title_h + 0.02
+    lofar_h = max(0.15, height_in - title_h - 0.05)
+    box = slide.shapes.add_textbox(
+        Inches(left_in), Inches(lofar_top),
+        Inches(width_in), Inches(lofar_h),
+    )
+    btf = box.text_frame
+    btf.word_wrap = True
+    for i, lofar in enumerate(spec.lofars):
+        para = btf.paragraphs[0] if i == 0 else btf.add_paragraph()
+        run = para.add_run()
+        run.text = lofar.label
+        run.font.size = Pt(8)
+        add_text_run_hyperlink(run, lofar.rel_glc)
+
+
+def _chunk(seq: list, size: int) -> Iterable[list]:
+    for i in range(0, len(seq), size):
+        yield seq[i:i + size]
+
+
+def build_publication_pptx(pub: Publication, out_pptx: Path, specs: list[GramSpec]) -> None:
+    """Build one publication's PPTX, embedding tiles + hyperlinks."""
+    prs = Presentation()
+    prs.slide_width = Inches(SLIDE_WIDTH_IN)
+    prs.slide_height = Inches(SLIDE_HEIGHT_IN)
+
+    slide_chunks = list(_chunk(specs, pub.family.grams_per_slide))
+    total_pages = len(slide_chunks)
+    blank_layout = prs.slide_layouts[6]  # blank
+
+    _add_framing_slide(prs, title=f"{WELCOME_TITLE_PREFIX}{pub.name}")
+
+    for page_num, chunk in enumerate(slide_chunks, start=1):
+        slide = prs.slides.add_slide(blank_layout)
+        _add_title_bar(
+            slide, prs,
+            title=f"{pub.name} — Page {page_num} of {total_pages}",
+        )
+
+        # Grid placement.
+        usable_w = SLIDE_WIDTH_IN - 2 * GRID_LEFT_MARGIN_IN
+        usable_h = SLIDE_HEIGHT_IN - GRID_TOP_MARGIN_IN - 0.3
+        cell_w = usable_w / GRID_COLS
+        cell_h = usable_h / GRID_ROWS
+        for idx, spec in enumerate(chunk):
+            row = idx // GRID_COLS
+            col = idx % GRID_COLS
+            left = GRID_LEFT_MARGIN_IN + col * cell_w
+            top = GRID_TOP_MARGIN_IN + row * cell_h
+            _add_gram_tile(
+                slide,
+                left_in=left, top_in=top,
+                width_in=cell_w - CELL_GAP_IN,
+                height_in=cell_h - CELL_GAP_IN,
+                spec=spec,
+            )
+
+    _add_framing_slide(prs, title=f"{EXIT_TITLE_PREFIX}{pub.name}")
+
+    out_pptx.parent.mkdir(parents=True, exist_ok=True)
+    prs.save(out_pptx)
+
+
+def build_publication(pub: Publication, out_root: Path, rng: random.Random) -> None:
+    """Write one publication: <Name>/<Name>.pptx + <Name> Files/Gram N/..."""
+    pub_dir = out_root / pub.name
+    files_dir = pub_dir / f"{pub.name} Files"
+    files_dir.mkdir(parents=True, exist_ok=True)
+    specs = build_gram_specs(pub, files_dir, rng)
+    out_pptx = pub_dir / f"{pub.name}.pptx"
+    build_publication_pptx(pub, out_pptx, specs)
 
 
 # -----------------------------------------------------------------------------
@@ -194,30 +618,28 @@ def add_content_slide(prs: Presentation, slide_num: int, gram_start: int, gram_e
 # -----------------------------------------------------------------------------
 
 def main(argv: Iterable[str] | None = None) -> int:
-    """Build and write the mock PPTX. Returns process exit code."""
-    parser = argparse.ArgumentParser(description="Generate a synthetic instructor PPTX")
-    parser.add_argument("--out", required=True, type=Path, help="Output .pptx path")
+    parser = argparse.ArgumentParser(
+        description="Generate the synthetic instructor PPTX corpus")
+    parser.add_argument(
+        "--out-root", required=True, type=Path,
+        help="Output directory; each publication becomes a subfolder",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    out_path: Path = args.out
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_root: Path = args.out_root
+    out_root.mkdir(parents=True, exist_ok=True)
 
-    prs = Presentation()
-    prs.slide_width = Inches(SLIDE_WIDTH_IN)
-    prs.slide_height = Inches(SLIDE_HEIGHT_IN)
+    rng = random.Random(RANDOM_SEED)
 
-    add_welcome_slide(prs)
+    for pub in PUBLICATIONS:
+        # Use a publication-scoped sub-RNG so adding a publication later doesn't
+        # disturb the earlier ones' generated content.
+        sub_seed = rng.randrange(0, 2**31 - 1)
+        sub_rng = random.Random(sub_seed)
+        build_publication(pub, out_root, sub_rng)
+        print(f"Built {pub.name}")
 
-    gram = 1
-    slide_num = 2
-    while gram <= TOTAL_GRAMS:
-        gram_end = min(gram + GRAMS_PER_SLIDE - 1, TOTAL_GRAMS)
-        add_content_slide(prs, slide_num, gram, gram_end)
-        gram = gram_end + 1
-        slide_num += 1
-
-    prs.save(out_path)
-    print(f"Wrote {out_path} with {TOTAL_SLIDE_COUNT} slides ({CONTENT_SLIDE_COUNT} content + 1 welcome).")
+    print(f"Wrote {len(PUBLICATIONS)} publications under {out_root}")
     return 0
 
 
