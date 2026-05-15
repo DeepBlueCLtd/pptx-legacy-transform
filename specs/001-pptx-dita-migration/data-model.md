@@ -146,7 +146,7 @@ row per resulting DITA topic. The unique key per row is
 | `vessel_name` | `str` | from `GramPlaceholder` | may be empty (warns at WARNING level) |
 | `topic_type` | `str` | enum: `"glc"` or `"analysis"` | must be one of the two |
 | `sequence` | `str` | `1`-based per gram, type-scoped | `"1"` for analysis rows; `"1..N"` for glc rows |
-| `topic_filename` | `str` | computed | matches `gram_xx_lofarN.dita` or `gram_xx_analysis.dita` |
+| `topic_filename` | `str` | computed | matches `gram_xx.dita`; identical across all rows belonging to the same gram (the CSV's N+1 rows collapse into one DITA topic) |
 | `display_text` | `str` | from `GlcLink.display_text` | human-readable link label; empty for analysis rows |
 | `link_href` | `str` | from `GlcLink.href` | raw hyperlink URI; source of truth for WAV detection and stub `xref href`; empty for analysis rows |
 | `glc_path` | `str` | resolved relative to source folder | empty for analysis rows and for WAV-targeted rows |
@@ -192,27 +192,43 @@ identity for any clean row (same field values in same order).
 
 ### 3.1 `DitaTopic`
 
-The generator writes two flavours of topic, both as standalone XML
-files, no DTD declaration, no XML preamble beyond the encoding line.
-Filenames and folder placement come from the CSV row's
-`publication`/`chapter`/`topic_filename`.
+The generator writes one topic per gram (`gram_NN.dita`) as a
+standalone XML file with no DTD declaration and no XML preamble
+beyond the encoding line. The CSV's N+1 rows for a gram (one
+`topic_type=analysis` row plus N `topic_type=glc` rows) all share
+the same `topic_filename` and collapse into one topic; the generator
+groups by `(publication, chapter, gram_id)` before emitting.
 
-#### 3.1.1 `gram_xx_lofarN.dita` (from a GLC row)
+Filenames and folder placement come from the CSV row's
+`publication`/`chapter`/`topic_filename`. See
+[`contracts/gramframe.md`](contracts/gramframe.md) for the rendered-HTML
+contract the `gram-config` block must satisfy.
+
+#### 3.1.1 `gram_xx.dita` — per-gram topic
 
 Required structure:
 
 ```xml
-<topic id="gram_NN_lofarM">
+<topic id="gram_NN">
   <title>Gram NN<ph audience="-trainee"> - {vessel_name}</ph></title>
   <body>
+    <!-- 1. Analysis-sheet section, from the topic_type=analysis row -->
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <!-- PNG: <image href="{slug}.png" placement="break" align="center"/> -->
+      <!-- DOCX: <p><xref href="{slug}.docx" format="docx" scope="local">Analysis Sheet</xref></p> -->
+    </section>
+
+    <!-- 2. One GramFrame block per topic_type=glc row, in sequence order -->
     <section>
       <table outputclass="gram-config">
         <tgroup cols="2">
+          <colspec colname="c1" colnum="1"/>
+          <colspec colname="c2" colnum="2"/>
           <tbody>
             <row>
               <entry namest="c1" nameend="c2">
-                <image href="{png_path resolved against image-root}"
-                       placement="break" align="center"/>
+                <image href="{slug}.png" placement="break" align="center"/>
               </entry>
             </row>
             <row><entry>time-start</entry><entry>0</entry></row>
@@ -223,61 +239,37 @@ Required structure:
         </tgroup>
       </table>
     </section>
+
+    <!-- 3. Optional GAPS-Lite stub block(s), inline among the GramFrame tables -->
+    <section>
+      <note>This gram requires GAPS-Lite playback.</note>
+      <p><xref href="{slug}.wav" format="wav" scope="local">{display_text}</xref></p>
+    </section>
   </body>
   <related-links>
     <link href="../gram-index.dita" format="dita"/>
   </related-links>
 </topic>
 ```
+
+When any GAPS-Lite stub block is present, the topic file is prefixed
+with a `<!-- MANUAL REVIEW: GAPS-Lite required -->` comment so the
+technical author can find the affected grams later.
 
 Validation:
 
-- `id` is the `topic_filename` minus the `.dita` extension.
-- The `<ph audience="-trainee">` wrapper is omitted only when
-  `vessel_name` is empty; otherwise it is always present.
+- `id` is the `topic_filename` minus the `.dita` extension
+  (e.g. `gram_12`).
+- The analysis section is omitted when the gram has no
+  `topic_type=analysis` row.
+- The `<ph audience="-trainee">` wrapper in the title is omitted only
+  when `vessel_name` is empty; otherwise it is always present.
+- The analysis section always carries `audience="-trainee"`.
+- The two named `<colspec>` elements inside each `gram-config` table
+  are required so DITA-OT emits `colspan="2"` on the image row; without
+  them the GramFrame bundle rejects the table.
 - `time-start` and `freq-start` are always literal `"0"` (per
   spec section 1.6).
-
-#### 3.1.2 `gram_xx_analysis.dita` (from an analysis row)
-
-Required structure:
-
-```xml
-<topic id="gram_NN_analysis" audience="-trainee">
-  <title>Gram NN Analysis</title>
-  <body>
-    <section>
-      <image href="{png_path resolved against image-root}"
-             placement="break" align="center"/>
-    </section>
-  </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita"/>
-  </related-links>
-</topic>
-```
-
-Validation: `audience="-trainee"` is always set on the root topic.
-
-#### 3.1.3 WAV stub topic (from a `wav_treatment="gaps-lite"` row)
-
-Required structure:
-
-```xml
-<!-- MANUAL REVIEW: GAPS-Lite required -->
-<topic id="gram_NN_lofarM">
-  <title>Gram NN<ph audience="-trainee"> - {vessel_name}</ph></title>
-  <body>
-    <section>
-      <note>This gram requires GAPS-Lite playback.</note>
-      <p><xref href="{wav target}" format="wav" scope="external">{display_text}</xref></p>
-    </section>
-  </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita"/>
-  </related-links>
-</topic>
-```
 
 ### 3.2 `Ditamap`
 
@@ -290,16 +282,17 @@ Required structure:
 ```xml
 <map title="Main">
   <topichead navtitle="{Chapter Title}">
-    <topicref href="../main/{chapter-slug}/gram_NN_lofarM.dita"/>
-    <topicref href="../main/{chapter-slug}/gram_NN_analysis.dita"/>
+    <topicref href="main/{chapter-slug}/gram-NN/gram_NN.dita"/>
     ...
   </topichead>
   ...
 </map>
 ```
 
-Chapters are emitted in the order of first appearance in the CSV (which
-is, by R3, alphabetical folder order).
+One `topicref` per gram (not per CSV row); the analysis row's
+contribution lives inside the same `gram_NN.dita` as an instructor-only
+section. Chapters are emitted in the order of first appearance in the
+CSV (which is, by R3, alphabetical folder order).
 
 #### 3.2.2 Test ditamap (`progress-test-N.ditamap`)
 
@@ -307,8 +300,7 @@ Required structure:
 
 ```xml
 <map title="Progress Test N">
-  <topicref href="../progress-test-N/gram_NN_lofarM.dita"/>
-  <topicref href="../progress-test-N/gram_NN_analysis.dita"/>
+  <topicref href="progress-test-N/gram-NN/gram_NN.dita"/>
   ...
 </map>
 ```

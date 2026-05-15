@@ -25,7 +25,7 @@ generator never re-reads PPTX or GLC files.
 | 4 | `vessel_name` | string | yes | instructor-only content |
 | 5 | `topic_type` | enum | no | `glc` or `analysis` |
 | 6 | `sequence` | string | no | `1`-based per gram, scoped per `topic_type` |
-| 7 | `topic_filename` | string | no | `gram_NN_lofarM.dita` or `gram_NN_analysis.dita` |
+| 7 | `topic_filename` | string | no | `gram_NN.dita`; identical across every row that belongs to the same gram (CSV's N+1 rows per gram collapse into one DITA topic — see `dita-topic-schema.md` §1) |
 | 8 | `display_text` | string | yes (analysis rows) | human-readable link label from the PPTX run |
 | 9 | `link_href` | string | yes (analysis rows) | raw hyperlink URI from the PPTX run; `.glc`, `.wav`, or other; source of truth for WAV detection and `xref href` in WAV stub topics |
 | 10 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved `.glc` path relative to source folder; empty when the link target was a `.wav` |
@@ -41,10 +41,12 @@ generator never re-reads PPTX or GLC files.
 The unique key per row is the tuple
 `(publication, chapter, gram_id, topic_type, sequence)`.
 
-`topic_filename` is derived from this tuple and must remain consistent.
-The generator does not deduplicate on `topic_filename`; if two rows share
-one, the second write overwrites the first silently — by contract this
-should never happen because the unique key drives the filename.
+`topic_filename` is derived from `(publication, chapter, gram_id)` —
+**not** from the full row key — and is therefore shared by every row
+belonging to the same gram. The generator groups rows by gram and
+merges them into one DITA topic per `topic_filename`; the trailing
+columns (`topic_type`, `sequence`) determine *which block* a row
+contributes to inside that topic.
 
 ## Row construction rules
 
@@ -86,17 +88,21 @@ preserved; the writer never normalises numerics.
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12_lofar2.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,,Gram 12/Analysis.png,Gram 12/Analysis Sheet.docx,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12.dita,,,,,,Gram 12/Analysis.png,Gram 12/Analysis Sheet.docx,,
 ```
+
+All three rows share `topic_filename=gram_12.dita`; the generator merges
+them into one DITA topic with one analysis section followed by two
+GramFrame tables.
 
 ### Progress-test gram with a missing GLC
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,"GLC not found"
-progress-test-1,,Gram 03,,analysis,1,gram_03_analysis.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
+progress-test-1,,Gram 03,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,"GLC not found"
+progress-test-1,,Gram 03,,analysis,1,gram_03.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
 ```
 
 ### WAV row awaiting author treatment
