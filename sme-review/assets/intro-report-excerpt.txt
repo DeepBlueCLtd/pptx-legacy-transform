@@ -1,0 +1,40 @@
+=== Section 1: Summary ===
+Filename: Instructor Progress Test 1 Grams.pptx
+Total slides: 4
+Hyperlink target extensions:
+  .docx: 19
+  .glc: 64
+  .png: 11
+Shape-level hyperlinks: 30
+Text-run hyperlinks: 64
+Slides flagged (deviating shape count): none
+
+=== Section 2: Per-slide ===
+-- Slide 1 (shapes: 2) --
+  [0] name=TextBox 1 type=TEXT_BOX (17) pos=(1.00,2.60) size=(11.33x1.40) text='Welcome to Instructor Progress Test 1 Grams' shape_hyperlink=None
+      run[0]: text='Welcome to Instructor Progress Test 1 Grams' hyperlink=None
+  [1] name=TextBox 2 type=TEXT_BOX (17) pos=(1.00,4.20) size=(11.33x0.80) text='Instructor Version' shape_hyperlink=None
+      run[0]: text='Instructor Version' hyperlink=None
+-- Slide 2 (shapes: 31) --
+  [0] name=Rectangle 1 type=AUTO_SHAPE (1) pos=(0.00,0.00) size=(13.33x0.60) text='Instructor Progress Test 1 Grams — Page 1 of 2' shape_hyperlink=None
+      run[0]: text='Instructor Progress Test 1 Grams — Page 1 of 2' hyperlink=None
+  [1] name=Rounded Rectangle 2 type=AUTO_SHAPE (1) pos=(0.40,0.80) size=(2.41x0.40) text='Gram 1: FR Prometheus, Category 1, Bespin' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 1/Analysis Sheet.docx
+      run[0]: text='Gram 1: FR Prometheus, Category 1, Bespin' hyperlink=None
+  [2] name=TextBox 3 type=TEXT_BOX (17) pos=(0.40,1.22) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 1/Lofar 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 1/Lofar 2 I.glc
+  [3] name=Rounded Rectangle 4 type=AUTO_SHAPE (1) pos=(2.91,0.80) size=(2.41x0.40) text='Gram 3: FR Ghost, Category 1, Tantive' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 3/Analysis Sheet.docx
+      run[0]: text='Gram 3: FR Ghost, Category 1, Tantive' hyperlink=None
+  [4] name=TextBox 5 type=TEXT_BOX (17) pos=(2.91,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 3/Lofar 1 ABC.glc
+  [5] name=Rounded Rectangle 6 type=AUTO_SHAPE (1) pos=(5.41,0.80) size=(2.41x0.40) text='Gram 4: Enterprise contact bearing 291, codename Hoth' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 4/Analysis.png
+      run[0]: text='Gram 4: Enterprise contact bearing 291, codename Hoth' hyperlink=None
+  [6] name=TextBox 7 type=TEXT_BOX (17) pos=(5.41,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 4/Lofar 1 Loop 2.glc
+  [7] name=Rounded Rectangle 8 type=AUTO_SHAPE (1) pos=(7.92,0.80) size=(2.41x0.40) text='Gram 5: FR Enterprise, Category 4, Bespin' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 5/Analysis.png
+      run[0]: text='Gram 5: FR Enterprise, Category 4, Bespin' hyperlink=None
+  [8] name=TextBox 9 type=TEXT_BOX (17) pos=(7.92,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 5/Lofar 1 Loop 1.glc
+  [9] name=Rounded Rectangle 10 type=AUTO_SHAPE (1) pos=(10.42,0.80) size=(2.41x0.40) text='Gram 6: FR Akira-class, Category 4, Hoth' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 6/Analysis.png
+      run[0]: text='Gram 6: FR Akira-class, Category 4, Hoth' hyperlink=None
+  [10] name=TextBox 11 type=TEXT_BOX (17) pos=(10.42,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
