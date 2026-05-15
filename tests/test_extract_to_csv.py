@@ -1,9 +1,9 @@
-"""Tests for extract_to_csv.py infrastructure (User Story 2).
+"""Tests for extract_to_csv.py (User Story 2 + Phase 10 grouping).
 
-The shape-grouping function (`extract_grams_from_slide`) is the documented
-``NotImplementedError`` stub mandated by FR-015 / R1, so these tests cover
-the surrounding infrastructure: argument parsing, walking, classification,
-GLC resolution, row construction, and CSV writing.
+Post Phase 10, ``extract_grams_from_slide`` implements the reverse-spec §4
+grouping rule (T104) — so these tests exercise the real end-to-end
+extraction against the mock corpus, in addition to the pre-existing
+classification / CSV / row-construction coverage.
 """
 
 from __future__ import annotations
@@ -13,13 +13,13 @@ import shutil
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import extract_to_csv  # noqa: E402
 import mock_pptx  # noqa: E402
+from tests import conftest_helpers  # noqa: E402
 
 
 TMP = REPO_ROOT / "tests" / "_tmp"
@@ -188,68 +188,93 @@ class GramToRowsTests(unittest.TestCase):
         self.assertIn("WAV link; treatment required", wav_row["warnings"])
 
 
-class StubBoundaryTests(unittest.TestCase):
-    """Argparse + walk + classify + write all run; only the stub raises (FR-015)."""
+class GroupingAgainstMockCorpusTests(unittest.TestCase):
+    """T105 — exercise the real grouping logic against a small mock corpus.
 
-    def setUp(self) -> None:
-        self.input_root = TMP / "stub_boundary"
-        if self.input_root.exists():
-            shutil.rmtree(self.input_root)
-        self.input_root.mkdir(parents=True)
+    Uses the Week 1 deck (a fast, single-publication slice of the corpus)
+    so this test stays well under the FR-017 one-minute budget.
+    """
 
-    def test_argparse_and_logging_succeed_before_stub(self) -> None:
-        # Generate a real mock pptx so python-pptx parses successfully and
-        # we hit the shape-grouping stub. The script should exit 1 but
-        # everything before the stub must run.
-        pptx = self.input_root / "01.pptx"
-        mock_pptx.main(["--out", str(pptx)])
-        out_csv = TMP / "stub_boundary.csv"
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(TMP / "extract_corpus")
+        cls.week1_dir = cls.corpus / "Instructor Week 1 Grams"
+
+    def test_grouping_emits_one_analysis_row_per_gram(self) -> None:
+        out_csv = TMP / "extract_corpus_week1.csv"
         rc = extract_to_csv.main([
-            "--input-root", str(self.input_root),
+            "--input-root", str(self.week1_dir),
             "--out", str(out_csv),
         ])
-        self.assertEqual(rc, 1, "stub must trip exit 1")
-        self.assertTrue(out_csv.is_file(), "header must be written even on stub")
-        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
-            reader = csv.DictReader(fh)
-            self.assertEqual(tuple(reader.fieldnames or ()), extract_to_csv.CSV_COLUMNS)
-
-
-class StubExpansionTests(unittest.TestCase):
-    """With the stub patched out, the rest of the pipeline runs end-to-end."""
-
-    def setUp(self) -> None:
-        self.input_root = TMP / "stub_patched"
-        if self.input_root.exists():
-            shutil.rmtree(self.input_root)
-        self.input_root.mkdir(parents=True)
-
-    def test_full_run_with_stub_patched(self) -> None:
-        pptx = self.input_root / "01.pptx"
-        mock_pptx.main(["--out", str(pptx)])
-        glc_dir = self.input_root / "supporting" / "gram01"
-        glc_dir.mkdir(parents=True)
-        shutil.copy(FIXTURES / "minimal.glc", glc_dir / "config_1.glc")
-
-        # Stub returns one fake gram per slide.
-        def fake(slide, slide_num):
-            if slide_num == 1:
-                return []
-            return [_gram(gram_id="Gram 01", vessel="Test",
-                          links=[("LOFAR 1", "supporting/gram01/config_1.glc")],
-                          png="images/gram01_analysis.png")]
-
-        out_csv = TMP / "stub_patched.csv"
-        with patch.object(extract_to_csv, "extract_grams_from_slide", fake):
-            rc = extract_to_csv.main([
-                "--input-root", str(self.input_root),
-                "--out", str(out_csv),
-            ])
         self.assertEqual(rc, 0)
-        self.assertTrue(out_csv.is_file())
         with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
-        self.assertGreaterEqual(len(rows), 2)
+        analysis_rows = [r for r in rows if r["topic_type"] == "analysis"]
+        gram_ids = {r["gram_id"] for r in rows}
+        self.assertEqual(len(analysis_rows), len(gram_ids),
+                         "Expected exactly one analysis row per gram")
+
+    def test_gram_id_is_normalized_two_digit_form(self) -> None:
+        out_csv = TMP / "extract_corpus_gram_id.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.week1_dir),
+            "--out", str(out_csv),
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertRegex(row["gram_id"], r"^Gram \d{2,}$",
+                             f"gram_id not in normalised form: {row['gram_id']!r}")
+
+    def test_descriptor_split_populates_vessel_name(self) -> None:
+        out_csv = TMP / "extract_corpus_vessel.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.week1_dir),
+            "--out", str(out_csv),
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        # Every gram has a non-empty descriptor after the colon, so every row
+        # should carry the instructor-visible detail in vessel_name.
+        with_detail = [r for r in rows if r["vessel_name"].strip()]
+        self.assertGreater(len(with_detail), 0)
+
+    def test_glc_resolution_succeeds_against_mock_corpus(self) -> None:
+        out_csv = TMP / "extract_corpus_glc.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.week1_dir),
+            "--out", str(out_csv),
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        glc_rows = [r for r in rows
+                    if r["topic_type"] == "glc" and r["link_href"].lower().endswith(".glc")]
+        self.assertGreater(len(glc_rows), 0)
+        # Every .glc-link row should have produced a resolved glc_path and
+        # populated time_end/freq_end via the parser.
+        unresolved = [r for r in glc_rows if not r["glc_path"]]
+        self.assertEqual(len(unresolved), 0,
+                         f"Unresolved GLC links: {[r['link_href'] for r in unresolved][:5]}")
+
+    def test_progress_test_routing_with_default_pattern(self) -> None:
+        # The default test pattern ("progress test", case-insensitive) should
+        # route the Progress Test 1 PPTX to publication=progress-test-N.
+        test1_dir = self.corpus / "Instructor Progress Test 1 Grams"
+        out_csv = TMP / "extract_corpus_test1.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(test1_dir),
+            "--out", str(out_csv),
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        pubs = {r["publication"] for r in rows}
+        self.assertEqual(pubs, {"progress-test-1"}, f"unexpected publications: {pubs}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GAPS_Lite_configuration><data_source><filename>Lofar 1.png</filename><bitmap_crop_values><top_crop>0</top_crop><bottom_crop>360</bottom_crop></bitmap_crop_values></data_source><playback><time_offset>0</time_offset></playback><settings><lofar><bandwidth>800</bandwidth></lofar></settings></GAPS_Lite_configuration>
