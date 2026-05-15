@@ -246,9 +246,15 @@ produces the expected output tree on continue.
 
 ### Edge Cases
 
-- A gram title shape's hyperlink to the analysis PNG is attached at the
+- A gram title shape's hyperlink to the analysis sheet is attached at the
   shape level on some slides and at the text-run level on others; both
   mechanisms must be detected and recorded.
+- A gram folder on disk carries its analysis sheet as `Analysis Sheet.docx`
+  on some grams, as `Analysis.png` on others, and rarely as both; the
+  pipeline must normalise each gram folder so that both forms exist on
+  disk before extraction emits the analysis CSV row. Normalisation runs
+  once per gram folder, not per CSV row and not per gram instance on a
+  slide, and a renderer failure on one folder must not abort the run.
 - A supporting-material folder layout uses one subfolder per ten grams
   rather than one per gram; GLC path resolution must succeed for either
   layout without configuration changes.
@@ -391,6 +397,21 @@ produces the expected output tree on continue.
   separately from the automated pipeline. The README MUST also state
   that Oxygen remains the production publishing path and that the
   DITA-OT preview is for inspection only.
+- **FR-022**: The pipeline MUST include an analysis-sheet normalisation
+  stage that operates per gram *folder* (not per gram instance on a
+  slide, not per CSV row) and runs before extraction emits any analysis
+  row. For every gram folder under the content root, the stage MUST
+  ensure both an `Analysis Sheet.docx` and an `Analysis.png` exist:
+  where only the `.docx` is present it MUST be rendered to PNG via the
+  configured renderer; where only the `.png` is present a minimal
+  single-image `.docx` MUST be produced that embeds the PNG full-page;
+  where both already exist the stage MUST leave them in place and log
+  at INFO level. The stage MUST log a WARNING and continue (rather than
+  abort the run) for any gram folder whose renderer step fails or whose
+  renderer binary is unavailable, so that the air-gapped maintainer can
+  triage affected folders from the log and from the resulting CSV row
+  (where `png_path` and/or `analysis_docx_path` are left empty and the
+  `warnings` column records the failure).
 
 ### Key Entities *(include if feature involves data)*
 
@@ -400,9 +421,17 @@ produces the expected output tree on continue.
   by filename pattern.
 - **Gram Placeholder**: A logical unit on a content slide consisting of
   a title shape (gram identifier and vessel name, with a hyperlink to an
-  analysis PNG) and a link text box (one to four hyperlinked runs to GLC
-  or WAV configurations); 15 placeholders are arranged on a 3×5 grid per
-  content slide.
+  analysis sheet — either an `Analysis Sheet.docx` or an `Analysis.png`
+  in the gram folder; see FR-022 for the normalisation that guarantees
+  both forms exist before extraction) and a link text box (one to four
+  hyperlinked runs to GLC or WAV configurations); 15 placeholders are
+  arranged on a 3×5 grid per content slide.
+- **Analysis Sheet**: The per-gram-folder artefact describing a single
+  gram's analysis, carried on disk as either `Analysis Sheet.docx` or
+  `Analysis.png` (or both). One Analysis Sheet exists per gram folder,
+  irrespective of how many times that gram is referenced from a slide.
+  FR-022 normalisation guarantees both forms exist before extraction
+  consumes the folder.
 - **GLC Configuration**: An XML file describing a spectrogram analysis
   view; contributes the source-image filename, the time end (from
   bottom-crop), and the frequency end (from bandwidth) to a DITA topic.
@@ -503,3 +532,11 @@ produces the expected output tree on continue.
 - DITA audience filtering uses the existing convention `audience="-trainee"`
   to mark instructor-only content, consistent with the target
   publications.
+- A renderer capable of converting `.docx` to PNG is available on both
+  the development VM and the air-gapped target PC (LibreOffice headless
+  is the default expectation; an equivalent that exposes a
+  command-line `.docx → image` conversion is acceptable). The renderer
+  binary is discoverable on PATH or via a configurable command. It is
+  used only by the FR-022 normalisation stage and never at runtime by
+  any other stage; like DITA-OT (FR-021) it is installed-by-the-user,
+  documented in the README, and not bundled in the project delivery.
