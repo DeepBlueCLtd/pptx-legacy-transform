@@ -1,5 +1,5 @@
-﻿publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,271,400,images/gram12.png,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,images/gram12_analysis.png,,
-progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,,,images/gram03.png,,GLC not found
-main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,audio_clip.wav,,,,,gaps-lite,
+﻿publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,,images/gram12_analysis.png,,
+progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,GLC not found
+main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,Audio sample,supporting/gram05/audio_clip.wav,,,,,gaps-lite,

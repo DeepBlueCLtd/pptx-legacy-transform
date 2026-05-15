@@ -125,8 +125,9 @@ row per resulting DITA topic. The unique key per row is
 | `topic_type` | `str` | enum: `"glc"` or `"analysis"` | must be one of the two |
 | `sequence` | `str` | `1`-based per gram, type-scoped | `"1"` for analysis rows; `"1..N"` for glc rows |
 | `topic_filename` | `str` | computed | matches `gram_xx_lofarN.dita` or `gram_xx_analysis.dita` |
-| `display_text` | `str` | from `GlcLink` | empty for analysis rows |
-| `glc_path` | `str` | resolved relative to source folder | empty for analysis rows |
+| `display_text` | `str` | from `GlcLink.display_text` | human-readable link label; empty for analysis rows |
+| `link_href` | `str` | from `GlcLink.href` | raw hyperlink URI; source of truth for WAV detection and stub `xref href`; empty for analysis rows |
+| `glc_path` | `str` | resolved relative to source folder | empty for analysis rows and for WAV-targeted rows |
 | `time_end` | `str` | from `GlcDocument.time_end` | empty for analysis rows |
 | `freq_end` | `str` | from `GlcDocument.freq_end` | empty for analysis rows |
 | `png_path` | `str` | resolved relative to source folder | empty for glc rows whose link target was a .glc |
@@ -142,8 +143,10 @@ row per resulting DITA topic. The unique key per row is
    box, starting at `1`.
 4. WAV-targeted links produce a row whose `topic_type` is `"glc"` and
    whose `wav_treatment` is left for the technical author to fill in.
-   `glc_path` is empty for such rows; the WAV path lives in
-   `display_text` adjacent context until the author adjusts it.
+   `glc_path` is empty for such rows; the raw `.wav` URI lives in
+   `link_href` (source of truth for the generator's WAV branching and
+   stub `xref href`), and `display_text` carries the visible link label
+   exactly as it appeared in the PPTX run.
 5. The warnings column accumulates *all* recoverable issues for the row,
    joined by `", "`.
 
@@ -341,6 +344,7 @@ contract for that edit:
 | `topic_type`, `sequence`, `topic_filename` | No | derived; changes break ditamap consistency |
 | `vessel_name` | Yes | typos and missing names |
 | `display_text` | Yes | rare |
+| `link_href` | Yes | rare — only to correct an extractor mis-read |
 | `glc_path`, `png_path` | Yes | to fix unresolved paths |
 | `time_end`, `freq_end` | Yes | to override broken GLC parses |
 | `wav_treatment` | Yes | required where it is empty |

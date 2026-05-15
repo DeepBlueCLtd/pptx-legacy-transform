@@ -101,9 +101,12 @@ Produced for every CSV row whose `wav_treatment` is `gaps-lite`.
 </topic>
 ```
 
-`wav_href` is taken from the row's `display_text` only when `glc_path`
-is empty and the link target was a `.wav`; the extractor records this
-in `display_text` until the author edits it. (See R8.)
+`wav_href` is taken from the row's `link_href` column when `glc_path` is
+empty and `link_href` ends in `.wav`; the `<xref>` element's visible
+text comes from `display_text`. The extractor never conflates the two:
+`display_text` is the human-readable label exactly as it appeared in
+the PPTX run; `link_href` is the raw URI. (See R8 and the WAV-row rule
+in `csv-schema.md`.)
 
 ## 4. WAV row with `wav_treatment="screenshot"`
 
