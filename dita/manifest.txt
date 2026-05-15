@@ -1,9 +1,4 @@
-ditamaps/main.ditamap
-ditamaps/progress-test-1.ditamap
-ditamaps/progress-test-2.ditamap
-ditamaps/progress-test-3.ditamap
-ditamaps/progress-test-4.ditamap
-ditamaps/progress-test-5.ditamap
+main.ditamap
 main/instructor-progress-final-assessment-grams/gram_01_analysis.dita
 main/instructor-progress-final-assessment-grams/gram_01_lofar1.dita
 main/instructor-progress-final-assessment-grams/gram_02_analysis.dita
@@ -902,6 +897,7 @@ main/instructor-week-4-grams-updated/gram_42_analysis.dita
 main/instructor-week-4-grams-updated/gram_42_lofar1.dita
 main/instructor-week-4-grams-updated/gram_42_lofar2.dita
 main/instructor-week-4-grams-updated/gram_42_lofar3.dita
+progress-test-1.ditamap
 progress-test-1/gram_01_analysis.dita
 progress-test-1/gram_01_lofar1.dita
 progress-test-1/gram_01_lofar2.dita
@@ -996,6 +992,7 @@ progress-test-1/gram_33_lofar3.dita
 progress-test-1/gram_36_analysis.dita
 progress-test-1/gram_36_lofar1.dita
 progress-test-1/gram_36_lofar2.dita
+progress-test-2.ditamap
 progress-test-2/gram_01_analysis.dita
 progress-test-2/gram_01_lofar1.dita
 progress-test-2/gram_01_lofar2.dita
@@ -1101,6 +1098,7 @@ progress-test-2/gram_34_lofar1.dita
 progress-test-2/gram_34_lofar2.dita
 progress-test-2/gram_36_analysis.dita
 progress-test-2/gram_36_lofar1.dita
+progress-test-3.ditamap
 progress-test-3/gram_01_analysis.dita
 progress-test-3/gram_01_lofar1.dita
 progress-test-3/gram_02_analysis.dita
@@ -1206,6 +1204,7 @@ progress-test-3/gram_36_analysis.dita
 progress-test-3/gram_36_lofar1.dita
 progress-test-3/gram_36_lofar2.dita
 progress-test-3/gram_36_lofar3.dita
+progress-test-4.ditamap
 progress-test-4/gram_01_analysis.dita
 progress-test-4/gram_01_lofar1.dita
 progress-test-4/gram_01_lofar2.dita
@@ -1315,6 +1314,7 @@ progress-test-4/gram_36_lofar1.dita
 progress-test-4/gram_36_lofar2.dita
 progress-test-4/gram_36_lofar3.dita
 progress-test-4/gram_36_lofar4.dita
+progress-test-5.ditamap
 progress-test-5/gram_01_analysis.dita
 progress-test-5/gram_01_lofar1.dita
 progress-test-5/gram_01_lofar2.dita
