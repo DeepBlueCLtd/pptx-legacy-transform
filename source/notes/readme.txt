@@ -1,0 +1,124 @@
+This source/notes folder does not contain representative target content, it just contains metadata / notes used in the development of the mock source data.
+
+
+## Tree
+
+Root
+  - Instructor Progress Test 1 Grams
+      - Instructor Progress Test 1 Files
+        - Gram 1
+          - 0-100Hz.glc
+          - 0-100Hz.png
+          - 0-400Hz.glc
+          - 0-400Hz.png
+          - Analysis Sheet.docx
+          - Analysis Sheet.png
+        - Gram 2
+          - Wav 1.glc
+          - Wav 1.wav
+          - Wav 2.glc
+          - Wav 2.wav
+          - Analysis Sheet.docx
+        - Gram 3
+          - Wav 1.glc
+          - Wav 1.wav
+          - Analysis Sheet.docx
+        - Gram 4
+        - Analysis Sheet.docx
+      - Instructor Progress Test 1 Grams.pptx
+  - Instructor Progress Test 2 Grams_Updated
+  - Instructor Progress Test 3 Grams
+  - Instructor Progress Test 3 Grams No FR
+  - Instructor Progress Test 4 Grams
+  - Instructor Progress Final Assessment Grams
+    - Instructor Progress Final Assessment Grams.pptx
+    - Instructor Progress Final Assessment Files
+      - Analysis Sheet.docx
+      - Gram 1
+          - Wav 1.glc
+          - Wav 1.wav
+          - Wav 2.glc
+          - Wav 2.wav
+          - Analysis Sheet.docx
+      - Gram 2
+        - Gram 2_Analysis Sheet.docx
+        - Gram11.jpg
+        - Gram11.glc
+        - Gram11a.glc
+        - Gram11a.jpg
+        - gram11b.glc
+        - gram11b.jpg
+      - Gram 3
+        - Analysis Sheet.docx
+        - anal.doc
+        - Gram 3 Analysis.jpg
+        - Gram 3, Loop 1.glc
+        - Gram 3, Loop 1.jpg
+        - Gram 3, Loop 2.glc
+        - Gram 3, Loop 2.jpg
+        - Gram 3, Loop 3.glc
+        - Gram 3, Loop 3.jpg 
+      - Gram 4
+      - SPMP Gram 1
+      - SPMP Gram 2
+      - SPMP Gram 3
+      - SPMP Gram 4
+  - Instructor Pub 10
+  - Instructor Week 1 Grams
+    - Instructor Week 1 Grams.pptx
+    - Instructor Week 1 Files
+      - Gram 1
+        - Gram_1_Analysis.png
+        - Gram_1_a.glc
+        - Gram_1_a.png
+        - Gram_1_b.glc
+        - Gram_1_b.pnc
+      - (33 other gram folders)  
+      - Gram 35
+        - 16-35 Hz.glc
+        - 16-35 Hz.png
+        - 160-350.glc
+        - 160-350.png
+        - Analysis.docx
+  - Instructor Week 2 Grams
+  - Instructor Week 3 Grams
+  - Instructor Week 4 Grams_Updated
+  - Instructor Pub10_Ed22B_Updated
+    - Instructor Pub10_Ed22B_Updated.pptx
+    - Pub 10_Ed 2_(1-10)
+      - Gram_01
+        - Gram 01.glc
+        - Gram 1 I.png
+        - Gram1 Analysis.png
+      - Gram_1
+        - Gram 1.glc
+        - Gram 1 I.png
+        - Gram1 Analysis.png
+      - Gram_1 Gandalf
+        - Gram 1.glc
+        - Gram 1 I.png
+        - Gram1 Analysis.png
+      - Gram_1 Gandalf
+        - Gram.glc
+        - Gram 1.png
+        - Gram 2-ABC.glc
+        - Gram 2-Pic1.png
+        - Gram1 Analysis.png
+    - Pub 10_Ed 2_(11-20)
+    - Pub 10_Ed 2_(21-30)
+    - Pub 10_Ed 2_(31-40)
+    - Pub 10_Ed 2_(41-50)
+    - Pub 10_Ed 2_(51-60)
+    - Pub 10_Ed 2_(61-70)
+    - Pub 10_Ed 2_(71 - 
+      - Gram_72_DANK
+        - 0-100Hz.glc
+        - 0-100Hz.png
+        - 0-100Hz ABC.glc
+        - 0-100Hz ABC.png
+        - 0-400Hz.glc
+        - 0-400Hz.png
+        - Dank analysis.docx
+        - Analysis.docx
+
+    
