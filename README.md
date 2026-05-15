@@ -77,7 +77,7 @@ python introspect_pptx.py --input mock_instructor.pptx --out mock_report.txt
 python extract_to_csv.py --input-root path/to/content --out extracted.csv
 # ...review extracted.csv in Excel...
 python generate_dita.py --csv extracted.csv \
-                        --out output/ \
+                        --out dita/ \
                         --image-root path/to/content
 ```
 
