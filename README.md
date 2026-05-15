@@ -13,8 +13,11 @@ Roughly 15 instructor PowerPoint decks containing ~1,000 acoustic
 training "grams" must become DITA topics that the modern publishing
 toolchain (Oxygen) renders in both an instructor profile and a
 trainee profile. Each gram has a title with vessel name, a hyperlinked
-analysis PNG, and one or more hyperlinked GLC (or WAV) configurations.
-The pipeline extracts those into an intermediate CSV, lets the
+analysis sheet, and one or more `Lofar`-labelled hyperlinks that
+**always** point to a `.glc` configuration file. The `.glc` in turn
+references a sibling `.png` (a pre-rendered spectrogram, ~82% of
+files) or `.wav` (raw audio that GAPS-Lite would have rendered live,
+~18%). The pipeline extracts those into an intermediate CSV, lets the
 technical author triage warnings in Excel, then emits the deterministic
 DITA tree.
 

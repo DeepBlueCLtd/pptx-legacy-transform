@@ -111,15 +111,24 @@ DITA topic (`gram_NN.dita`). A gram with four `.glc` links therefore
 produces four tables in the same topic, and the rendered page hosts
 four GramFrame viewers stacked vertically — one per spectrogram.
 
-## 5. WAV / GAPS-Lite links
+## 5. `.glc` files whose inner asset is a `.wav`
 
-Links targeting `.wav` files do not become GramFrame tables. They are
-either:
+All `Lofar` hyperlinks in the PPTX corpus target `.glc` files; none
+target `.wav` directly. About 18% of the `.glc` files, however,
+configure GAPS-Lite to render a fresh spectrogram from a sibling
+`.wav` rather than displaying a pre-rendered `.png`. These rows carry
+a `.wav` path in `png_path` and the author's Stage 3 decision in
+`wav_treatment`:
 
-- emitted as a non-GramFrame stub inside the gram topic (a
-  `<note>` plus an `<xref format="wav">`) for rows with
-  `wav_treatment="gaps-lite"`, or
-- recorded in `skipped.txt` for `TBD`, empty, or unknown treatments.
+- `wav_treatment="screenshot"` — the pipeline (or the author
+  upstream) has supplied a pre-rendered PNG of the spectrogram and
+  `png_path` points at that PNG; the row produces a normal
+  GramFrame table.
+- `wav_treatment="gaps-lite"` — leave a non-GramFrame stub inside
+  the gram topic (a `<note>` plus an `<xref format="wav">`) so the
+  WAV is reachable but no GramFrame viewer is emitted.
+- `wav_treatment="TBD"` or empty — the row is recorded in
+  `skipped.txt` until the author decides.
 
 The bundle ignores anything that is not a `table.gram-config`, so the
 stub blocks render as plain HTML next to the GramFrame viewers
