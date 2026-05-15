@@ -345,10 +345,9 @@ def _skip_record(row: dict, reason: str) -> dict:
 # -----------------------------------------------------------------------------
 
 def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
-    """Write ``ditamaps/main.ditamap`` with ``<topichead>`` per chapter."""
-    ditamap_dir = out_dir / "ditamaps"
-    ditamap_dir.mkdir(parents=True, exist_ok=True)
-    map_path = ditamap_dir / "main.ditamap"
+    """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    map_path = out_dir / "main.ditamap"
 
     chapters: OrderedDict[str, tuple[str, list[dict]]] = OrderedDict()
     for row in rows:
@@ -365,7 +364,7 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     for slug, (title, chapter_rows) in chapters.items():
         topichead = ET.SubElement(root, "topichead", {"navtitle": title})
         for row in chapter_rows:
-            href = f"../main/{slug}/{row['topic_filename']}"
+            href = f"main/{slug}/{row['topic_filename']}"
             ET.SubElement(topichead, "topicref", {"href": href})
 
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
@@ -373,16 +372,15 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
 
 
 def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path:
-    """Write ``ditamaps/<publication>.ditamap`` flat (no topichead)."""
-    ditamap_dir = out_dir / "ditamaps"
-    ditamap_dir.mkdir(parents=True, exist_ok=True)
-    map_path = ditamap_dir / f"{publication}.ditamap"
+    """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    map_path = out_dir / f"{publication}.ditamap"
     n = publication.removeprefix("progress-test-")
     root = ET.Element("map", {"title": f"Progress Test {n}"})
     for row in rows:
         if row["publication"] != publication:
             continue
-        href = f"../{publication}/{row['topic_filename']}"
+        href = f"{publication}/{row['topic_filename']}"
         ET.SubElement(root, "topicref", {"href": href})
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
     return map_path

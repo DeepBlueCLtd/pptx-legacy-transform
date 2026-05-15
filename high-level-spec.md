@@ -144,20 +144,24 @@ Folder structure acts as namespace — no filename prefixing needed:
 
 ```
 output/
+  main.ditamap
   main/
     nordic-fishing-vessels/
       gram_12_lofar1.dita
       gram_12_lofar2.dita
       gram_12_analysis.dita
+  progress-test-1.ditamap
   progress-test-1/
     gram_01_lofar1.dita
     gram_01_analysis.dita
+  progress-test-2.ditamap
   progress-test-2/
     ...
-  ditamaps/
-    main.ditamap
-    progress-test-1.ditamap
 ```
+
+Each ditamap sits at the root next to a similarly-named folder holding
+its topics, so `topicref` hrefs in the map are simple forward paths
+(no `../` prefix) into that sibling folder.
 
 ### 1.9 Intermediate CSV Structure
 

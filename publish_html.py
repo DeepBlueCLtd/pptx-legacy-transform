@@ -33,25 +33,16 @@ MAP_DOCTYPE = (
 
 
 def stage(src: Path, dst: Path) -> None:
-    """Copy src to dst, add DOCTYPEs, and promote ditamaps to the staged root.
-
-    Source ditamaps live under ``ditamaps/`` with ``../`` hrefs into the
-    chapter tree. DITA-OT preserves those relative paths in its output,
-    which buries the HTML under a parent-walk path. Promoting the ditamap
-    one level up (and stripping ``../`` from each href) keeps the HTML
-    output tree flat.
-    """
+    """Copy src to dst and add DOCTYPEs to topics and ditamaps."""
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
     for path in dst.rglob("*.dita"):
         body = path.read_text(encoding="utf-8")
         path.write_text(TOPIC_DOCTYPE + body, encoding="utf-8", newline="\n")
-    ditamap_dir = dst / "ditamaps"
-    for path in sorted(ditamap_dir.glob("*.ditamap")):
-        body = path.read_text(encoding="utf-8").replace('href="../', 'href="')
-        (dst / path.name).write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
-    shutil.rmtree(ditamap_dir)
+    for path in sorted(dst.glob("*.ditamap")):
+        body = path.read_text(encoding="utf-8")
+        path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
 
 
 VOID_ELEMENTS = frozenset({
@@ -243,7 +234,7 @@ def prettify_tree(root: Path) -> int:
 def publish(dita_ot: Path, staged: Path, out_root: Path) -> int:
     ditamaps = sorted(staged.glob("*.ditamap"))
     if not ditamaps:
-        print(f"No ditamaps found under {staged}/ditamaps", file=sys.stderr)
+        print(f"No ditamaps found under {staged}", file=sys.stderr)
         return 1
     errors = 0
     for ditamap in ditamaps:
