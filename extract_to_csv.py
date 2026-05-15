@@ -156,6 +156,29 @@ def resolve_glc_path(href: str, content_root: Path, source_dir: Path | None = No
     return None
 
 
+def _rel_to_root(path: Path, content_root: Path) -> str:
+    """Return ``path`` as a POSIX string relative to ``content_root`` when possible."""
+    root_abs = content_root.resolve()
+    if path.is_relative_to(root_abs):
+        return path.relative_to(root_abs).as_posix()
+    return path.as_posix()
+
+
+def resolve_asset_path(href: str, content_root: Path, source_dir: Path | None) -> str:
+    """Resolve an asset href (PNG/DOCX/WAV) to a path relative to ``content_root``.
+
+    Returns the resolved POSIX path string when the file is found, or the
+    original href stripped of backslashes when it is not — the generator
+    treats a missing asset as a dangling reference, not a fatal error.
+    """
+    if not href:
+        return ""
+    resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
+    if resolved is not None:
+        return _rel_to_root(resolved, content_root)
+    return href.replace("\\", "/")
+
+
 def walk_pptxs(input_root: Path) -> Iterator[Path]:
     """Yield every ``.pptx`` under ``input_root`` in deterministic sorted order."""
     yield from sorted(input_root.rglob("*.pptx"))
@@ -439,23 +462,25 @@ def gram_to_rows(
         if is_wav:
             wav_treatment = ""
             warnings.append("WAV link; treatment required")
+            png_path = resolve_asset_path(href, content_root, source_dir)
         else:
             resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
             if resolved is None:
                 warnings.append("GLC not found")
                 glc_path = href
             else:
-                root_abs = content_root.resolve()
-                if resolved.is_relative_to(root_abs):
-                    glc_path = str(resolved.relative_to(root_abs))
-                else:
-                    glc_path = str(resolved)
+                glc_path = _rel_to_root(resolved, content_root)
                 glc = parse_glc(resolved)
                 warnings.extend(glc.warnings)
                 time_end = glc.time_end
                 freq_end = glc.freq_end
                 if glc.image_filename:
-                    png_path = glc.image_filename
+                    # The PNG sits next to the GLC on disk. Resolve against
+                    # the GLC's directory so the path is image-root-relative
+                    # and the generator can copy it directly.
+                    png_path = resolve_asset_path(
+                        glc.image_filename, content_root, source_dir=resolved.parent,
+                    )
 
         rows.append({
             "publication": publication,
@@ -464,7 +489,7 @@ def gram_to_rows(
             "vessel_name": gram.vessel_name,
             "topic_type": "glc",
             "sequence": str(i),
-            "topic_filename": f"gram_{gram_num}_lofar{i}.dita",
+            "topic_filename": f"gram_{gram_num}.dita",
             "display_text": display_text,
             "link_href": href,
             "glc_path": glc_path,
@@ -479,6 +504,9 @@ def gram_to_rows(
     analysis_png = gram.png_href or ""
     if not analysis_png:
         analysis_warnings.append("missing analysis PNG hyperlink")
+        analysis_png_resolved = ""
+    else:
+        analysis_png_resolved = resolve_asset_path(analysis_png, content_root, source_dir)
     rows.append({
         "publication": publication,
         "chapter": chapter or "",
@@ -486,13 +514,13 @@ def gram_to_rows(
         "vessel_name": gram.vessel_name,
         "topic_type": "analysis",
         "sequence": "1",
-        "topic_filename": f"gram_{gram_num}_analysis.dita",
+        "topic_filename": f"gram_{gram_num}.dita",
         "display_text": "",
         "link_href": "",
         "glc_path": "",
         "time_end": "",
         "freq_end": "",
-        "png_path": analysis_png,
+        "png_path": analysis_png_resolved,
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
     })

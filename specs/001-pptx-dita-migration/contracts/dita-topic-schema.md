@@ -15,22 +15,40 @@ All output files are:
 - No DOCTYPE declaration (validation against the DITA DTD happens in
   Oxygen at publish time)
 
-## 1. `gram_NN_lofarM.dita` — gram-config topic
+## 1. `gram_NN.dita` — single gram topic
 
-Produced for every CSV row with `topic_type="glc"` (excluding skipped
-WAV rows).
+One DITA topic per gram. The body groups everything for that gram into
+a single page: the instructor-only Analysis Sheet section first, then
+one block per `.glc` (or WAV) link beneath the gram header in the
+source PPTX, in `sequence` order.
+
+A gram with N `.glc` links and one analysis sheet therefore produces
+**one** `gram_NN.dita` file containing one analysis section plus N
+GramFrame tables — not N+1 DITA topics. The CSV still carries N+1
+rows per gram (one per `topic_type=glc` row and one for
+`topic_type=analysis`); the generator groups them by
+`(publication, chapter, gram_id)` and folds them into one topic.
 
 ```xml
-<topic id="gram_NN_lofarM">
+<topic id="gram_NN">
   <title>Gram NN<ph audience="-trainee"> - {vessel_name}</ph></title>
   <body>
-    <section>
+    <section audience="-trainee">       <!-- §1.1 analysis sheet -->
+      <title>Analysis Sheet</title>
+      <!-- one of: -->
+      <image href="{slug}.png" placement="break" align="center"/>
+      <p><xref href="{slug}.docx" format="docx" scope="local">Analysis Sheet</xref></p>
+    </section>
+
+    <section>                            <!-- §1.2 GramFrame, repeats per .glc -->
       <table outputclass="gram-config">
         <tgroup cols="2">
+          <colspec colname="c1" colnum="1"/>
+          <colspec colname="c2" colnum="2"/>
           <tbody>
             <row>
               <entry namest="c1" nameend="c2">
-                <image href="{image_href}" placement="break" align="center"/>
+                <image href="{slug}.png" placement="break" align="center"/>
               </entry>
             </row>
             <row><entry>time-start</entry><entry>0</entry></row>
@@ -41,93 +59,83 @@ WAV rows).
         </tgroup>
       </table>
     </section>
+
+    <section>                            <!-- §1.3 GAPS-Lite stub, optional -->
+      <note>This gram requires GAPS-Lite playback.</note>
+      <p><xref href="{slug}.wav" format="wav" scope="local">{display_text}</xref></p>
+    </section>
   </body>
+
   <related-links>
     <link href="../gram-index.dita" format="dita"/>
   </related-links>
 </topic>
 ```
 
-Substitutions:
+When any GAPS-Lite stub is present the topic file is prefixed with a
+`<!-- MANUAL REVIEW: GAPS-Lite required -->` comment so the
+technical author can find it later.
+
+### 1.1 Analysis-sheet section
+
+Built from the `topic_type="analysis"` row's `png_path` column
+(populated by the extractor after FR-023 normalisation). The section
+carries `audience="-trainee"` so the trainee profile elides it
+entirely; only the instructor build includes the analysis sheet.
+
+| Asset suffix | Rendering |
+|---|---|
+| `.png` | Embedded inline via `<image href="{slug}.png" .../>` |
+| `.docx` (or any other suffix) | Linked via `<xref href="{slug}.docx" format="docx" scope="local">Analysis Sheet</xref>` |
+
+The `slug` is the slug of the *source* filename (e.g. `Analysis Sheet.docx`
+→ `analysis-sheet.docx`); see §10.
+
+### 1.2 GramFrame table block
+
+One `<table outputclass="gram-config">` per `topic_type="glc"` row
+whose `wav_treatment` is empty (treated as a normal GLC screenshot
+row) or `screenshot`. The shape is exactly what
+`gramframe.bundle.js` expects after DITA-OT renders it; see
+[`gramframe.md`](./gramframe.md) for the rendered-HTML contract and the
+reason the two `<colspec>` elements are not optional.
+
+Placeholders:
 
 | Placeholder | Source |
 |---|---|
 | `NN` | `gram_id` numeric portion (zero-padded as it appears) |
-| `M` | `sequence` |
 | `vessel_name` | CSV column; if empty, the entire `<ph>` element is omitted |
-| `image_href` | The asset is copied next to the topic and renamed to match the topic's stem (see §10). The href is the bare local filename, e.g. `gram_12_lofar1.png`. |
+| `image_href` | Slugified copy of the asset, placed in the same per-gram folder as the topic (see §10) |
 | `time_end` | CSV column; if empty, literal `""` is written |
 | `freq_end` | CSV column; if empty, literal `""` is written |
 
-## 2. `gram_NN_analysis.dita` — instructor-only analysis topic
+### 1.3 GAPS-Lite WAV stub block
 
-Produced for every CSV row with `topic_type="analysis"`.
+One stub block per `topic_type="glc"` row with
+`wav_treatment="gaps-lite"`. The WAV referenced by the row's
+`png_path` column (with `link_href` and `glc_path` retained as
+fallbacks for older CSVs) is copied into the per-gram folder and
+slug-renamed (see §10). `scope="local"` records that the WAV sits
+inside the publication, even though the player is invoked externally
+via GAPS-Lite. The `<xref>` element's visible text comes from
+`display_text`; the extractor never conflates the two:
+`display_text` is the human-readable label exactly as it appeared in
+the PPTX run, while `link_href` is the raw URI from the PPTX
+hyperlink.
 
-```xml
-<topic id="gram_NN_analysis" audience="-trainee">
-  <title>Gram NN Analysis</title>
-  <body>
-    <section>
-      <image href="{image_href}" placement="break" align="center"/>
-    </section>
-  </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita"/>
-  </related-links>
-</topic>
-```
-
-Note: the `audience="-trainee"` attribute is on the root topic. The
-trainee profile excludes this topic entirely; the instructor profile
-includes it.
-
-## 3. WAV stub topic (`wav_treatment="gaps-lite"`)
-
-Produced for every CSV row whose `wav_treatment` is `gaps-lite`.
-
-```xml
-<!-- MANUAL REVIEW: GAPS-Lite required -->
-<topic id="gram_NN_lofarM">
-  <title>Gram NN<ph audience="-trainee"> - {vessel_name}</ph></title>
-  <body>
-    <section>
-      <note>This gram requires GAPS-Lite playback.</note>
-      <p><xref href="{wav_href}" format="wav" scope="local">{display_text}</xref></p>
-    </section>
-  </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita"/>
-  </related-links>
-</topic>
-```
-
-The WAV referenced by the row's `link_href` column (or `glc_path` as a
-fallback) is copied next to the topic and renamed to match the topic's
-stem (see §10). `wav_href` is therefore the bare local filename, e.g.
-`gram_05_lofar1.wav`. The `<xref>` element's visible text comes from
-`display_text`. The extractor never conflates the two: `display_text`
-is the human-readable label exactly as it appeared in the PPTX run;
-`link_href` is the raw URI used to locate the source asset.
-`scope="local"` records that the WAV sits inside the publication, even
-though the player is invoked externally via GAPS-Lite. (See R8 and the
-WAV-row rule in `csv-schema.md`.)
-
-## 4. WAV row with `wav_treatment="screenshot"`
-
-Treated identically to a normal GLC row: the generator emits the
-gram-config topic shape from §1 using the row's `png_path`,
-`time_end`, and `freq_end` columns. The technical author is
-responsible for filling those columns when choosing `screenshot`.
-
-## 5. Skipped rows
+## 2. Skipped rows
 
 Rows with `wav_treatment="TBD"`, empty `wav_treatment` on a WAV-typed
-row, or any unknown `wav_treatment` are *not* emitted as DITA. They
-are recorded one-per-line in `skipped.txt`:
+row, or any unknown `wav_treatment` contribute no block to their
+gram's DITA topic. They are recorded one-per-line in `skipped.txt`:
 
 ```
 publication=main chapter=arctic-survey gram_id="Gram 05" topic_type=glc sequence=1 reason="wav_treatment is TBD"
 ```
+
+The gram topic still renders provided at least one other row for the
+same gram survived dispatch.
 
 ## 6. Ditamaps
 
@@ -136,9 +144,8 @@ publication=main chapter=arctic-survey gram_id="Gram 05" topic_type=glc sequence
 ```xml
 <map title="Main">
   <topichead navtitle="{Chapter Title}">
-    <topicref href="main/{chapter-slug}/gram_NN_lofarM.dita"/>
-    <topicref href="main/{chapter-slug}/gram_NN_analysis.dita"/>
-    <!-- ...all topics for this chapter, in CSV row order... -->
+    <topicref href="main/{chapter-slug}/gram-NN/gram_NN.dita"/>
+    <!-- ...one topicref per gram, in CSV order... -->
   </topichead>
   <!-- ...further chapters in alphabetical folder order... -->
 </map>
@@ -149,9 +156,8 @@ Notes:
 - The ditamap lives at the output root next to its sibling `main/`
   folder, so `topicref` URLs are simple forward paths into that
   folder (no `../` prefix).
-- Analysis topicrefs are emitted alongside the GLC topicrefs for the
-  same gram; the trainee profile elides the analysis topic via the
-  topic-level `audience` attribute set in §2.
+- One `topicref` per gram — the CSV's N+1 rows per gram collapse into
+  one `gram_NN.dita` and therefore one ditamap entry.
 - `topichead` `navtitle` is the human-readable chapter title (mixed
   case), distinct from the chapter slug used in URLs.
 
@@ -159,9 +165,8 @@ Notes:
 
 ```xml
 <map title="Progress Test N">
-  <topicref href="progress-test-N/gram_NN_lofarM.dita"/>
-  <topicref href="progress-test-N/gram_NN_analysis.dita"/>
-  <!-- ...further topics, flat... -->
+  <topicref href="progress-test-N/gram-NN/gram_NN.dita"/>
+  <!-- ...one topicref per gram, flat... -->
 </map>
 ```
 
@@ -174,46 +179,60 @@ Paths relative to `--out`. Includes ditamaps.
 
 ```
 main.ditamap
-main/arctic-survey/gram_01_analysis.dita
-main/arctic-survey/gram_01_lofar1.dita
+main/arctic-survey/gram-01/analysis-sheet.docx
+main/arctic-survey/gram-01/gram_01.dita
+main/arctic-survey/gram-01/lofar-1.png
 progress-test-1.ditamap
-progress-test-1/gram_01_analysis.dita
+progress-test-1/gram-01/gram_01.dita
 ...
 ```
 
 ## 8. Filename conventions
 
-| Topic | Filename |
+| Artefact | Filename |
 |---|---|
-| GLC row | `gram_NN_lofarM.dita` (e.g. `gram_12_lofar1.dita`) |
-| Analysis row | `gram_NN_analysis.dita` (e.g. `gram_12_analysis.dita`) |
+| Gram topic | `gram_NN.dita` (e.g. `gram_12.dita`) |
 | Main ditamap | `main.ditamap` |
 | Test ditamap | `progress-test-N.ditamap` (e.g. `progress-test-1.ditamap`) |
 
 `NN` is the numeric portion of `gram_id` exactly as it appears in the
 CSV (no padding adjustments). The expectation is that the source
 material uses two-digit numbering today; if it grows past 99 the format
-silently widens to three digits.
+silently widens to three digits. There is exactly one DITA topic per
+gram regardless of how many GLC/WAV links it carries — the legacy
+per-link `gram_NN_lofarM.dita` filenames are obsolete.
 
 ## 9. Folder layout
+
+Each gram (a single `gram_id` within a publication) lives in its own
+sub-directory. The grouping mirrors the supporting-material folder
+structure in the source content (one folder per gram, in the chapter
+or per-publication root) so that locating an asset on disk needs no
+look-up table.
 
 ```
 {out}/
 ├── main.ditamap
 ├── main/
 │   ├── {chapter-slug-1}/
-│   │   ├── gram_NN_lofarM.dita
-│   │   ├── gram_NN_lofarM.png   ← asset copied + renamed (see §10)
-│   │   ├── gram_NN_analysis.dita
-│   │   ├── gram_NN_analysis.png
-│   │   └── ...
+│   │   ├── gram-NN/
+│   │   │   ├── gram_NN.dita
+│   │   │   ├── analysis-sheet.docx   ← analysis asset (or analysis.png)
+│   │   │   ├── lofar-1.png           ← one image per GLC link (see §10)
+│   │   │   ├── lofar-2.png
+│   │   │   └── ...
+│   │   └── gram-NN/
+│   │       └── ...
 │   └── {chapter-slug-2}/
 │       └── ...
 ├── progress-test-1.ditamap
 ├── progress-test-1/
-│   ├── gram_NN_lofarM.dita
-│   ├── gram_NN_lofarM.png
-│   └── gram_NN_analysis.dita
+│   ├── gram-NN/
+│   │   ├── gram_NN.dita
+│   │   ├── analysis-sheet.docx
+│   │   └── lofar-1.png
+│   └── gram-NN/
+│       └── ...
 ├── progress-test-2.ditamap
 ├── progress-test-2/
 │   └── ...
@@ -222,7 +241,11 @@ silently widens to three digits.
 ```
 
 Each ditamap is paired with a similarly-named sibling content folder
-at the output root.
+at the output root. Inside a content folder, each gram (a single
+`gram_id`) lives in its own `gram-NN/` sub-directory, where `NN` is
+the numeric portion of `gram_id` exactly as it appears in the CSV
+(zero-padded to at least two digits by the extractor; widens silently
+past 99).
 
 ## 10. Asset copy and rename
 
@@ -232,21 +255,24 @@ external asset (PNG screenshot, WAV file, or analysis sheet), the
 generator:
 
 1. Resolves the source path as `--image-root` joined with the relevant
-   CSV column (`png_path` for §1 and §2 topics; `link_href` then
-   `glc_path` as fallback for §3 WAV-stub topics).
-2. Copies the source file into the same directory as the topic.
-3. Renames the copy to `{topic_stem}{original_extension}`, where
-   `topic_stem` is the topic's filename without its `.dita` suffix.
-   For example, the asset referenced by `gram_12_lofar1.dita` is copied
-   to `gram_12_lofar1.png` (or `.wav`, `.docx`, etc. depending on the
-   source extension).
+   CSV column. For all three topic shapes (§1, §2, §3) this is
+   `png_path` — the extractor resolves the asset path against the
+   image root so the generator can copy it blindly. `link_href` and
+   `glc_path` are retained as fallbacks for older CSVs.
+2. Copies the source file into the topic's per-gram folder (`gram-NN/`).
+3. Renames the copy to a slug of the *source* filename, preserving the
+   original extension lower-cased. For example, the asset referenced
+   by `gram_12_lofar1.dita` whose source is `Lofar 1 ABC.PNG` is
+   copied to `gram-12/lofar-1-abc.png`.
 4. Uses the bare local filename as the topic's `href`. References
-   never traverse out of the chapter directory.
+   never traverse out of the per-gram directory.
 
-Renaming to the topic stem keeps the topic↔asset relationship self-
-evident on disk and prevents collisions when two grams within the same
-chapter happen to reference assets with the same original filename
-(e.g. both have a `Lofar 1.png`).
+The per-gram folder gives each asset a unique location automatically:
+two grams in the same chapter that both have a source `Lofar 1.png`
+end up at `gram-NN/lofar-1.png` and `gram-MM/lofar-1.png`, with no
+collision. Slugifying the filename keeps hrefs URL-safe (no spaces,
+ASCII only) without losing the human-readable relationship to the
+source.
 
 Asset copies use `shutil.copy2`, which preserves the source's modification
 time. Two consecutive generator runs against an unchanged source tree

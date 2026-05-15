@@ -169,6 +169,8 @@ class GramToRowsTests(unittest.TestCase):
         # FR-011: a .wav link target produces a GLC-typed row with empty
         # glc_path/time_end/freq_end, the raw URL in link_href, the visible
         # label in display_text, and the "treatment required" warning.
+        # ``png_path`` carries the asset path the generator should copy —
+        # the wav file itself for WAV-link rows.
         gram = _gram(links=[("Audio sample", "supporting/gram12/audio_clip.wav")])
         rows = extract_to_csv.gram_to_rows(
             gram, publication="main", chapter="Arctic Survey",
@@ -183,7 +185,7 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(wav_row["glc_path"], "")
         self.assertEqual(wav_row["time_end"], "")
         self.assertEqual(wav_row["freq_end"], "")
-        self.assertEqual(wav_row["png_path"], "")
+        self.assertEqual(wav_row["png_path"], "supporting/gram12/audio_clip.wav")
         self.assertEqual(wav_row["wav_treatment"], "")
         self.assertIn("WAV link; treatment required", wav_row["warnings"])
 

@@ -31,13 +31,16 @@ in the correct folder structure and parse as well-formed XML.
 **Acceptance Scenarios**:
 
 1. **Given** a signed-off CSV containing GLC rows for a main-publication
-   chapter, **When** the generator runs, **Then** one DITA topic per GLC row
-   is produced under `output/main/<chapter>/`, each containing a
-   `gram-config` table with the time and frequency values from the CSV and
-   an instructor-only inline phrase wrapping the vessel name.
+   chapter, **When** the generator runs, **Then** one DITA topic per gram
+   is produced under `output/main/<chapter>/gram-NN/`, each containing one
+   `gram-config` GramFrame table per GLC row (with the time and frequency
+   values from the CSV) and an instructor-only inline phrase wrapping the
+   vessel name in the title.
 2. **Given** a CSV row whose topic type is `analysis`, **When** the
-   generator runs, **Then** an instructor-only analysis topic referencing
-   the analysis PNG is produced for that gram.
+   generator runs, **Then** the analysis sheet is rendered as an
+   instructor-only section at the top of the gram's single DITA topic —
+   embedded as `<image>` when the asset is a PNG, linked via `<xref>`
+   when the asset is a DOCX.
 3. **Given** a CSV containing rows for a progress-test publication, **When**
    the generator runs, **Then** a flat ditamap with no chapter level is
    produced for that test publication.
@@ -324,18 +327,26 @@ produces the expected output tree on continue.
   PNG and every link text box carries text-run hyperlinks to `.glc` or
   `.wav` targets, with the configured variation in link counts per gram
   and the configured `.wav` overrides.
-- **FR-010**: The DITA generator MUST emit `gram_xx_lofarN.dita` for each
-  GLC row, including a `gram-config` table with `time-start=0`,
-  `time-end` from CSV, `freq-start=0`, `freq-end` from CSV, an image
-  reference (a topic-relative local filename — see FR-022), a
-  related-link back to the gram index, and a title in which the vessel
-  name is wrapped in `<ph audience="-trainee">`.
-- **FR-011**: The DITA generator MUST emit `gram_xx_analysis.dita` for
-  each analysis row, marked instructor-only, referencing the analysis
-  image, and MUST emit a stub topic with a manual-review marker for WAV
-  rows whose treatment is `gaps-lite`, treat WAV rows with treatment
-  `screenshot` as if they were PNG rows, and skip WAV rows whose
-  treatment is `TBD` (logging an error and recording the skip in
+- **FR-010**: The DITA generator MUST emit one `gram_xx.dita` per gram
+  (regardless of how many GLC rows the gram carries) containing one
+  `<table outputclass="gram-config">` GramFrame block per GLC row, each
+  block carrying `time-start=0`, `time-end` from CSV, `freq-start=0`,
+  `freq-end` from CSV, an image reference (a topic-relative local
+  filename — see FR-022), and two named `<colspec>` elements so DITA-OT
+  emits `colspan="2"` on the image row (without which the GramFrame
+  bundle rejects the table — see
+  [`contracts/gramframe.md`](contracts/gramframe.md)). The topic carries
+  a related-link back to the gram index, and a title in which the
+  vessel name is wrapped in `<ph audience="-trainee">`.
+- **FR-011**: The DITA generator MUST fold the analysis row into the
+  same `gram_xx.dita` as an instructor-only section
+  (`<section audience="-trainee">`) whose contents are an embedded
+  `<image>` when the analysis asset is a PNG or an `<xref>` link when
+  it is a DOCX. For WAV rows it MUST inline a stub block (note plus
+  WAV `<xref>`) into the gram topic when treatment is `gaps-lite`
+  (and prefix the topic file with a manual-review comment), treat
+  `screenshot` rows as if they were PNG rows, and skip rows with
+  treatment `TBD` (logging an error and recording the skip in
   `skipped.txt`).
 - **FR-012**: The DITA generator MUST emit one ditamap per publication,
   using `<topichead>` chapter elements with `<topicref>` children for
@@ -462,10 +473,12 @@ produces the expected output tree on continue.
   topic, keyed by publication, chapter, gram identifier, topic type, and
   sequence; carries display text, resolved paths, measurements, WAV
   treatment, and accumulated warnings.
-- **DITA Topic**: A generated XML file (`gram_xx_lofarN.dita` or
-  `gram_xx_analysis.dita`) containing a `gram-config` table or analysis
-  image, with audience-filtered fragments for instructor-only content
-  and a related link back to the gram index.
+- **DITA Topic**: One generated XML file per gram (`gram_xx.dita`)
+  containing an instructor-only analysis-sheet section followed by one
+  GramFrame `gram-config` table per GLC row (and any GAPS-Lite stub
+  blocks for WAV rows). The vessel name in the title is wrapped in an
+  instructor-only `<ph>`, and the topic carries a related link back
+  to the gram index.
 - **Ditamap**: One per publication; main-publication maps use chapter
   topicheads with gram topicref children, progress-test maps are flat
   lists of gram topicrefs.
