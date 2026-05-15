@@ -379,6 +379,18 @@ produces the expected output tree on continue.
   publish step that excludes the `-trainee` audience produces
   trainee-safe output and a publish step with no exclusion produces the
   instructor output.
+- **FR-021**: The README MUST include a "Publishing to HTML (optional)"
+  section documenting how to acquire, install, and run DITA-OT (together
+  with a Java runtime) on the air-gapped target PC so that the
+  maintainer can render the generated DITA tree to HTML for sanity-
+  checking without an Oxygen licence. DITA-OT and Java MUST NOT be
+  bundled into the project delivery and MUST NOT become Python
+  dependencies or pipeline stages; the maintainer transfers the
+  installers through the air-gap manually using the README's
+  instructions and invokes DITA-OT as an ad-hoc step after generation,
+  separately from the automated pipeline. The README MUST also state
+  that Oxygen remains the production publishing path and that the
+  DITA-OT preview is for inspection only.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -479,8 +491,13 @@ produces the expected output tree on continue.
   CSV in a spreadsheet tool and is the authority on `wav_treatment`
   values; the pipeline does not attempt to infer WAV treatment.
 - The publishing toolchain (Oxygen) is available outside this pipeline
-  for Stage 5 QA; the pipeline's contract ends at producing DITA topics
-  and ditamaps that conform to the existing pub-9/pub-10 structure.
+  for Stage 5 QA and is the production HTML publishing path; the
+  pipeline's contract ends at producing DITA topics and ditamaps that
+  conform to the existing pub-9/pub-10 structure. DITA-OT is available
+  separately on the air-gapped target PC as an installed-by-the-user
+  toolchain (with a Java runtime) and offers a development/maintenance
+  HTML-preview path documented in the README, but it is not bundled in
+  the delivery and is not part of the automated pipeline.
 - `python-pptx` is the only third-party dependency; the test suite uses
   only the Python standard library.
 - DITA audience filtering uses the existing convention `audience="-trainee"`
