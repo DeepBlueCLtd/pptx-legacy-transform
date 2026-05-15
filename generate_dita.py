@@ -33,8 +33,8 @@ from typing import Iterable
 
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
-    "sequence", "topic_filename", "display_text", "glc_path", "time_end",
-    "freq_end", "png_path", "wav_treatment", "warnings",
+    "sequence", "topic_filename", "display_text", "link_href", "glc_path",
+    "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -218,11 +218,11 @@ def emit_wav_stub_topic(row: dict, out_dir: Path) -> Path:
     note = ET.SubElement(section, "note")
     note.text = "This gram requires GAPS-Lite playback."
     p = ET.SubElement(section, "p")
-    wav_target = row.get("display_text", "") or row.get("glc_path", "")
+    wav_target = row.get("link_href", "") or row.get("glc_path", "")
     xref = ET.SubElement(p, "xref", {
         "href": wav_target, "format": "wav", "scope": "external",
     })
-    xref.text = row.get("display_text", "")
+    xref.text = row.get("display_text", "") or wav_target
 
     related = ET.SubElement(topic, "related-links")
     ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
@@ -247,7 +247,8 @@ def dispatch_row(row: dict, out_dir: Path, image_root: Path) -> tuple[Path | Non
     """Branch on ``topic_type`` and ``wav_treatment``. Returns ``(written, skipped)``."""
     topic_type = row.get("topic_type", "")
     treatment = (row.get("wav_treatment") or "").strip().lower()
-    is_wav_link = (not row.get("glc_path")) and bool(row.get("display_text", "").lower().endswith(".wav") or treatment)
+    link_href = row.get("link_href", "") or ""
+    is_wav_link = (not row.get("glc_path")) and (link_href.lower().endswith(".wav") or bool(treatment))
 
     if topic_type == "analysis":
         return (emit_analysis_topic(row, out_dir, image_root), None)

@@ -94,7 +94,11 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIn("MANUAL REVIEW", text)
         root = ET.parse(topic).getroot()
         self.assertIsNotNone(root.find(".//note"))
-        self.assertIsNotNone(root.find(".//xref"))
+        xref = root.find(".//xref")
+        self.assertIsNotNone(xref)
+        # xref href must be the link URL, not the human-readable label.
+        self.assertEqual(xref.get("href"), "supporting/gram05/audio_clip.wav")
+        self.assertEqual(xref.text, "Audio sample")
 
     def test_skipped_report_emitted_for_tbd_wav(self) -> None:
         # Build a CSV with a TBD WAV row.
@@ -108,7 +112,9 @@ class GenerateDitaTests(unittest.TestCase):
             "gram_id": "Gram 05", "vessel_name": "Arctic Surveyor",
             "topic_type": "glc", "sequence": "1",
             "topic_filename": "gram_05_lofar1.dita",
-            "display_text": "audio_clip.wav", "wav_treatment": "TBD",
+            "display_text": "Audio sample",
+            "link_href": "supporting/gram05/audio_clip.wav",
+            "wav_treatment": "TBD",
         })
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(cols),

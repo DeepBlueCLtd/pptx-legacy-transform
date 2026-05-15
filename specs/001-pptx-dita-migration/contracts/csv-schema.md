@@ -26,13 +26,14 @@ generator never re-reads PPTX or GLC files.
 | 5 | `topic_type` | enum | no | `glc` or `analysis` |
 | 6 | `sequence` | string | no | `1`-based per gram, scoped per `topic_type` |
 | 7 | `topic_filename` | string | no | `gram_NN_lofarM.dita` or `gram_NN_analysis.dita` |
-| 8 | `display_text` | string | yes (analysis rows) | link label from PPTX |
-| 9 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved relative to source folder |
-| 10 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 11 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 12 | `png_path` | string | yes (glc rows) | resolved relative to source folder |
-| 13 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
-| 14 | `warnings` | string | yes | comma-joined, free-form |
+| 8 | `display_text` | string | yes (analysis rows) | human-readable link label from the PPTX run |
+| 9 | `link_href` | string | yes (analysis rows) | raw hyperlink URI from the PPTX run; `.glc`, `.wav`, or other; source of truth for WAV detection and `xref href` in WAV stub topics |
+| 10 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved `.glc` path relative to source folder; empty when the link target was a `.wav` |
+| 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
+| 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
+| 13 | `png_path` | string | yes (glc rows) | resolved relative to source folder |
+| 14 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
+| 15 | `warnings` | string | yes | comma-joined, free-form |
 
 ## Row identity
 
@@ -51,7 +52,9 @@ should never happen because the unique key drives the filename.
    `display_text=""`, `glc_path=""`, `time_end=""`, `freq_end=""`.
 3. GLC rows: `topic_type="glc"`, `sequence="1..N"` in PPTX order.
 4. WAV-targeted links produce a GLC-typed row with empty `glc_path`,
-   empty `time_end`/`freq_end`, and `wav_treatment` left for the author.
+   empty `time_end`/`freq_end`, the raw `.wav` URI stored in `link_href`,
+   and `wav_treatment` left empty for the author to fill in. `display_text`
+   carries the visible link label, never the URL.
 5. Warnings accumulate in column order: GLC parse warnings first, then
    path-resolution warnings, then shape warnings.
 
@@ -71,23 +74,23 @@ preserved; the writer never normalises numerics.
 ### Single-gram, two GLC links, one analysis PNG
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,271,400,images/gram12.png,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12_lofar2.dita,LOFAR 2,supporting/gram12/config_2.glc,180,400,images/gram12.png,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,images/gram12_analysis.png,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12_lofar2.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,,images/gram12_analysis.png,,
 ```
 
 ### Progress-test gram with a missing GLC
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,,,images/gram03.png,,"GLC not found"
-progress-test-1,,Gram 03,,analysis,1,gram_03_analysis.dita,,,,,images/gram03_analysis.png,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
+progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,"GLC not found"
+progress-test-1,,Gram 03,,analysis,1,gram_03_analysis.dita,,,,,,images/gram03_analysis.png,,
 ```
 
 ### WAV row awaiting author treatment
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,Audio,,,,images/gram05.png,,"WAV link; treatment required"
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
+main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,Audio sample,supporting/gram05/audio_clip.wav,,,,,,"WAV link; treatment required"
 ```

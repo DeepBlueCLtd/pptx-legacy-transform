@@ -86,6 +86,51 @@ class CsvWriteReadTests(unittest.TestCase):
             for col in extract_to_csv.CSV_COLUMNS:
                 self.assertEqual(parsed[col], original[col])
 
+    def test_csv_byte_level_round_trip(self) -> None:
+        # The csv-schema contract claims read(csv) -> write(csv) is
+        # byte-identical for clean rows. Verify by writing, reading back
+        # via DictReader, and rewriting with the same writer settings.
+        out_a = TMP / "round_trip_a.csv"
+        out_b = TMP / "round_trip_b.csv"
+        rows = [{c: "" for c in extract_to_csv.CSV_COLUMNS} for _ in range(3)]
+        rows[0].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_12_lofar1.dita",
+            "display_text": "LOFAR 1",
+            "link_href": "supporting/gram12/config_1.glc",
+            "glc_path": "supporting/gram12/config_1.glc",
+            "time_end": "271", "freq_end": "400",
+            "png_path": "images/gram12.png",
+        })
+        rows[1].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 05", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_05_lofar1.dita",
+            "display_text": "Audio sample",
+            "link_href": "supporting/gram05/audio_clip.wav",
+            "wav_treatment": "gaps-lite",
+        })
+        rows[2].update({
+            "publication": "progress-test-1", "chapter": "",
+            "gram_id": "Gram 03", "vessel_name": "",
+            "topic_type": "analysis", "sequence": "1",
+            "topic_filename": "gram_03_analysis.dita",
+            "png_path": "images/gram03_analysis.png",
+        })
+        extract_to_csv.write_csv(rows, out_a)
+        with out_a.open("r", encoding="utf-8-sig", newline="") as fh:
+            read_back = list(csv.DictReader(fh))
+        # Rebuild with all declared columns so DictWriter behaves identically.
+        rebuilt = [{c: row.get(c, "") for c in extract_to_csv.CSV_COLUMNS}
+                   for row in read_back]
+        extract_to_csv.write_csv(rebuilt, out_b)
+        self.assertEqual(out_a.read_bytes(), out_b.read_bytes(),
+                         "Read-then-write must be byte-identical "
+                         "(BOM, line endings, quoting all preserved)")
+
 
 class GramToRowsTests(unittest.TestCase):
 
@@ -118,6 +163,29 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(rows[0]["time_end"], "271")
         self.assertEqual(rows[0]["freq_end"], "400")
         self.assertEqual(rows[0]["png_path"], "gram12.PNG")
+        self.assertEqual(rows[0]["link_href"], "supporting/gram12/config_1.glc")
+
+    def test_wav_link_row_shape(self) -> None:
+        # FR-011: a .wav link target produces a GLC-typed row with empty
+        # glc_path/time_end/freq_end, the raw URL in link_href, the visible
+        # label in display_text, and the "treatment required" warning.
+        gram = _gram(links=[("Audio sample", "supporting/gram12/audio_clip.wav")])
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        wav_row = rows[0]
+        self.assertEqual(wav_row["topic_type"], "glc")
+        self.assertEqual(wav_row["display_text"], "Audio sample")
+        self.assertEqual(wav_row["link_href"],
+                         "supporting/gram12/audio_clip.wav")
+        self.assertEqual(wav_row["glc_path"], "")
+        self.assertEqual(wav_row["time_end"], "")
+        self.assertEqual(wav_row["freq_end"], "")
+        self.assertEqual(wav_row["png_path"], "")
+        self.assertEqual(wav_row["wav_treatment"], "")
+        self.assertIn("WAV link; treatment required", wav_row["warnings"])
 
 
 class StubBoundaryTests(unittest.TestCase):

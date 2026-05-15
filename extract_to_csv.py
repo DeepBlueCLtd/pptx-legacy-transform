@@ -31,8 +31,8 @@ from pptx import Presentation
 
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
-    "sequence", "topic_filename", "display_text", "glc_path", "time_end",
-    "freq_end", "png_path", "wav_treatment", "warnings",
+    "sequence", "topic_filename", "display_text", "link_href", "glc_path",
+    "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress_test"
@@ -293,6 +293,7 @@ def gram_to_rows(
             "sequence": str(i),
             "topic_filename": f"gram_{gram_num}_lofar{i}.dita",
             "display_text": display_text,
+            "link_href": href,
             "glc_path": glc_path,
             "time_end": time_end,
             "freq_end": freq_end,
@@ -314,6 +315,7 @@ def gram_to_rows(
         "sequence": "1",
         "topic_filename": f"gram_{gram_num}_analysis.dita",
         "display_text": "",
+        "link_href": "",
         "glc_path": "",
         "time_end": "",
         "freq_end": "",

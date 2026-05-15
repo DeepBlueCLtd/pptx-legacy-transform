@@ -139,13 +139,36 @@ Reviewers should not edit the identity columns
 | 5 | `topic_type` | no | `glc` or `analysis`. |
 | 6 | `sequence` | no | 1-based per gram, scoped per `topic_type`. |
 | 7 | `topic_filename` | no | `gram_NN_lofarM.dita` or `gram_NN_analysis.dita`. |
-| 8 | `display_text` | yes (rare) | Link label from the PPTX. |
-| 9 | `glc_path` | yes | Resolved relative to the source folder. |
-| 10 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
-| 11 | `freq_end` | yes | From GLC `bandwidth`; numeric string. |
-| 12 | `png_path` | yes | Resolved relative to the source folder. |
-| 13 | `wav_treatment` | yes | `screenshot`, `gaps-lite`, `TBD`, or empty. |
-| 14 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
+| 8 | `display_text` | yes (rare) | Human-readable link label from the PPTX run. |
+| 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run (`.glc`, `.wav`, or other). Source of truth for WAV detection and the stub topic's `xref href`. |
+| 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder; empty for WAV rows. |
+| 11 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
+| 12 | `freq_end` | yes | From GLC `bandwidth`; numeric string. |
+| 13 | `png_path` | yes | Resolved relative to the source folder. |
+| 14 | `wav_treatment` | yes | `screenshot`, `gaps-lite`, `TBD`, or empty. |
+| 15 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
+
+### Editing the CSV in Excel — what can go wrong
+
+The intermediate CSV is written `utf-8-sig` (BOM included), CRLF
+line-terminated, with `QUOTE_MINIMAL` quoting (R11). Excel can mangle
+all three of those if you "Save As" instead of "Save":
+
+- **BOM stripped** if you re-save as plain CSV without `Unicode (UTF-8)`
+  selected — non-ASCII vessel names become mojibake on the next read.
+- **Line endings flipped** to LF on macOS or to mixed endings in some
+  cross-platform flows. `generate_dita.py` tolerates this on read, but
+  the byte-level round-trip invariant in `csv-schema.md` no longer holds.
+- **Leading zeros lost** if Excel auto-coerces `Gram 05` style cells.
+  Stick to text-cell format for the identity columns.
+- **Quoting changes** if Excel decides a free-form column needs quoting
+  where the writer did not. Functionally harmless but breaks byte-level
+  diffs across runs.
+
+Mitigation: open the CSV with `Data → From Text/CSV → 65001: Unicode (UTF-8)`
+and save back with the same encoding; do not edit identity columns
+(`publication`, `chapter`, `gram_id`, `topic_type`, `sequence`,
+`topic_filename`).
 
 ## Running tests
 
