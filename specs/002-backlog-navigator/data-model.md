@@ -48,7 +48,8 @@ Items table.
 
 ## Entity: Item (row in the Items table)
 
-**Fields** (12 columns, matching the navigator's fixed table shape):
+**Fields** (10 columns, matching the shape of the existing
+`backlog.md` and what the navigator's parser reads from this repo):
 
 | # | Field | Type | Notes |
 |---|---|---|---|
@@ -62,7 +63,12 @@ Items table.
 | 8 | Total | int | Sum of V+M+A; must equal that sum. |
 | 9 | Complexity | enum | `Low`, `Medium`, `High`. |
 | 10 | Status | enum | One of the workflow states (`needs-interview`, `proposed`, `approved`, `specified`, `clarified`, `planned`, `tasked`, `implementing`, `complete`). |
-| 11–12 | *(reserved)* | — | Reserved by the navigator's 12-column expectation; this repo's backlog uses the first 10 columns and leaves the trailing two columns intentionally empty / unused. See `contracts/backlog-file-schema.md` for the exact rendering. |
+
+The navigator README describes a "virtualized 12-column table for
+desktop"; that refers to the desktop UI's rendering (data columns
+plus UI-only columns such as selection and actions), not a markdown
+schema requirement. The on-disk file is and remains a 10-column
+table.
 
 **Relationships**:
 

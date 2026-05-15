@@ -48,15 +48,19 @@ Each subsequent row is one epic.
 
 ## Items table
 
-A markdown pipe table with this exact 12-column header (column order
-matters; trailing columns are reserved by the navigator and rendered
-empty by this repository):
+A markdown pipe table with this exact 10-column header (column
+order matters; this matches the navigator's expectations as well
+as the shape of the existing `backlog.md` in this repository):
 
 ```
 | ID | Title | Category | Epic | V | M | A | Total | Complexity | Status |
 ```
 
 Followed by a header-separator row. Each subsequent row is one item.
+The navigator README mentions a "virtualized 12-column table for
+desktop"; that is the desktop UI's rendering (data columns plus
+UI-only columns such as selection and actions), not a constraint on
+the markdown source.
 
 **Cell rules**:
 

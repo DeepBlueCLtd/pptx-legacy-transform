@@ -17,6 +17,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - BACKLOG.md
+      - .github/workflows/backlog-navigator-pr-link.yml
 ```
 
 - `opened`: first time the PR is opened with backlog changes.
@@ -43,13 +44,19 @@ Runs on `ubuntu-latest`. Steps:
 
 1. **Compose the comment body** (in-line shell or step output). The
    body MUST begin with the marker line and MUST embed the
-   navigator URL produced according to `navigator-url.md`:
+   navigator URL produced according to `navigator-url.md` (the
+   `branch` form, since `?pr=` is documented as a legacy parameter
+   in the navigator's own README):
 
    ```
    <!-- backlog-navigator-link -->
    Review this PR's backlog changes in the navigator:
-   https://deepbluecltd.github.io/backlog-navigator/?repo=DeepBlueCLtd/pptx-legacy-transform&pr=${{ github.event.pull_request.number }}
+   https://deepbluecltd.github.io/backlog-navigator/?repo=DeepBlueCLtd/pptx-legacy-transform&branch=${{ github.event.pull_request.head.ref }}
    ```
+
+   If `head.ref` contains characters that need URL-encoding (e.g.
+   `/` in `claude/foo-bar`), the workflow MUST URL-encode it before
+   substitution.
 
 2. **Find existing comment by marker** and either create a new
    comment or update the existing one in place. The reference

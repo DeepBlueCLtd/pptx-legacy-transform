@@ -114,8 +114,19 @@ BACKLOG.md                   # Renamed from backlog.md (case-only rename — see
 README.md                    # Adds "Browse the backlog" section
 .github/
 └── workflows/
-    └── backlog-navigator-pr-link.yml   # New: PR comment workflow
+    ├── backlog-navigator-pr-link.yml   # New: PR comment workflow (Story P3)
+    └── backlog-reference-check.yml     # New: greps for stray `backlog.md` lowercase references (SC-006 guard)
 ```
+
+In addition, the same commit that performs the rename MUST append
+three new rows to `BACKLOG.md` (proposed by the review):
+
+- An item recording this backlog-navigator integration as
+  `specified` and linked to `specs/002-backlog-navigator/`.
+- A backlog item for the reference-integrity CI check (above) so its
+  ongoing maintenance is tracked, not just its initial creation.
+- A backlog item for a future PR template pointing reviewers at the
+  navigator, marked `proposed` and dependent on Story P3 shipping.
 
 No directories are added. The existing Python scripts
 (`mock_pptx.py`, `introspect_pptx.py`, `extract_to_csv.py`,

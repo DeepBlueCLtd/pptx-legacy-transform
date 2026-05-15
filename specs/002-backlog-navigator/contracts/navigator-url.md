@@ -19,10 +19,14 @@ The trailing slash is preserved in every link.
 | Parameter | Purpose | Required | Source |
 |---|---|---|---|
 | `repo` | `owner/name` slug identifying the repository | yes | Constant: `DeepBlueCLtd/pptx-legacy-transform` |
-| `branch` | Branch name whose `BACKLOG.md` to load | exactly one of `branch` or `pr` | README uses `main` |
-| `pr` | Pull request number to load (head ref of the PR) | exactly one of `branch` or `pr` | Workflow uses `${{ github.event.pull_request.number }}` |
-| `path` | Override the backlog file path | no | Omit — we rely on the navigator's default of `BACKLOG.md` |
+| `branch` | Branch name whose `BACKLOG.md` to load | yes (used in both emitted URLs) | README uses `main`; workflow uses `${{ github.event.pull_request.head.ref }}` |
+| `pr` | Pull request number — **documented as legacy form, "resolves against bundled default"** | no | Not used by either emitted URL; see "Out of contract" |
 | `dryRun` | Suppress write paths in the navigator UI | no | Omit |
+
+Note: the navigator does not currently expose a `?path=` parameter,
+so the backlog filename is fixed by the navigator at `BACKLOG.md`
+(case-sensitive). This is why the rename described in `research.md`
+is required.
 
 ## Canonical emitted URLs
 
@@ -35,8 +39,13 @@ https://deepbluecltd.github.io/backlog-navigator/?repo=DeepBlueCLtd/pptx-legacy-
 **PR-comment workflow (per-PR view)**:
 
 ```
-https://deepbluecltd.github.io/backlog-navigator/?repo=DeepBlueCLtd/pptx-legacy-transform&pr=<PR_NUMBER>
+https://deepbluecltd.github.io/backlog-navigator/?repo=DeepBlueCLtd/pptx-legacy-transform&branch=<PR_HEAD_REF>
 ```
+
+`<PR_HEAD_REF>` is the PR's head branch name. In the workflow this
+comes from `${{ github.event.pull_request.head.ref }}`. Branch names
+containing characters that need URL-encoding (e.g. `/`) MUST be
+URL-encoded before substitution.
 
 ## Encoding rules
 
@@ -45,9 +54,11 @@ https://deepbluecltd.github.io/backlog-navigator/?repo=DeepBlueCLtd/pptx-legacy-
 - Parameters are joined with `&`; no trailing `&`.
 - No fragment (`#...`) component is used.
 
-## Fallback (documented, not currently used)
+## Out of contract
 
-If the `?pr=` view is ever unavailable on the hosted instance, the
-workflow MAY fall back to `?branch=${{ github.head_ref }}`. This is
-the only sanctioned variation; any other URL shape requires updating
-this contract first.
+- `?pr=<n>` is documented by the navigator project as a **legacy
+  form** that "resolves against bundled default". It is not used
+  in either of the emitted URLs above. Do not add it back without
+  updating this contract first.
+- Any URL shape other than the two canonical forms above requires
+  updating this contract first.

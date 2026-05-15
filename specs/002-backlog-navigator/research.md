@@ -127,7 +127,57 @@ enough to satisfy FR-007 without taking on documentation debt.
 - *Reproduce the navigator's full token-setup walkthrough in our
   README.* Rejected — duplication, will go stale.
 
-## 6. Out of scope
+## 6. Reference-integrity guard for the rename
+
+**Decision**: Add a second workflow file,
+`.github/workflows/backlog-reference-check.yml`, that runs on
+`pull_request` and on `push` to `main`, greps the repository for
+the lowercase literal `backlog.md` (word-bounded, regex
+`\bbacklog\.md\b`), and fails if any match falls outside
+`specs/002-backlog-navigator/` (where historical mentions are
+preserved deliberately).
+
+**Rationale**: SC-006 ("no existing link, command, or skill returns
+'file not found'") is the spec's load-bearing invariant. The
+manual `grep` in `quickstart.md §4` is one-shot; an automated check
+keeps the invariant true forever and costs ~ten lines of YAML. The
+review identified this as a critical gap because the rename is
+invasive and the failure mode (a stale link to a missing file) is
+silent.
+
+**Alternatives considered**:
+
+- *Manual grep in `quickstart.md` only.* Rejected — does not survive
+  the project's lifetime; SC-006 silently regresses the first time
+  someone adds a new file with the old reference.
+- *A `pre-commit` hook instead of CI.* Rejected — relies on every
+  contributor's local environment being correctly configured, which
+  is fragile in a multi-machine team.
+
+## 7. URL parameter choice for the PR-comment workflow
+
+**Decision**: The PR-comment workflow uses
+`?repo=...&branch=${{ github.event.pull_request.head.ref }}`. The
+`?pr=<n>` parameter is **not** used.
+
+**Rationale**: Verification against the navigator project's README
+during review showed that `?pr=` is documented as a "legacy form —
+resolves against bundled default", while `?branch=` is the modern
+canonical parameter. Initial planning had reversed these roles; the
+review corrected them. Using the modern parameter keeps us aligned
+with the navigator's supported surface and avoids a future
+deprecation break.
+
+**Alternatives considered**:
+
+- *Use `?pr=<n>` as originally planned.* Rejected — relies on a
+  legacy code path in the navigator that may be removed without
+  notice.
+- *Emit both `?branch=` and `?pr=` for robustness.* Rejected — the
+  navigator's URL contract is "exactly one of"; duplicating both
+  is undefined behaviour.
+
+## 8. Out of scope
 
 The following were deliberately excluded from this feature; calling
 them out here so they are not re-raised during `/speckit-tasks`:
