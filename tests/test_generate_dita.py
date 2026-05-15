@@ -39,10 +39,12 @@ class GenerateDitaTests(unittest.TestCase):
         if self.out.exists():
             shutil.rmtree(self.out)
 
-    def test_glc_topic_structure(self) -> None:
+    def test_gram_topic_has_gramframe_table(self) -> None:
+        """Each GLC row contributes one ``<table outputclass='gram-config'>``
+        carrying the time/freq parameters the GramFrame plugin reads."""
         rc = _run(self.out)
         self.assertEqual(rc, 0)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.dita"
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         self.assertTrue(topic.is_file(), f"missing {topic}")
         root = ET.parse(topic).getroot()
         self.assertEqual(root.tag, "topic")
@@ -57,30 +59,92 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(ph, "vessel name should be wrapped in <ph audience='-trainee'>")
         self.assertIn("Nordik Jockey", (ph.text or ""))
 
-    def test_glc_topic_asset_copied_with_relative_href(self) -> None:
-        """When the referenced asset exists, the generator copies it next to
-        the topic (renamed to match the topic stem) and emits a topic-relative
-        href."""
+    def test_gramframe_table_has_named_colspecs(self) -> None:
+        """DITA-OT needs named colspecs so the image cell renders with
+        ``colspan='2'``; without them GramFrame rejects the table."""
         _run(self.out)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.dita"
-        copied = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.png"
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        colspecs = root.findall(".//table[@outputclass='gram-config']/tgroup/colspec")
+        self.assertEqual([c.get("colname") for c in colspecs], ["c1", "c2"])
+
+    def test_glc_asset_copied_with_slugified_name(self) -> None:
+        """When the referenced asset exists, the generator copies it next to
+        the topic (with a slugified filename, preserving the extension) and
+        emits a topic-relative href."""
+        _run(self.out)
+        gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+        topic = gram_dir / "gram_12.dita"
+        copied = gram_dir / "gram12.png"
         original = FIXTURES / "images" / "gram12.png"
         self.assertTrue(copied.is_file(), "asset must be copied next to topic")
         self.assertEqual(copied.read_bytes(), original.read_bytes())
         root = ET.parse(topic).getroot()
-        image = root.find(".//image")
+        image = root.find(".//table[@outputclass='gram-config']//image")
         self.assertIsNotNone(image)
-        self.assertEqual(image.get("href"), "gram_12_lofar1.png",
+        self.assertEqual(image.get("href"), "gram12.png",
                          "href must be topic-relative, not an outward path")
 
-    def test_analysis_topic_audience_attribute(self) -> None:
+    def test_analysis_section_in_gram_topic(self) -> None:
+        """Analysis assets are copied into the per-gram folder and the gram
+        topic carries an instructor-only analysis section (PNG embedded as
+        <image>, DOCX linked via <xref>)."""
         _run(self.out)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_analysis.dita"
-        self.assertTrue(topic.is_file())
+        gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+        topic = gram_dir / "gram_12.dita"
+        copied = gram_dir / "gram12-analysis.png"
+        self.assertTrue(copied.is_file(), "analysis asset must be copied next to topic")
         root = ET.parse(topic).getroot()
-        self.assertEqual(root.get("audience"), "-trainee")
+        analysis_section = root.find(".//body/section[@audience='-trainee']")
+        self.assertIsNotNone(analysis_section,
+                             "gram topic must include an instructor-only analysis section")
+        image = analysis_section.find("image")
+        self.assertIsNotNone(image, "PNG analysis assets render as <image>")
+        self.assertEqual(image.get("href"), "gram12-analysis.png")
 
-    def test_main_ditamap_uses_topichead(self) -> None:
+    def test_docx_analysis_renders_as_xref(self) -> None:
+        """When the analysis asset is a .docx, the section emits an <xref>
+        instead of an embedded <image>."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [
+            {c: "" for c in cols},
+            {c: "" for c in cols},
+        ]
+        rows[0].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "link_href": "supporting/gram12/config_1.glc",
+            "glc_path": "supporting/gram12/config_1.glc",
+            "time_end": "271", "freq_end": "400",
+            "png_path": "images/gram12.png",
+        })
+        rows[1].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "analysis", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "png_path": "analysis.docx",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        analysis_section = root.find(".//body/section[@audience='-trainee']")
+        self.assertIsNotNone(analysis_section)
+        xref = analysis_section.find(".//xref")
+        self.assertIsNotNone(xref, "DOCX analysis assets render as <xref>")
+        self.assertEqual(xref.get("href"), "analysis.docx")
+        self.assertEqual(xref.get("format"), "docx")
+
+    def test_main_ditamap_topichead_per_chapter(self) -> None:
         _run(self.out)
         ditamap = self.out / "main.ditamap"
         self.assertTrue(ditamap.is_file())
@@ -92,6 +156,16 @@ class GenerateDitaTests(unittest.TestCase):
             for child in th:
                 self.assertEqual(child.tag, "topicref")
 
+    def test_main_ditamap_one_topicref_per_gram(self) -> None:
+        """The CSV carries N+1 rows per gram but the ditamap must point to
+        the single gram topic once, not once per row."""
+        _run(self.out)
+        ditamap = self.out / "main.ditamap"
+        root = ET.parse(ditamap).getroot()
+        hrefs = [tr.get("href") for tr in root.findall(".//topicref")]
+        self.assertEqual(len(hrefs), len(set(hrefs)),
+                         f"duplicate topicrefs in ditamap: {hrefs}")
+
     def test_test_ditamap_is_flat(self) -> None:
         _run(self.out)
         ditamap = self.out / "progress-test-1.ditamap"
@@ -102,9 +176,9 @@ class GenerateDitaTests(unittest.TestCase):
                              f"unexpected child {child.tag} in flat test ditamap")
         self.assertIsNone(root.find("topichead"))
 
-    def test_wav_gaps_lite_stub(self) -> None:
+    def test_wav_gaps_lite_block_inside_gram_topic(self) -> None:
         _run(self.out)
-        topic = self.out / "main" / "arctic-survey" / "gram_05_lofar1.dita"
+        topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
         self.assertTrue(topic.is_file())
         text = topic.read_text(encoding="utf-8")
         self.assertIn("MANUAL REVIEW", text)
@@ -112,12 +186,12 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(root.find(".//note"))
         xref = root.find(".//xref")
         self.assertIsNotNone(xref)
-        # The generator copies the WAV next to the topic, renamed to match
-        # the topic stem, and emits a topic-relative href. The fixture WAV
-        # does not exist on disk, so no file is copied, but the href still
+        # The generator copies the WAV next to the topic, renamed to a
+        # slugified version of the source filename. The fixture WAV does
+        # not exist on disk, so no file is copied, but the href still
         # reflects the intended local name so re-running with the asset
         # present resolves the link without touching the topic XML.
-        self.assertEqual(xref.get("href"), "gram_05_lofar1.wav")
+        self.assertEqual(xref.get("href"), "audio-clip.wav")
         self.assertEqual(xref.text, "Audio sample")
 
     def test_skipped_report_emitted_for_tbd_wav(self) -> None:
@@ -131,7 +205,7 @@ class GenerateDitaTests(unittest.TestCase):
             "publication": "main", "chapter": "Arctic Survey",
             "gram_id": "Gram 05", "vessel_name": "Arctic Surveyor",
             "topic_type": "glc", "sequence": "1",
-            "topic_filename": "gram_05_lofar1.dita",
+            "topic_filename": "gram_05.dita",
             "display_text": "Audio sample",
             "link_href": "supporting/gram05/audio_clip.wav",
             "wav_treatment": "TBD",
@@ -143,8 +217,12 @@ class GenerateDitaTests(unittest.TestCase):
             for r in rows:
                 w.writerow(r)
         _run(self.out, csv_path=csv_path)
-        topic = self.out / "main" / "arctic-survey" / "gram_05_lofar1.dita"
-        self.assertFalse(topic.exists(), "TBD WAV row must not produce a topic")
+        topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
+        # The TBD row contributes no gramframe block, but with no other rows
+        # for this gram the topic still renders (empty body bar the title).
+        self.assertTrue(topic.is_file())
+        root = ET.parse(topic).getroot()
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
         skipped = self.out / "skipped.txt"
         self.assertTrue(skipped.is_file())
         self.assertIn("Gram 05", skipped.read_text(encoding="utf-8"))

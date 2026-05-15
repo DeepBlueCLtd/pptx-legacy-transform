@@ -13,7 +13,12 @@
 This work migrates acoustic training content from MS PowerPoint presentations into
 DITA XML publications. The target DITA publications use the GramFrame browser-based
 spectrogram analysis tool (`gramframe.bundle.js`) to replace the legacy GAPS-Lite
-desktop application.
+desktop application. GramFrame is the rendering target for every spectrogram in the
+published HTML: each gram's `.glc` configurations become `<table class="gram-config">`
+elements that the bundle auto-detects on `DOMContentLoaded` and rewrites into
+interactive viewers. The exact table shape, DITA source, and bundle-loading
+requirements are documented in
+[`specs/001-pptx-dita-migration/contracts/gramframe.md`](specs/001-pptx-dita-migration/contracts/gramframe.md).
 
 ### 1.2 Development Context — Important
 

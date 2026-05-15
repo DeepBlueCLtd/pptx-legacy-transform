@@ -87,6 +87,19 @@ def slugify(text: str) -> str:
     return _SLUG_NON_ALNUM.sub("-", ascii_only).strip("-")
 
 
+def slugify_asset_name(filename: str) -> str:
+    """Slugify a filename while preserving its extension (lower-cased).
+
+    Example: ``"Lofar 1 ABC.PNG"`` → ``"lofar-1-abc.png"``. The original
+    extension is kept so DITA-OT and downstream consumers can still
+    classify the asset by suffix.
+    """
+    p = Path(filename)
+    stem = slugify(p.stem)
+    suffix = p.suffix.lower()
+    return f"{stem}{suffix}" if stem else f"asset{suffix}"
+
+
 def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
     """Return ``png_path`` resolved against ``image_root``, relative to ``topic_dir``."""
     if not png_path:
@@ -103,14 +116,14 @@ def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
 
 
 def copy_asset(
-    src_relpath: str, image_root: Path, topic_dir: Path, topic_stem: str,
+    src_relpath: str, image_root: Path, topic_dir: Path,
 ) -> tuple[str, Path | None]:
     """Copy the referenced asset next to its topic and return ``(href, written)``.
 
-    The asset is renamed to ``<topic_stem><ext>`` so that the topic-asset
-    relationship is self-evident on disk and two grams in the same chapter
-    that share an asset filename (e.g. both have ``Lofar 1.png``) cannot
-    collide.
+    The asset is renamed to a slugified version of its source filename
+    (e.g. ``"Lofar 1 ABC.png"`` → ``"lofar-1-abc.png"``). Each gram has
+    its own folder so two grams sharing an original filename never
+    collide; the slug keeps hrefs URL-safe.
 
     If ``src_relpath`` is empty, returns ``("", None)``.
 
@@ -123,7 +136,7 @@ def copy_asset(
     if not src_relpath:
         return "", None
     source = image_root / src_relpath
-    target_name = f"{topic_stem}{Path(src_relpath).suffix}"
+    target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
     if source.is_file():
         topic_dir.mkdir(parents=True, exist_ok=True)
@@ -141,12 +154,28 @@ def _gram_num(gram_id: str) -> str:
     return digits[0] if digits else "00"
 
 
-def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
+def _gram_folder_name(gram_id: str) -> str:
+    """Return the per-gram folder name, e.g. ``"gram-01"``."""
+    return f"gram-{_gram_num(gram_id)}"
+
+
+def _publication_root(out_dir: Path, row: dict) -> Path:
+    """Return the per-publication root, ``{out}/{pub}`` or ``{out}/main/{chapter}``."""
     pub = row["publication"]
     if pub.startswith("progress-test-"):
         return out_dir / pub
     chapter_slug = slugify(row.get("chapter", ""))
     return out_dir / "main" / chapter_slug
+
+
+def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
+    """Return the directory the topic + its asset live in.
+
+    Each gram gets its own sub-directory so the original asset filenames
+    can be preserved (slugified) without colliding across grams in the
+    same chapter.
+    """
+    return _publication_root(out_dir, row) / _gram_folder_name(row["gram_id"])
 
 
 # -----------------------------------------------------------------------------
@@ -161,120 +190,197 @@ def _serialise(root: ET.Element, leading: str = "") -> str:
     return f"{leading}{body}\n"
 
 
-def emit_glc_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
-    """Write ``gram_NN_lofarM.dita`` for a glc-typed row plus its asset."""
-    gram_num = _gram_num(row["gram_id"])
-    seq = row["sequence"]
-    topic_id = f"gram_{gram_num}_lofar{seq}"
-    topic_dir = _topic_dir_for_row(out_dir, row)
-    topic_dir.mkdir(parents=True, exist_ok=True)
-    topic_path = topic_dir / row["topic_filename"]
-    topic_stem = Path(row["topic_filename"]).stem
+def _append_gramframe_table(
+    parent: ET.Element, image_href: str, time_end: str, freq_end: str,
+) -> None:
+    """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
 
-    image_href, copied = copy_asset(
-        row.get("png_path", ""), image_root, topic_dir, topic_stem,
-    )
+    The HTML produced by DITA-OT carries ``class="gram-config"`` on the
+    table; the GramFrame browser bundle (``gramframe.bundle.js``) auto-
+    detects this class on ``DOMContentLoaded`` and rewrites the table
+    into an interactive spectrogram view. See
+    ``specs/001-pptx-dita-migration/contracts/gramframe.md``.
 
-    topic = ET.Element("topic", {"id": topic_id})
-    title = ET.SubElement(topic, "title")
-    title.text = f"Gram {gram_num}"
-    if row.get("vessel_name"):
-        ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
-        ph.text = f" - {row['vessel_name']}"
-
-    body = ET.SubElement(topic, "body")
-    section = ET.SubElement(body, "section")
+    The two named ``<colspec>`` elements are required so DITA-OT emits
+    ``colspan="2"`` on the image row — without them the image cell
+    renders with ``colspan="1"`` and GramFrame rejects the table.
+    """
+    section = ET.SubElement(parent, "section")
     table = ET.SubElement(section, "table", {"outputclass": "gram-config"})
     tgroup = ET.SubElement(table, "tgroup", {"cols": "2"})
+    ET.SubElement(tgroup, "colspec", {"colname": "c1", "colnum": "1"})
+    ET.SubElement(tgroup, "colspec", {"colname": "c2", "colnum": "2"})
     tbody = ET.SubElement(tgroup, "tbody")
-
     image_row = ET.SubElement(tbody, "row")
     image_entry = ET.SubElement(image_row, "entry", {"namest": "c1", "nameend": "c2"})
     ET.SubElement(image_entry, "image", {
         "href": image_href, "placement": "break", "align": "center",
     })
-
     for label, value in (
         ("time-start", "0"),
-        ("time-end", row.get("time_end", "")),
+        ("time-end", time_end),
         ("freq-start", "0"),
-        ("freq-end", row.get("freq_end", "")),
+        ("freq-end", freq_end),
     ):
         r = ET.SubElement(tbody, "row")
         ET.SubElement(r, "entry").text = label
         ET.SubElement(r, "entry").text = value
 
-    related = ET.SubElement(topic, "related-links")
-    ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
 
-    topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
-    return [topic_path] + ([copied] if copied is not None else [])
+def _append_analysis_section(
+    parent: ET.Element, href: str,
+) -> None:
+    """Append the instructor-only analysis-sheet section.
 
-
-def emit_analysis_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
-    """Write ``gram_NN_analysis.dita`` for an analysis-typed row plus its asset."""
-    gram_num = _gram_num(row["gram_id"])
-    topic_id = f"gram_{gram_num}_analysis"
-    topic_dir = _topic_dir_for_row(out_dir, row)
-    topic_dir.mkdir(parents=True, exist_ok=True)
-    topic_path = topic_dir / row["topic_filename"]
-    topic_stem = Path(row["topic_filename"]).stem
-
-    href, copied = copy_asset(
-        row.get("png_path", ""), image_root, topic_dir, topic_stem,
-    )
-
-    topic = ET.Element("topic", {"id": topic_id, "audience": "-trainee"})
-    title = ET.SubElement(topic, "title")
-    title.text = f"Gram {gram_num} Analysis"
-    body = ET.SubElement(topic, "body")
-    section = ET.SubElement(body, "section")
-    ET.SubElement(section, "image", {
-        "href": href, "placement": "break", "align": "center",
-    })
-    related = ET.SubElement(topic, "related-links")
-    ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
-
-    topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
-    return [topic_path] + ([copied] if copied is not None else [])
+    DOCX assets are linked via ``<xref>`` (the trainee opens them in
+    Word); PNG assets are embedded inline as ``<image>``. The section
+    carries ``audience="-trainee"`` so the trainee profile elides the
+    analysis sheet entirely.
+    """
+    section = ET.SubElement(parent, "section", {"audience": "-trainee"})
+    title = ET.SubElement(section, "title")
+    title.text = "Analysis Sheet"
+    if not href:
+        return
+    suffix = Path(href).suffix.lower().lstrip(".")
+    if suffix == "png":
+        ET.SubElement(section, "image", {
+            "href": href, "placement": "break", "align": "center",
+        })
+    else:
+        p = ET.SubElement(section, "p")
+        xref = ET.SubElement(p, "xref", {
+            "href": href, "format": suffix or "html", "scope": "local",
+        })
+        xref.text = "Analysis Sheet"
 
 
-def emit_wav_stub_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
-    """Write the GAPS-Lite stub topic for a ``wav_treatment="gaps-lite"`` row plus its WAV."""
-    gram_num = _gram_num(row["gram_id"])
-    seq = row["sequence"]
-    topic_id = f"gram_{gram_num}_lofar{seq}"
-    topic_dir = _topic_dir_for_row(out_dir, row)
-    topic_dir.mkdir(parents=True, exist_ok=True)
-    topic_path = topic_dir / row["topic_filename"]
-    topic_stem = Path(row["topic_filename"]).stem
-
-    wav_relpath = row.get("link_href", "") or row.get("glc_path", "")
-    wav_href, copied = copy_asset(wav_relpath, image_root, topic_dir, topic_stem)
-
-    topic = ET.Element("topic", {"id": topic_id})
-    title = ET.SubElement(topic, "title")
-    title.text = f"Gram {gram_num}"
-    if row.get("vessel_name"):
-        ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
-        ph.text = f" - {row['vessel_name']}"
-
-    body = ET.SubElement(topic, "body")
-    section = ET.SubElement(body, "section")
+def _append_wav_stub(
+    parent: ET.Element, wav_href: str, display_text: str,
+) -> None:
+    """Append a GAPS-Lite stub block (note + WAV xref) to the gram body."""
+    section = ET.SubElement(parent, "section")
     note = ET.SubElement(section, "note")
     note.text = "This gram requires GAPS-Lite playback."
     p = ET.SubElement(section, "p")
     xref = ET.SubElement(p, "xref", {
         "href": wav_href, "format": "wav", "scope": "local",
     })
-    xref.text = row.get("display_text", "") or wav_href
+    xref.text = display_text or wav_href
+
+
+def emit_gram_topic(
+    gram_rows: list[dict], out_dir: Path, image_root: Path,
+) -> tuple[list[Path], list[dict]]:
+    """Write a single ``gram_NN.dita`` carrying every block for one gram.
+
+    The body contains, in order:
+
+    1. The analysis-sheet section (DOCX link or embedded PNG), once,
+       wrapped with ``audience="-trainee"``.
+    2. One GramFrame table per ``topic_type="glc"`` row (the screenshot
+       grams), in CSV ``sequence`` order. Each table is the shape the
+       ``gramframe.bundle.js`` browser plugin recognises.
+    3. One GAPS-Lite stub block per ``wav_treatment="gaps-lite"`` row,
+       inline with the GramFrame tables in the same sequence order.
+
+    Rows with ``wav_treatment="TBD"``, empty treatment on a WAV link,
+    or any unknown treatment are skipped — they contribute no block to
+    the gram but the gram topic still renders the rest. If any GAPS-Lite
+    block is emitted the topic gets a leading ``MANUAL REVIEW`` comment.
+    """
+    analysis_rows = [r for r in gram_rows if r["topic_type"] == "analysis"]
+    glc_rows = [r for r in gram_rows if r["topic_type"] == "glc"]
+    glc_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
+
+    first = analysis_rows[0] if analysis_rows else glc_rows[0]
+    gram_num = _gram_num(first["gram_id"])
+    topic_dir = _topic_dir_for_row(out_dir, first)
+    topic_dir.mkdir(parents=True, exist_ok=True)
+    topic_path = topic_dir / first["topic_filename"]
+
+    topic = ET.Element("topic", {"id": f"gram_{gram_num}"})
+    title = ET.SubElement(topic, "title")
+    title.text = f"Gram {gram_num}"
+    if first.get("vessel_name"):
+        ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
+        ph.text = f" - {first['vessel_name']}"
+    body = ET.SubElement(topic, "body")
+
+    written: list[Path] = []
+    skipped: list[dict] = []
+    needs_review = False
+
+    if analysis_rows:
+        analysis_row = analysis_rows[0]
+        href, copied = copy_asset(
+            analysis_row.get("png_path", ""), image_root, topic_dir,
+        )
+        if copied is not None:
+            written.append(copied)
+        _append_analysis_section(body, href)
+
+    for row in glc_rows:
+        treatment = (row.get("wav_treatment") or "").strip().lower()
+        link_href = row.get("link_href", "") or ""
+        is_wav_link = (not row.get("glc_path")) and (
+            link_href.lower().endswith(".wav") or bool(treatment)
+        )
+
+        if treatment == "gaps-lite":
+            wav_relpath = (
+                row.get("png_path", "") or link_href or row.get("glc_path", "")
+            )
+            wav_href, copied = copy_asset(wav_relpath, image_root, topic_dir)
+            if copied is not None:
+                written.append(copied)
+            _append_wav_stub(body, wav_href, row.get("display_text", ""))
+            needs_review = True
+            continue
+
+        if treatment in ("", "screenshot") and not is_wav_link:
+            image_href, copied = copy_asset(
+                row.get("png_path", ""), image_root, topic_dir,
+            )
+            if copied is not None:
+                written.append(copied)
+            _append_gramframe_table(
+                body, image_href,
+                row.get("time_end", ""), row.get("freq_end", ""),
+            )
+            continue
+
+        if treatment == "screenshot":
+            image_href, copied = copy_asset(
+                row.get("png_path", ""), image_root, topic_dir,
+            )
+            if copied is not None:
+                written.append(copied)
+            _append_gramframe_table(
+                body, image_href,
+                row.get("time_end", ""), row.get("freq_end", ""),
+            )
+            continue
+
+        if treatment == "":
+            reason = "wav_treatment is empty"
+        elif treatment == "tbd":
+            reason = "wav_treatment is TBD"
+        else:
+            reason = f"unknown wav_treatment {treatment!r}"
+        LOGGER.error(
+            "Skipping row %s/%s/%s seq=%s: %s",
+            row["publication"], row["gram_id"], row["topic_type"],
+            row["sequence"], reason,
+        )
+        skipped.append(_skip_record(row, reason))
 
     related = ET.SubElement(topic, "related-links")
     ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
 
-    leading = "<!-- MANUAL REVIEW: GAPS-Lite required -->\n"
+    leading = "<!-- MANUAL REVIEW: GAPS-Lite required -->\n" if needs_review else ""
     topic_path.write_text(_serialise(topic, leading=leading), encoding="utf-8", newline="\n")
-    return [topic_path] + ([copied] if copied is not None else [])
+    return [topic_path] + written, skipped
 
 
 # -----------------------------------------------------------------------------
@@ -288,45 +394,13 @@ class EmitResult:
     errors: int
 
 
-def dispatch_row(row: dict, out_dir: Path, image_root: Path) -> tuple[list[Path], dict | None]:
-    """Branch on ``topic_type`` and ``wav_treatment``. Returns ``(written, skipped)``."""
-    topic_type = row.get("topic_type", "")
-    treatment = (row.get("wav_treatment") or "").strip().lower()
-    link_href = row.get("link_href", "") or ""
-    is_wav_link = (not row.get("glc_path")) and (link_href.lower().endswith(".wav") or bool(treatment))
-
-    if topic_type == "analysis":
-        return (emit_analysis_topic(row, out_dir, image_root), None)
-
-    if topic_type == "glc":
-        if treatment == "gaps-lite":
-            return (emit_wav_stub_topic(row, out_dir, image_root), None)
-        if treatment == "screenshot":
-            return (emit_glc_topic(row, out_dir, image_root), None)
-        if treatment == "":
-            # No WAV treatment, no glc_path -> empty WAV row, skip.
-            if is_wav_link:
-                LOGGER.error(
-                    "Skipping row %s/%s/%s seq=%s: wav_treatment is empty",
-                    row["publication"], row["gram_id"], row["topic_type"], row["sequence"],
-                )
-                return ([], _skip_record(row, "wav_treatment is empty"))
-            return (emit_glc_topic(row, out_dir, image_root), None)
-        if treatment == "tbd":
-            LOGGER.error(
-                "Skipping row %s/%s/%s seq=%s: wav_treatment is TBD",
-                row["publication"], row["gram_id"], row["topic_type"], row["sequence"],
-            )
-            return ([], _skip_record(row, "wav_treatment is TBD"))
-        # Any other unknown treatment.
-        LOGGER.error(
-            "Skipping row %s/%s/%s seq=%s: unknown wav_treatment %r",
-            row["publication"], row["gram_id"], row["topic_type"], row["sequence"], treatment,
-        )
-        return ([], _skip_record(row, f"unknown wav_treatment {treatment!r}"))
-
-    LOGGER.error("Skipping row with unknown topic_type %r", topic_type)
-    return ([], _skip_record(row, f"unknown topic_type {topic_type!r}"))
+def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple[str, str, str], list[dict]]":
+    """Group rows by ``(publication, chapter, gram_id)`` preserving CSV order."""
+    groups: OrderedDict[tuple[str, str, str], list[dict]] = OrderedDict()
+    for row in rows:
+        key = (row["publication"], row.get("chapter", ""), row["gram_id"])
+        groups.setdefault(key, []).append(row)
+    return groups
 
 
 def _skip_record(row: dict, reason: str) -> dict:
@@ -363,8 +437,13 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     root = ET.Element("map", {"title": "Main"})
     for slug, (title, chapter_rows) in chapters.items():
         topichead = ET.SubElement(root, "topichead", {"navtitle": title})
+        seen: set[str] = set()
         for row in chapter_rows:
-            href = f"main/{slug}/{row['topic_filename']}"
+            gram_dir = _gram_folder_name(row["gram_id"])
+            if gram_dir in seen:
+                continue
+            seen.add(gram_dir)
+            href = f"main/{slug}/{gram_dir}/{row['topic_filename']}"
             ET.SubElement(topichead, "topicref", {"href": href})
 
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
@@ -377,10 +456,15 @@ def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path
     map_path = out_dir / f"{publication}.ditamap"
     n = publication.removeprefix("progress-test-")
     root = ET.Element("map", {"title": f"Progress Test {n}"})
+    seen: set[str] = set()
     for row in rows:
         if row["publication"] != publication:
             continue
-        href = f"{publication}/{row['topic_filename']}"
+        gram_dir = _gram_folder_name(row["gram_id"])
+        if gram_dir in seen:
+            continue
+        seen.add(gram_dir)
+        href = f"{publication}/{gram_dir}/{row['topic_filename']}"
         ET.SubElement(root, "topicref", {"href": href})
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
     return map_path
@@ -446,17 +530,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     written: list[Path] = []
     skipped: list[dict] = []
     errors = 0
-    for row in rows:
+    for key, gram_rows in _gram_groups(rows).items():
         try:
-            paths, skip = dispatch_row(row, args.out, args.image_root)
+            paths, skips = emit_gram_topic(gram_rows, args.out, args.image_root)
             for path in paths:
                 written.append(path)
                 LOGGER.info("Wrote %s", path)
-            if skip is not None:
-                skipped.append(skip)
+            skipped.extend(skips)
         except Exception as exc:
             errors += 1
-            LOGGER.error("Failed to emit row %s: %s", row, exc)
+            LOGGER.error("Failed to emit gram %s: %s", key, exc)
 
     publications = sorted({r["publication"] for r in rows})
     ditamap_paths: list[Path] = []
