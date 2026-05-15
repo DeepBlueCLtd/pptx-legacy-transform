@@ -26,7 +26,13 @@ STDLIB_NAMES: set[str] = set(sys.stdlib_module_names) | {
 ALLOWED_THIRD_PARTY: set[str] = {"pptx", "lxml"}
 
 
-SCRIPTS = ("mock_pptx.py", "introspect_pptx.py", "extract_to_csv.py", "generate_dita.py")
+SCRIPTS = (
+    "mock_pptx.py",
+    "introspect_pptx.py",
+    "extract_to_csv.py",
+    "generate_dita.py",
+    "publish_html.py",
+)
 
 
 def _iter_test_cases(suite: unittest.TestSuite):
