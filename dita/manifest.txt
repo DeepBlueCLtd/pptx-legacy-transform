@@ -1,9 +1,4 @@
-ditamaps/main.ditamap
-ditamaps/progress-test-1.ditamap
-ditamaps/progress-test-2.ditamap
-ditamaps/progress-test-3.ditamap
-ditamaps/progress-test-4.ditamap
-ditamaps/progress-test-5.ditamap
+main.ditamap
 main/instructor-progress-final-assessment-grams/gram-01/analysis-sheet.docx
 main/instructor-progress-final-assessment-grams/gram-01/gram_01_analysis.dita
 main/instructor-progress-final-assessment-grams/gram-01/gram_01_lofar1.dita
@@ -1800,6 +1795,7 @@ main/instructor-week-4-grams-updated/gram-42/gram_42_lofar3.dita
 main/instructor-week-4-grams-updated/gram-42/lofar-1-a.wav
 main/instructor-week-4-grams-updated/gram-42/lofar-2-b.png
 main/instructor-week-4-grams-updated/gram-42/lofar-3-a.png
+progress-test-1.ditamap
 progress-test-1/gram-01/analysis-sheet.docx
 progress-test-1/gram-01/gram_01_analysis.dita
 progress-test-1/gram-01/gram_01_lofar1.dita
@@ -1988,6 +1984,7 @@ progress-test-1/gram-36/gram_36_lofar1.dita
 progress-test-1/gram-36/gram_36_lofar2.dita
 progress-test-1/gram-36/lofar-1.png
 progress-test-1/gram-36/lofar-2.png
+progress-test-2.ditamap
 progress-test-2/gram-01/analysis.png
 progress-test-2/gram-01/gram_01_analysis.dita
 progress-test-2/gram-01/gram_01_lofar1.dita
@@ -2198,6 +2195,7 @@ progress-test-2/gram-36/analysis-sheet.docx
 progress-test-2/gram-36/gram_36_analysis.dita
 progress-test-2/gram-36/gram_36_lofar1.dita
 progress-test-2/gram-36/lofar-1.png
+progress-test-3.ditamap
 progress-test-3/gram-01/analysis-sheet.docx
 progress-test-3/gram-01/gram_01_analysis.dita
 progress-test-3/gram-01/gram_01_lofar1.dita
@@ -2408,6 +2406,7 @@ progress-test-3/gram-36/gram_36_lofar3.dita
 progress-test-3/gram-36/lofar-1-b.png
 progress-test-3/gram-36/lofar-2-loop-2.png
 progress-test-3/gram-36/lofar-3-abc.png
+progress-test-4.ditamap
 progress-test-4/gram-01/analysis.png
 progress-test-4/gram-01/gram_01_analysis.dita
 progress-test-4/gram-01/gram_01_lofar1.dita
@@ -2626,6 +2625,7 @@ progress-test-4/gram-36/lofar-1-abc.png
 progress-test-4/gram-36/lofar-2-b.wav
 progress-test-4/gram-36/lofar-3-loop-2.png
 progress-test-4/gram-36/lofar-4-abc.png
+progress-test-5.ditamap
 progress-test-5/gram-01/analysis-sheet.docx
 progress-test-5/gram-01/gram_01_analysis.dita
 progress-test-5/gram-01/gram_01_lofar1.dita

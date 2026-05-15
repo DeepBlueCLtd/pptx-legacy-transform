@@ -313,7 +313,48 @@ Flat repository root:
 - [X] T118 In `quickstart.md`, change the §6 example to `--out dita/`; add the asset-copy expectations to the list of generator outputs; add new §9 covering `publish_html.py`; renumber the orchestrator step to §10.
 - [X] T119 In `run_pipeline.bat`, change the default output path from `output\` to `dita\` to match the operator-facing convention. README example updated to match.
 
-**Checkpoint**: After Phase 10, the mock generator produces the corpus described in the reverse-spec, the extractor's shape-grouping function is no longer a stub, the README documents DITA-OT preview, and the spec/plan/reverse-spec are coherent. T091 and T092 (manual VM validation) remain the only outstanding tasks.
+**Checkpoint**: After Phase 11, `generate_dita.py` emits self-contained publication trees (assets copied next to topics with stable local hrefs) and `publish_html.py` renders the trees to HTML via DITA-OT. The Phase 10 checkpoint above still applies: mock generator is corpus-aware, the FR-015 stub is replaced, README documents DITA-OT preview, and the spec/plan/reverse-spec are coherent. T091 and T092 (manual VM validation) remain the only outstanding tasks from Phase 9.
+
+---
+
+## Phase 12: Analysis-Sheet Normalisation (FR-023)
+
+**Purpose**: Add the per-gram-folder normalisation stage that guarantees both `Analysis Sheet.docx` and `Analysis.png` exist for every gram folder before extraction emits an analysis CSV row. Runs *once per gram folder*, not per CSV row and not per gram instance on a slide. The stage is upstream of FR-022's asset copy: by the time `generate_dita.py` copies `Analysis.png` next to its topic, FR-023 has guaranteed the PNG exists.
+
+**Inputs**: spec.md FR-023 + the new analysis-sheet edge case + the new renderer assumption; data-model.md §1.7 `AnalysisSheet`; the new `analysis_docx_path` column in contracts/csv-schema.md.
+
+**Why this phase exists**: Real gram folders carry the analysis as either `Analysis Sheet.docx` *or* `Analysis.png` (roughly 50/50 per reverse-spec §7). The DITA generator's asset copy (FR-022 / Phase 11) assumes the PNG already exists in the gram folder; the technical author and downstream artefact consumers depend on the `.docx` also being present. The mock generator (T096) already emits the 50/50 mix; the normalisation stage is the inverse pipeline step that makes them interchangeable for downstream consumers.
+
+### CLI + contract
+
+- [ ] T120 In `contracts/cli-contracts.md`, add a `normalise_analysis_sheets.py` section: `--content-root` (required), `--renderer-cmd` (optional, defaults to `soffice` for LibreOffice headless), `--dry-run` (flag — log what would happen without modifying disk). Document exit codes: `0` on success including renderer-failure-with-warnings, `1` on unhandled errors. Mention that the script is idempotent: rerunning is a no-op when both forms already exist.
+
+### Tests for Phase 12 (write first, verify red)
+
+- [ ] T121 [P] In `tests/test_normalise_analysis_sheets.py` add `test_docx_only_folder_produces_png` constructing a temp gram folder containing only `Analysis Sheet.docx` (the minimal docx written via `zipfile`+`xml.etree` per T099), running the normaliser with the renderer stubbed via `--renderer-cmd` pointing at a tiny script that writes a known PNG byte template, and asserting both files exist post-run and the script exits 0.
+- [ ] T122 [P] In `tests/test_normalise_analysis_sheets.py` add `test_png_only_folder_produces_docx` constructing a temp gram folder containing only `Analysis.png` and asserting the normaliser produces a valid (zip-openable, parseable) `Analysis Sheet.docx` containing the PNG full-page, with both files present post-run.
+- [ ] T123 [P] In `tests/test_normalise_analysis_sheets.py` add `test_both_present_is_idempotent_noop` asserting that a folder containing both files has its mtimes preserved across a run and the run logs an INFO line per folder, not a WARNING.
+- [ ] T124 [P] In `tests/test_normalise_analysis_sheets.py` add `test_renderer_failure_is_warning_not_abort` pointing `--renderer-cmd` at a script that exits 1, asserting the affected folder produces a WARNING in the log, the run exits 0, and the missing form is reported in the run summary so the technical author can see it from the CSV via the eventual extractor warning.
+- [ ] T125 [P] In `tests/test_normalise_analysis_sheets.py` add `test_missing_both_forms_is_warning` constructing an empty gram folder and asserting the run emits a WARNING (`"analysis sheet missing"`), continues to the next folder, and exits 0.
+
+### Implementation for Phase 12
+
+- [ ] T126 Create `normalise_analysis_sheets.py` at repository root, scaffold `argparse` per T120, wire `setup_logging` to `normalise.log` and stdout per R10 (contracts/cli-contracts.md §`normalise_analysis_sheets.py`)
+- [ ] T127 In `normalise_analysis_sheets.py`, implement `iter_gram_folders(content_root: Path) -> Iterator[Path]` that walks the content tree yielding every directory whose name matches `Gram \d+` (sorted, deterministic, no recursion past the gram folder itself)
+- [ ] T128 In `normalise_analysis_sheets.py`, implement `classify_folder(folder: Path) -> str` returning `"docx"`, `"png"`, `"both"`, or `"missing"` based on which of `Analysis Sheet.docx` / `Analysis.png` are present
+- [ ] T129 In `normalise_analysis_sheets.py`, implement `render_docx_to_png(docx: Path, png_out: Path, renderer_cmd: str) -> bool` via `subprocess.run` invoking LibreOffice headless (`soffice --headless --convert-to png --outdir <tmp> <docx>`) or the configured equivalent; return `True` on success, log WARNING + return `False` on renderer-unavailable or non-zero exit. Never raises.
+- [ ] T130 In `normalise_analysis_sheets.py`, implement `wrap_png_in_docx(png: Path, docx_out: Path) -> bool` using stdlib `zipfile` + `xml.etree` (reuse the T099 minimal-docx writer pattern) to embed the PNG full-page. Never raises; returns `False` on filesystem failure.
+- [ ] T131 In `normalise_analysis_sheets.py`, implement `main()` orchestration: walk gram folders, classify each, dispatch to renderer or wrapper, accumulate per-folder warnings, log a per-folder INFO/WARNING line, write an end-of-run summary (`folders_visited`, `docx_to_png_rendered`, `png_to_docx_wrapped`, `both_present_skipped`, `renderer_failures`, `missing_analysis`) per FR-014
+
+### Pipeline & contract wiring
+
+- [ ] T132 Update `extract_to_csv.py::gram_to_rows` (T045) so the analysis row populates both `png_path` (from the gram folder's `Analysis.png`) and `analysis_docx_path` (from the gram folder's `Analysis Sheet.docx`). Where either is absent after normalisation, populate the corresponding column with `""` and append `"analysis renderer failed: <direction>"` to the row's `warnings`. Update `write_csv` (T046) column order to include `analysis_docx_path` per contracts/csv-schema.md.
+- [ ] T133 Update `tests/test_extract_to_csv.py::test_csv_round_trip_invariant` (T038) for the new column. Add `test_analysis_row_carries_both_paths_when_normaliser_ran` and `test_analysis_row_records_renderer_failure_warning` using a temp content tree with selectively missing files to exercise both happy-path and failure-path columns.
+- [ ] T134 Update `run_pipeline.bat` (T082, last updated by T119 for `dita\` output) to insert `python normalise_analysis_sheets.py --content-root %1` as a new stage between the existing extract and pause steps, with `if errorlevel 1 goto error` after the invocation. Update `tests/test_run_pipeline_bat.py` (T080) to assert the new call order `normalise → extract → pause → generate`.
+- [ ] T135 [P] In `README.md`, add a `Renderer prerequisites (LibreOffice headless)` section per the new FR-023 assumption: acquisition, install on the development VM and the air-gapped target PC, air-gap transfer, the `--renderer-cmd` override, and an explicit note that the renderer is not bundled and not a Python dependency.
+- [ ] T136 [P] In `contracts/csv-schema.md`, verify the column-count assertion (now 16 columns) matches T132's `write_csv` column order; update any worked example whose row width still reflects the pre-FR-023 column count *(already partially done in this phase's spec edits; this task is the consistency sweep after T132 lands).*
+
+**Checkpoint**: After Phase 12, every gram folder under a content root has both `Analysis Sheet.docx` and `Analysis.png` before extraction runs; CSV analysis rows carry both paths; renderer failures are surfaced as row warnings rather than aborts; the batch wrapper threads the new stage in before extraction; FR-022's asset copy in `generate_dita.py` consumes the now-guaranteed `Analysis.png` without needing fallback logic.
 
 ---
 
@@ -331,6 +372,8 @@ Flat repository root:
 - **User Story 6 (Phase 8)**: Depends on User Stories 1 and 2 (the batch wrapper invokes those scripts)
 - **Polish (Phase 9)**: Depends on every user story being complete
 - **Reverse-Spec Adaptation (Phase 10)**: Depends on Phase 9 and on `source/notes/reverse-spec.md` existing; rewrites Phase 6 deliverables (mock generator), replaces the Phase 4 stub from T044, and extends the Phase 9 README. T101–T103 (mock test updates) and T105 (extractor test updates) follow their corresponding implementation tasks; T106 (DITA-OT README section) and T107 (plan/spec alignment) are independent and can run in parallel with the mock-generator work
+- **Self-Contained Publication Tree (Phase 11)**: Depends on Phase 3 (the DITA generator skeleton). Captures the `dita/` asset-copy contract (FR-022) and the `publish_html.py` HTML preview helper (FR-021 extension)
+- **Analysis-Sheet Normalisation (Phase 12)**: Depends on Phase 10 (the corpus-aware mock generator's 50/50 docx/png mix is the primary test corpus), on Phase 4 (the extractor that consumes the post-normalisation columns), and is upstream of Phase 11 (FR-022's asset copy assumes the `Analysis.png` exists in the gram folder; FR-023 produces it). T134 depends on Phase 8 (`run_pipeline.bat` exists). T135/T136 are independent README/contract tasks and can run in parallel with the implementation tasks
 
 ### Within Each User Story
 

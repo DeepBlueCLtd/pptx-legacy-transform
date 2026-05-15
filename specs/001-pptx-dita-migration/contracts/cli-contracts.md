@@ -132,7 +132,9 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 
 - Writes one DITA topic per non-skipped row under
   `--out/<publication>/[<chapter-slug>/]<topic_filename>`.
-- Writes one ditamap per publication under `--out/ditamaps/`.
+- Writes one ditamap per publication at the `--out/` root
+  (e.g. `--out/main.ditamap`, `--out/progress-test-1.ditamap`), each
+  alongside its similarly-named content folder.
 - Writes `--out/manifest.txt` listing every file produced.
 - Writes `--out/skipped.txt` listing every row skipped (only if there
   is at least one).

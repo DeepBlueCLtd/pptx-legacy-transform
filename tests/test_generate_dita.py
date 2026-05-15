@@ -95,7 +95,7 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_main_ditamap_uses_topichead(self) -> None:
         _run(self.out)
-        ditamap = self.out / "ditamaps" / "main.ditamap"
+        ditamap = self.out / "main.ditamap"
         self.assertTrue(ditamap.is_file())
         root = ET.parse(ditamap).getroot()
         self.assertEqual(root.tag, "map")
@@ -107,7 +107,7 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_test_ditamap_is_flat(self) -> None:
         _run(self.out)
-        ditamap = self.out / "ditamaps" / "progress-test-1.ditamap"
+        ditamap = self.out / "progress-test-1.ditamap"
         self.assertTrue(ditamap.is_file())
         root = ET.parse(ditamap).getroot()
         for child in root:

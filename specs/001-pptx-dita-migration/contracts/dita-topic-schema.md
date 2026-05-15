@@ -134,13 +134,13 @@ publication=main chapter=arctic-survey gram_id="Gram 05" topic_type=glc sequence
 
 ## 6. Ditamaps
 
-### 6.1 Main ditamap (`ditamaps/main.ditamap`)
+### 6.1 Main ditamap (`main.ditamap`)
 
 ```xml
 <map title="Main">
   <topichead navtitle="{Chapter Title}">
-    <topicref href="../main/{chapter-slug}/gram_NN_lofarM.dita"/>
-    <topicref href="../main/{chapter-slug}/gram_NN_analysis.dita"/>
+    <topicref href="main/{chapter-slug}/gram_NN_lofarM.dita"/>
+    <topicref href="main/{chapter-slug}/gram_NN_analysis.dita"/>
     <!-- ...all topics for this chapter, in CSV row order... -->
   </topichead>
   <!-- ...further chapters in alphabetical folder order... -->
@@ -149,20 +149,21 @@ publication=main chapter=arctic-survey gram_id="Gram 05" topic_type=glc sequence
 
 Notes:
 
-- `topicref` URLs are relative to the ditamap's directory, hence the
-  `..` prefix.
+- The ditamap lives at the output root next to its sibling `main/`
+  folder, so `topicref` URLs are simple forward paths into that
+  folder (no `../` prefix).
 - Analysis topicrefs are emitted alongside the GLC topicrefs for the
   same gram; the trainee profile elides the analysis topic via the
   topic-level `audience` attribute set in §2.
 - `topichead` `navtitle` is the human-readable chapter title (mixed
   case), distinct from the chapter slug used in URLs.
 
-### 6.2 Test ditamap (`ditamaps/progress-test-N.ditamap`)
+### 6.2 Test ditamap (`progress-test-N.ditamap`)
 
 ```xml
 <map title="Progress Test N">
-  <topicref href="../progress-test-N/gram_NN_lofarM.dita"/>
-  <topicref href="../progress-test-N/gram_NN_analysis.dita"/>
+  <topicref href="progress-test-N/gram_NN_lofarM.dita"/>
+  <topicref href="progress-test-N/gram_NN_analysis.dita"/>
   <!-- ...further topics, flat... -->
 </map>
 ```
@@ -175,10 +176,11 @@ Plain text. One line per file produced. Sorted alphabetically.
 Paths relative to `--out`. Includes ditamaps.
 
 ```
-ditamaps/main.ditamap
-ditamaps/progress-test-1.ditamap
+main.ditamap
 main/arctic-survey/gram_01_analysis.dita
 main/arctic-survey/gram_01_lofar1.dita
+progress-test-1.ditamap
+progress-test-1/gram_01_analysis.dita
 ...
 ```
 
@@ -206,6 +208,7 @@ look-up table.
 
 ```
 {out}/
+├── main.ditamap
 ├── main/
 │   ├── {chapter-slug-1}/
 │   │   ├── gram-NN/
@@ -217,6 +220,7 @@ look-up table.
 │   │       └── ...
 │   └── {chapter-slug-2}/
 │       └── ...
+├── progress-test-1.ditamap
 ├── progress-test-1/
 │   ├── gram-NN/
 │   │   ├── gram_NN_lofarM.dita
@@ -224,19 +228,19 @@ look-up table.
 │   │   └── gram_NN_analysis.dita
 │   └── gram-NN/
 │       └── ...
+├── progress-test-2.ditamap
 ├── progress-test-2/
 │   └── ...
-├── ditamaps/
-│   ├── main.ditamap
-│   ├── progress-test-1.ditamap
-│   └── progress-test-2.ditamap
 ├── manifest.txt
 └── skipped.txt   (only when at least one row was skipped)
 ```
 
-The per-gram folder name is `gram-NN`, where `NN` is the numeric
-portion of `gram_id` exactly as it appears in the CSV (zero-padded to
-at least two digits by the extractor; widens silently past 99).
+Each ditamap is paired with a similarly-named sibling content folder
+at the output root. Inside a content folder, each gram (a single
+`gram_id`) lives in its own `gram-NN/` sub-directory, where `NN` is
+the numeric portion of `gram_id` exactly as it appears in the CSV
+(zero-padded to at least two digits by the extractor; widens silently
+past 99).
 
 ## 10. Asset copy and rename
 
@@ -292,17 +296,13 @@ target — Oxygen remains the production publishing path (FR-021).
 1. Stages a copy of `{out}` under `.dita-build/` and prepends the OASIS
    DITA Topic and Map DOCTYPE declarations (the source DITA omits
    DOCTYPEs per §0; Oxygen handles validation at publish time, but
-   DITA-OT requires them to classify elements).
-2. Promotes each ditamap from `ditamaps/{name}.ditamap` to
-   `.dita-build/{name}.ditamap`, rewriting `href="../…"` entries so
-   that all topic references descend into the staged tree from the
-   ditamap's directory. Without this step DITA-OT preserves the
-   parent-walking path structure and buries the HTML under a deep
-   subdirectory.
-3. Invokes DITA-OT once per staged ditamap with
+   DITA-OT requires them to classify elements). Ditamaps already sit
+   at the root of `{out}` with forward-only hrefs into their sibling
+   content folders, so no path rewriting or promotion step is needed.
+2. Invokes DITA-OT once per staged ditamap with
    `--format=html5 --processing-mode=lax`, writing to
    `html/{ditamap-stem}/`.
-4. Removes the staging directory once publishing completes.
+3. Removes the staging directory once publishing completes.
 
 The script's only inputs are `--dita` (default `dita/`), `--out`
 (default `html/`), and `--dita-ot` (path to a DITA-OT installation

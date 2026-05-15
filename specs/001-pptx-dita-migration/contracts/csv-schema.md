@@ -31,9 +31,10 @@ generator never re-reads PPTX or GLC files.
 | 10 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved `.glc` path relative to source folder; empty when the link target was a `.wav` |
 | 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 13 | `png_path` | string | yes (glc rows, analysis rows, WAV-link rows) | path of the asset to copy next to the topic, resolved relative to `--image-root`. Holds the PNG for screenshot grams, the analysis sheet (`.png`/`.docx`) for analysis rows, and the `.wav` file for WAV-link rows. |
-| 14 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
-| 15 | `warnings` | string | yes | comma-joined, free-form |
+| 13 | `png_path` | string | yes (glc rows, analysis rows, WAV-link rows) | path of the asset to copy next to the topic, resolved relative to `--image-root`. Holds the PNG for screenshot grams, the analysis-sheet PNG for analysis rows (populated from the gram folder's `Analysis.png` after FR-023 normalisation; may be empty if the renderer failed), and the `.wav` file for WAV-link rows. |
+| 14 | `analysis_docx_path` | string | yes (non-analysis rows; analysis rows when renderer failed) | resolved relative to `--image-root`; populated for analysis rows from the gram folder's `Analysis Sheet.docx` after FR-023 normalisation. Carried for the author's review trail; the generator does not consume it. |
+| 15 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
+| 16 | `warnings` | string | yes | comma-joined, free-form |
 
 ## Row identity
 
@@ -58,7 +59,15 @@ should never happen because the unique key drives the filename.
    `wav_treatment` left empty for the author to fill in. `display_text`
    carries the visible link label, never the URL.
 5. Warnings accumulate in column order: GLC parse warnings first, then
-   path-resolution warnings, then shape warnings.
+   path-resolution warnings, then shape warnings, then
+   analysis-sheet-normalisation warnings (from FR-023).
+6. Analysis rows carry both `png_path` and `analysis_docx_path` after
+   FR-023 normalisation runs over the gram folder. Either column may be
+   empty when the renderer was unavailable or failed; the `warnings`
+   column records which direction failed
+   (`"analysis renderer failed: docx→png"` or
+   `"analysis renderer failed: png→docx"`). Non-analysis rows always
+   leave `analysis_docx_path` empty.
 
 ## Round-trip invariant
 
@@ -76,23 +85,30 @@ preserved; the writer never normalises numerics.
 ### Single-gram, two GLC links, one analysis PNG
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12_lofar2.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,,images/gram12_analysis.png,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12_lofar1.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12_lofar2.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,,
+main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12_analysis.dita,,,,,,Gram 12/Analysis.png,Gram 12/Analysis Sheet.docx,,
 ```
 
 ### Progress-test gram with a missing GLC
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,"GLC not found"
-progress-test-1,,Gram 03,,analysis,1,gram_03_analysis.dita,,,,,,images/gram03_analysis.png,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
+progress-test-1,,Gram 03,,glc,1,gram_03_lofar1.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,"GLC not found"
+progress-test-1,,Gram 03,,analysis,1,gram_03_analysis.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
 ```
 
 ### WAV row awaiting author treatment
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,Audio sample,supporting/gram05/audio_clip.wav,,,,,,"WAV link; treatment required"
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
+main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,Audio sample,supporting/gram05/audio_clip.wav,,,,,,,,"WAV link; treatment required"
+```
+
+### Analysis row whose docx→png render failed
+
+```csv
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
+main,Nordic Fishing Vessels,Gram 17,,analysis,1,gram_17_analysis.dita,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
 ```
