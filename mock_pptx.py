@@ -45,6 +45,7 @@ from xml.etree import ElementTree as ET
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 from lxml import etree
@@ -64,8 +65,15 @@ RANDOM_SEED: int = 20260515
 @dataclass(frozen=True)
 class FamilyParams:
     grams: int           # approximate gram count
-    slides: int          # slide count (content; mock has no welcome slide)
+    slides: int          # content slide count (welcome + exit are added on top)
     grams_per_slide: int  # nominal layout target
+
+
+# Framing slide subtitle text — also used by the extractor to detect and
+# skip welcome / exit slides during CSV generation.
+FRAMING_SUBTITLE: str = "Instructor Version"
+WELCOME_TITLE_PREFIX: str = "Welcome to "
+EXIT_TITLE_PREFIX: str = "End of "
 
 
 FAMILY_WEEK = FamilyParams(grams=35, slides=3, grams_per_slide=15)
@@ -469,6 +477,42 @@ def _add_title_bar(slide, prs: Presentation, *, title: str) -> None:
     run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
 
+def _add_framing_slide(prs: Presentation, *, title: str) -> None:
+    """Add a welcome/exit slide: centred title + 'Instructor Version' subtitle.
+
+    No gram content, no hyperlinks. The extractor identifies these slides
+    by the title prefix and skips them when building the CSV.
+    """
+    blank_layout = prs.slide_layouts[6]
+    slide = prs.slides.add_slide(blank_layout)
+
+    title_box = slide.shapes.add_textbox(
+        Inches(1.0), Inches(2.6),
+        Inches(SLIDE_WIDTH_IN - 2.0), Inches(1.4),
+    )
+    ttf = title_box.text_frame
+    ttf.word_wrap = True
+    tp = ttf.paragraphs[0]
+    tp.alignment = PP_ALIGN.CENTER
+    trun = tp.add_run()
+    trun.text = title
+    trun.font.size = Pt(40)
+    trun.font.bold = True
+    trun.font.color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+
+    sub_box = slide.shapes.add_textbox(
+        Inches(1.0), Inches(4.2),
+        Inches(SLIDE_WIDTH_IN - 2.0), Inches(0.8),
+    )
+    stf = sub_box.text_frame
+    sp = stf.paragraphs[0]
+    sp.alignment = PP_ALIGN.CENTER
+    srun = sp.add_run()
+    srun.text = FRAMING_SUBTITLE
+    srun.font.size = Pt(24)
+    srun.font.color.rgb = RGBColor(0x1F, 0x3A, 0x5F)
+
+
 def _add_gram_tile(
     slide, *, left_in: float, top_in: float, width_in: float, height_in: float,
     spec: GramSpec,
@@ -526,6 +570,8 @@ def build_publication_pptx(pub: Publication, out_pptx: Path, specs: list[GramSpe
     total_pages = len(slide_chunks)
     blank_layout = prs.slide_layouts[6]  # blank
 
+    _add_framing_slide(prs, title=f"{WELCOME_TITLE_PREFIX}{pub.name}")
+
     for page_num, chunk in enumerate(slide_chunks, start=1):
         slide = prs.slides.add_slide(blank_layout)
         _add_title_bar(
@@ -550,6 +596,8 @@ def build_publication_pptx(pub: Publication, out_pptx: Path, specs: list[GramSpe
                 height_in=cell_h - CELL_GAP_IN,
                 spec=spec,
             )
+
+    _add_framing_slide(prs, title=f"{EXIT_TITLE_PREFIX}{pub.name}")
 
     out_pptx.parent.mkdir(parents=True, exist_ok=True)
     prs.save(out_pptx)
