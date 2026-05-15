@@ -92,7 +92,29 @@ docstring contract on the stub.
 | `display_text` | `str` | e.g. `"LOFAR 1"` |
 | `href` | `str` | relative URI from the run's hyperlink, may be `.glc` or `.wav` |
 
-### 1.7 `GlcDocument` *(produced by `parse_glc`)*
+### 1.7 `AnalysisSheet` *(produced by the FR-023 normalisation stage)*
+
+The analysis artefact attached to a gram *folder* on disk. Exactly one
+record per gram folder regardless of how many slide instances reference
+that gram.
+
+| Field | Type | Source | Notes |
+|---|---|---|---|
+| `gram_folder` | `pathlib.Path` | filesystem | e.g. `Gram 12/` |
+| `docx_path` | `pathlib.Path \| None` | filesystem | `Gram NN/Analysis Sheet.docx`; populated after normalisation unless renderer failed |
+| `png_path` | `pathlib.Path \| None` | filesystem | `Gram NN/Analysis.png`; populated after normalisation unless renderer failed |
+| `source_form` | `str` | enum: `"docx"`, `"png"`, `"both"`, `"missing"` | which form(s) existed *before* normalisation; recorded for the CSV review trail |
+| `warnings` | `list[str]` | accumulated during normalisation | empty when both forms exist post-normalisation |
+
+**Validation**: The normalisation stage produces one record per gram
+folder it visits; a `"missing"` `source_form` (no `.docx` and no `.png`
+present) yields a warning and leaves both paths `None`. A renderer
+failure leaves the *unproduced* path `None` and records a warning; the
+*present* path remains populated. The stage MUST NOT raise on renderer
+unavailability — the run continues and the affected gram's analysis row
+surfaces the warning in the CSV.
+
+### 1.8 `GlcDocument` *(produced by `parse_glc`)*
 
 The narrow projection of a GLC XML file used by the pipeline. Per R6,
 the parser is tolerant: missing fields produce empty strings plus
@@ -130,7 +152,8 @@ row per resulting DITA topic. The unique key per row is
 | `glc_path` | `str` | resolved relative to source folder | empty for analysis rows and for WAV-targeted rows |
 | `time_end` | `str` | from `GlcDocument.time_end` | empty for analysis rows |
 | `freq_end` | `str` | from `GlcDocument.freq_end` | empty for analysis rows |
-| `png_path` | `str` | resolved relative to source folder | empty for glc rows whose link target was a .glc |
+| `png_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.png_path` for analysis rows | empty for glc rows whose link target was a `.glc`; populated for analysis rows post-FR-023 unless renderer failed |
+| `analysis_docx_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.docx_path` | empty for glc rows; populated for analysis rows post-FR-023 unless renderer failed |
 | `wav_treatment` | `str` | author-supplied | empty unless link was .wav; values: `screenshot`, `gaps-lite`, `TBD`, empty |
 | `warnings` | `str` | comma-joined warning list | empty if clean |
 
@@ -149,6 +172,14 @@ row per resulting DITA topic. The unique key per row is
    exactly as it appeared in the PPTX run.
 5. The warnings column accumulates *all* recoverable issues for the row,
    joined by `", "`.
+6. Analysis rows carry both `png_path` and `analysis_docx_path`
+   populated after FR-023 normalisation. Either may be empty (with a
+   `warnings` entry such as `"analysis renderer failed: docx→png"` or
+   `"analysis renderer failed: png→docx"`) when the renderer was
+   unavailable or failed for that gram folder. The DITA generator
+   continues to consume `png_path` only — `analysis_docx_path` is
+   carried for the technical author's review trail and is not required
+   by the generator.
 
 **Encoding**: UTF-8 with BOM, CRLF line endings (R11). Excel-friendly.
 
@@ -320,11 +351,15 @@ SourcePresentation 1───* Slide 1───* Shape 1───* Run
                               └── (via shape-grouping stub) ───*
                                           GramPlaceholder 1───* GlcLink
                                                   │
-                                                  ├── 1 PNG hyperlink (analysis)
+                                                  ├── 1 analysis-sheet hyperlink (→ AnalysisSheet)
                                                   └── 0..* GLC files (parsed → GlcDocument)
 
-GramPlaceholder ──> CsvRow*  (one per GLC link + one for analysis PNG)
-CsvRow          ──> DitaTopic
+GramFolder        ──> AnalysisSheet  (1-1, produced by FR-023 normalisation)
+GramPlaceholder   ──> CsvRow*        (one per GLC link + one analysis row;
+                                      the analysis row's png_path and
+                                      analysis_docx_path are sourced from
+                                      the gram folder's AnalysisSheet)
+CsvRow            ──> DitaTopic
 {CsvRow per publication} ──> Ditamap
 {CsvRow that is skipped} ──> SkippedReport entry
 {DitaTopic, Ditamap}    ──> OutputManifest entry
@@ -345,7 +380,7 @@ contract for that edit:
 | `vessel_name` | Yes | typos and missing names |
 | `display_text` | Yes | rare |
 | `link_href` | Yes | rare — only to correct an extractor mis-read |
-| `glc_path`, `png_path` | Yes | to fix unresolved paths |
+| `glc_path`, `png_path`, `analysis_docx_path` | Yes | to fix unresolved paths or re-point to a manually produced asset |
 | `time_end`, `freq_end` | Yes | to override broken GLC parses |
 | `wav_treatment` | Yes | required where it is empty |
 | `warnings` | Yes (clear after fix) | author marks rows handled |
