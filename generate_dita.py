@@ -102,6 +102,40 @@ def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
         return Path(rel_str).as_posix()
 
 
+def copy_asset(
+    src_relpath: str, image_root: Path, topic_dir: Path, topic_stem: str,
+) -> tuple[str, Path | None]:
+    """Copy the referenced asset next to its topic and return ``(href, written)``.
+
+    The asset is renamed to ``<topic_stem><ext>`` so that the topic-asset
+    relationship is self-evident on disk and two grams in the same chapter
+    that share an asset filename (e.g. both have ``Lofar 1.png``) cannot
+    collide.
+
+    If ``src_relpath`` is empty, returns ``("", None)``.
+
+    If the source file is missing, a warning is logged and the intended
+    local filename is still returned. The href in the topic XML therefore
+    stays stable across runs, and dropping the asset in at the expected
+    path and re-running the generator will resolve the dangling reference
+    without any topic-file churn.
+    """
+    if not src_relpath:
+        return "", None
+    source = image_root / src_relpath
+    target_name = f"{topic_stem}{Path(src_relpath).suffix}"
+    target = topic_dir / target_name
+    if source.is_file():
+        topic_dir.mkdir(parents=True, exist_ok=True)
+        # ``copy2`` preserves the source mtime so two consecutive generator
+        # runs against an unchanged source tree produce byte- and stat-
+        # identical assets, preserving the idempotency contract (R9).
+        shutil.copy2(source, target)
+        return target_name, target
+    LOGGER.warning("Asset missing, href will dangle: %s", source)
+    return target_name, None
+
+
 def _gram_num(gram_id: str) -> str:
     digits = re.findall(r"\d+", gram_id)
     return digits[0] if digits else "00"
@@ -127,14 +161,19 @@ def _serialise(root: ET.Element, leading: str = "") -> str:
     return f"{leading}{body}\n"
 
 
-def emit_glc_topic(row: dict, out_dir: Path, image_root: Path) -> Path:
-    """Write ``gram_NN_lofarM.dita`` for a glc-typed row."""
+def emit_glc_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
+    """Write ``gram_NN_lofarM.dita`` for a glc-typed row plus its asset."""
     gram_num = _gram_num(row["gram_id"])
     seq = row["sequence"]
     topic_id = f"gram_{gram_num}_lofar{seq}"
     topic_dir = _topic_dir_for_row(out_dir, row)
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / row["topic_filename"]
+    topic_stem = Path(row["topic_filename"]).stem
+
+    image_href, copied = copy_asset(
+        row.get("png_path", ""), image_root, topic_dir, topic_stem,
+    )
 
     topic = ET.Element("topic", {"id": topic_id})
     title = ET.SubElement(topic, "title")
@@ -151,7 +190,6 @@ def emit_glc_topic(row: dict, out_dir: Path, image_root: Path) -> Path:
 
     image_row = ET.SubElement(tbody, "row")
     image_entry = ET.SubElement(image_row, "entry", {"namest": "c1", "nameend": "c2"})
-    image_href = resolve_image_href(row.get("png_path", ""), image_root, topic_dir)
     ET.SubElement(image_entry, "image", {
         "href": image_href, "placement": "break", "align": "center",
     })
@@ -170,23 +208,27 @@ def emit_glc_topic(row: dict, out_dir: Path, image_root: Path) -> Path:
     ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
 
     topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
-    return topic_path
+    return [topic_path] + ([copied] if copied is not None else [])
 
 
-def emit_analysis_topic(row: dict, out_dir: Path, image_root: Path) -> Path:
-    """Write ``gram_NN_analysis.dita`` for an analysis-typed row."""
+def emit_analysis_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
+    """Write ``gram_NN_analysis.dita`` for an analysis-typed row plus its asset."""
     gram_num = _gram_num(row["gram_id"])
     topic_id = f"gram_{gram_num}_analysis"
     topic_dir = _topic_dir_for_row(out_dir, row)
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / row["topic_filename"]
+    topic_stem = Path(row["topic_filename"]).stem
+
+    href, copied = copy_asset(
+        row.get("png_path", ""), image_root, topic_dir, topic_stem,
+    )
 
     topic = ET.Element("topic", {"id": topic_id, "audience": "-trainee"})
     title = ET.SubElement(topic, "title")
     title.text = f"Gram {gram_num} Analysis"
     body = ET.SubElement(topic, "body")
     section = ET.SubElement(body, "section")
-    href = resolve_image_href(row.get("png_path", ""), image_root, topic_dir)
     ET.SubElement(section, "image", {
         "href": href, "placement": "break", "align": "center",
     })
@@ -194,17 +236,21 @@ def emit_analysis_topic(row: dict, out_dir: Path, image_root: Path) -> Path:
     ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
 
     topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
-    return topic_path
+    return [topic_path] + ([copied] if copied is not None else [])
 
 
-def emit_wav_stub_topic(row: dict, out_dir: Path) -> Path:
-    """Write the GAPS-Lite stub topic for a ``wav_treatment="gaps-lite"`` row."""
+def emit_wav_stub_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
+    """Write the GAPS-Lite stub topic for a ``wav_treatment="gaps-lite"`` row plus its WAV."""
     gram_num = _gram_num(row["gram_id"])
     seq = row["sequence"]
     topic_id = f"gram_{gram_num}_lofar{seq}"
     topic_dir = _topic_dir_for_row(out_dir, row)
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / row["topic_filename"]
+    topic_stem = Path(row["topic_filename"]).stem
+
+    wav_relpath = row.get("link_href", "") or row.get("glc_path", "")
+    wav_href, copied = copy_asset(wav_relpath, image_root, topic_dir, topic_stem)
 
     topic = ET.Element("topic", {"id": topic_id})
     title = ET.SubElement(topic, "title")
@@ -218,18 +264,17 @@ def emit_wav_stub_topic(row: dict, out_dir: Path) -> Path:
     note = ET.SubElement(section, "note")
     note.text = "This gram requires GAPS-Lite playback."
     p = ET.SubElement(section, "p")
-    wav_target = row.get("link_href", "") or row.get("glc_path", "")
     xref = ET.SubElement(p, "xref", {
-        "href": wav_target, "format": "wav", "scope": "external",
+        "href": wav_href, "format": "wav", "scope": "local",
     })
-    xref.text = row.get("display_text", "") or wav_target
+    xref.text = row.get("display_text", "") or wav_href
 
     related = ET.SubElement(topic, "related-links")
     ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
 
     leading = "<!-- MANUAL REVIEW: GAPS-Lite required -->\n"
     topic_path.write_text(_serialise(topic, leading=leading), encoding="utf-8", newline="\n")
-    return topic_path
+    return [topic_path] + ([copied] if copied is not None else [])
 
 
 # -----------------------------------------------------------------------------
@@ -243,7 +288,7 @@ class EmitResult:
     errors: int
 
 
-def dispatch_row(row: dict, out_dir: Path, image_root: Path) -> tuple[Path | None, dict | None]:
+def dispatch_row(row: dict, out_dir: Path, image_root: Path) -> tuple[list[Path], dict | None]:
     """Branch on ``topic_type`` and ``wav_treatment``. Returns ``(written, skipped)``."""
     topic_type = row.get("topic_type", "")
     treatment = (row.get("wav_treatment") or "").strip().lower()
@@ -255,7 +300,7 @@ def dispatch_row(row: dict, out_dir: Path, image_root: Path) -> tuple[Path | Non
 
     if topic_type == "glc":
         if treatment == "gaps-lite":
-            return (emit_wav_stub_topic(row, out_dir), None)
+            return (emit_wav_stub_topic(row, out_dir, image_root), None)
         if treatment == "screenshot":
             return (emit_glc_topic(row, out_dir, image_root), None)
         if treatment == "":
@@ -265,23 +310,23 @@ def dispatch_row(row: dict, out_dir: Path, image_root: Path) -> tuple[Path | Non
                     "Skipping row %s/%s/%s seq=%s: wav_treatment is empty",
                     row["publication"], row["gram_id"], row["topic_type"], row["sequence"],
                 )
-                return (None, _skip_record(row, "wav_treatment is empty"))
+                return ([], _skip_record(row, "wav_treatment is empty"))
             return (emit_glc_topic(row, out_dir, image_root), None)
         if treatment == "tbd":
             LOGGER.error(
                 "Skipping row %s/%s/%s seq=%s: wav_treatment is TBD",
                 row["publication"], row["gram_id"], row["topic_type"], row["sequence"],
             )
-            return (None, _skip_record(row, "wav_treatment is TBD"))
+            return ([], _skip_record(row, "wav_treatment is TBD"))
         # Any other unknown treatment.
         LOGGER.error(
             "Skipping row %s/%s/%s seq=%s: unknown wav_treatment %r",
             row["publication"], row["gram_id"], row["topic_type"], row["sequence"], treatment,
         )
-        return (None, _skip_record(row, f"unknown wav_treatment {treatment!r}"))
+        return ([], _skip_record(row, f"unknown wav_treatment {treatment!r}"))
 
     LOGGER.error("Skipping row with unknown topic_type %r", topic_type)
-    return (None, _skip_record(row, f"unknown topic_type {topic_type!r}"))
+    return ([], _skip_record(row, f"unknown topic_type {topic_type!r}"))
 
 
 def _skip_record(row: dict, reason: str) -> dict:
@@ -405,10 +450,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     errors = 0
     for row in rows:
         try:
-            path, skip = dispatch_row(row, args.out, args.image_root)
-            if path is not None:
+            paths, skip = dispatch_row(row, args.out, args.image_root)
+            for path in paths:
                 written.append(path)
-                LOGGER.info("Wrote topic %s", path)
+                LOGGER.info("Wrote %s", path)
             if skip is not None:
                 skipped.append(skip)
         except Exception as exc:
@@ -434,7 +479,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.info("Wrote skipped report %s", skipped_path)
 
     LOGGER.info(
-        "Generation summary: topics=%d ditamaps=%d skipped=%d errors=%d",
+        "Generation summary: files=%d ditamaps=%d skipped=%d errors=%d",
         len(written), len(ditamap_paths), len(skipped), errors,
     )
     return 0 if errors == 0 else 1

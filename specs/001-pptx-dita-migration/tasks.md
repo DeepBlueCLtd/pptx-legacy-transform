@@ -286,6 +286,33 @@ Flat repository root:
 
 - [ ] T107 Cross-check `plan.md` and `spec.md` after T093–T106 land: ensure the "Project Structure" section still matches the actual file layout, that no assumption in `spec.md` §Assumptions has been contradicted by the new mock-corpus shape (especially the "Each content slide hosts exactly 15 gram placeholders in a 3×5 grid" assumption — now superseded by reverse-spec §3), and amend or remove that assumption with a pointer to the reverse-spec.
 
+## Phase 11: Self-Contained Publication Tree (FR-022) & HTML Publish Helper
+
+**Purpose**: Re-running the DITA pipeline (after CSV changes upstream) should produce a self-contained `dita/` tree with assets copied next to their owning topics, and a one-command HTML preview path. Captures the work that produced the committed `dita/` and `html/` snapshots on branch `claude/write-dita-docs-n7uFB` so that a future regeneration follows the same recipe.
+
+**Inputs**: FR-022 (asset copy and rename), updated `contracts/dita-topic-schema.md` §10–11, the existing `generate_dita.py` skeleton from Phase 3.
+
+### Asset copy in the DITA generator (FR-022)
+
+- [X] T108 [US1] In `generate_dita.py`, add a `copy_asset(src_relpath, image_root, topic_dir, topic_stem)` helper that resolves the source asset, copies it next to the topic (`shutil.copy2` to preserve mtime for idempotency), renames the copy to `{topic_stem}{ext}`, and returns `(href, written_path)`. When the source is missing, log a WARNING and return the intended local filename anyway so the topic XML is stable across runs.
+- [X] T109 [US1] Wire `copy_asset` into `emit_glc_topic`, `emit_analysis_topic`, and `emit_wav_stub_topic`. Each emit function now returns `list[Path]` (topic + optionally the copied asset). The WAV stub uses `link_href` (then `glc_path` fallback) as the source and emits `scope="local"` on the `<xref>` to reflect the in-publication location of the renamed WAV.
+- [X] T110 [US1] Update `dispatch_row` to return `(list[Path], dict | None)` and the main loop to iterate the list when accumulating `written`. Adjust the summary log line from `topics=N` to `files=N` to reflect the union of topics and assets.
+- [X] T111 [US1] In `tests/test_generate_dita.py`, add `test_glc_topic_asset_copied_with_relative_href`: drop a real 1×1 PNG fixture at `tests/fixtures/images/gram12.png`, run the generator, and assert that (a) the copy lands at `<chapter>/gram_12_lofar1.png` with byte-identical content, and (b) the topic's `<image href>` is the bare local filename. Update `test_wav_gaps_lite_stub` to assert the new local-href shape (`gram_05_lofar1.wav`).
+- [X] T112 [US1] Update the `image_href` substitution row in `contracts/dita-topic-schema.md` §1; rewrite the WAV-stub paragraph in §3 (now `scope="local"` plus a local filename); extend the §9 folder-layout sketch to show assets sitting alongside topics; add new §10 codifying the asset copy/rename contract.
+
+### HTML publish helper (FR-021)
+
+- [X] T113 Add `publish_html.py` at the repository root: stage a copy of `dita/` to `.dita-build/`, inject DITA Topic and Map DOCTYPEs into the staged files (the source DITA tree omits them per §0 — Oxygen handles validation), promote each ditamap to the staged root with `href="../…"` rewritten to drop the leading `../`, and invoke DITA-OT (`bin/dita --format=html5 --processing-mode=lax`) once per staged ditamap, writing to `html/<ditamap-stem>/`. Clean the staging directory once publishing completes. The script is standard-library-only; DITA-OT is supplied via `--dita-ot`.
+- [X] T114 In `.gitignore`, add `.dita-build/` (the staging directory must never be committed).
+- [X] T115 Add new §11 to `contracts/dita-topic-schema.md` documenting the staging/promotion/invocation recipe so a future maintainer can reproduce or audit `publish_html.py` without reading its source.
+
+### Spec / plan / quickstart alignment
+
+- [X] T116 In `spec.md`, append FR-022 (self-contained publication tree, asset copy/rename, dangling-href stability) and extend FR-021 to mention the `publish_html.py` helper. Update FR-010's "image reference" wording from "resolved against the image root" to "topic-relative local filename — see FR-022".
+- [X] T117 In `plan.md`, add `publish_html.py` to the *Source Code (repository root)* listing; update the *Storage* line to mention copied assets and the `html/` preview output.
+- [X] T118 In `quickstart.md`, change the §6 example to `--out dita/`; add the asset-copy expectations to the list of generator outputs; add new §9 covering `publish_html.py`; renumber the orchestrator step to §10.
+- [X] T119 In `run_pipeline.bat`, change the default output path from `output\` to `dita\` to match the operator-facing convention. README example updated to match.
+
 **Checkpoint**: After Phase 10, the mock generator produces the corpus described in the reverse-spec, the extractor's shape-grouping function is no longer a stub, the README documents DITA-OT preview, and the spec/plan/reverse-spec are coherent. T091 and T092 (manual VM validation) remain the only outstanding tasks.
 
 ---

@@ -12,13 +12,10 @@ The source ``dita/`` tree is never modified.
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-_OUTER_IMAGE = re.compile(r'<image\s[^>]*href="(?:\.\./)+[^"]*"[^/]*/>')
 
 TOPIC_DOCTYPE = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -44,7 +41,6 @@ def stage(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
     for path in dst.rglob("*.dita"):
         body = path.read_text(encoding="utf-8")
-        body = _OUTER_IMAGE.sub("<!-- image stripped for HTML preview -->", body)
         path.write_text(TOPIC_DOCTYPE + body, encoding="utf-8", newline="\n")
     ditamap_dir = dst / "ditamaps"
     for path in sorted(ditamap_dir.glob("*.ditamap")):
