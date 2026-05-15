@@ -38,6 +38,11 @@ CSV_COLUMNS: tuple[str, ...] = (
 
 DEFAULT_TEST_PATTERN: str = "progress test"
 
+# Prefixes that identify the welcome / exit framing slides emitted by
+# ``mock_pptx.py``. These slides carry no gram content and must not
+# contribute rows to the CSV.
+FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -268,6 +273,24 @@ def _iter_leaf_shapes(shapes):
             yield from _iter_leaf_shapes(shape.shapes)
         else:
             yield shape
+
+
+def is_framing_slide(slide) -> bool:
+    """Return True for welcome / exit slides that should be skipped.
+
+    Detection is by title text prefix (``"Welcome to "`` / ``"End of "``)
+    so it survives slide-position shuffles and is robust against real
+    decks that may add or remove framing slides.
+    """
+    for shape in slide.shapes:
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        text = (shape.text_frame.text or "").strip()
+        if not text:
+            continue
+        if text.startswith(FRAMING_TITLE_PREFIXES):
+            return True
+    return False
 
 
 def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
@@ -526,6 +549,9 @@ def main(argv: Iterable[str] | None = None) -> int:
                 LOGGER.error("Cannot open PPTX %s: %s", pptx, exc)
                 return 1
             for slide_num, slide in enumerate(prs.slides, start=1):
+                if is_framing_slide(slide):
+                    LOGGER.info("Skipping framing slide %d in %s", slide_num, pptx.name)
+                    continue
                 grams = extract_grams_from_slide(slide, slide_num)
                 for gram in grams:
                     gram_rows = gram_to_rows(

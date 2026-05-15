@@ -160,6 +160,36 @@ class CorpusShapeTests(unittest.TestCase):
         self.assertGreater(ratio, 0.3)
         self.assertLess(ratio, 0.7)
 
+    def test_welcome_and_exit_slides_bracket_each_publication(self) -> None:
+        for pub in mock_pptx.PUBLICATIONS:
+            prs = Presentation(self.corpus / pub.name / f"{pub.name}.pptx")
+            slides = list(prs.slides)
+            self.assertGreaterEqual(len(slides), 3,
+                                    f"{pub.name} should have welcome + content + exit")
+
+            welcome_text = "".join(
+                r.text or "" for s in slides[0].shapes if s.has_text_frame
+                for p in s.text_frame.paragraphs for r in p.runs
+            )
+            self.assertIn(f"Welcome to {pub.name}", welcome_text)
+            self.assertIn("Instructor Version", welcome_text)
+            # Welcome slide carries no shape-level hyperlinks (no gram content).
+            self.assertFalse(
+                any(_shape_hyperlink(s) for s in slides[0].shapes),
+                f"{pub.name} welcome slide should have no hyperlinks",
+            )
+
+            exit_text = "".join(
+                r.text or "" for s in slides[-1].shapes if s.has_text_frame
+                for p in s.text_frame.paragraphs for r in p.runs
+            )
+            self.assertIn(f"End of {pub.name}", exit_text)
+            self.assertIn("Instructor Version", exit_text)
+            self.assertFalse(
+                any(_shape_hyperlink(s) for s in slides[-1].shapes),
+                f"{pub.name} exit slide should have no hyperlinks",
+            )
+
     def test_gram_numbering_has_gaps(self) -> None:
         # At least one publication should show a non-contiguous gram-number sequence.
         any_gaps = False

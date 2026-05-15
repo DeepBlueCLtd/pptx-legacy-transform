@@ -261,6 +261,27 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
         self.assertEqual(len(unresolved), 0,
                          f"Unresolved GLC links: {[r['link_href'] for r in unresolved][:5]}")
 
+    def test_framing_slides_produce_no_csv_rows(self) -> None:
+        # The mock PPTX brackets content with a welcome and an exit slide.
+        # Neither should contribute rows; gram_id values must never carry
+        # "Welcome" / "End of" text leaking from those slides.
+        out_csv = TMP / "extract_corpus_framing.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.week1_dir),
+            "--out", str(out_csv),
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        self.assertTrue(rows, "Expected gram rows from the Week 1 deck")
+        for row in rows:
+            self.assertFalse(row["gram_id"].startswith("Welcome"),
+                             f"framing slide leaked into rows: {row}")
+            self.assertFalse(row["gram_id"].startswith("End of"),
+                             f"framing slide leaked into rows: {row}")
+            self.assertNotIn("Welcome to", row["vessel_name"])
+            self.assertNotIn("End of", row["vessel_name"])
+
     def test_progress_test_routing_with_default_pattern(self) -> None:
         # The default test pattern ("progress test", case-insensitive) should
         # route the Progress Test 1 PPTX to publication=progress-test-N.
