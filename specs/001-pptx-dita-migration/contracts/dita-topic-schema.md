@@ -55,7 +55,7 @@ Substitutions:
 | `NN` | `gram_id` numeric portion (zero-padded as it appears) |
 | `M` | `sequence` |
 | `vessel_name` | CSV column; if empty, the entire `<ph>` element is omitted |
-| `image_href` | The asset is copied next to the topic and renamed to match the topic's stem (see §10). The href is the bare local filename, e.g. `gram_12_lofar1.png`. |
+| `image_href` | The asset is copied into the topic's per-gram folder and renamed to a slug of its source filename (see §10). The href is the bare local filename, e.g. `lofar-1.png`. |
 | `time_end` | CSV column; if empty, literal `""` is written |
 | `freq_end` | CSV column; if empty, literal `""` is written |
 
@@ -101,13 +101,16 @@ Produced for every CSV row whose `wav_treatment` is `gaps-lite`.
 </topic>
 ```
 
-The WAV referenced by the row's `link_href` column (or `glc_path` as a
-fallback) is copied next to the topic and renamed to match the topic's
-stem (see §10). `wav_href` is therefore the bare local filename, e.g.
-`gram_05_lofar1.wav`. The `<xref>` element's visible text comes from
+The WAV referenced by the row's `png_path` column (with `link_href`
+and `glc_path` retained as fallbacks for older CSVs) is copied into
+the topic's per-gram folder and renamed to a slug of its source
+filename (see §10). `wav_href` is therefore the bare local filename,
+e.g. `audio-clip.wav`. The `<xref>` element's visible text comes from
 `display_text`. The extractor never conflates the two: `display_text`
 is the human-readable label exactly as it appeared in the PPTX run;
-`link_href` is the raw URI used to locate the source asset.
+`link_href` is the raw URI from the PPTX hyperlink, while `png_path`
+carries the asset path resolved against `--image-root` so the
+generator can copy it without further path arithmetic.
 `scope="local"` records that the WAV sits inside the publication, even
 though the player is invoked externally via GAPS-Lite. (See R8 and the
 WAV-row rule in `csv-schema.md`.)
@@ -195,21 +198,32 @@ silently widens to three digits.
 
 ## 9. Folder layout
 
+Each gram (a single `gram_id` within a publication) lives in its own
+sub-directory. The grouping mirrors the supporting-material folder
+structure in the source content (one folder per gram, in the chapter
+or per-publication root) so that locating an asset on disk needs no
+look-up table.
+
 ```
 {out}/
 ├── main/
 │   ├── {chapter-slug-1}/
-│   │   ├── gram_NN_lofarM.dita
-│   │   ├── gram_NN_lofarM.png   ← asset copied + renamed (see §10)
-│   │   ├── gram_NN_analysis.dita
-│   │   ├── gram_NN_analysis.png
-│   │   └── ...
+│   │   ├── gram-NN/
+│   │   │   ├── gram_NN_lofarM.dita
+│   │   │   ├── {slug}.png        ← asset copied + slug-renamed (see §10)
+│   │   │   ├── gram_NN_analysis.dita
+│   │   │   └── {slug}.docx
+│   │   └── gram-NN/
+│   │       └── ...
 │   └── {chapter-slug-2}/
 │       └── ...
 ├── progress-test-1/
-│   ├── gram_NN_lofarM.dita
-│   ├── gram_NN_lofarM.png
-│   └── gram_NN_analysis.dita
+│   ├── gram-NN/
+│   │   ├── gram_NN_lofarM.dita
+│   │   ├── {slug}.png
+│   │   └── gram_NN_analysis.dita
+│   └── gram-NN/
+│       └── ...
 ├── progress-test-2/
 │   └── ...
 ├── ditamaps/
@@ -220,6 +234,10 @@ silently widens to three digits.
 └── skipped.txt   (only when at least one row was skipped)
 ```
 
+The per-gram folder name is `gram-NN`, where `NN` is the numeric
+portion of `gram_id` exactly as it appears in the CSV (zero-padded to
+at least two digits by the extractor; widens silently past 99).
+
 ## 10. Asset copy and rename
 
 The DITA-writing phase is responsible for materialising a
@@ -228,21 +246,24 @@ external asset (PNG screenshot, WAV file, or analysis sheet), the
 generator:
 
 1. Resolves the source path as `--image-root` joined with the relevant
-   CSV column (`png_path` for §1 and §2 topics; `link_href` then
-   `glc_path` as fallback for §3 WAV-stub topics).
-2. Copies the source file into the same directory as the topic.
-3. Renames the copy to `{topic_stem}{original_extension}`, where
-   `topic_stem` is the topic's filename without its `.dita` suffix.
-   For example, the asset referenced by `gram_12_lofar1.dita` is copied
-   to `gram_12_lofar1.png` (or `.wav`, `.docx`, etc. depending on the
-   source extension).
+   CSV column. For all three topic shapes (§1, §2, §3) this is
+   `png_path` — the extractor resolves the asset path against the
+   image root so the generator can copy it blindly. `link_href` and
+   `glc_path` are retained as fallbacks for older CSVs.
+2. Copies the source file into the topic's per-gram folder (`gram-NN/`).
+3. Renames the copy to a slug of the *source* filename, preserving the
+   original extension lower-cased. For example, the asset referenced
+   by `gram_12_lofar1.dita` whose source is `Lofar 1 ABC.PNG` is
+   copied to `gram-12/lofar-1-abc.png`.
 4. Uses the bare local filename as the topic's `href`. References
-   never traverse out of the chapter directory.
+   never traverse out of the per-gram directory.
 
-Renaming to the topic stem keeps the topic↔asset relationship self-
-evident on disk and prevents collisions when two grams within the same
-chapter happen to reference assets with the same original filename
-(e.g. both have a `Lofar 1.png`).
+The per-gram folder gives each asset a unique location automatically:
+two grams in the same chapter that both have a source `Lofar 1.png`
+end up at `gram-NN/lofar-1.png` and `gram-MM/lofar-1.png`, with no
+collision. Slugifying the filename keeps hrefs URL-safe (no spaces,
+ASCII only) without losing the human-readable relationship to the
+source.
 
 Asset copies use `shutil.copy2`, which preserves the source's modification
 time. Two consecutive generator runs against an unchanged source tree

@@ -42,7 +42,7 @@ class GenerateDitaTests(unittest.TestCase):
     def test_glc_topic_structure(self) -> None:
         rc = _run(self.out)
         self.assertEqual(rc, 0)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.dita"
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12_lofar1.dita"
         self.assertTrue(topic.is_file(), f"missing {topic}")
         root = ET.parse(topic).getroot()
         self.assertEqual(root.tag, "topic")
@@ -59,23 +59,36 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_glc_topic_asset_copied_with_relative_href(self) -> None:
         """When the referenced asset exists, the generator copies it next to
-        the topic (renamed to match the topic stem) and emits a topic-relative
-        href."""
+        the topic (with a slugified filename, preserving the extension) and
+        emits a topic-relative href."""
         _run(self.out)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.dita"
-        copied = self.out / "main" / "nordic-fishing-vessels" / "gram_12_lofar1.png"
+        gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+        topic = gram_dir / "gram_12_lofar1.dita"
+        copied = gram_dir / "gram12.png"
         original = FIXTURES / "images" / "gram12.png"
         self.assertTrue(copied.is_file(), "asset must be copied next to topic")
         self.assertEqual(copied.read_bytes(), original.read_bytes())
         root = ET.parse(topic).getroot()
         image = root.find(".//image")
         self.assertIsNotNone(image)
-        self.assertEqual(image.get("href"), "gram_12_lofar1.png",
+        self.assertEqual(image.get("href"), "gram12.png",
                          "href must be topic-relative, not an outward path")
+
+    def test_analysis_topic_asset_copied(self) -> None:
+        """Analysis assets are copied into the same per-gram folder as the topic."""
+        _run(self.out)
+        gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+        topic = gram_dir / "gram_12_analysis.dita"
+        copied = gram_dir / "gram12-analysis.png"
+        self.assertTrue(copied.is_file(), "analysis asset must be copied next to topic")
+        root = ET.parse(topic).getroot()
+        image = root.find(".//image")
+        self.assertIsNotNone(image)
+        self.assertEqual(image.get("href"), "gram12-analysis.png")
 
     def test_analysis_topic_audience_attribute(self) -> None:
         _run(self.out)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram_12_analysis.dita"
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12_analysis.dita"
         self.assertTrue(topic.is_file())
         root = ET.parse(topic).getroot()
         self.assertEqual(root.get("audience"), "-trainee")
@@ -104,7 +117,7 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_wav_gaps_lite_stub(self) -> None:
         _run(self.out)
-        topic = self.out / "main" / "arctic-survey" / "gram_05_lofar1.dita"
+        topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05_lofar1.dita"
         self.assertTrue(topic.is_file())
         text = topic.read_text(encoding="utf-8")
         self.assertIn("MANUAL REVIEW", text)
@@ -112,12 +125,12 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(root.find(".//note"))
         xref = root.find(".//xref")
         self.assertIsNotNone(xref)
-        # The generator copies the WAV next to the topic, renamed to match
-        # the topic stem, and emits a topic-relative href. The fixture WAV
-        # does not exist on disk, so no file is copied, but the href still
+        # The generator copies the WAV next to the topic, renamed to a
+        # slugified version of the source filename. The fixture WAV does
+        # not exist on disk, so no file is copied, but the href still
         # reflects the intended local name so re-running with the asset
         # present resolves the link without touching the topic XML.
-        self.assertEqual(xref.get("href"), "gram_05_lofar1.wav")
+        self.assertEqual(xref.get("href"), "audio-clip.wav")
         self.assertEqual(xref.text, "Audio sample")
 
     def test_skipped_report_emitted_for_tbd_wav(self) -> None:
@@ -143,7 +156,7 @@ class GenerateDitaTests(unittest.TestCase):
             for r in rows:
                 w.writerow(r)
         _run(self.out, csv_path=csv_path)
-        topic = self.out / "main" / "arctic-survey" / "gram_05_lofar1.dita"
+        topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05_lofar1.dita"
         self.assertFalse(topic.exists(), "TBD WAV row must not produce a topic")
         skipped = self.out / "skipped.txt"
         self.assertTrue(skipped.is_file())

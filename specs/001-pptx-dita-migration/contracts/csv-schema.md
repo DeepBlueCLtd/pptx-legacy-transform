@@ -31,7 +31,7 @@ generator never re-reads PPTX or GLC files.
 | 10 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved `.glc` path relative to source folder; empty when the link target was a `.wav` |
 | 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 13 | `png_path` | string | yes (glc rows) | resolved relative to source folder |
+| 13 | `png_path` | string | yes (glc rows, analysis rows, WAV-link rows) | path of the asset to copy next to the topic, resolved relative to `--image-root`. Holds the PNG for screenshot grams, the analysis sheet (`.png`/`.docx`) for analysis rows, and the `.wav` file for WAV-link rows. |
 | 14 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
 | 15 | `warnings` | string | yes | comma-joined, free-form |
 
@@ -53,7 +53,9 @@ should never happen because the unique key drives the filename.
 3. GLC rows: `topic_type="glc"`, `sequence="1..N"` in PPTX order.
 4. WAV-targeted links produce a GLC-typed row with empty `glc_path`,
    empty `time_end`/`freq_end`, the raw `.wav` URI stored in `link_href`,
-   and `wav_treatment` left empty for the author to fill in. `display_text`
+   the resolved (image-root-relative) `.wav` path stored in `png_path`
+   so the generator can copy it without further path arithmetic, and
+   `wav_treatment` left empty for the author to fill in. `display_text`
    carries the visible link label, never the URL.
 5. Warnings accumulate in column order: GLC parse warnings first, then
    path-resolution warnings, then shape warnings.

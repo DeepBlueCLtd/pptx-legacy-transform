@@ -87,6 +87,19 @@ def slugify(text: str) -> str:
     return _SLUG_NON_ALNUM.sub("-", ascii_only).strip("-")
 
 
+def slugify_asset_name(filename: str) -> str:
+    """Slugify a filename while preserving its extension (lower-cased).
+
+    Example: ``"Lofar 1 ABC.PNG"`` → ``"lofar-1-abc.png"``. The original
+    extension is kept so DITA-OT and downstream consumers can still
+    classify the asset by suffix.
+    """
+    p = Path(filename)
+    stem = slugify(p.stem)
+    suffix = p.suffix.lower()
+    return f"{stem}{suffix}" if stem else f"asset{suffix}"
+
+
 def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
     """Return ``png_path`` resolved against ``image_root``, relative to ``topic_dir``."""
     if not png_path:
@@ -103,14 +116,14 @@ def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
 
 
 def copy_asset(
-    src_relpath: str, image_root: Path, topic_dir: Path, topic_stem: str,
+    src_relpath: str, image_root: Path, topic_dir: Path,
 ) -> tuple[str, Path | None]:
     """Copy the referenced asset next to its topic and return ``(href, written)``.
 
-    The asset is renamed to ``<topic_stem><ext>`` so that the topic-asset
-    relationship is self-evident on disk and two grams in the same chapter
-    that share an asset filename (e.g. both have ``Lofar 1.png``) cannot
-    collide.
+    The asset is renamed to a slugified version of its source filename
+    (e.g. ``"Lofar 1 ABC.png"`` → ``"lofar-1-abc.png"``). Each gram has
+    its own folder so two grams sharing an original filename never
+    collide; the slug keeps hrefs URL-safe.
 
     If ``src_relpath`` is empty, returns ``("", None)``.
 
@@ -123,7 +136,7 @@ def copy_asset(
     if not src_relpath:
         return "", None
     source = image_root / src_relpath
-    target_name = f"{topic_stem}{Path(src_relpath).suffix}"
+    target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
     if source.is_file():
         topic_dir.mkdir(parents=True, exist_ok=True)
@@ -141,12 +154,28 @@ def _gram_num(gram_id: str) -> str:
     return digits[0] if digits else "00"
 
 
-def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
+def _gram_folder_name(gram_id: str) -> str:
+    """Return the per-gram folder name, e.g. ``"gram-01"``."""
+    return f"gram-{_gram_num(gram_id)}"
+
+
+def _publication_root(out_dir: Path, row: dict) -> Path:
+    """Return the per-publication root, ``{out}/{pub}`` or ``{out}/main/{chapter}``."""
     pub = row["publication"]
     if pub.startswith("progress-test-"):
         return out_dir / pub
     chapter_slug = slugify(row.get("chapter", ""))
     return out_dir / "main" / chapter_slug
+
+
+def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
+    """Return the directory the topic + its asset live in.
+
+    Each gram gets its own sub-directory so the original asset filenames
+    can be preserved (slugified) without colliding across grams in the
+    same chapter.
+    """
+    return _publication_root(out_dir, row) / _gram_folder_name(row["gram_id"])
 
 
 # -----------------------------------------------------------------------------
@@ -169,10 +198,9 @@ def emit_glc_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path]:
     topic_dir = _topic_dir_for_row(out_dir, row)
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / row["topic_filename"]
-    topic_stem = Path(row["topic_filename"]).stem
 
     image_href, copied = copy_asset(
-        row.get("png_path", ""), image_root, topic_dir, topic_stem,
+        row.get("png_path", ""), image_root, topic_dir,
     )
 
     topic = ET.Element("topic", {"id": topic_id})
@@ -218,10 +246,9 @@ def emit_analysis_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path
     topic_dir = _topic_dir_for_row(out_dir, row)
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / row["topic_filename"]
-    topic_stem = Path(row["topic_filename"]).stem
 
     href, copied = copy_asset(
-        row.get("png_path", ""), image_root, topic_dir, topic_stem,
+        row.get("png_path", ""), image_root, topic_dir,
     )
 
     topic = ET.Element("topic", {"id": topic_id, "audience": "-trainee"})
@@ -247,10 +274,13 @@ def emit_wav_stub_topic(row: dict, out_dir: Path, image_root: Path) -> list[Path
     topic_dir = _topic_dir_for_row(out_dir, row)
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / row["topic_filename"]
-    topic_stem = Path(row["topic_filename"]).stem
 
-    wav_relpath = row.get("link_href", "") or row.get("glc_path", "")
-    wav_href, copied = copy_asset(wav_relpath, image_root, topic_dir, topic_stem)
+    # ``png_path`` is preferred — the extractor resolves it against
+    # ``--image-root`` so the generator can copy it without further
+    # path arithmetic. ``link_href`` is the raw URI from the PPTX and
+    # is kept as a fallback for older CSVs.
+    wav_relpath = row.get("png_path", "") or row.get("link_href", "") or row.get("glc_path", "")
+    wav_href, copied = copy_asset(wav_relpath, image_root, topic_dir)
 
     topic = ET.Element("topic", {"id": topic_id})
     title = ET.SubElement(topic, "title")
@@ -365,7 +395,8 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     for slug, (title, chapter_rows) in chapters.items():
         topichead = ET.SubElement(root, "topichead", {"navtitle": title})
         for row in chapter_rows:
-            href = f"../main/{slug}/{row['topic_filename']}"
+            gram_dir = _gram_folder_name(row["gram_id"])
+            href = f"../main/{slug}/{gram_dir}/{row['topic_filename']}"
             ET.SubElement(topichead, "topicref", {"href": href})
 
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
@@ -382,7 +413,8 @@ def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path
     for row in rows:
         if row["publication"] != publication:
             continue
-        href = f"../{publication}/{row['topic_filename']}"
+        gram_dir = _gram_folder_name(row["gram_id"])
+        href = f"../{publication}/{gram_dir}/{row['topic_filename']}"
         ET.SubElement(root, "topicref", {"href": href})
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
     return map_path
