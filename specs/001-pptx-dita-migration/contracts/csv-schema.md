@@ -27,13 +27,13 @@ generator never re-reads PPTX or GLC files.
 | 6 | `sequence` | string | no | `1`-based per gram, scoped per `topic_type` |
 | 7 | `topic_filename` | string | no | `gram_NN.dita`; identical across every row that belongs to the same gram (CSV's N+1 rows per gram collapse into one DITA topic — see `dita-topic-schema.md` §1) |
 | 8 | `display_text` | string | yes (analysis rows) | human-readable link label from the PPTX run |
-| 9 | `link_href` | string | yes (analysis rows) | raw hyperlink URI from the PPTX run; `.glc`, `.wav`, or other; source of truth for WAV detection and `xref href` in WAV stub topics |
-| 10 | `glc_path` | string | yes (analysis rows; empty for WAV) | resolved `.glc` path relative to source folder; empty when the link target was a `.wav` |
+| 9 | `link_href` | string | yes (analysis rows) | raw hyperlink URI from the PPTX `Lofar` run. In the real corpus this is **always** a `.glc` path; the `.glc`-target invariant is documented in `high-level-spec.md` §1.5 and the reverse-spec. Any non-`.glc` value here represents a future or anomalous case (see backlog item 007). |
+| 10 | `glc_path` | string | yes (analysis rows; empty for non-GLC links) | resolved `.glc` path relative to source folder. Equals `link_href` for the normal case; empty only when `link_href` is non-`.glc` (anomaly). |
 | 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 13 | `png_path` | string | yes (glc rows, analysis rows, WAV-link rows) | path of the asset to copy next to the topic, resolved relative to `--image-root`. Holds the PNG for screenshot grams, the analysis-sheet PNG for analysis rows (populated from the gram folder's `Analysis.png` after FR-023 normalisation; may be empty if the renderer failed), and the `.wav` file for WAV-link rows. |
+| 13 | `png_path` | string | yes | path of the spectrogram asset to copy next to the topic, resolved relative to `--image-root`. For GLC rows it is the file named by the `.glc`'s inner `<data_source><filename>` element — a `.png` for most grams and a `.wav` for the ~18% of grams whose `.glc` configures a live render. For analysis rows it is the gram folder's `Analysis.png` after FR-023 normalisation. May be empty when the asset is missing or the renderer failed. |
 | 14 | `analysis_docx_path` | string | yes (non-analysis rows; analysis rows when renderer failed) | resolved relative to `--image-root`; populated for analysis rows from the gram folder's `Analysis Sheet.docx` after FR-023 normalisation. Carried for the author's review trail; the generator does not consume it. |
-| 15 | `wav_treatment` | enum | yes (non-WAV rows) | `screenshot`, `gaps-lite`, `TBD`, empty |
+| 15 | `wav_treatment` | enum | yes (when the inner `data_source/filename` is **not** `.wav`) | `screenshot`, `gaps-lite`, `TBD`, empty. Required only on rows where the resolved `png_path` ends in `.wav` (i.e. the `.glc` references audio rather than a pre-rendered screenshot); the author declares whether the pipeline should pre-render a screenshot or leave a GAPS-Lite stub for the bundle to render live. |
 | 16 | `warnings` | string | yes | comma-joined, free-form |
 
 ## Row identity
@@ -54,12 +54,21 @@ contributes to inside that topic.
 2. Analysis rows: `topic_type="analysis"`, `sequence="1"`,
    `display_text=""`, `glc_path=""`, `time_end=""`, `freq_end=""`.
 3. GLC rows: `topic_type="glc"`, `sequence="1..N"` in PPTX order.
-4. WAV-targeted links produce a GLC-typed row with empty `glc_path`,
-   empty `time_end`/`freq_end`, the raw `.wav` URI stored in `link_href`,
-   the resolved (image-root-relative) `.wav` path stored in `png_path`
-   so the generator can copy it without further path arithmetic, and
-   `wav_treatment` left empty for the author to fill in. `display_text`
-   carries the visible link label, never the URL.
+4. GLC rows whose inner `data_source/filename` is a `.wav` (the
+   `.glc` configures GAPS-Lite to render a fresh spectrogram from
+   audio rather than reference a pre-rendered screenshot) keep all
+   normal GLC-row fields populated — `glc_path` resolved as usual,
+   `time_end`/`freq_end` parsed from the `.glc` — and additionally
+   require the author to populate `wav_treatment` in Stage 3
+   (`screenshot` → pre-render to PNG; `gaps-lite` → leave a stub for
+   the bundle; `TBD` → skip until decided). The `.wav` path is stored
+   in `png_path` so the generator can copy it without further path
+   arithmetic. `display_text` carries the visible link label
+   (`"Lofar 1"`, `"Lofar 2"`, etc.), never the URL.
+   *Note:* in the audited corpus every `Lofar` text-run hyperlink
+   targets a `.glc`; the historical "WAV-targeted link" case (a
+   hyperlink whose target ends in `.wav`) has not been observed in
+   real data and is captured as backlog item 007.
 5. Warnings accumulate in column order: GLC parse warnings first, then
    path-resolution warnings, then shape warnings, then
    analysis-sheet-normalisation warnings (from FR-023).
@@ -105,11 +114,15 @@ progress-test-1,,Gram 03,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.gl
 progress-test-1,,Gram 03,,analysis,1,gram_03.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
 ```
 
-### WAV row awaiting author treatment
+### GLC whose inner `data_source/filename` is `.wav` — awaiting author treatment
+
+The `.glc` configures GAPS-Lite to render a fresh spectrogram from the
+named `.wav`. All normal GLC fields are populated; `png_path` carries
+the resolved `.wav` path and `wav_treatment` is empty pending Stage 3.
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05_lofar1.dita,Audio sample,supporting/gram05/audio_clip.wav,,,,,,,,"WAV link; treatment required"
+main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05.dita,Lofar 1,supporting/gram05/config_1.glc,supporting/gram05/config_1.glc,180,400,supporting/gram05/audio_clip.wav,,,"GLC references WAV; treatment required"
 ```
 
 ### Analysis row whose docx→png render failed

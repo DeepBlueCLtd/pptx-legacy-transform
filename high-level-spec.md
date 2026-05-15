@@ -72,10 +72,18 @@ Each gram placeholder consists of:
   - This hyperlink may be a shape-level click action OR a hyperlinked text run
     — **to be confirmed by Stage 1 introspection**
 - **1–4 link shapes** beneath the title, each containing hyperlinked text runs
-  - Display text differs from filename (e.g. display: `"LOFAR 1"`,
+  - Display text differs from filename (e.g. display: `"Lofar 1"`,
     target: `../gram12/config.glc`)
-  - Links point to `.glc` files (XML configuration for GAPS-Lite)
-  - A small number may point to `.wav` files instead
+  - Links **always** point to `.glc` files (XML configuration for
+    GAPS-Lite). Empirically, every `Lofar`-labelled text run in the
+    1,004-link corpus targets a `.glc` — no Lofar hyperlink ever
+    targets a `.png`, `.wav`, or anything else directly.
+  - The referenced `.glc` carries an inner
+    `data_source/filename` element that names the spectrogram asset
+    GAPS-Lite would render: usually a `.png` (~82% of files,
+    pre-rendered screenshot) and occasionally a `.wav` (~18%, raw
+    audio the legacy player would render live). That asset lives in
+    the same `Gram N\` folder as the `.glc`. See §1.6.
 
 ### 1.6 GLC File Structure
 
