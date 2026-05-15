@@ -25,6 +25,7 @@ development VM, which only happen after handover.
 
 **Language/Version**: Python 3.11+ (CPython, standard interpreter)
 **Primary Dependencies**: `python-pptx` for PPTX reading and mock generation; standard library only for everything else (`xml.etree.ElementTree`, `csv`, `pathlib`, `logging`, `argparse`, `unittest`)
+**External Toolchain (not a Python dependency, not bundled)**: DITA-OT plus a Java runtime, installed manually on the air-gapped target PC. Used ad-hoc by the maintainer to render generated DITA to HTML for inspection. The README ships acquisition/install/run instructions; the user handles transfer through the air-gap. Oxygen XML Author remains the production publishing path — DITA-OT is for development and sanity-check previews only, and is invoked outside the automated pipeline.
 **Storage**: Filesystem only — PPTX/GLC/PNG/WAV inputs read from a configurable content root; intermediate CSV at the project root; DITA topics and ditamaps written under an `output/` tree
 **Testing**: `unittest` discovery (`python -m unittest discover tests/`); fixtures shipped under `tests/fixtures/`; no third-party test framework
 **Target Platform**: Windows workstations on an air-gapped analyst network (post-deployment) and an internet-connected Windows VM (development); both run the same Python and the same scripts

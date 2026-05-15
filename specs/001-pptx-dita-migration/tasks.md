@@ -117,7 +117,7 @@ Flat repository root:
 - [X] T041 [US2] In `extract_to_csv.py`, implement `resolve_glc_path(href: str, content_root: Path) -> Path | None` handling both per-gram and per-ten-grams supporting layouts (FR-006); return `None` and log a WARNING when not found
 - [X] T042 [US2] In `extract_to_csv.py`, implement `walk_pptxs(input_root: Path) -> Iterator[Path]` yielding every `.pptx` under the root, sorted for deterministic output (R2)
 - [X] T043 [US2] In `extract_to_csv.py`, implement `classify_publication(pptx: Path, test_pattern: str, allocated: dict) -> tuple[str, str | None, str | None]` returning `(publication, chapter, chapter_slug)` per R2/R3, allocating progress-test numbers in stable filename order
-- [X] T044 [US2] In `extract_to_csv.py`, implement `extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]` as the documented `NotImplementedError` stub specified in FR-015 / spec.md §5.3, with a docstring listing the five introspection questions verbatim from the source spec
+- [X] T044 [US2] In `extract_to_csv.py`, implement `extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]` as the documented `NotImplementedError` stub specified in FR-015 / spec.md §5.3, with a docstring listing the five introspection questions verbatim from the source spec *(stub now superseded — see T104 in Phase 10, which replaces it using the grouping rule documented in `source/notes/reverse-spec.md` §4)*
 - [X] T045 [US2] In `extract_to_csv.py`, implement `gram_to_rows(gram: GramPlaceholder, publication: str, chapter: str, content_dir: Path) -> list[dict]` producing one CSV row per GLC link (numbered by sequence) plus one analysis row, populating `warnings` from each `parse_glc` and `resolve_glc_path` call (FR-003, FR-004, contracts/csv-schema.md §"Row construction rules")
 - [X] T046 [US2] In `extract_to_csv.py`, implement `write_csv(rows: list[dict], out: Path) -> None` using `csv.DictWriter` with `encoding="utf-8-sig"`, `lineterminator="\r\n"`, `quoting=csv.QUOTE_MINIMAL`, and the column order from contracts/csv-schema.md (R11)
 - [X] T047 [US2] In `extract_to_csv.py`, implement `main()` orchestration: walk PPTXs, classify each, open each via `python-pptx`, iterate slides, call the (stubbed) grouping function, expand to rows, write CSV, emit end-of-run summary (total PPTXs, total rows, total warnings, distinct warning types) per FR-014
@@ -156,6 +156,8 @@ Flat repository root:
 ---
 
 ## Phase 6: User Story 4 — Generate a Realistic Mock PPTX for Testing (Priority: P4)
+
+> **Note (post-reverse-spec):** This phase was completed against the pre-reverse-spec model (one fixed-shape PPTX, 3×5 grid, 15 grams per slide, welcome slide, hand-picked vessel pool). The corpus-aware redesign that matches `source/notes/reverse-spec.md` lives in **Phase 10 (T093–T103)** and supersedes the implementation parts of this phase. The tests and constants below remain a useful historical record.
 
 **Goal**: Produce a synthetic instructor PPTX that exercises every structural case in the source spec — used by the introspection and extraction test suites and as a teaching tool for the air-gapped maintainer.
 
@@ -199,7 +201,7 @@ Flat repository root:
 ### Implementation for User Story 5
 
 - [X] T077 [US5] In `tests/__init__.py` (initially empty from T004), document the discovery command and the `tests/_tmp/` convention for ephemeral fixtures, plus the rule that no fixture larger than 50 KB is committed (R13)
-- [X] T078 [US5] In `tests/conftest_helpers.py` (a regular module, not a pytest conftest), implement `make_mock_pptx(tmp_path: Path) -> Path` that invokes `mock_pptx.main` with `--out tmp_path/mock.pptx` and returns the path; reused by US3 and US5 tests via `setUpClass` to avoid committing a binary fixture (R13)
+- [X] T078 [US5] In `tests/conftest_helpers.py` (a regular module, not a pytest conftest), implement `make_mock_pptx(tmp_path: Path) -> Path` that invokes `mock_pptx.main` with `--out tmp_path/mock.pptx` and returns the path; reused by US3 and US5 tests via `setUpClass` to avoid committing a binary fixture (R13) *(signature and return shape change in T102 — corpus mode returns the root directory; callers must pick a specific PPTX from a family)*
 - [X] T079 [US5] Add a `test:` entry to `README.md` (created in Phase 1 / extended in T084) documenting the exact discovery command, expected runtime, and what to do when a test fails on the air-gapped network (FR-018 §8 "Running tests")
 
 **Checkpoint**: User Story 5 is fully functional — the air-gapped maintainer can run, read, and triage every test without internet or AI access.
@@ -227,6 +229,8 @@ Flat repository root:
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
+> **Note (post-reverse-spec):** Phase 9 produced the README before FR-021 was added. The new "Publishing to HTML (optional)" section lives in **Phase 10 (T106)**.
+
 **Purpose**: Documentation completion, air-gapped install hardening, and final validation against the quickstart.
 
 - [X] T083 [P] In `README.md`, add the *Project context* section summarising what the pipeline does and why, sourced from spec.md §1.1 and plan.md §Summary (FR-018 §1)
@@ -239,6 +243,48 @@ Flat repository root:
 - [X] T090 [P] In `README.md`, add the *Known limitations* section explicitly calling out the FR-015 shape-grouping stub, the WAV `TBD` skip behaviour, and the no-cleanup default for `output/` (FR-018 §9)
 - [ ] T091 Run the quickstart end-to-end on the development VM exactly as written in `specs/001-pptx-dita-migration/quickstart.md`, recording any drift between the documented commands and the actual scripts; fix any discrepancies and re-run until quickstart and reality agree *(manual; defer to development VM)*
 - [ ] T092 Verify SC-005 manually on the development VM: run an Oxygen build of the generated DITA tree against both an instructor profile (no audience exclusion) and a trainee profile (excluding `-trainee`); record any build failures and resolve *(manual; defer to development VM)*
+
+---
+
+## Phase 10: Reverse-Spec Adaptation & DITA-OT Documentation
+
+**Purpose**: Re-align the mock generator, the FR-015 stub, and the README with two post-Phase-9 inputs: (a) `source/notes/reverse-spec.md`, which describes the real source corpus shape that earlier phases could only guess at (multi-publication corpus across three families, descriptor-split-at-colon, rounded-rect + Lofar-labels gram tile, hyperlink mechanism, Pub10_Ed22B batched folders, etc.); and (b) FR-021, which adds a DITA-OT + Java HTML-preview path documented in the README but not bundled in the delivery.
+
+**Inputs**: [`source/notes/reverse-spec.md`](../../source/notes/reverse-spec.md) (corpus shape), spec.md FR-021 (DITA-OT documentation requirement), plan.md "External Toolchain" note.
+
+**Why this phase exists**: Phases 6 (mock generator) and 4 (FR-015 stub) were written before the reverse-spec interview, so the mock produced one fixed-shape PPTX and the shape-grouping logic was a documented `NotImplementedError`. The reverse-spec now supplies both the corpus shape (so the mock can be corpus-aware) and the grouping rule (so the stub can be implemented). Phase 9 produced the README before FR-021 was added, so the DITA-OT section is missing.
+
+### Mock generator redesign (supersedes parts of Phase 6)
+
+- [ ] T093 [US4] Redesign `mock_pptx.py` for the multi-publication corpus per `source/notes/reverse-spec.md` §1, §3, §4: produce ~11 publication folders across three families (Weeks ×4, Progress Tests ×5 including a "No FR" variant, Final Assessment ×1, Pub10_Ed22B ×1), each with its own `<Name>.pptx` plus a sibling `<Name> Files/` folder of `Gram N/` subfolders. Drop the welcome slide. Replace the fixed 3×5 / 15-gram-per-slide model with per-family parameters (reverse-spec §7).
+- [ ] T094 [US4] Adapt `mock_pptx.py`'s CLI from `--out <file>` to `--out-root <dir>` (corpus output); supersede T067's single-file CLI. Document the new CLI in `contracts/cli-contracts.md` §`mock_pptx.py`.
+- [ ] T095 [US4] In `mock_pptx.py`, build a Star Trek + Star Wars vocabulary (vessel classes, ship names, codenames) per reverse-spec §6, with deterministic 2–6 cross-publication repeats. Replace the existing `VESSEL_NAMES` constant. Keep generation deterministic via a fixed RNG seed for SC-004-style reproducibility.
+- [ ] T096 [US4] In `mock_pptx.py`, implement the gram-tile shape per reverse-spec §4: a rounded rectangle whose text follows `"Gram N: <descriptor>"` (descriptor synthesised from the vessel pool with deliberate format variance — sometimes `"FR <vessel>, Category <K>, <codename>"`, sometimes a free-form sentence) and a shape-level hyperlink to a `Gram N/Analysis Sheet.docx` or `Gram N/Analysis.png` (50/50 mix per reverse-spec §7); plus 1–4 text labels labelled `"Lofar 1"`…`"Lofar N"` (uniform random count) each carrying a text-run hyperlink to a distinct `Gram N/<name>.glc` in the same gram folder.
+- [ ] T097 [US4] In `mock_pptx.py`, implement gram-number gap generation (reverse-spec §7): for each publication, draw the target gram count from the family parameter, then drop a small random subset of integers from the sequence to simulate edit history (e.g. retain 32 of 35 numbers for a Weeks deck), so the resulting sequence is non-contiguous but the surviving grams keep their original numbers.
+- [ ] T098 [US4] In `mock_pptx.py`, implement the Pub10_Ed22B `Files/` folder batching per reverse-spec §2: split that publication's gram subfolders into ten-gram parents (`Pub 10_Ed 2_(1-10)`, `(11-20)`, …), keep slides at ~15 grams each, and ensure PPTX hyperlinks span batch folders. Other publications retain a flat `Files/` layout.
+- [ ] T099 [US4] In `mock_pptx.py`, implement asset emission for each gram via the standard library only: write the `.glc` as `GAPS_Lite_configuration` XML per `contracts/glc-schema.md`; write a small valid `.png` using a pre-computed byte template (no PIL); write a short silence `.wav` via the stdlib `wave` module; write a minimal valid `.docx` using `zipfile` + `xml.etree` (no `python-docx`). Mostly PNG-referencing GLCs with a minority of WAV-referencing GLCs per reverse-spec §7.
+- [ ] T100 [US4] In `mock_pptx.py`, implement title-bar emission per reverse-spec §3: each slide's title bar uses `"<Publication> — Page N of M"` format, with a generic placeholder logo (text-in-a-coloured-box; no real org imagery). No speaker notes.
+
+### Mock test updates (supersedes parts of Phase 6)
+
+- [ ] T101 [P] [US4] Update `tests/test_mock_pptx.py` to assert against the corpus-aware model: a single run produces a directory tree with one PPTX per publication, family-appropriate gram counts (±5%), variable Lofar counts (1–4), 50/50 analysis-sheet mix, the Pub10_Ed22B batched folder layout, and deterministic regeneration (two runs byte-identical given the same seed). Drop T061–T065's assumptions about a single PPTX with 15 grams per slide.
+- [ ] T102 [P] [US4] Update `tests/conftest_helpers.py::make_mock_pptx` (originally T078) for the new CLI and the new return type: now returns the corpus root path (a directory), and callers that need a single PPTX pick a specific one by family (e.g. the first Week). Update US3 and US5 callers accordingly.
+- [ ] T103 [P] [US4] In `tests/test_mock_pptx.py`, add `test_gram_tile_uses_descriptor_colon_split` asserting that every gram rectangle's text matches `r"^Gram \d+: "` so the student/instructor split at the first colon is well-defined (reverse-spec §4).
+
+### Replace FR-015 stub (task only; implementation deferred per current scope)
+
+- [ ] T104 [US2] Replace the `NotImplementedError` body of `extract_grams_from_slide(slide, slide_num)` in `extract_to_csv.py` with the documented grouping rule from `source/notes/reverse-spec.md` §4: locate each rounded-rectangle shape carrying a shape-level hyperlink (treat as the gram header — descriptor split at the first colon yields `gram_id` and instructor-visible detail; href is the analysis-sheet path), then for each rectangle find the text-frame shape(s) immediately beneath it that contain runs hyperlinked to `.glc` files (one Lofar each). Return a list of `GramPlaceholder` records. Update T044's docstring-only stub accordingly.
+- [ ] T105 [US2] Update `tests/test_extract_to_csv.py`: remove `test_argparse_and_logging_succeed_before_stub` (T035) since the stub is gone, and add tests for the grouping rule using a mock PPTX from `make_mock_pptx` — assert that the row count for a known mock publication matches the expected number of GLC links plus one analysis row per gram, and that descriptor split at the colon populates `gram_id` and a separate instructor-visible field on the row.
+
+### DITA-OT documentation (new — supersedes nothing)
+
+- [ ] T106 [P] In `README.md`, add a `Publishing to HTML (optional)` section per FR-021: (a) acquisition of DITA-OT and a Java runtime (with version compatibility note), (b) Windows install steps on the air-gapped target including how the maintainer transfers the installers across the air-gap, (c) the exact DITA-OT command line for rendering `output/main/main.ditamap` and each `output/progress-test-N/...ditamap` to HTML, (d) explicit caveats that DITA-OT is for sanity-checking only, that Oxygen XML Author is the production publishing path, and that DITA-OT and Java are not bundled in the project delivery.
+
+### Plan / spec alignment
+
+- [ ] T107 Cross-check `plan.md` and `spec.md` after T093–T106 land: ensure the "Project Structure" section still matches the actual file layout, that no assumption in `spec.md` §Assumptions has been contradicted by the new mock-corpus shape (especially the "Each content slide hosts exactly 15 gram placeholders in a 3×5 grid" assumption — now superseded by reverse-spec §3), and amend or remove that assumption with a pointer to the reverse-spec.
+
+**Checkpoint**: After Phase 10, the mock generator produces the corpus described in the reverse-spec, the extractor's shape-grouping function is no longer a stub, the README documents DITA-OT preview, and the spec/plan/reverse-spec are coherent. T091 and T092 (manual VM validation) remain the only outstanding tasks.
 
 ---
 
@@ -255,6 +301,7 @@ Flat repository root:
 - **User Story 5 (Phase 7)**: Depends on User Stories 1–4 being complete (it asserts properties across all scripts and tests)
 - **User Story 6 (Phase 8)**: Depends on User Stories 1 and 2 (the batch wrapper invokes those scripts)
 - **Polish (Phase 9)**: Depends on every user story being complete
+- **Reverse-Spec Adaptation (Phase 10)**: Depends on Phase 9 and on `source/notes/reverse-spec.md` existing; rewrites Phase 6 deliverables (mock generator), replaces the Phase 4 stub from T044, and extends the Phase 9 README. T101–T103 (mock test updates) and T105 (extractor test updates) follow their corresponding implementation tasks; T106 (DITA-OT README section) and T107 (plan/spec alignment) are independent and can run in parallel with the mock-generator work
 
 ### Within Each User Story
 
