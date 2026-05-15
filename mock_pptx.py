@@ -161,11 +161,15 @@ HYPERLINK_REL_TYPE = (
 
 
 def add_shape_level_hyperlink(shape, target: str) -> None:
-    """Attach a shape-level click action via direct lxml manipulation."""
+    """Attach a shape-level click action via direct lxml manipulation.
+
+    The ``a:hlinkClick`` element belongs inside ``p:cNvPr`` (NonVisualDrawingProps)
+    per ECMA-376. PowerPoint ignores it when placed under ``p:nvPr``.
+    """
     rel_id = shape.part.relate_to(target, HYPERLINK_REL_TYPE, is_external=True)
     nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
-    nv_pr = nv_sp_pr.find(qn("p:nvPr"))
-    hlink = etree.SubElement(nv_pr, qn("a:hlinkClick"))
+    c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
+    hlink = etree.SubElement(c_nv_pr, qn("a:hlinkClick"))
     hlink.set(qn("r:id"), rel_id)
 
 
