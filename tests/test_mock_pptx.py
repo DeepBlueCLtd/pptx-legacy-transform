@@ -29,10 +29,10 @@ def _shape_hyperlink(shape) -> str | None:
     nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
     if nv_sp_pr is None:
         return None
-    nv_pr = nv_sp_pr.find(qn("p:nvPr"))
-    if nv_pr is None:
+    c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
+    if c_nv_pr is None:
         return None
-    hlink = nv_pr.find(qn("a:hlinkClick"))
+    hlink = c_nv_pr.find(qn("a:hlinkClick"))
     if hlink is None:
         return None
     rel_id = hlink.get(qn("r:id"))
