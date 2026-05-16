@@ -196,26 +196,32 @@ class GenerateDitaTests(unittest.TestCase):
                              f"unexpected child {child.tag} in flat test ditamap")
         self.assertIsNone(root.find("topichead"))
 
-    def test_wav_gaps_lite_block_inside_gram_topic(self) -> None:
+    def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
+        """A GLC row whose inner asset is a .wav renders as a §1.3
+        GLC-viewer-link block: a plain <xref> to the .glc (so the
+        on-PC GLC viewer opens it and resolves the .wav next to it),
+        with no <image> and no gramframe table for that row."""
         _run(self.out)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
         self.assertTrue(topic.is_file())
-        text = topic.read_text(encoding="utf-8")
-        self.assertIn("MANUAL REVIEW", text)
         root = ET.parse(topic).getroot()
-        self.assertIsNotNone(root.find(".//note"))
+        # No gramframe table for this row (no pre-rendered spectrogram).
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
+        # No <image> either — the WAV is not a renderable image.
+        self.assertIsNone(root.find(".//image"))
         xref = root.find(".//xref")
-        self.assertIsNotNone(xref)
-        # The generator copies the WAV next to the topic, renamed to a
-        # slugified version of the source filename. The fixture WAV does
-        # not exist on disk, so no file is copied, but the href still
-        # reflects the intended local name so re-running with the asset
-        # present resolves the link without touching the topic XML.
-        self.assertEqual(xref.get("href"), "audio-clip.wav")
+        self.assertIsNotNone(xref, "WAV-typed GLC row must emit an <xref>")
+        # The href targets the .glc (slugified), not the .wav: the GLC
+        # viewer reads the .glc's <filename> element to find the audio.
+        self.assertEqual(xref.get("href"), "config.glc")
+        self.assertEqual(xref.get("format"), "glc")
+        self.assertEqual(xref.get("scope"), "local")
         self.assertEqual(xref.text, "Audio sample")
 
-    def test_skipped_report_emitted_for_tbd_wav(self) -> None:
-        # Build a CSV with a TBD WAV row.
+    def test_glc_row_without_classifiable_asset_is_skipped(self) -> None:
+        """A GLC row whose png_path is empty (or carries an extension
+        the generator cannot dispatch on) contributes no block to its
+        gram topic and is recorded in skipped.txt."""
         csv_path = TMP / f"{self._testMethodName}.csv"
         cols = generate_dita.CSV_COLUMNS
         rows = [
@@ -227,8 +233,10 @@ class GenerateDitaTests(unittest.TestCase):
             "topic_type": "glc", "sequence": "1",
             "topic_filename": "gram_05.dita",
             "display_text": "Audio sample",
-            "link_href": "supporting/gram05/audio_clip.wav",
-            "wav_treatment": "TBD",
+            "link_href": "supporting/gram05/config.glc",
+            "glc_path": "supporting/gram05/config.glc",
+            # png_path left empty — the .glc parse failed to yield an
+            # inner asset filename, so there's nothing to dispatch on.
         })
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(cols),
@@ -238,8 +246,8 @@ class GenerateDitaTests(unittest.TestCase):
                 w.writerow(r)
         _run(self.out, csv_path=csv_path)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
-        # The TBD row contributes no gramframe block, but with no other rows
-        # for this gram the topic still renders (empty body bar the title).
+        # The skipped row contributes no block, but the gram topic still
+        # renders (empty body bar the title).
         self.assertTrue(topic.is_file())
         root = ET.parse(topic).getroot()
         self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))

@@ -201,6 +201,13 @@ def _html_twin(dita_path: Path) -> Path:
 
 _IMG_SRC_RE = re.compile(r'<img\b[^>]*\bsrc="([^"]+)"', re.IGNORECASE)
 
+# Suffixes a browser will render as an image. Anything else inside an
+# <image href> / <img src> renders as a broken-image icon — the visible
+# failure mode that motivated these tests. WAV assets travel through
+# the pipeline as <xref href="*.glc"> blocks instead (see
+# dita-topic-schema.md §1.3), so they never appear inside <image>.
+IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"})
+
 
 class PublishedImagePresenceTests(unittest.TestCase):
     """Walk the shipped ``dita/`` and ``html/`` trees and assert images
@@ -218,8 +225,48 @@ class PublishedImagePresenceTests(unittest.TestCase):
         cls.dita_files = sorted(DITA_ROOT.rglob("*.dita"))
         if not cls.dita_files:
             raise unittest.SkipTest("no .dita files under dita/")
+        # Cross-tree checks (those tagged `_html_*` and the binary check)
+        # assume html/ was built from the current dita/. Detect a stale
+        # html/ tree by sampling for the legacy buggy <img src="*.wav">
+        # pattern that the new generator never emits, so a fresh build
+        # passes silently while a stale tree skips with a clear message.
+        cls._html_is_stale = False
+        for html_path in HTML_ROOT.rglob("*.html"):
+            for src in _IMG_SRC_RE.findall(html_path.read_text(encoding="utf-8")):
+                if Path(src).suffix.lower() not in IMAGE_SUFFIXES:
+                    cls._html_is_stale = True
+                    cls._stale_reason = (
+                        f"html/ tree is stale (sample: {html_path.relative_to(REPO_ROOT)} "
+                        f"has <img src={src!r}>). Regenerate with "
+                        f"`python publish_html.py --dita-ot <path>` and re-run."
+                    )
+                    return
+
+    def _require_fresh_html(self) -> None:
+        if getattr(self, "_html_is_stale", False):
+            self.skipTest(self._stale_reason)
+
+    def test_dita_image_hrefs_point_at_image_files(self) -> None:
+        """Every ``<image href>`` in the generated DITA must point at a
+        renderable image (extension in IMAGE_SUFFIXES). A ``.wav`` or
+        ``.docx`` href slips through DITA-OT unchanged and renders as a
+        broken-image icon in the browser. WAV-typed GLC rows belong in
+        ``<xref href="*.glc">`` blocks, never inside ``<image>``."""
+        bad: list[str] = []
+        for dita_path in self.dita_files:
+            root = ET.parse(dita_path).getroot()
+            for img in root.findall(".//image"):
+                href = img.get("href") or ""
+                suffix = Path(href).suffix.lower()
+                if suffix not in IMAGE_SUFFIXES:
+                    bad.append(
+                        f"{dita_path.relative_to(REPO_ROOT)}: "
+                        f"<image href={href!r}> is not a renderable image"
+                    )
+        self.assertEqual(bad, [], f"\n{len(bad)} non-image <image> hrefs:\n" + "\n".join(bad))
 
     def test_every_dita_image_has_html_twin(self) -> None:
+        self._require_fresh_html()
         missing: list[str] = []
         for dita_path in self.dita_files:
             root = ET.parse(dita_path).getroot()
@@ -240,7 +287,24 @@ class PublishedImagePresenceTests(unittest.TestCase):
                     )
         self.assertEqual(missing, [], "\n".join(missing))
 
+    def test_html_img_srcs_point_at_image_files(self) -> None:
+        """Every ``<img src>`` in the published HTML must point at a
+        renderable image. Catches the same root failure as the DITA-side
+        check, but at the user-visible layer."""
+        self._require_fresh_html()
+        bad: list[str] = []
+        for html_path in HTML_ROOT.rglob("*.html"):
+            for src in _IMG_SRC_RE.findall(html_path.read_text(encoding="utf-8")):
+                suffix = Path(src).suffix.lower()
+                if suffix not in IMAGE_SUFFIXES:
+                    bad.append(
+                        f"{html_path.relative_to(REPO_ROOT)}: "
+                        f"<img src={src!r}> is not a renderable image"
+                    )
+        self.assertEqual(bad, [], f"\n{len(bad)} non-image <img> srcs:\n" + "\n".join(bad))
+
     def test_image_binaries_present_alongside_dita_and_html(self) -> None:
+        self._require_fresh_html()
         missing: list[str] = []
         mismatched: list[str] = []
         for dita_path in self.dita_files:

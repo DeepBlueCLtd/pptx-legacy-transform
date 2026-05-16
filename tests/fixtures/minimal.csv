@@ -2,4 +2,4 @@
 main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,
 main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12.dita,,,,,,images/gram12_analysis.png,,
 progress-test-1,,Gram 03,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,GLC not found
-main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05.dita,Audio sample,supporting/gram05/audio_clip.wav,,,,,gaps-lite,
+main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05.dita,Audio sample,supporting/gram05/config.glc,supporting/gram05/config.glc,180,400,supporting/gram05/audio_clip.wav,,
