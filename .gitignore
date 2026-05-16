@@ -230,3 +230,8 @@ extracted.csv
 
 # DITA-OT staging directory (publish_html.py)
 .dita-build/
+
+# Jest test layer (HTML-output verification — spec 003)
+node_modules/
+.jest-cache/
+package-lock.json
