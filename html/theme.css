@@ -250,6 +250,22 @@ section.lofar-stage > table.gram-config {
     linear-gradient(180deg, rgba(0,0,0,0.25), transparent);
 }
 
+/* ---------- Inline body links ----------
+   <xref> rendered as <a class="xref"> and other in-body anchors. The
+   browser-default blue is unreadable on the dark panel; pick up the
+   theme's cyan accent and an amber hover, matching the related-links /
+   tile treatments elsewhere on the page. */
+article a,
+article a:link,
+article a:visited {
+  color: var(--cyan-bright);
+  text-decoration: underline;
+  text-decoration-color: var(--cyan);
+  text-underline-offset: 2px;
+}
+article a:hover,
+article a:focus { color: var(--amber-bright); }
+
 /* ---------- Inline tags ---------- */
 .vessel-name { color: var(--amber); }
 .instructor-only {
