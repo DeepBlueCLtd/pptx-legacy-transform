@@ -1,0 +1,121 @@
+name: Regenerate html/ and publish to gh-pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'source/**'
+      - 'source.csv'
+      - 'generate_dita.py'
+      - 'publish_html.py'
+      - 'requirements.txt'
+      - '.github/workflows/regenerate-html.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  DITA_OT_VERSION: 4.2.4
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          path: main-checkout
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r main-checkout/requirements.txt
+
+      - name: Set up Java (for DITA-OT)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache DITA-OT
+        id: cache-dita-ot
+        uses: actions/cache@v4
+        with:
+          path: dita-ot-${{ env.DITA_OT_VERSION }}
+          key: dita-ot-${{ env.DITA_OT_VERSION }}
+
+      - name: Download DITA-OT
+        if: steps.cache-dita-ot.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -fSL -o dita-ot.zip \
+            "https://github.com/dita-ot/dita-ot/releases/download/${DITA_OT_VERSION}/dita-ot-${DITA_OT_VERSION}.zip"
+          unzip -q dita-ot.zip
+          rm dita-ot.zip
+          chmod +x "dita-ot-${DITA_OT_VERSION}/bin/dita"
+
+      - name: Generate DITA from source.csv
+        working-directory: main-checkout
+        run: |
+          python generate_dita.py \
+            --csv source.csv \
+            --out dita/ \
+            --image-root source/ \
+            --clean
+
+      - name: Publish DITA tree to HTML
+        working-directory: main-checkout
+        run: |
+          python publish_html.py \
+            --dita-ot "${GITHUB_WORKSPACE}/dita-ot-${DITA_OT_VERSION}"
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-checkout
+
+      - name: Sync html/ into gh-pages
+        run: |
+          set -euo pipefail
+          rm -rf gh-pages-checkout/html
+          mkdir -p gh-pages-checkout/html
+          cp -R main-checkout/html/. gh-pages-checkout/html/
+
+      - name: Ensure link on gh-pages index
+        run: |
+          set -euo pipefail
+          cd gh-pages-checkout
+          if ! grep -q 'href="html/"' index.html; then
+            sed -i 's|  </ul>|    <li><a href="html/">Published HTML output</a> \&mdash; generated HTML view of the DITA pipeline output.</li>\n  </ul>|' index.html
+          fi
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          cd gh-pages-checkout
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Regenerate html/ from ${GITHUB_SHA::7}"
+          for attempt in 1 2 3 4; do
+            if git push origin gh-pages; then
+              exit 0
+            fi
+            sleep $((2 ** attempt))
+            git pull --rebase origin gh-pages
+          done
+          echo "push failed after retries" >&2
+          exit 1
