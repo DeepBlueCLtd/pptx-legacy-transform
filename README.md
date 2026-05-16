@@ -189,12 +189,21 @@ and save back with the same encoding; do not edit identity columns
 
 ## Running tests
 
+The test suite is split across two layers:
+
+### Python `unittest` — pipeline behaviour and DITA XML output
+
 ```bash
 python -m unittest discover tests/
 ```
 
 Standard-library `unittest` discovery, no third-party test framework.
 Expected runtime: under one minute on a standard development workstation.
+
+This layer covers `mock_pptx.py`, `introspect_pptx.py`,
+`extract_to_csv.py`, the DITA shape emitted by `generate_dita.py`, the
+HTML pretty-printer inside `publish_html.py`, and the publisher's
+DITA-OT invocation contract (mocked at the `subprocess` boundary).
 
 When a test fails on the air-gapped network:
 
@@ -205,6 +214,35 @@ When a test fails on the air-gapped network:
    detail from the most recent run.
 3. Re-run a single test for shorter feedback:
    `python -m unittest tests.test_generate_dita.GenerateDitaTests.test_glc_topic_structure`.
+
+### Jest — rendered HTML output (spec 003)
+
+```bash
+npm install        # one-off, on a host with internet access
+npm test
+```
+
+The Jest layer (`tests/web/`) verifies the *rendered* HTML output of
+the dual-edition publish pipeline. It runs against the live `html/`
+tree at the repo root, so it MUST be invoked *after* a successful
+`python publish_html.py` run. It asserts:
+
+- **No leakage of "instructor" content into the student edition** —
+  recursive case-insensitive grep over every file and every path
+  segment under `html/student/`.
+- **Gram heading shape** — every student-edition gram page has a
+  heading matching `/^Gram \d+$/` (no vessel name, no separator).
+- **URL parity** — every path under `html/instructor/` has a
+  corresponding sibling under `html/student/` and vice versa.
+- **Shared landing page** — `html/index.html` exposes two
+  unambiguous links to the two editions.
+- **Output idempotency** — sha256 snapshot of every file under
+  `html/` is stable across publish runs against an unchanged DITA
+  source.
+
+The Jest layer is developer-time only — it is not part of the air-
+gapped runtime contract. The Python `unittest` suite remains the
+canonical air-gapped test surface.
 
 ## Troubleshooting
 
@@ -247,12 +285,46 @@ python publish_html.py --dita-ot /path/to/dita-ot-4.2.4
 `publish_html.py` (standard-library only) stages a copy of `dita/`
 under `.dita-build/`, injects the DOCTYPE declarations DITA-OT needs
 (the source DITA omits these per the schema contract — Oxygen handles
-validation), and writes HTML5 under `html/<ditamap-stem>/` per
-ditamap. The staging directory is cleaned up after each run.
+validation), and writes HTML5 under `html/<edition>/<ditamap-stem>/`
+per ditamap per edition. The staging directory is cleaned up after
+each run.
+
+### Output layout (spec 003)
+
+Each publish run emits two parallel HTML editions plus a shared
+landing page:
+
+```text
+html/
+├── index.html                        ← shared landing — pick an edition
+├── instructor/
+│   ├── index.html                    ← publication list, instructor edition
+│   ├── main/                         ← DITA-OT render, no audience filter
+│   ├── progress-test-1/
+│   └── …                             ← one folder per ditamap
+└── student/
+    ├── index.html                    ← publication list, student edition
+    ├── main/                         ← DITA-OT render with --filter=trainee.ditaval
+    ├── progress-test-1/
+    └── …
+```
+
+The instructor edition contains every vessel-name decoration,
+Analysis Sheet section, and "Instructor Version" labelling. The
+student edition is produced by a second DITA-OT pass with
+`dita/trainee.ditaval` excluding every element carrying
+`audience="-trainee"`. URL paths below the top-level edition segment
+are identical across editions — swapping `instructor/` ↔ `student/`
+in any URL reaches the same gram in the other edition.
+
+Pre-existing `html/<publication>/` deep-link URLs from before spec
+003 no longer resolve — the shared `html/index.html` is the new
+authoritative entry point.
 
 See the full recipe in
 [`specs/001-pptx-dita-migration/contracts/dita-topic-schema.md`](specs/001-pptx-dita-migration/contracts/dita-topic-schema.md)
-§11.
+§11 and the dual-edition contracts in
+[`specs/003-instructor-student-versions/contracts/`](specs/003-instructor-student-versions/contracts/).
 
 ## Known limitations
 

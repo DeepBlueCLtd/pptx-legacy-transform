@@ -159,12 +159,48 @@ def _gram_folder_name(gram_id: str) -> str:
     return f"gram-{_gram_num(gram_id)}"
 
 
+_INSTRUCTOR_PREFIX_RE = re.compile(r"^(Instructor )", re.IGNORECASE)
+
+
+def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
+    """Split an "Instructor "-prefixed chapter name and compute its slug.
+
+    Returns ``(audience_prefix, display_remainder, slug)`` where the
+    prefix is wrapped in ``<ph audience="-trainee">`` at emit time so
+    the student edition's trainee filter strips it, leaving the
+    display-remainder as the visible chapter navtitle.
+
+    The slug is computed from the *remainder* only, so the chapter
+    folder name in the DITA source tree never contains the substring
+    "instructor" (case-insensitive). Both editions render the same
+    chapter at the same path below their edition segment (FR-014,
+    FR-016).
+
+    Examples:
+
+    >>> _normalise_chapter("Instructor Week 1 Grams")
+    ('Instructor ', 'Week 1 Grams', 'week-1-grams')
+    >>> _normalise_chapter("Instructor Pub10_Ed22B_Updated")
+    ('Instructor ', 'Pub10_Ed22B_Updated', 'pub10-ed22b-updated')
+    >>> _normalise_chapter("Plain Chapter Without Prefix")
+    (None, 'Plain Chapter Without Prefix', 'plain-chapter-without-prefix')
+    >>> _normalise_chapter("")
+    (None, '', '')
+    """
+    match = _INSTRUCTOR_PREFIX_RE.match(raw)
+    if match is None:
+        return None, raw, slugify(raw)
+    prefix = match.group(1)
+    remainder = raw[len(prefix):]
+    return prefix, remainder, slugify(remainder)
+
+
 def _publication_root(out_dir: Path, row: dict) -> Path:
     """Return the per-publication root, ``{out}/{pub}`` or ``{out}/main/{chapter}``."""
     pub = row["publication"]
-    if pub.startswith("progress-test-"):
+    if pub != "main":
         return out_dir / pub
-    chapter_slug = slugify(row.get("chapter", ""))
+    _, _, chapter_slug = _normalise_chapter(row.get("chapter", ""))
     return out_dir / "main" / chapter_slug
 
 
@@ -416,6 +452,45 @@ def _skip_record(row: dict, reason: str) -> dict:
 # Ditamaps (FR-012)
 # -----------------------------------------------------------------------------
 
+def _append_map_title(root: ET.Element, base_title: str) -> None:
+    """Append ``<title>{base_title}<ph audience="-trainee"> — Instructor Version</ph></title>``.
+
+    The audience-tagged suffix means the trainee filter renders just
+    ``base_title``; the unfiltered (instructor) build renders the
+    full decorated form. The ``<title>`` *child* element replaces the
+    legacy ``title=`` attribute on ``<map>`` so inline markup can carry
+    the audience tag.
+    """
+    title = ET.SubElement(root, "title")
+    title.text = base_title
+    ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
+    ph.text = " — Instructor Version"
+
+
+def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
+    """Append ``<topicmeta><navtitle>…</navtitle></topicmeta>`` to ``topichead``.
+
+    The visible text is decomposed by ``_normalise_chapter``. When the
+    raw chapter name began with "Instructor " (case-insensitive), the
+    prefix is emitted inside ``<ph audience="-trainee">`` so the
+    trainee filter strips it; otherwise the navtitle is plain text
+    with no ``<ph>`` wrapper.
+
+    The ``<topicmeta>/<navtitle>`` *child* element replaces the legacy
+    ``navtitle=`` attribute on ``<topichead>`` so inline markup can
+    carry the audience tag.
+    """
+    audience_prefix, display_remainder, _ = _normalise_chapter(raw_chapter)
+    topicmeta = ET.SubElement(topichead, "topicmeta")
+    navtitle = ET.SubElement(topicmeta, "navtitle")
+    if audience_prefix is None:
+        navtitle.text = display_remainder
+    else:
+        ph = ET.SubElement(navtitle, "ph", {"audience": "-trainee"})
+        ph.text = audience_prefix
+        ph.tail = display_remainder
+
+
 def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -426,15 +501,17 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
         if row["publication"] != "main":
             continue
         chapter_title = row.get("chapter", "") or ""
-        slug = slugify(chapter_title)
+        _, _, slug = _normalise_chapter(chapter_title)
         key = slug
         if key not in chapters:
             chapters[key] = (chapter_title, [])
         chapters[key][1].append(row)
 
-    root = ET.Element("map", {"title": "Main"})
+    root = ET.Element("map")
+    _append_map_title(root, "Main")
     for slug, (title, chapter_rows) in chapters.items():
-        topichead = ET.SubElement(root, "topichead", {"navtitle": title})
+        topichead = ET.SubElement(root, "topichead")
+        _append_chapter_navtitle(topichead, title)
         seen: set[str] = set()
         for row in chapter_rows:
             gram_dir = _gram_folder_name(row["gram_id"])
@@ -448,12 +525,28 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     return map_path
 
 
+def _flat_publication_title(publication: str) -> str:
+    """Human-readable map title for a non-``main`` (flat) publication.
+
+    ``progress-test-N`` → ``"Progress Test N"`` (preserves the legacy
+    title style from feature 001). Any other slug is title-cased with
+    hyphens turned into spaces (e.g. ``progress-final-assessment`` →
+    ``"Progress Final Assessment"``). This is what gets emitted into
+    the ditamap's ``<title>`` child element; the audience-tagged
+    " — Instructor Version" suffix is appended by ``_append_map_title``.
+    """
+    if publication.startswith("progress-test-"):
+        n = publication.removeprefix("progress-test-")
+        return f"Progress Test {n}"
+    return publication.replace("-", " ").title()
+
+
 def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path:
     """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / f"{publication}.ditamap"
-    n = publication.removeprefix("progress-test-")
-    root = ET.Element("map", {"title": f"Progress Test {n}"})
+    root = ET.Element("map")
+    _append_map_title(root, _flat_publication_title(publication))
     seen: set[str] = set()
     for row in rows:
         if row["publication"] != publication:
@@ -545,7 +638,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         ditamap_paths.append(emit_main_ditamap(rows, args.out))
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
-        if pub.startswith("progress-test-"):
+        if pub != "main":
             path = emit_test_ditamap(pub, rows, args.out)
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
