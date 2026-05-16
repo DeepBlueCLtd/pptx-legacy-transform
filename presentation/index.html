@@ -141,45 +141,38 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <div class="pipeline">
           <div class="stage">
             <div class="stage-num">1</div>
-            <div class="stage-name">Introspect</div>
-            <div class="stage-tool"><code>introspect_pptx.py</code></div>
-            <div class="stage-desc">Read a PPTX, report its structure. Sanity check before extraction.</div>
-          </div>
-          <div class="arrow">→</div>
-          <div class="stage">
-            <div class="stage-num">2</div>
             <div class="stage-name">Extract</div>
             <div class="stage-tool"><code>extract_to_csv.py</code></div>
             <div class="stage-desc">Walk every deck, emit one row per gram-configuration into an intermediate CSV.</div>
           </div>
           <div class="arrow">→</div>
           <div class="stage stage-emphasis">
-            <div class="stage-num">3</div>
+            <div class="stage-num">2</div>
             <div class="stage-name">Review</div>
             <div class="stage-tool">Excel + author</div>
             <div class="stage-desc"><strong>Human checkpoint.</strong> Technical author triages warnings, signs off on the CSV.</div>
           </div>
           <div class="arrow">→</div>
           <div class="stage">
-            <div class="stage-num">4</div>
+            <div class="stage-num">3</div>
             <div class="stage-name">Generate</div>
             <div class="stage-tool"><code>generate_dita.py</code></div>
             <div class="stage-desc">Consume the signed-off CSV. Emit DITA topics, copied assets, and ditamaps.</div>
           </div>
           <div class="arrow">→</div>
           <div class="stage">
-            <div class="stage-num">5</div>
+            <div class="stage-num">4</div>
             <div class="stage-name">Publish</div>
             <div class="stage-tool"><code>publish_html.py</code> / Oxygen</div>
             <div class="stage-desc">Render DITA twice &mdash; once for the instructor edition, once for the student edition.</div>
           </div>
         </div>
-        <p class="caption" style="margin-top:1em">Five small Python scripts, one third-party dependency. Designed to be debuggable on an air-gapped network.</p>
+        <p class="caption" style="margin-top:1em">Four production stages, plus <code>introspect_pptx.py</code> as a standalone diagnostic tool (it produced the report on the previous slide). Small Python scripts, one third-party dependency &mdash; designed to be debuggable on an air-gapped network.</p>
       </section>
 
-      <!-- 8. Stage 2: Extract -->
+      <!-- 8. Stage 1: Extract -->
       <section>
-        <h2>Stage 2 &mdash; Extract to CSV</h2>
+        <h2>Stage 1 &mdash; Extract to CSV</h2>
         <p>The pipeline first explodes every gram into a flat, reviewable table.</p>
         <table class="data-table">
           <thead>
@@ -194,9 +187,9 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <p class="caption">One row per topic. Today's CSV: <strong>1,409 rows</strong> across 7 publications. The <em>warnings</em> column is where the next stage takes over.</p>
       </section>
 
-      <!-- 9. Stage 3: Manual review -->
+      <!-- 9. Stage 2: Manual review -->
       <section data-background-color="#fffbea">
-        <h2>Stage 3 &mdash; Human checkpoint <span class="badge">⭐ quality gate</span></h2>
+        <h2>Stage 2 &mdash; Human checkpoint <span class="badge">⭐ quality gate</span></h2>
         <div class="two-col">
           <div>
             <p>The technical author opens the CSV in Excel and:</p>
@@ -216,9 +209,9 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 10. Stage 4: Generate DITA -->
+      <!-- 10. Stage 3: Generate DITA -->
       <section>
-        <h2>Stage 4 &mdash; Generate DITA</h2>
+        <h2>Stage 3 &mdash; Generate DITA</h2>
         <p>One CSV row becomes one DITA topic. Standardised, structured XML.</p>
 <pre class="code-xml"><code>&lt;topic id="gram_04"&gt;
   &lt;title&gt;Gram 04&lt;ph audience="-trainee"&gt; - Enterprise contact bearing 291, codename Hoth&lt;/ph&gt;&lt;/title&gt;
@@ -244,9 +237,9 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <p class="caption"><code>audience="-trainee"</code> is the single attribute that drives the dual-edition split &mdash; on the vessel-name decoration <em>and</em> on the whole Analysis Sheet section. Section titles ("Lofar 1", "Stage 1 — Broadband", ...) come straight from the PPTX link labels.</p>
       </section>
 
-      <!-- 11. Stage 5: Publish - dual edition -->
+      <!-- 11. Stage 4: Publish - dual edition -->
       <section>
-        <h2>Stage 5 &mdash; Publish two editions</h2>
+        <h2>Stage 4 &mdash; Publish two editions</h2>
         <div class="two-col">
           <div>
             <p>One DITA source tree, two DITA-OT passes:</p>
@@ -388,7 +381,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
           <div>
             <h3 class="done-header">✅ Shipped</h3>
             <ul class="check-list">
-              <li>End-to-end pipeline: <code>introspect</code> → <code>extract</code> → <code>review</code> → <code>generate</code> → <code>publish</code></li>
+              <li>End-to-end pipeline: <code>extract</code> → <code>review</code> → <code>generate</code> → <code>publish</code> (plus <code>introspect</code> as a standalone diagnostic)</li>
               <li><strong>Dual instructor / student editions</strong> via DITA-OT audience filtering (spec 003)</li>
               <li><strong>Operator Console v2 dark theme</strong> wired into the publish pipeline</li>
               <li><strong>GramFrame plugin</strong> bundled and auto-injected for interactive spectrograms</li>
