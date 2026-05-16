@@ -88,7 +88,26 @@ EDITIONS: tuple[Edition, ...] = (
 
 
 def stage(src: Path, dst: Path) -> None:
-    """Copy src to dst and add DOCTYPEs to topics and ditamaps."""
+    """Copy ``src`` to ``dst``, add DOCTYPEs, and tuck each ditamap inside
+    its publication folder with hrefs rewritten relative to it.
+
+    The source ``dita/`` tree keeps a single root with the ditamaps as
+    siblings of the publication folders — that shape makes it easy for
+    a human author to scan the corpus. But DITA-OT mirrors the topic
+    paths it sees in the ditamap below the output directory, so a map
+    at ``dita/progress-test-5.ditamap`` referencing
+    ``progress-test-5/gram-01/gram_01.dita`` produces
+    ``html/.../progress-test-5/progress-test-5/gram-01/gram_01.html``
+    — a duplicated ``progress-test-5/`` segment that's visually
+    confusing.
+
+    Staging restructures the build-only copy so each ditamap lives at
+    ``<staged>/<stem>/<stem>.ditamap`` with topic hrefs of the form
+    ``<gram-folder>/<gram>.dita`` (no leading ``<stem>/``). DITA-OT
+    then publishes into ``html/<edition>/<stem>/<gram-folder>/...``
+    with no duplicated segment, and the original ``dita/`` tree is
+    untouched.
+    """
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
@@ -96,8 +115,14 @@ def stage(src: Path, dst: Path) -> None:
         body = path.read_text(encoding="utf-8")
         path.write_text(TOPIC_DOCTYPE + body, encoding="utf-8", newline="\n")
     for path in sorted(dst.glob("*.ditamap")):
+        stem = path.stem
         body = path.read_text(encoding="utf-8")
-        path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
+        body = body.replace(f'href="{stem}/', 'href="')
+        new_dir = dst / stem
+        new_dir.mkdir(parents=True, exist_ok=True)
+        new_path = new_dir / path.name
+        new_path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
+        path.unlink()
 
 
 VOID_ELEMENTS = frozenset({
@@ -753,7 +778,7 @@ def publish(
     DITA-OT remains stable across runs and the staged tree is fully
     self-contained.
     """
-    ditamaps = sorted(staged.glob("*.ditamap"))
+    ditamaps = sorted(staged.glob("*/*.ditamap"))
     if not ditamaps:
         print(f"No ditamaps found under {staged}", file=sys.stderr)
         return 1
@@ -826,7 +851,7 @@ def main(argv: list[str] | None = None) -> int:
     rc = publish(args.dita_ot, args.staged, args.out)
 
     if rc == 0:
-        ditamaps = sorted(args.staged.glob("*.ditamap"))
+        ditamaps = sorted(args.staged.glob("*/*.ditamap"))
         generated_at = _generated_timestamp()
         for edition in EDITIONS:
             entries = [(_ditamap_title(m, edition), m.stem) for m in ditamaps]

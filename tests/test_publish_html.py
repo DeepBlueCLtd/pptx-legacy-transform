@@ -280,10 +280,18 @@ class PublishDualEditionTests(unittest.TestCase):
     """``publish()`` runs DITA-OT twice per ditamap — once per edition."""
 
     def _make_staged(self, tmp: Path) -> Path:
+        """Build a staged tree in the post-``stage()`` shape: each
+        ditamap lives inside its own publication folder so DITA-OT
+        publishes into ``<edition>/<stem>/`` without duplicating the
+        stem segment in the output path."""
         staged = tmp / ".dita-build"
         staged.mkdir()
-        (staged / "main.ditamap").write_text("<map/>", encoding="utf-8")
-        (staged / "progress-test-1.ditamap").write_text("<map/>", encoding="utf-8")
+        (staged / "main").mkdir()
+        (staged / "main" / "main.ditamap").write_text("<map/>", encoding="utf-8")
+        (staged / "progress-test-1").mkdir()
+        (staged / "progress-test-1" / "progress-test-1.ditamap").write_text(
+            "<map/>", encoding="utf-8",
+        )
         (staged / "trainee.ditaval").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n',
             encoding="utf-8",
