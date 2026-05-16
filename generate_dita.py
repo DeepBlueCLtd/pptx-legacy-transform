@@ -410,8 +410,10 @@ def emit_gram_topic(
         )
         skipped.append(_skip_record(row, reason))
 
-    related = ET.SubElement(topic, "related-links")
-    ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
+    # Navigation back to the publication index is delivered by the page
+    # chrome (a future custom header bar), not by per-topic related-links:
+    # the historical ``<related-links>`` pointed at a ``gram-index.dita``
+    # that was never generated, producing a 404 in every gram page.
 
     topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
     return [topic_path] + written, skipped

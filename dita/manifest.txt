@@ -1999,4 +1999,3 @@ progress-test-5/gram-36/analysis-sheet.docx
 progress-test-5/gram-36/gram_36.dita
 progress-test-5/gram-36/lofar-1-loop-2.png
 progress-test-5/gram-36/lofar-2-a.png
-trainee.ditaval
