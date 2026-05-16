@@ -153,8 +153,14 @@ class GenerateDitaTests(unittest.TestCase):
         topicheads = root.findall("topichead")
         self.assertGreaterEqual(len(topicheads), 1)
         for th in topicheads:
+            # Spec 003: chapter navtitles live inside <topicmeta>/<navtitle>
+            # (replaces the legacy navtitle= attribute). Each chapter's
+            # children are exactly one <topicmeta> followed by one or more
+            # <topicref> elements — no nested <topichead>.
             for child in th:
-                self.assertEqual(child.tag, "topicref")
+                self.assertIn(child.tag, {"topicmeta", "topicref"})
+            self.assertIsNone(th.find("topichead"),
+                              "no nested topicheads — chapter layout is one level deep")
 
     def test_main_ditamap_one_topicref_per_gram(self) -> None:
         """The CSV carries N+1 rows per gram but the ditamap must point to
@@ -171,9 +177,12 @@ class GenerateDitaTests(unittest.TestCase):
         ditamap = self.out / "progress-test-1.ditamap"
         self.assertTrue(ditamap.is_file())
         root = ET.parse(ditamap).getroot()
+        # Spec 003: every ditamap carries a <title> child element (replaces
+        # the legacy title= attribute). Flat = no <topichead> below the
+        # title. Children are <title> followed by <topicref> elements.
         for child in root:
-            self.assertEqual(child.tag, "topicref",
-                             f"unexpected child {child.tag} in flat test ditamap")
+            self.assertIn(child.tag, {"title", "topicref"},
+                          f"unexpected child {child.tag} in flat test ditamap")
         self.assertIsNone(root.find("topichead"))
 
     def test_wav_gaps_lite_block_inside_gram_topic(self) -> None:
@@ -259,6 +268,107 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(listed, actual)
         self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
                          "manifest must be sorted")
+
+
+class AudienceShapeTests(unittest.TestCase):
+    """Spec 003 — chapter slug normalisation and audience-tagged ditamap shape.
+
+    Drives `generate_dita.py` against ``tests/fixtures/audience_minimal.csv``
+    which carries one "Instructor "-prefixed chapter, one plain chapter,
+    and a mix of vessel-name and no-vessel-name grams.
+    """
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.out = TMP / f"out_{self._testMethodName}"
+        if self.out.exists():
+            shutil.rmtree(self.out)
+        rc = _run(self.out, csv_path=FIXTURES / "audience_minimal.csv")
+        self.assertEqual(rc, 0)
+
+    def test_chapter_slug_strips_instructor_prefix(self) -> None:
+        """Chapter "Instructor Week 1 Grams" → folder ``main/week-1-grams/``
+        (no ``instructor-`` prefix anywhere in the source tree)."""
+        normalised_chapter = self.out / "main" / "week-1-grams"
+        legacy_chapter = self.out / "main" / "instructor-week-1-grams"
+        self.assertTrue(normalised_chapter.is_dir(),
+                        f"normalised chapter folder missing: {normalised_chapter}")
+        self.assertFalse(legacy_chapter.exists(),
+                         f"legacy instructor-prefixed folder must not exist: {legacy_chapter}")
+        for path in self.out.rglob("*"):
+            self.assertNotIn(
+                "instructor", path.name.lower(),
+                f'no path component under {self.out} may contain "instructor": {path}',
+            )
+
+    def test_map_title_uses_title_element_not_attribute(self) -> None:
+        """Map title is a ``<title>`` child of ``<map>`` carrying an audience-
+        tagged ``<ph audience="-trainee"> — Instructor Version</ph>`` suffix.
+        The legacy ``title=`` attribute on ``<map>`` is no longer emitted."""
+        ditamap = self.out / "main.ditamap"
+        root = ET.parse(ditamap).getroot()
+        self.assertIsNone(root.get("title"),
+                          'legacy title="..." attribute on <map> must not be emitted')
+        title = root.find("title")
+        self.assertIsNotNone(title, "<map> must carry a <title> child element")
+        self.assertEqual(title.text, "Main",
+                         "audience-neutral title text precedes the audience-tagged <ph>")
+        ph = title.find("ph[@audience='-trainee']")
+        self.assertIsNotNone(ph,
+                             '<title> must contain a <ph audience="-trainee"> suffix')
+        self.assertEqual(ph.text, " — Instructor Version")
+        # The progress-test ditamap follows the same shape.
+        pt_ditamap = self.out / "progress-test-1.ditamap"
+        pt_root = ET.parse(pt_ditamap).getroot()
+        self.assertIsNone(pt_root.get("title"))
+        pt_title = pt_root.find("title")
+        self.assertIsNotNone(pt_title)
+        self.assertEqual(pt_title.text, "Progress Test 1")
+        pt_ph = pt_title.find("ph[@audience='-trainee']")
+        self.assertIsNotNone(pt_ph)
+        self.assertEqual(pt_ph.text, " — Instructor Version")
+
+    def test_topichead_uses_topicmeta_navtitle(self) -> None:
+        """Each ``<topichead>`` carries ``<topicmeta>/<navtitle>``. Chapters
+        whose source name began with "Instructor " emit the prefix inside
+        ``<ph audience="-trainee">`` and the remainder as the navtitle tail.
+        The legacy ``navtitle=`` attribute on ``<topichead>`` is no longer
+        emitted."""
+        ditamap = self.out / "main.ditamap"
+        root = ET.parse(ditamap).getroot()
+        topicheads = root.findall("topichead")
+        self.assertEqual(len(topicheads), 2,
+                         "fixture defines two main chapters")
+        navtitles_by_kind: dict[str, ET.Element] = {}
+        for th in topicheads:
+            self.assertIsNone(
+                th.get("navtitle"),
+                'legacy navtitle="..." attribute on <topichead> must not be emitted',
+            )
+            topicmeta = th.find("topicmeta")
+            self.assertIsNotNone(topicmeta,
+                                 "<topichead> must carry a <topicmeta> child")
+            navtitle = topicmeta.find("navtitle")
+            self.assertIsNotNone(navtitle,
+                                 "<topicmeta> must carry a <navtitle> child")
+            ph = navtitle.find("ph[@audience='-trainee']")
+            kind = "instructor_prefixed" if ph is not None else "plain"
+            navtitles_by_kind[kind] = navtitle
+        self.assertIn("instructor_prefixed", navtitles_by_kind,
+                      "fixture defines an Instructor-prefixed chapter")
+        self.assertIn("plain", navtitles_by_kind,
+                      "fixture defines a plain chapter")
+        prefixed = navtitles_by_kind["instructor_prefixed"]
+        prefixed_ph = prefixed.find("ph")
+        self.assertEqual(prefixed_ph.text, "Instructor ",
+                         "audience-tagged prefix preserves the leading 'Instructor ' word + space")
+        self.assertEqual(prefixed_ph.tail, "Week 1 Grams",
+                         "remainder text follows the <ph> as its tail")
+        plain = navtitles_by_kind["plain"]
+        self.assertEqual(plain.text, "Plain Chapter",
+                         "plain chapters emit text directly with no <ph> wrapper")
+        self.assertEqual(len(list(plain)), 0,
+                         "plain navtitle must have no child elements")
 
 
 if __name__ == "__main__":
