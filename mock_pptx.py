@@ -259,6 +259,22 @@ def emit_spectrogram(path: Path) -> None:
     emit_png(path, width=8, height=8, shade=120 + variant * 30)
 
 
+def emit_analysis_sheet_image(path: Path) -> None:
+    """Copy the pre-baked Analysis Sheet image to ``path``.
+
+    Real-world Analysis Sheets are screenshots of an MS Word measurement
+    table (harmonics, base frequencies, speed, etc.) — not spectrograms.
+    Falls back to ``emit_spectrogram`` when the dedicated asset is
+    missing so older mock-data dirs keep working.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    source = MOCK_SPECTROGRAMS_DIR / "analysis-sheet.png"
+    if source.is_file():
+        shutil.copy2(source, path)
+        return
+    emit_spectrogram(path)
+
+
 def emit_wav(path: Path, *, duration_s: float = 0.1, framerate: int = 8000) -> None:
     """Write a short silence WAV using stdlib ``wave``."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -417,7 +433,7 @@ def _emit_analysis_sheet(
         emit_docx(gram_folder / name, title=title)
     else:
         name = "Analysis.png"
-        emit_spectrogram(gram_folder / name)
+        emit_analysis_sheet_image(gram_folder / name)
     return f"{rel_folder_from_pptx}/{name}"
 
 
