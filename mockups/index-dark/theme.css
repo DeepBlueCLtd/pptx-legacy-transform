@@ -1,0 +1,562 @@
+/* Theme: Operator Console v2 — "captured from the equipment" dark theme
+   Innovations beyond a vanilla dark mode:
+   - Each LOFAR-gram is presented as a faux instrument trace, with a TRACE header
+     bar carrying a session id and a live status LED, plus a CRT scanline overlay.
+   - Time / frequency metadata is rendered as an LCD-style readout strip with
+     bracketed values.
+   - A faint engineering grid sits behind the content column.
+   - The edition strip becomes a classification banner with corner tick marks.
+*/
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Share+Tech+Mono&display=swap");
+
+:root {
+  --bg: #07101a;
+  --bg-grid: #0c1a26;
+  --panel: #11202e;
+  --panel-2: #17293a;
+  --rule: #25415c;
+  --rule-soft: #1b2f44;
+  --ink: #d6e4f0;
+  --ink-dim: #7a98b4;
+  --ink-faint: #4f6a85;
+  --cyan: #4dd0e1;
+  --cyan-bright: #80deea;
+  --amber: #ffb74d;
+  --amber-bright: #ffd180;
+  --green-led: #6cff9d;
+  --instructor: #ff8a3d;
+  --student: #4dd0e1;
+}
+
+html { background: var(--bg); }
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  background:
+    radial-gradient(ellipse at top, #0d1c2a 0%, var(--bg) 60%),
+    linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0 / 100% 32px,
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0 / 32px 100%,
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* ---------- Classification banner ---------- */
+body::before {
+  content: "┄ INSTRUCTOR ┄ TRAINING USE ONLY ┄ CLASS-RESTRICTED ┄";
+  display: block;
+  background: linear-gradient(90deg, transparent, rgba(255,138,61,0.15) 10%, rgba(255,138,61,0.15) 90%, transparent);
+  border-bottom: 1px solid rgba(255,138,61,0.35);
+  color: var(--instructor);
+  font: 600 11px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.38em;
+  text-align: center;
+  padding: 10px 12px;
+  text-transform: uppercase;
+}
+body[data-edition="student"]::before {
+  content: "┄ STUDENT ┄ TRAINING ┄";
+  background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
+  border-bottom-color: rgba(77,208,225,0.35);
+  color: var(--student);
+}
+
+/* ---------- Layout ---------- */
+main[role="main"] {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 28px 80px;
+  position: relative;
+}
+
+/* ---------- Topic title ---------- */
+article > h1.topictitle1 {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 28px;
+  color: var(--cyan);
+  margin: 0 0 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+article > h1.topictitle1::before {
+  content: "» ";
+  color: var(--amber);
+}
+article > h1.topictitle1::after {
+  content: "_";
+  color: var(--cyan);
+  animation: caret 1.1s steps(2, end) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+
+article > h1 .ph.vessel-name {
+  display: inline-block;
+  margin-top: 12px;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--amber);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  background: rgba(255,183,77,0.08);
+  border: 1px solid rgba(255,183,77,0.4);
+  border-radius: 2px;
+  padding: 4px 10px;
+}
+article > h1 .ph.vessel-name::before { content: "◉ TGT  "; color: var(--amber-bright); letter-spacing: 0.1em; }
+
+/* ---------- Section labels ---------- */
+section.section > h2.sectiontitle {
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin: 32px 0 12px;
+}
+
+/* ---------- Cleanup of DITA-OT scaffolding ---------- */
+caption:empty { display: none; }
+section.section > br,
+td.entry > br { display: none; }
+
+/* ---------- Analysis sheet ---------- */
+section.analysis-sheet { margin-top: 8px; }
+section.analysis-sheet > h2.sectiontitle::before {
+  content: "▤ ";
+  color: var(--cyan);
+}
+section.analysis-sheet .imagecenter {
+  text-align: center;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+section.analysis-sheet .imagecenter img {
+  max-width: 100%;
+  height: auto;
+  filter: brightness(1.05) saturate(1.1);
+}
+
+/* ---------- LOFAR stage: faux instrument trace ---------- */
+section.lofar-stage {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0;
+  margin-top: 22px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(77,208,225,0.04), 0 12px 32px rgba(0,0,0,0.4);
+}
+
+/* Stage header bar */
+section.lofar-stage > h2.sectiontitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-bottom: 1px solid var(--rule);
+  color: var(--cyan);
+  letter-spacing: 0.24em;
+}
+section.lofar-stage > h2.sectiontitle::before {
+  content: "● TRACE / STAGE";
+  color: var(--amber);
+  letter-spacing: 0.18em;
+}
+section.lofar-stage > h2.sectiontitle::after {
+  content: "REC";
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--green-led);
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  animation: rec 1.6s ease-in-out infinite;
+}
+@keyframes rec { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* Image cell — scanlines overlay */
+section.lofar-stage table.gram-config tr:first-child td {
+  padding: 0;
+  position: relative;
+}
+section.lofar-stage .imagecenter {
+  position: relative;
+  text-align: center;
+  padding: 0;
+  margin: 0;
+  background: #000;
+}
+section.lofar-stage .imagecenter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 2px,
+    rgba(77,208,225,0.06) 2px,
+    rgba(77,208,225,0.06) 3px
+  );
+  mix-blend-mode: screen;
+}
+section.lofar-stage .imagecenter img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+  filter: contrast(1.05) brightness(1.05) saturate(1.1);
+}
+
+/* Metadata readout: LCD strip below the gram */
+section.lofar-stage table.gram-config {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  background: transparent;
+}
+section.lofar-stage table.gram-config,
+section.lofar-stage table.gram-config tbody,
+section.lofar-stage table.gram-config tr,
+section.lofar-stage table.gram-config td { border: 0; background: transparent; }
+section.lofar-stage table.gram-config tbody {
+  display: block;
+}
+section.lofar-stage table.gram-config tr:not(:first-child) {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 18px 10px 0;
+  padding-left: 14px;
+}
+section.lofar-stage table.gram-config tr:nth-child(2) { margin-left: 14px; }
+section.lofar-stage table.gram-config tr:not(:first-child) td {
+  padding: 0;
+  font-family: "Share Tech Mono", "JetBrains Mono", monospace;
+  font-size: 13px;
+  color: var(--cyan-bright);
+}
+section.lofar-stage table.gram-config tr:not(:first-child) td:first-child {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 10px;
+}
+section.lofar-stage table.gram-config tr:not(:first-child) td:first-child::after {
+  content: " ⟨";
+  color: var(--ink-faint);
+}
+section.lofar-stage table.gram-config tr:not(:first-child) td:last-child::after {
+  content: "⟩";
+  color: var(--ink-faint);
+}
+
+/* Footer-style band under the readout */
+section.lofar-stage > table.gram-config {
+  border-top: 1px solid var(--rule-soft);
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.25), transparent);
+}
+
+/* ---------- Inline tags ---------- */
+.vessel-name { color: var(--amber); }
+.instructor-only {
+  background: rgba(255,138,61,0.1);
+  border-left: 3px solid var(--instructor);
+  padding: 4px 10px;
+  border-radius: 2px;
+}
+body[data-edition="student"] .instructor-only { display: none; }
+
+/* ---------- Related links → back pill ---------- */
+nav.related-links {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--rule);
+}
+nav.related-links strong { display: none; }
+nav.related-links ul.linklist { list-style: none; padding: 0; margin: 0; }
+nav.related-links a.link {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--cyan);
+  background: rgba(77,208,225,0.06);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 7px 16px;
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+nav.related-links a.link::before { content: "◂◂ "; color: var(--amber); }
+nav.related-links a.link:hover {
+  background: rgba(77,208,225,0.14);
+  border-color: var(--cyan);
+}
+
+/* ---------- Landing / index pages (publish_html.py output) ---------- */
+body.landing { background-image: none; background: radial-gradient(ellipse at top, #0d1c2a 0%, var(--bg) 60%) fixed; }
+body.landing main { padding-top: 40px; }
+body.landing h1 {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 32px;
+  color: var(--cyan);
+  margin-bottom: 4px;
+}
+body.landing h1::before { content: "» "; color: var(--amber); }
+body.landing .generated {
+  font: 11px/1 "JetBrains Mono", monospace;
+  color: var(--ink-faint);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+body.landing ul.deliverables {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+body.landing ul.deliverables li {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 18px 18px 16px;
+  position: relative;
+  transition: border-color 0.15s, transform 0.15s;
+}
+body.landing ul.deliverables li:hover {
+  border-color: var(--cyan);
+  transform: translateY(-1px);
+}
+body.landing ul.deliverables li::before {
+  content: "▪ MODULE";
+  display: block;
+  font: 600 10px/1 "JetBrains Mono", monospace;
+  color: var(--amber);
+  letter-spacing: 0.28em;
+  margin-bottom: 8px;
+}
+body.landing ul.deliverables li.test::before { content: "▪ PROGRESS TEST"; color: var(--cyan); }
+body.landing ul.deliverables li.assessment::before { content: "▪ FINAL ASSESSMENT"; color: var(--green-led); }
+body.landing ul.deliverables a {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 16px;
+}
+body.landing ul.deliverables a::after {
+  content: " →";
+  color: var(--cyan);
+}
+body.landing ul.deliverables .meta {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink-dim);
+  font: 12px/1.4 "Inter", sans-serif;
+}
+
+/* =====================================================================
+   DITA-OT index pages (ditamap → HTML)
+   Structure DITA-OT emits:
+     body
+       h1.topictitle1
+       nav
+         ul.map
+           li.topicref.topichead            <- section heading text
+             ul
+               li.topicref > a              <- gram link
+
+   Strategy for a long index:
+   - Render each .topichead as a card with a colour-coded tab and a count.
+   - Inside, lay the grams out as a dense grid of identifier tiles.
+   - On the instructor edition, the link text is "Gram NN - vessel info"; we
+     split it on the en-dash via a CSS-only trick (the part before " - " is
+     boosted, the part after is dimmed and clamped to one line).
+===================================================================== */
+
+body.ditamap-index {
+  background:
+    radial-gradient(ellipse at top, #0d1c2a 0%, var(--bg) 60%),
+    linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0 / 100% 32px,
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0 / 32px 100%,
+    var(--bg);
+  background-attachment: fixed;
+}
+
+body.ditamap-index main[role="main"] {
+  max-width: 1280px;
+  padding: 32px 32px 80px;
+}
+
+/* Topic title at the very top of the index */
+body.ditamap-index h1.topictitle1 {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 30px;
+  color: var(--cyan);
+  margin: 0 0 6px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+body.ditamap-index h1.topictitle1::before { content: "» "; color: var(--amber); }
+body.ditamap-index h1.topictitle1::after { content: none; }
+body.ditamap-index h1.topictitle1 .ph {
+  display: inline;
+  margin: 0 0 0 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: 500 13px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+body.ditamap-index h1.topictitle1 .ph::before { content: "· "; }
+
+/* nav + outer list */
+body.ditamap-index nav { margin-top: 28px; }
+body.ditamap-index ul.map,
+body.ditamap-index ul.map ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+body.ditamap-index ul.map { display: flex; flex-direction: column; gap: 22px; }
+
+/* Section card (li.topichead) */
+body.ditamap-index li.topichead {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--cyan);
+  border-radius: 4px;
+  padding: 16px 18px 18px;
+  position: relative;
+  font: 600 12px/1.4 "JetBrains Mono", monospace;
+  color: var(--cyan);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+/* Colour-code the five sections by position. Pub10 = amber, Week 1..4 = cyan tints */
+body.ditamap-index li.topichead:nth-child(1) { border-left-color: var(--amber); color: var(--amber); }
+body.ditamap-index li.topichead:nth-child(2) { border-left-color: #4dd0e1; color: #4dd0e1; }
+body.ditamap-index li.topichead:nth-child(3) { border-left-color: #66bb6a; color: #66bb6a; }
+body.ditamap-index li.topichead:nth-child(4) { border-left-color: #ba68c8; color: #ba68c8; }
+body.ditamap-index li.topichead:nth-child(5) { border-left-color: #ef5350; color: #ef5350; }
+
+/* The text node "Instructor Week 1 Grams" is a bare text inside li.topichead.
+   Give it the look of a section title. */
+body.ditamap-index li.topichead {
+  /* trick: turn the li into a flex column so the inner ul drops to a row below */
+}
+
+/* Inner gram list — dense tile grid */
+body.ditamap-index li.topichead > ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+  margin-top: 14px;
+}
+
+body.ditamap-index li.topicref:not(.topichead) {
+  margin: 0;
+  font: 500 12px/1.3 "Inter", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+body.ditamap-index li.topicref:not(.topichead) a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  min-height: 38px;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+body.ditamap-index li.topicref:not(.topichead) a:hover {
+  border-color: var(--cyan);
+  background: var(--panel-2);
+}
+
+/* Split "Gram 20 - FR Stargazer, Category 4, Gandalf" via the ::first-line
+   trick won't work for inline split — but DITA-OT emits the whole label as
+   a single text node, so we use a CSS truncation + a left-aligned mono prefix.
+   For the instructor edition we want the prefix ("Gram NN") to look like a
+   stable identifier.  We can't split via CSS alone reliably, so we just
+   render the whole label in a single line and clamp it; the "Gram NN" stays
+   left-aligned and visible. */
+body.ditamap-index li.topicref:not(.topichead) a {
+  font-feature-settings: "tnum";
+}
+body.ditamap-index li.topicref:not(.topichead) a::before {
+  content: "▸";
+  color: var(--amber);
+  font: 12px/1 "JetBrains Mono", monospace;
+}
+body.ditamap-index li.topicref:not(.topichead) a {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Student edition: labels are short ("Gram 20") so center them and turn the
+   tiles into a tight number-card grid */
+body[data-edition="student"].ditamap-index li.topichead > ul {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+body[data-edition="student"].ditamap-index li.topicref:not(.topichead) a {
+  justify-content: center;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.06em;
+}
+body[data-edition="student"].ditamap-index li.topicref:not(.topichead) a::before { content: none; }
+
+/* --- Instructor: 2-line tile when the descriptor is split out into spans ---
+   In the mockup this is done via a screenshot-time JS that splits the link
+   text at " - " into <span.gram-id>…</span><span.gram-desc>…</span>.
+   In production we'd surface those as separate elements by adjusting the
+   DITA topicmeta / navtitle structure or via a custom plugin so DITA-OT
+   emits them directly. */
+body[data-edition="instructor"].ditamap-index li.topichead > ul {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+body[data-edition="instructor"].ditamap-index li.topicref:not(.topichead) a {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  white-space: normal;
+  min-height: 56px;
+  padding: 9px 12px;
+}
+body[data-edition="instructor"].ditamap-index li.topicref:not(.topichead) a::before { content: none; }
+body[data-edition="instructor"].ditamap-index .gram-id {
+  font: 600 13px/1.1 "JetBrains Mono", monospace;
+  color: var(--cyan-bright);
+  letter-spacing: 0.06em;
+}
+body[data-edition="instructor"].ditamap-index .gram-desc {
+  font: 11px/1.3 "Inter", sans-serif;
+  color: var(--ink-dim);
+  letter-spacing: 0.02em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
