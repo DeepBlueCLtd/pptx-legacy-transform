@@ -52,7 +52,9 @@ main/progress-final-assessment-grams/gram-13/lofar-3-a.png
 main/progress-final-assessment-grams/gram-14/analysis-sheet.docx
 main/progress-final-assessment-grams/gram-14/gram_14.dita
 main/progress-final-assessment-grams/gram-14/lofar-1-loop-1.png
+main/progress-final-assessment-grams/gram-14/lofar-2-i.glc
 main/progress-final-assessment-grams/gram-14/lofar-2-i.wav
+main/progress-final-assessment-grams/gram-14/lofar-3-abc.glc
 main/progress-final-assessment-grams/gram-14/lofar-3-abc.wav
 main/progress-final-assessment-grams/gram-14/lofar-4-a.png
 main/progress-final-assessment-grams/gram-15/analysis.png
@@ -64,6 +66,7 @@ main/progress-final-assessment-grams/gram-16/analysis-sheet.docx
 main/progress-final-assessment-grams/gram-16/gram_16.dita
 main/progress-final-assessment-grams/gram-16/lofar-1-loop-1.png
 main/progress-final-assessment-grams/gram-16/lofar-2-loop-1.png
+main/progress-final-assessment-grams/gram-16/lofar-3-abc.glc
 main/progress-final-assessment-grams/gram-16/lofar-3-abc.wav
 main/progress-final-assessment-grams/gram-18/analysis.png
 main/progress-final-assessment-grams/gram-18/gram_18.dita
@@ -107,12 +110,14 @@ main/progress-final-assessment-grams/gram-28/lofar-2-loop-2.glc
 main/progress-final-assessment-grams/gram-28/lofar-2-loop-2.wav
 main/progress-final-assessment-grams/gram-29/analysis-sheet.docx
 main/progress-final-assessment-grams/gram-29/gram_29.dita
+main/progress-final-assessment-grams/gram-29/lofar-1-loop-2.glc
 main/progress-final-assessment-grams/gram-29/lofar-1-loop-2.wav
 main/progress-final-assessment-grams/gram-30/analysis-sheet.docx
 main/progress-final-assessment-grams/gram-30/gram_30.dita
 main/progress-final-assessment-grams/gram-30/lofar-1-b.png
 main/progress-final-assessment-grams/gram-31/analysis.png
 main/progress-final-assessment-grams/gram-31/gram_31.dita
+main/progress-final-assessment-grams/gram-31/lofar-1-loop-1.glc
 main/progress-final-assessment-grams/gram-31/lofar-1-loop-1.wav
 main/progress-final-assessment-grams/gram-31/lofar-2-b.png
 main/progress-final-assessment-grams/gram-31/lofar-3-i.png
@@ -171,8 +176,11 @@ main/progress-final-assessment-grams/gram-43/lofar-4-loop-2.wav
 main/progress-final-assessment-grams/gram-44/analysis-sheet.docx
 main/progress-final-assessment-grams/gram-44/gram_44.dita
 main/progress-final-assessment-grams/gram-44/lofar-1.png
+main/progress-final-assessment-grams/gram-44/lofar-2-a.glc
 main/progress-final-assessment-grams/gram-44/lofar-2-a.wav
+main/progress-final-assessment-grams/gram-44/lofar-3-b.glc
 main/progress-final-assessment-grams/gram-44/lofar-3-b.wav
+main/progress-final-assessment-grams/gram-44/lofar-4-loop-2.glc
 main/progress-final-assessment-grams/gram-44/lofar-4-loop-2.wav
 main/progress-final-assessment-grams/gram-46/analysis-sheet.docx
 main/progress-final-assessment-grams/gram-46/gram_46.dita
