@@ -255,6 +255,89 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertTrue(skipped.is_file())
         self.assertIn("Gram 05", skipped.read_text(encoding="utf-8"))
 
+    def test_glc_inner_wav_copies_glc_and_wav_pair(self) -> None:
+        """End-to-end happy path for the §1.3 GLC-viewer-link contract:
+        when both the .glc and the named .wav exist on disk, the
+        generator copies both into the per-gram folder under slugified
+        names, byte-identical to the source, so the on-PC GLC viewer
+        can resolve the audio. Covers the success branches that
+        ``test_glc_inner_wav_renders_as_glc_viewer_link`` skips
+        (fixture .glc/.wav are missing there, so the copy is a no-op)."""
+        glc_src = TMP / "wav_pair_src" / "supporting" / "gram07" / "config.glc"
+        wav_src = TMP / "wav_pair_src" / "supporting" / "gram07" / "audio_clip.wav"
+        glc_src.parent.mkdir(parents=True, exist_ok=True)
+        glc_src.write_bytes(b"<GAPS_Lite_configuration/>")
+        wav_src.write_bytes(b"RIFF\x00\x00\x00\x00WAVEfmt ")
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 07", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_07.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram07/config.glc",
+            "glc_path": "supporting/gram07/config.glc",
+            "png_path": "supporting/gram07/audio_clip.wav",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path, image_root=TMP / "wav_pair_src")
+        gram_dir = self.out / "main" / "arctic-survey" / "gram-07"
+        glc_copy = gram_dir / "config.glc"
+        wav_copy = gram_dir / "audio-clip.wav"
+        self.assertTrue(glc_copy.is_file(), "the .glc must be copied next to the topic")
+        self.assertTrue(wav_copy.is_file(),
+                        "the companion .wav must travel with the .glc so the "
+                        "on-PC viewer can resolve it")
+        self.assertEqual(glc_copy.read_bytes(), glc_src.read_bytes())
+        self.assertEqual(wav_copy.read_bytes(), wav_src.read_bytes())
+        # And the topic's xref must point at the slugified .glc.
+        topic = gram_dir / "gram_07.dita"
+        root = ET.parse(topic).getroot()
+        xref = root.find(".//xref")
+        self.assertIsNotNone(xref)
+        self.assertEqual(xref.get("href"), "config.glc")
+        self.assertEqual(xref.get("format"), "glc")
+
+    def test_glc_row_with_unsupported_extension_is_skipped(self) -> None:
+        """The dispatch must reject any extension that is neither image
+        (.png/.jpg/.jpeg) nor .wav — including plausible-looking ones
+        like .bmp or .pdf — and record the skip with the offending
+        extension in the reason so the technical author can triage."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 08", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_08.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram08/config.glc",
+            "glc_path": "supporting/gram08/config.glc",
+            "png_path": "supporting/gram08/spectrogram.bmp",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "arctic-survey" / "gram-08" / "gram_08.dita"
+        self.assertTrue(topic.is_file())
+        root = ET.parse(topic).getroot()
+        self.assertIsNone(root.find(".//image"))
+        self.assertIsNone(root.find(".//xref"))
+        skipped = (self.out / "skipped.txt").read_text(encoding="utf-8")
+        self.assertIn("Gram 08", skipped)
+        self.assertIn(".bmp", skipped,
+                      "the skip reason should name the rejected extension")
+
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)
         self.assertEqual(rc1, 0)
