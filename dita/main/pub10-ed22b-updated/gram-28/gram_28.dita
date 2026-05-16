@@ -8,6 +8,7 @@
       </p>
     </section>
     <section>
+      <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1" />
@@ -39,16 +40,19 @@
       </table>
     </section>
     <section>
+      <title>Lofar 2</title>
       <p>
         <xref href="lofar-2-b.glc" format="glc" scope="local">Lofar 2</xref>
       </p>
     </section>
     <section>
+      <title>Lofar 3</title>
       <p>
         <xref href="lofar-3-a.glc" format="glc" scope="local">Lofar 3</xref>
       </p>
     </section>
     <section>
+      <title>Lofar 4</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1" />

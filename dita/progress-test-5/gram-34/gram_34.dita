@@ -6,6 +6,7 @@
       <image href="analysis.png" placement="break" align="center" />
     </section>
     <section>
+      <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1" />
@@ -37,6 +38,7 @@
       </table>
     </section>
     <section>
+      <title>Lofar 2</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1" />
@@ -68,6 +70,7 @@
       </table>
     </section>
     <section>
+      <title>Lofar 3</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1" />
@@ -99,6 +102,7 @@
       </table>
     </section>
     <section>
+      <title>Lofar 4</title>
       <p>
         <xref href="lofar-4-a.glc" format="glc" scope="local">Lofar 4</xref>
       </p>

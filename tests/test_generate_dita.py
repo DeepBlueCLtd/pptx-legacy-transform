@@ -59,6 +59,68 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(ph, "vessel name should be wrapped in <ph audience='-trainee'>")
         self.assertIn("Nordik Jockey", (ph.text or ""))
 
+    def test_glc_section_carries_display_text_title(self) -> None:
+        """Each GLC section in a gram topic carries a ``<title>`` set to the
+        PPTX link label (``display_text``) so multi-gram pages render a
+        clear heading per spectrogram. The minimal fixture's Gram 12 row
+        has ``display_text="LOFAR 1"``."""
+        _run(self.out)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        section = root.find(".//body/section[table]")
+        self.assertIsNotNone(section, "expected a section wrapping the gramframe table")
+        title = section.find("title")
+        self.assertIsNotNone(title,
+                             "GLC section must carry a <title> taken from display_text")
+        self.assertEqual(title.text, "LOFAR 1")
+
+    def test_glc_section_omits_title_when_display_text_blank(self) -> None:
+        """When ``display_text`` is empty, the section emits no ``<title>``
+        — we don't want a blank heading polluting the page."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "link_href": "supporting/gram12/config_1.glc",
+            "glc_path": "supporting/gram12/config_1.glc",
+            "time_end": "271", "freq_end": "400",
+            "png_path": "images/gram12.png",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        section = root.find(".//body/section[table]")
+        self.assertIsNotNone(section)
+        self.assertIsNone(section.find("title"),
+                          "section must not emit an empty <title>")
+
+    def test_wav_glc_section_carries_display_text_title(self) -> None:
+        """The §1.3 GLC-viewer-link section also carries the display_text
+        as its ``<title>`` (in addition to the xref's link text), so the
+        section heading identifies the link on multi-gram pages."""
+        _run(self.out)
+        topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
+        root = ET.parse(topic).getroot()
+        xref_section = next(
+            (s for s in root.findall(".//body/section") if s.find("p/xref") is not None),
+            None,
+        )
+        self.assertIsNotNone(xref_section,
+                             "expected a section wrapping the GLC-viewer xref")
+        title = xref_section.find("title")
+        self.assertIsNotNone(title,
+                             "WAV-typed GLC section must carry a <title> from display_text")
+        self.assertEqual(title.text, "Audio sample")
+
     def test_gramframe_table_has_named_colspecs(self) -> None:
         """DITA-OT needs named colspecs so the image cell renders with
         ``colspan='2'``; without them GramFrame rejects the table."""

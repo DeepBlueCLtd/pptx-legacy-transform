@@ -6,6 +6,7 @@
       <image href="analysis.png" placement="break" align="center" />
     </section>
     <section>
+      <title>Lofar 1</title>
       <p>
         <xref href="lofar-1.glc" format="glc" scope="local">Lofar 1</xref>
       </p>

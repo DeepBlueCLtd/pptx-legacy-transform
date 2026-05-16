@@ -260,6 +260,7 @@ def _serialise(root: ET.Element) -> str:
 
 def _append_gramframe_table(
     parent: ET.Element, image_href: str, time_end: str, freq_end: str,
+    display_text: str = "",
 ) -> None:
     """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
 
@@ -272,8 +273,14 @@ def _append_gramframe_table(
     The two named ``<colspec>`` elements are required so DITA-OT emits
     ``colspan="2"`` on the image row — without them the image cell
     renders with ``colspan="1"`` and GramFrame rejects the table.
+
+    When ``display_text`` is supplied (the link label from the source
+    PPTX, e.g. ``"Lofar 1"``), a ``<title>`` is emitted inside the
+    section so multi-gram pages get a clear heading per spectrogram.
     """
     section = ET.SubElement(parent, "section")
+    if display_text:
+        ET.SubElement(section, "title").text = display_text
     table = ET.SubElement(section, "table", {"outputclass": "gram-config"})
     tgroup = ET.SubElement(table, "tgroup", {"cols": "2"})
     ET.SubElement(tgroup, "colspec", {"colname": "c1", "colnum": "1"})
@@ -334,8 +341,14 @@ def _append_glc_viewer_link(
     and the on-PC GLC viewer reads the file and resolves the adjacent
     ``.wav`` for live aural analysis. The companion ``.wav`` is copied
     next to the ``.glc`` by the caller.
+
+    When ``display_text`` is supplied (the link label from the source
+    PPTX), a ``<title>`` is emitted inside the section so multi-gram
+    pages get a clear heading per audio link.
     """
     section = ET.SubElement(parent, "section")
+    if display_text:
+        ET.SubElement(section, "title").text = display_text
     p = ET.SubElement(section, "p")
     xref = ET.SubElement(p, "xref", {
         "href": glc_href, "format": "glc", "scope": "local",
@@ -408,6 +421,7 @@ def emit_gram_topic(
             _append_gramframe_table(
                 body, image_href,
                 row.get("time_end", ""), row.get("freq_end", ""),
+                row.get("display_text", ""),
             )
             continue
 

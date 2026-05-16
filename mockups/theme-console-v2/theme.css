@@ -165,16 +165,6 @@ section.lofar-stage > h2.sectiontitle::before {
   color: var(--amber);
   letter-spacing: 0.18em;
 }
-section.lofar-stage > h2.sectiontitle::after {
-  content: "REC";
-  margin-left: auto;
-  font-size: 10px;
-  letter-spacing: 0.3em;
-  color: var(--green-led);
-  padding: 2px 8px;
-  border: 1px solid currentColor;
-  border-radius: 2px;
-}
 
 /* Image cell — scanlines overlay */
 section.lofar-stage table.gram-config tr:first-child td {
