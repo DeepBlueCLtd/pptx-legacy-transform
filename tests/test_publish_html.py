@@ -790,14 +790,16 @@ class GeneratedTimestampTests(unittest.TestCase):
                 "2023-11-14 22:13 UTC",
             )
 
-    def test_falls_back_to_fixed_string_when_unset(self):
+    def test_falls_back_to_current_utc_when_unset(self):
         env = {k: v for k, v in os.environ.items() if k != "SOURCE_DATE_EPOCH"}
         with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(publish_html._generated_timestamp(), "unset")
+            ts = publish_html._generated_timestamp()
+        self.assertRegex(ts, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$")
 
     def test_falls_back_when_value_is_garbage(self):
         with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "not-a-number"}):
-            self.assertEqual(publish_html._generated_timestamp(), "unset")
+            ts = publish_html._generated_timestamp()
+        self.assertRegex(ts, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$")
 
 
 # -----------------------------------------------------------------------------
@@ -883,12 +885,13 @@ class PublisherIdempotencyTests(unittest.TestCase):
 def _html_twin(dita_path: Path) -> Path:
     """Return the HTML file produced by DITA-OT for ``dita_path``.
 
-    DITA-OT writes each ditamap's output under
-    ``html/<edition>/<map>/<map>/...`` — the map stem appears twice
-    because DITA-OT preserves the source tree relative to the build
-    root, and we hand it the staged ditamap copy. The image-presence
-    regression check targets the **instructor edition** (the
-    unfiltered superset) — that's where every image referenced by
+    Staging in ``publish_html.stage()`` rewrites each ditamap so its
+    topic hrefs are relative to the ditamap stem, then drops the
+    ditamap inside ``<staged>/<stem>/<stem>.ditamap``. DITA-OT therefore
+    publishes to ``html/<edition>/<stem>/<topic-rel>`` with no
+    duplicated ``<stem>/`` segment (see the ``stage`` docstring). The
+    image-presence regression check targets the **instructor edition**
+    (the unfiltered superset) — that's where every image referenced by
     ``dita/`` is required to exist. Student-edition image presence is
     implicitly verified by the Jest URL-parity test, which asserts
     each instructor HTML page has a sibling at the same path under
@@ -897,7 +900,7 @@ def _html_twin(dita_path: Path) -> Path:
     rel = dita_path.relative_to(DITA_ROOT)
     map_stem = rel.parts[0]
     inner = Path(*rel.parts[1:]).with_suffix(".html")
-    return HTML_ROOT / "instructor" / map_stem / map_stem / inner
+    return HTML_ROOT / "instructor" / map_stem / inner
 
 
 _IMG_SRC_RE = re.compile(r'<img\b[^>]*\bsrc="([^"]+)"', re.IGNORECASE)
