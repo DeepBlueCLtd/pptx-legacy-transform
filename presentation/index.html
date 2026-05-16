@@ -310,22 +310,25 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
 
       <!-- 14. GramFrame plugin -->
       <section>
-        <h2>GramFrame &mdash; the spectrogram becomes an instrument</h2>
+        <h2>GramFrame &mdash; analysis moves into the browser</h2>
         <div class="two-col">
           <div>
-            <p>A bundled JavaScript plugin (<code>gramframe.bundle.js</code>) finds every gram-config table on a page and replaces it with an interactive component:</p>
+            <h3 style="color:#92400e;margin-bottom:0.2em">Before &mdash; click out to GAPS-Lite</h3>
             <ul>
-              <li><strong>CURSOR / HARMONICS / DOPPLER</strong> mode buttons &mdash; switch the analysis tool without leaving the page</li>
-              <li><strong>LED readouts</strong> for live cursor time / frequency, plus the cursor colour-picker</li>
-              <li><strong>Click-to-add markers</strong> with a MARKERS table; right-click to delete</li>
-              <li><strong>Harmonics overlay</strong> with rate/spacing computed from the user's clicks</li>
-              <li>Talks to the SVG axes derived from the GLC's <code>time-end</code> / <code>freq-end</code> &mdash; values that came straight from the signed-off CSV</li>
+              <li>PPTX slide → click a <code>Lofar</code> link → Windows launches the <code>.glc</code> in <strong>GAPS-Lite</strong>, a separate non-intuitive app requiring dedicated training</li>
+              <li>Every analysis means switching out of the lesson context; trainee has to learn two tools</li>
             </ul>
-            <p class="muted small">Injected by <code>publish_html.py</code>; the DITA source stays plain XML. The same component shipped on both editions.</p>
+            <h3 style="color:#166534;margin-top:0.5em;margin-bottom:0.2em">After &mdash; inline GramFrame (~82% of links)</h3>
+            <ul>
+              <li>Spectrogram renders <strong>inside the gram topic</strong> &mdash; same browser tab, no app launch</li>
+              <li>GramFrame replaces each gram-config table with an interactive instrument: <strong>CURSOR / HARMONICS / DOPPLER</strong> modes, LED time/freq readouts, click-to-add markers</li>
+              <li>SVG axes driven by the GLC's <code>time-end</code> / <code>freq-end</code> &mdash; bundled plugin, injected at publish; DITA source stays plain XML</li>
+            </ul>
+            <p class="muted small" style="border-top:1px solid #e2e8f0;padding-top:0.4em;margin-top:0.5em"><strong>The ~18% WAV case still drops out to GAPS-Lite</strong> via the <code>.glc</code> link (the <code>.glc</code> + <code>.wav</code> pair is copied alongside the topic). Closing that gap is the next phase &mdash; <em>video under GramFrame</em>, enabling aural analysis without leaving the browser.</p>
           </div>
           <div>
-            <img src="assets/screenshots/baseline-gram.png" alt="Baseline DITA-OT output, static image + table" class="frame-img" style="max-height:55vh" />
-            <p class="caption"><strong>Before</strong>: a static PNG plus a four-row metadata table. Read-only.</p>
+            <img src="assets/screenshots/styled-gram.png" alt="Real screenshot of GramFrame components rendered inline in a gram topic" class="frame-img" style="max-height:74vh" />
+            <p class="caption">Three Lofar stages, three live GramFrame instruments &mdash; all inside one HTML page.</p>
           </div>
         </div>
       </section>
@@ -398,11 +401,11 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
           <div>
             <h3 class="todo-header">🚧 In flight / proposed</h3>
             <ul class="check-list todo">
+              <li><strong>Aural analysis &mdash; video under GramFrame</strong> (future phase) &mdash; embed a video player below the spectrogram so the WAV case can be analysed in the browser too, retiring the last GAPS-Lite drop-out</li>
               <li><strong>Audited Lofar → .glc → asset model</strong> (item #007, clarified) &mdash; tighten generator dispatch to use the GLC's inner asset extension and remove the dead direct-<code>.wav</code> code path</li>
               <li><strong>speckit-navigator SPA</strong> (item #001) &mdash; browser-based spec viewer for reviewers</li>
               <li>WAV-row extractor test against the mock generator (item #004)</li>
               <li><code>topic_filename</code> collision check at CSV-load time (item #005)</li>
-              <li>Doc-rot fixes in spec branches (item #006)</li>
             </ul>
           </div>
         </div>
