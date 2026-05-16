@@ -235,3 +235,6 @@ extracted.csv
 node_modules/
 .jest-cache/
 package-lock.json
+
+# Emitted by generate_dita.py on every run; not a source artefact (see 31d7de8e).
+dita/trainee.ditaval
