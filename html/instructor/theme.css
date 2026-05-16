@@ -303,23 +303,29 @@ nav.related-links a.link:hover {
 }
 
 /* ---------- Landing / index pages (publish_html.py output) ---------- */
-body.landing { background-image: none; background: radial-gradient(ellipse at top, #0d1c2a 0%, var(--bg) 60%) fixed; }
-body.landing main { padding-top: 40px; }
-body.landing h1 {
+body.landing,
+body.edition-index { background-image: none; background: radial-gradient(ellipse at top, #0d1c2a 0%, var(--bg) 60%) fixed; }
+body.landing main,
+body.edition-index main { padding-top: 40px; }
+body.landing h1,
+body.edition-index h1 {
   font-family: "JetBrains Mono", monospace;
   font-size: 32px;
   color: var(--cyan);
   margin-bottom: 4px;
 }
-body.landing h1::before { content: "» "; color: var(--amber); }
-body.landing .generated {
+body.landing h1::before,
+body.edition-index h1::before { content: "» "; color: var(--amber); }
+body.landing .generated,
+body.edition-index .generated {
   font: 11px/1 "JetBrains Mono", monospace;
   color: var(--ink-faint);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   margin-bottom: 28px;
 }
-body.landing ul.deliverables {
+body.landing ul.deliverables,
+body.edition-index ul.deliverables {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -327,7 +333,8 @@ body.landing ul.deliverables {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
 }
-body.landing ul.deliverables li {
+body.landing ul.deliverables li,
+body.edition-index ul.deliverables li {
   background: var(--panel);
   border: 1px solid var(--rule);
   border-radius: 4px;
@@ -335,11 +342,13 @@ body.landing ul.deliverables li {
   position: relative;
   transition: border-color 0.15s, transform 0.15s;
 }
-body.landing ul.deliverables li:hover {
+body.landing ul.deliverables li:hover,
+body.edition-index ul.deliverables li:hover {
   border-color: var(--cyan);
   transform: translateY(-1px);
 }
-body.landing ul.deliverables li::before {
+body.landing ul.deliverables li::before,
+body.edition-index ul.deliverables li::before {
   content: "▪ MODULE";
   display: block;
   font: 600 10px/1 "JetBrains Mono", monospace;
@@ -347,19 +356,24 @@ body.landing ul.deliverables li::before {
   letter-spacing: 0.28em;
   margin-bottom: 8px;
 }
-body.landing ul.deliverables li.test::before { content: "▪ PROGRESS TEST"; color: var(--cyan); }
-body.landing ul.deliverables li.assessment::before { content: "▪ FINAL ASSESSMENT"; color: var(--green-led); }
-body.landing ul.deliverables a {
+body.landing ul.deliverables li.test::before,
+body.edition-index ul.deliverables li.test::before { content: "▪ PROGRESS TEST"; color: var(--cyan); }
+body.landing ul.deliverables li.assessment::before,
+body.edition-index ul.deliverables li.assessment::before { content: "▪ FINAL ASSESSMENT"; color: var(--green-led); }
+body.landing ul.deliverables a,
+body.edition-index ul.deliverables a {
   color: var(--ink);
   text-decoration: none;
   font-weight: 600;
   font-size: 16px;
 }
-body.landing ul.deliverables a::after {
+body.landing ul.deliverables a::after,
+body.edition-index ul.deliverables a::after {
   content: " →";
   color: var(--cyan);
 }
-body.landing ul.deliverables .meta {
+body.landing ul.deliverables .meta,
+body.edition-index ul.deliverables .meta {
   display: block;
   margin-top: 6px;
   color: var(--ink-dim);
