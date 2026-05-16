@@ -39,6 +39,25 @@ the parser never raises.
 `time-start` and `freq-start` are always literally `"0"` in DITA output
 and are not read from GLC.
 
+## Asset extension contract
+
+The `data_source/filename` element may name an asset of three kinds.
+The parser does not interpret the extension — it simply returns the
+basename — but downstream stages (`extract_to_csv.py`,
+`generate_dita.py`, see `dita-topic-schema.md` §1.2/§1.3) dispatch
+on it:
+
+| Extension | Semantics | Downstream rendering |
+|---|---|---|
+| `.png` / `.jpg` | Pre-rendered spectrogram screenshot living next to the `.glc` | Embedded inline as `<image>` in a gram-config table (§1.2) |
+| `.wav` | Raw audio; the on-PC GLC viewer renders the spectrogram live from it | The `.glc` is copied alongside its `.wav` and linked from the gram topic via `<xref href="*.glc">` (§1.3) so the viewer can open both |
+| anything else | Anomalous; not observed in the audited corpus | Row skipped, recorded in `skipped.txt` |
+
+Corpus distribution today (1,004 audited `.glc` files): ~82% `.png`,
+~18% `.wav`, no `.jpg` observed. The `.jpg` branch is supported
+defensively because the GLC viewer accepts it; no migration in
+flight has produced one yet.
+
 ## Tolerated deviations
 
 | Deviation | Behaviour |

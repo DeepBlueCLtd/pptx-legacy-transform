@@ -79,11 +79,16 @@ Each gram placeholder consists of:
     1,004-link corpus targets a `.glc` — no Lofar hyperlink ever
     targets a `.png`, `.wav`, or anything else directly.
   - The referenced `.glc` carries an inner
-    `data_source/filename` element that names the spectrogram asset
-    GAPS-Lite would render: usually a `.png` (~82% of files,
-    pre-rendered screenshot) and occasionally a `.wav` (~18%, raw
-    audio the legacy player would render live). That asset lives in
-    the same `Gram N\` folder as the `.glc`. See §1.6.
+    `data_source/filename` element that names the asset the on-PC
+    GLC viewer would render: usually a `.png` (~82% of files,
+    pre-rendered screenshot, also `.jpg` accepted), and occasionally
+    a `.wav` (~18%, raw audio the viewer renders live). That asset
+    lives in the same `Gram N\` folder as the `.glc`. The pipeline
+    dispatches on the extension: image assets are embedded inline in
+    the gram topic, audio assets are linked via the `.glc` (with both
+    `.glc` and `.wav` copied next to the topic) so the on-PC GLC
+    viewer can resolve the audio when a student opens the link.
+    See §1.6.
 
 ### 1.6 GLC File Structure
 
@@ -196,7 +201,7 @@ The CSV produced by Stage 2 has **one row per DITA topic**. A gram placeholder w
 | `time_end` | `271` | From GLC `bottom_crop` |
 | `freq_end` | `400` | From GLC `bandwidth` |
 | `png_path` | `./images/gram12_analysis.png` | |
-| `wav_treatment` | `screenshot` / `gaps-lite` / blank | WAV files only; filled by author in Stage 3 |
+| `wav_treatment` | (deprecated; left blank) | Retained for round-trip compatibility only — generator dispatches on the GLC inner asset extension, no author input required |
 | `warnings` | `GLC not found` | Blank if clean; multiple warnings comma-separated |
 
 ### 1.10 DITA Audience Filtering
@@ -478,15 +483,22 @@ python generate_dita.py --csv extracted.csv --out output/ --image-root "W:\train
 - Instructor-only image (analysis PNG)
 - `audience="-trainee"` on the topic itself or via ditaval
 
-**Per WAV row with `wav_treatment=gaps-lite`:** generate a stub topic with:
-- A note that this gram requires GAPS-Lite
-- An external link to the `.wav` file
-- A `warnings` comment in the XML noting manual review needed
+**Per GLC row whose inner `data_source/filename` is a `.wav`:** emit
+a plain `<xref>` block in the gram topic linking to the `.glc` (not
+the WAV directly), and copy both the `.glc` and the named `.wav`
+side-by-side into the per-gram folder. The on-PC GLC viewer (assumed
+installed on student PCs) opens the `.glc`, reads its `<filename>`
+element, and loads the adjacent `.wav` for aural analysis. No
+gram-config table and no `<image>` are emitted for these rows.
 
-**Per WAV row with `wav_treatment=screenshot`:** treat identically to a PNG row.
+**Per GLC row whose inner asset is missing or has an unrecognised
+extension** (anything other than `.png`, `.jpg`, `.wav`): skip
+generation, log a warning, and list the row in a `skipped.txt`
+report.
 
-**Per WAV row with `wav_treatment=TBD`:** skip generation, log an error, list in
-a `skipped.txt` report.
+The `wav_treatment` CSV column is retained for round-trip
+compatibility with older files but is no longer consulted — the
+generator dispatches purely on the asset extension.
 
 **Ditamap generation:**
 - One ditamap per publication (main + each test)

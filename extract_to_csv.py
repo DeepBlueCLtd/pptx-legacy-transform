@@ -346,7 +346,11 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             continue
         headers.append((shape, href))
 
-    # 2) Identify candidate Lofar boxes (text frame with at least one .glc/.wav run).
+    # 2) Identify candidate Lofar boxes (text frame with at least one .glc run).
+    # Every Lofar text-run hyperlink in the audited corpus targets a .glc;
+    # the .wav case is always one indirection deeper, inside the .glc's
+    # data_source/filename element (see high-level-spec.md §1.5). A .wav
+    # appearing directly here is anomalous and worth surfacing.
     candidates: list[tuple[object, list[tuple[str, str]]]] = []
     header_ids = {id(s) for s, _ in headers}
     for shape in leaves:
@@ -355,7 +359,16 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
         pairs = _run_hyperlinks_in_shape(shape)
         if not pairs:
             continue
-        keep = [(t, h) for t, h in pairs if h.lower().endswith((".glc", ".wav"))]
+        keep: list[tuple[str, str]] = []
+        for t, h in pairs:
+            lh = h.lower()
+            if lh.endswith(".glc"):
+                keep.append((t, h))
+            elif lh.endswith(".wav"):
+                LOGGER.warning(
+                    "Lofar text run hyperlinks directly to a .wav (%r); "
+                    "expected .glc — row dropped", h,
+                )
         if keep:
             candidates.append((shape, keep))
 
@@ -452,35 +465,31 @@ def gram_to_rows(
     for i, link in enumerate(gram.glc_links, start=1):
         warnings: list[str] = []
         href = link.href
-        is_wav = href.lower().endswith(".wav")
         glc_path = ""
         time_end = ""
         freq_end = ""
         png_path = ""
-        wav_treatment = ""
         display_text = link.display_text
-        if is_wav:
-            wav_treatment = ""
-            warnings.append("WAV link; treatment required")
-            png_path = resolve_asset_path(href, content_root, source_dir)
+        resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
+        if resolved is None:
+            warnings.append("GLC not found")
+            glc_path = href
         else:
-            resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
-            if resolved is None:
-                warnings.append("GLC not found")
-                glc_path = href
-            else:
-                glc_path = _rel_to_root(resolved, content_root)
-                glc = parse_glc(resolved)
-                warnings.extend(glc.warnings)
-                time_end = glc.time_end
-                freq_end = glc.freq_end
-                if glc.image_filename:
-                    # The PNG sits next to the GLC on disk. Resolve against
-                    # the GLC's directory so the path is image-root-relative
-                    # and the generator can copy it directly.
-                    png_path = resolve_asset_path(
-                        glc.image_filename, content_root, source_dir=resolved.parent,
-                    )
+            glc_path = _rel_to_root(resolved, content_root)
+            glc = parse_glc(resolved)
+            warnings.extend(glc.warnings)
+            time_end = glc.time_end
+            freq_end = glc.freq_end
+            if glc.image_filename:
+                # The inner asset (.png/.jpg pre-rendered spectrogram, or
+                # .wav for live render) sits next to the GLC on disk.
+                # Resolve against the GLC's directory so the path is
+                # image-root-relative and the generator can copy it
+                # directly (see dita-topic-schema.md §1.2/§1.3 for how
+                # the generator dispatches on the extension).
+                png_path = resolve_asset_path(
+                    glc.image_filename, content_root, source_dir=resolved.parent,
+                )
 
         rows.append({
             "publication": publication,
@@ -496,7 +505,7 @@ def gram_to_rows(
             "time_end": time_end,
             "freq_end": freq_end,
             "png_path": png_path,
-            "wav_treatment": wav_treatment,
+            "wav_treatment": "",
             "warnings": ", ".join(warnings),
         })
 

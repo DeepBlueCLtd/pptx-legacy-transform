@@ -85,6 +85,26 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(image.get("href"), "gram12.png",
                          "href must be topic-relative, not an outward path")
 
+    def test_image_present_in_generated_dita(self) -> None:
+        """Regression guard: the gramframe block must carry an <image> element
+        with a non-empty href pointing at a file that actually exists next to
+        the topic. Without this, the published HTML would render an empty
+        gram cell — the failure mode that motivated this test."""
+        _run(self.out)
+        gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+        topic = gram_dir / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        images = root.findall(".//image")
+        self.assertGreaterEqual(len(images), 1,
+                                "generated DITA must contain at least one <image>")
+        for img in images:
+            href = img.get("href")
+            self.assertTrue(href, f"<image> is missing href: {ET.tostring(img)!r}")
+            self.assertFalse(href.startswith(("/", "..")),
+                             f"image href must be topic-relative, got {href!r}")
+            self.assertTrue((gram_dir / href).is_file(),
+                            f"image file referenced by DITA is missing: {gram_dir / href}")
+
     def test_analysis_section_in_gram_topic(self) -> None:
         """Analysis assets are copied into the per-gram folder and the gram
         topic carries an instructor-only analysis section (PNG embedded as
@@ -185,26 +205,32 @@ class GenerateDitaTests(unittest.TestCase):
                           f"unexpected child {child.tag} in flat test ditamap")
         self.assertIsNone(root.find("topichead"))
 
-    def test_wav_gaps_lite_block_inside_gram_topic(self) -> None:
+    def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
+        """A GLC row whose inner asset is a .wav renders as a §1.3
+        GLC-viewer-link block: a plain <xref> to the .glc (so the
+        on-PC GLC viewer opens it and resolves the .wav next to it),
+        with no <image> and no gramframe table for that row."""
         _run(self.out)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
         self.assertTrue(topic.is_file())
-        text = topic.read_text(encoding="utf-8")
-        self.assertIn("MANUAL REVIEW", text)
         root = ET.parse(topic).getroot()
-        self.assertIsNotNone(root.find(".//note"))
+        # No gramframe table for this row (no pre-rendered spectrogram).
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
+        # No <image> either — the WAV is not a renderable image.
+        self.assertIsNone(root.find(".//image"))
         xref = root.find(".//xref")
-        self.assertIsNotNone(xref)
-        # The generator copies the WAV next to the topic, renamed to a
-        # slugified version of the source filename. The fixture WAV does
-        # not exist on disk, so no file is copied, but the href still
-        # reflects the intended local name so re-running with the asset
-        # present resolves the link without touching the topic XML.
-        self.assertEqual(xref.get("href"), "audio-clip.wav")
+        self.assertIsNotNone(xref, "WAV-typed GLC row must emit an <xref>")
+        # The href targets the .glc (slugified), not the .wav: the GLC
+        # viewer reads the .glc's <filename> element to find the audio.
+        self.assertEqual(xref.get("href"), "config.glc")
+        self.assertEqual(xref.get("format"), "glc")
+        self.assertEqual(xref.get("scope"), "local")
         self.assertEqual(xref.text, "Audio sample")
 
-    def test_skipped_report_emitted_for_tbd_wav(self) -> None:
-        # Build a CSV with a TBD WAV row.
+    def test_glc_row_without_classifiable_asset_is_skipped(self) -> None:
+        """A GLC row whose png_path is empty (or carries an extension
+        the generator cannot dispatch on) contributes no block to its
+        gram topic and is recorded in skipped.txt."""
         csv_path = TMP / f"{self._testMethodName}.csv"
         cols = generate_dita.CSV_COLUMNS
         rows = [
@@ -216,8 +242,10 @@ class GenerateDitaTests(unittest.TestCase):
             "topic_type": "glc", "sequence": "1",
             "topic_filename": "gram_05.dita",
             "display_text": "Audio sample",
-            "link_href": "supporting/gram05/audio_clip.wav",
-            "wav_treatment": "TBD",
+            "link_href": "supporting/gram05/config.glc",
+            "glc_path": "supporting/gram05/config.glc",
+            # png_path left empty — the .glc parse failed to yield an
+            # inner asset filename, so there's nothing to dispatch on.
         })
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(cols),
@@ -227,14 +255,97 @@ class GenerateDitaTests(unittest.TestCase):
                 w.writerow(r)
         _run(self.out, csv_path=csv_path)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
-        # The TBD row contributes no gramframe block, but with no other rows
-        # for this gram the topic still renders (empty body bar the title).
+        # The skipped row contributes no block, but the gram topic still
+        # renders (empty body bar the title).
         self.assertTrue(topic.is_file())
         root = ET.parse(topic).getroot()
         self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
         skipped = self.out / "skipped.txt"
         self.assertTrue(skipped.is_file())
         self.assertIn("Gram 05", skipped.read_text(encoding="utf-8"))
+
+    def test_glc_inner_wav_copies_glc_and_wav_pair(self) -> None:
+        """End-to-end happy path for the §1.3 GLC-viewer-link contract:
+        when both the .glc and the named .wav exist on disk, the
+        generator copies both into the per-gram folder under slugified
+        names, byte-identical to the source, so the on-PC GLC viewer
+        can resolve the audio. Covers the success branches that
+        ``test_glc_inner_wav_renders_as_glc_viewer_link`` skips
+        (fixture .glc/.wav are missing there, so the copy is a no-op)."""
+        glc_src = TMP / "wav_pair_src" / "supporting" / "gram07" / "config.glc"
+        wav_src = TMP / "wav_pair_src" / "supporting" / "gram07" / "audio_clip.wav"
+        glc_src.parent.mkdir(parents=True, exist_ok=True)
+        glc_src.write_bytes(b"<GAPS_Lite_configuration/>")
+        wav_src.write_bytes(b"RIFF\x00\x00\x00\x00WAVEfmt ")
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 07", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_07.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram07/config.glc",
+            "glc_path": "supporting/gram07/config.glc",
+            "png_path": "supporting/gram07/audio_clip.wav",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path, image_root=TMP / "wav_pair_src")
+        gram_dir = self.out / "main" / "arctic-survey" / "gram-07"
+        glc_copy = gram_dir / "config.glc"
+        wav_copy = gram_dir / "audio-clip.wav"
+        self.assertTrue(glc_copy.is_file(), "the .glc must be copied next to the topic")
+        self.assertTrue(wav_copy.is_file(),
+                        "the companion .wav must travel with the .glc so the "
+                        "on-PC viewer can resolve it")
+        self.assertEqual(glc_copy.read_bytes(), glc_src.read_bytes())
+        self.assertEqual(wav_copy.read_bytes(), wav_src.read_bytes())
+        # And the topic's xref must point at the slugified .glc.
+        topic = gram_dir / "gram_07.dita"
+        root = ET.parse(topic).getroot()
+        xref = root.find(".//xref")
+        self.assertIsNotNone(xref)
+        self.assertEqual(xref.get("href"), "config.glc")
+        self.assertEqual(xref.get("format"), "glc")
+
+    def test_glc_row_with_unsupported_extension_is_skipped(self) -> None:
+        """The dispatch must reject any extension that is neither image
+        (.png/.jpg/.jpeg) nor .wav — including plausible-looking ones
+        like .bmp or .pdf — and record the skip with the offending
+        extension in the reason so the technical author can triage."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 08", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_08.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram08/config.glc",
+            "glc_path": "supporting/gram08/config.glc",
+            "png_path": "supporting/gram08/spectrogram.bmp",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "arctic-survey" / "gram-08" / "gram_08.dita"
+        self.assertTrue(topic.is_file())
+        root = ET.parse(topic).getroot()
+        self.assertIsNone(root.find(".//image"))
+        self.assertIsNone(root.find(".//xref"))
+        skipped = (self.out / "skipped.txt").read_text(encoding="utf-8")
+        self.assertIn("Gram 08", skipped)
+        self.assertIn(".bmp", skipped,
+                      "the skip reason should name the rejected extension")
 
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)

@@ -19,15 +19,29 @@ All output files are:
 
 One DITA topic per gram. The body groups everything for that gram into
 a single page: the instructor-only Analysis Sheet section first, then
-one block per `.glc` (or WAV) link beneath the gram header in the
-source PPTX, in `sequence` order.
+one block per `.glc` link beneath the gram header in the source PPTX,
+in `sequence` order.
 
 A gram with N `.glc` links and one analysis sheet therefore produces
 **one** `gram_NN.dita` file containing one analysis section plus N
-GramFrame tables — not N+1 DITA topics. The CSV still carries N+1
+per-GLC blocks — not N+1 DITA topics. The CSV still carries N+1
 rows per gram (one per `topic_type=glc` row and one for
 `topic_type=analysis`); the generator groups them by
 `(publication, chapter, gram_id)` and folds them into one topic.
+
+Each `topic_type=glc` row produces one of two block shapes, chosen
+by the extension of the asset named by the GLC's inner
+`data_source/filename` (carried through the CSV in `png_path`):
+
+| GLC inner filename ends in | Block shape | Asset copied into gram folder |
+|---|---|---|
+| `.png` / `.jpg` | §1.2 GramFrame table embedding the image | The image file |
+| `.wav` | §1.3 GLC-viewer link | Both the `.glc` and the referenced `.wav` |
+| anything else | row skipped (§2) | none |
+
+The split is automatic and driven by file extension; the legacy
+`wav_treatment` CSV column is retained for round-trip compatibility
+only and is ignored by the generator (see csv-schema.md §column 15).
 
 ```xml
 <topic id="gram_NN">
@@ -40,7 +54,7 @@ rows per gram (one per `topic_type=glc` row and one for
       <p><xref href="{slug}.docx" format="docx" scope="local">Analysis Sheet</xref></p>
     </section>
 
-    <section>                            <!-- §1.2 GramFrame, repeats per .glc -->
+    <section>                            <!-- §1.2 GramFrame, when GLC names a PNG/JPG -->
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1"/>
@@ -60,9 +74,8 @@ rows per gram (one per `topic_type=glc` row and one for
       </table>
     </section>
 
-    <section>                            <!-- §1.3 GAPS-Lite stub, optional -->
-      <note>This gram requires GAPS-Lite playback.</note>
-      <p><xref href="{slug}.wav" format="wav" scope="local">{display_text}</xref></p>
+    <section>                            <!-- §1.3 GLC-viewer link, when GLC names a WAV -->
+      <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
     </section>
   </body>
 
@@ -71,10 +84,6 @@ rows per gram (one per `topic_type=glc` row and one for
   </related-links>
 </topic>
 ```
-
-When any GAPS-Lite stub is present the topic file is prefixed with a
-`<!-- MANUAL REVIEW: GAPS-Lite required -->` comment so the
-technical author can find it later.
 
 ### 1.1 Analysis-sheet section
 
@@ -94,9 +103,9 @@ The `slug` is the slug of the *source* filename (e.g. `Analysis Sheet.docx`
 ### 1.2 GramFrame table block
 
 One `<table outputclass="gram-config">` per `topic_type="glc"` row
-whose `wav_treatment` is empty (treated as a normal GLC screenshot
-row) or `screenshot`. The shape is exactly what
-`gramframe.bundle.js` expects after DITA-OT renders it; see
+whose inner-GLC asset is a still image (i.e. `png_path` ends in
+`.png` or `.jpg`). The shape is exactly what `gramframe.bundle.js`
+expects after DITA-OT renders it; see
 [`gramframe.md`](./gramframe.md) for the rendered-HTML contract and the
 reason the two `<colspec>` elements are not optional.
 
@@ -110,28 +119,45 @@ Placeholders:
 | `time_end` | CSV column; if empty, literal `""` is written |
 | `freq_end` | CSV column; if empty, literal `""` is written |
 
-### 1.3 GAPS-Lite WAV stub block
+### 1.3 GLC-viewer link block
 
-One stub block per `topic_type="glc"` row with
-`wav_treatment="gaps-lite"`. The WAV referenced by the row's
-`png_path` column (with `link_href` and `glc_path` retained as
-fallbacks for older CSVs) is copied into the per-gram folder and
-slug-renamed (see §10). `scope="local"` records that the WAV sits
-inside the publication, even though the player is invoked externally
-via GAPS-Lite. The `<xref>` element's visible text comes from
-`display_text`; the extractor never conflates the two:
+One `<xref>` block per `topic_type="glc"` row whose inner-GLC asset is
+audio (i.e. `png_path` ends in `.wav`). The block is a single
+paragraph linking to the `.glc` file:
+
+```xml
+<section>
+  <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
+</section>
+```
+
+The student PC has a GLC-viewer application installed which opens the
+`.glc` file, reads its inner `data_source/filename`, and loads the
+named `.wav` from disk for aural analysis. The viewer expects the
+WAV to sit next to the GLC (the `<filename>` element carries only a
+bare filename, not a path), so the generator copies **both** files
+into the per-gram folder under their slugified names (§10) — the
+`.glc` becomes the topic-relative `xref` target, and the `.wav`
+travels with it so the viewer can resolve it.
+
+No `<image>` is emitted for these rows: there is no pre-rendered
+spectrogram to embed, and the gram-config table's time/freq metadata
+already lives inside the GLC for the viewer to consume directly.
+
 `display_text` is the human-readable label exactly as it appeared in
-the PPTX run, while `link_href` is the raw URI from the PPTX
-hyperlink.
+the PPTX run (e.g. `"Lofar 1"`), distinct from `link_href` which is
+the raw URI from the PPTX hyperlink.
 
 ## 2. Skipped rows
 
-Rows with `wav_treatment="TBD"`, empty `wav_treatment` on a WAV-typed
-row, or any unknown `wav_treatment` contribute no block to their
-gram's DITA topic. They are recorded one-per-line in `skipped.txt`:
+A `topic_type="glc"` row contributes no block to its gram topic when
+its asset cannot be classified — i.e. `png_path` is empty, the
+referenced file is missing, or its extension is none of `.png`,
+`.jpg`, or `.wav`. Each skip is recorded one-per-line in
+`skipped.txt`:
 
 ```
-publication=main chapter=arctic-survey gram_id="Gram 05" topic_type=glc sequence=1 reason="wav_treatment is TBD"
+publication=main chapter=arctic-survey gram_id="Gram 05" topic_type=glc sequence=1 reason="png_path missing"
 ```
 
 The gram topic still renders provided at least one other row for the
@@ -251,19 +277,25 @@ past 99).
 
 The DITA-writing phase is responsible for materialising a
 self-contained publication tree. For every topic that references an
-external asset (PNG screenshot, WAV file, or analysis sheet), the
-generator:
+external asset (image screenshot, GLC + WAV pair, or analysis sheet),
+the generator:
 
 1. Resolves the source path as `--image-root` joined with the relevant
-   CSV column. For all three topic shapes (§1, §2, §3) this is
-   `png_path` — the extractor resolves the asset path against the
-   image root so the generator can copy it blindly. `link_href` and
-   `glc_path` are retained as fallbacks for older CSVs.
-2. Copies the source file into the topic's per-gram folder (`gram-NN/`).
+   CSV column. For image and analysis blocks the asset path comes
+   from `png_path` (the extractor resolves it against the image
+   root so the generator can copy it blindly). For §1.3 GLC-viewer
+   blocks the `.glc` itself is resolved from `glc_path` and the
+   companion `.wav` from `png_path` — the pair is copied side-by-side
+   so the on-PC GLC viewer can read its `<filename>` element and
+   find the audio next to it.
+2. Copies the source file(s) into the topic's per-gram folder (`gram-NN/`).
 3. Renames the copy to a slug of the *source* filename, preserving the
    original extension lower-cased. For example, the asset referenced
    by `gram_12_lofar1.dita` whose source is `Lofar 1 ABC.PNG` is
-   copied to `gram-12/lofar-1-abc.png`.
+   copied to `gram-12/lofar-1-abc.png`. A WAV-typed GLC row whose
+   sources are `Lofar 1 I.glc` and `Lofar 1 I.wav` copies both files
+   to `gram-NN/lofar-1-i.glc` and `gram-NN/lofar-1-i.wav` so they
+   stay paired by basename.
 4. Uses the bare local filename as the topic's `href`. References
    never traverse out of the per-gram directory.
 
