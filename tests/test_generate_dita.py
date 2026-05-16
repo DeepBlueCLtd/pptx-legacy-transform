@@ -454,6 +454,23 @@ class GenerateDitaTests(unittest.TestCase):
             result.extend(self._collect_diffs(sub))
         return result
 
+    def test_trainee_ditaval_emitted_with_exact_bytes(self) -> None:
+        """``publish_html.py`` aborts unless ``<dita>/trainee.ditaval`` exists
+        with the audience-exclude rule, so the generator must produce it
+        every run — even after ``--clean`` wipes the tree."""
+        _run(self.out)
+        ditaval = self.out / "trainee.ditaval"
+        self.assertTrue(ditaval.is_file(), f"missing {ditaval}")
+        self.assertEqual(
+            ditaval.read_text(encoding="utf-8"),
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<val>\n'
+            '  <prop att="audience" val="-trainee" action="exclude"/>\n'
+            '</val>\n',
+        )
+        manifest_lines = (self.out / "manifest.txt").read_text(encoding="utf-8").splitlines()
+        self.assertIn("trainee.ditaval", manifest_lines)
+
     def test_manifest_lists_every_output_file(self) -> None:
         _run(self.out)
         manifest = self.out / "manifest.txt"

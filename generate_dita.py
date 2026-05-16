@@ -617,6 +617,26 @@ def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path
 # Reports
 # -----------------------------------------------------------------------------
 
+TRAINEE_DITAVAL = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<val>\n'
+    '  <prop att="audience" val="-trainee" action="exclude"/>\n'
+    '</val>\n'
+)
+
+
+def write_trainee_ditaval(out_dir: Path) -> Path:
+    """Emit the DITAVAL profile that the student edition filters with.
+
+    DITA elements authored for instructor-only content carry
+    ``audience="-trainee"``; ``publish_html.py`` requires this file to
+    exist next to the ditamaps and refuses to build otherwise.
+    """
+    path = out_dir / "trainee.ditaval"
+    path.write_text(TRAINEE_DITAVAL, encoding="utf-8", newline="\n")
+    return path
+
+
 def write_manifest(out_dir: Path, files: list[Path]) -> Path:
     """Write ``manifest.txt`` listing every produced file (sorted)."""
     manifest_path = out_dir / "manifest.txt"
@@ -695,7 +715,10 @@ def main(argv: Iterable[str] | None = None) -> int:
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
 
-    manifest_path = write_manifest(args.out, written + ditamap_paths)
+    ditaval_path = write_trainee_ditaval(args.out)
+    LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
+
+    manifest_path = write_manifest(args.out, written + ditamap_paths + [ditaval_path])
     LOGGER.info("Wrote manifest %s", manifest_path)
 
     skipped_path = write_skipped_report(args.out, skipped)
