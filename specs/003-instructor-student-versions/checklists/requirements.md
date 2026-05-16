@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,14 +31,15 @@
 
 ## Notes
 
-- One open clarification remaining in the **Edge Cases** section concerning
-  the treatment of chapter navtitles in `main.ditamap` that currently
-  contain the word "Instructor" (e.g. "Instructor Week 1 Grams"). The
-  default assumption — leave unchanged in both editions — is documented
-  in the Assumptions section. Resolve via `/speckit-clarify` before
-  `/speckit-plan` if the default is not acceptable.
+- Chapter-navtitle clarification (Q1) resolved on 2026-05-16: Option C —
+  the leading "Instructor " is stripped from both displayed navtitle and
+  chapter folder slug in the student edition, while the instructor
+  edition retains the source-derived navtitles and slugs unchanged.
+  The student edition therefore contains no "Instructor" string in any
+  rendered text *or* URL path (FR-010, FR-013, SC-002). The cost of this
+  choice — divergent URL paths between editions for affected chapters —
+  is acknowledged in FR-014 and in the Edge Cases section.
 - The spec deliberately treats DITA-OT, the `audience` attribute, and
   DITAVAL profile mechanics as implementation details — they appear in
   Assumptions for context, not in Requirements or Success Criteria.
-- Items marked incomplete require spec updates before `/speckit-clarify`
-  or `/speckit-plan`.
+- Spec is ready for `/speckit-plan`. No remaining open clarifications.
