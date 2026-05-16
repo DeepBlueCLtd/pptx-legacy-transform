@@ -217,7 +217,7 @@ with the heading `"Gram 01"` only and no Analysis Sheet section.
   `test_publish_html.py` should pass (including T007 and T008 added
   earlier). Pre-existing tests for feature 001 must also still pass
   (FR-012 / SC-008).
-- [ ] T018 [US1] Run `python publish_html.py --dita dita/ --out html/
+- [X] T018 [US1] Run `python publish_html.py --dita dita/ --out html/
   --dita-ot <path>` against the full corpus, then `npm install &&
   npm test`. All four Jest tests added in T009 must pass. Confirms
   the student edition satisfies SC-001 / SC-002 / SC-003 against the
@@ -283,7 +283,7 @@ its Analysis Sheet section.
 
 ### Verification for User Story 2
 
-- [ ] T023 [US2] Re-run `python -m unittest discover tests/` + `npm
+- [X] T023 [US2] Re-run `python -m unittest discover tests/` + `npm
   test`. All tests green, including T019 and T020 from above. Spot-
   check by opening
   `html/instructor/main/progress-final-assessment-grams/gram-01/gram_01.html`
@@ -361,7 +361,7 @@ publication, reach the same rendered topic tree US1 and US2 produced.
 
 ### Verification for User Story 3
 
-- [ ] T029 [US3] Re-run `python -m unittest discover tests/` + `npm
+- [X] T029 [US3] Re-run `python -m unittest discover tests/` + `npm
   test`. All tests green. Open `html/index.html` in a browser:
   confirm both editions are reachable from the top-level page in one
   click each (SC-004).
@@ -402,7 +402,7 @@ validation.
   a short note that the old top-level `html/main/`, `html/progress-test-N/`
   paths no longer exist (R8) — the new shared landing at
   `html/index.html` is the authoritative entry point.
-- [ ] T034 Run the complete quickstart at
+- [X] T034 Run the complete quickstart at
   `specs/003-instructor-student-versions/quickstart.md` end-to-end
   against the full corpus. Walk through §4.1 through §4.8 (every
   SC-001 … SC-008 verification) and tick each off. Capture any
