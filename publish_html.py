@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -252,6 +253,7 @@ def write_root_index(out_root: Path, entries: list[tuple[str, str]]) -> None:
         f'      <li><a href="{_escape(href)}/index.html">{_escape(title)}</a></li>'
         for title, href in entries
     )
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     out_root.joinpath("index.html").write_text(
         '<!DOCTYPE html>\n'
         '<html lang="en">\n'
@@ -261,6 +263,7 @@ def write_root_index(out_root: Path, entries: list[tuple[str, str]]) -> None:
         '  </head>\n'
         '  <body>\n'
         '    <h1>Published DITA output</h1>\n'
+        f'    <p>Generated {generated}</p>\n'
         '    <ul>\n'
         f'{items}\n'
         '    </ul>\n'
