@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import io
 import random
+import shutil
 import struct
 import sys
 import wave
@@ -207,7 +208,14 @@ def _png_chunk(tag: bytes, data: bytes) -> bytes:
 
 
 def emit_png(path: Path, *, width: int = 8, height: int = 8, shade: int = 200) -> None:
-    """Write a tiny valid grayscale PNG using only stdlib (no Pillow)."""
+    """Write a tiny valid grayscale PNG using only stdlib (no Pillow).
+
+    Used as the deterministic fallback when ``MOCK_SPECTROGRAMS_DIR`` is
+    missing — the synthetic block is enough to keep the pipeline tests
+    self-contained, but it renders as a near-invisible square in the
+    browser. Prefer :func:`emit_spectrogram` for any output that will be
+    inspected visually (gh-pages demo, screenshots, etc.).
+    """
     sig = b"\x89PNG\r\n\x1a\n"
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)  # 8-bit grayscale
     raw = b""
@@ -220,6 +228,35 @@ def emit_png(path: Path, *, width: int = 8, height: int = 8, shade: int = 200) -
         fh.write(_png_chunk(b"IHDR", ihdr))
         fh.write(_png_chunk(b"IDAT", idat))
         fh.write(_png_chunk(b"IEND", b""))
+
+
+MOCK_SPECTROGRAMS_DIR = Path(__file__).resolve().parent / "mock_pptx_data"
+SPECTROGRAM_VARIANT_COUNT = 4
+
+
+def _pick_variant(stem: str) -> int:
+    """Map a filename stem onto one of the ``SPECTROGRAM_VARIANT_COUNT``
+    pre-baked spectrogram variants. Deterministic so two consecutive
+    mock-corpus runs produce byte-identical assets (R9 idempotency)."""
+    return zlib.adler32(stem.encode("utf-8")) % SPECTROGRAM_VARIANT_COUNT
+
+
+def emit_spectrogram(path: Path) -> None:
+    """Copy one of the pre-baked spectrogram variants to ``path``.
+
+    The variant is chosen by ``_pick_variant`` so every gram-and-Lofar
+    pair gets a stable, visually distinct image across runs. Falls back
+    to a synthetic placeholder when the asset dir is absent (bare-clone
+    tests, packaged distributions without the data dir, etc.) so the
+    pipeline still runs end-to-end.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    variant = _pick_variant(path.stem)
+    source = MOCK_SPECTROGRAMS_DIR / f"spectrogram-{variant}.png"
+    if source.is_file():
+        shutil.copy2(source, path)
+        return
+    emit_png(path, width=8, height=8, shade=120 + variant * 30)
 
 
 def emit_wav(path: Path, *, duration_s: float = 0.1, framerate: int = 8000) -> None:
@@ -356,7 +393,7 @@ def _build_lofars(
         emit_glc(glc_path, image_filename=media_path.name,
                  time_end=time_end, freq_end=freq_end)
         if media_kind == "png":
-            emit_png(media_path, shade=120 + (i * 20) % 100)
+            emit_spectrogram(media_path)
         else:
             emit_wav(media_path)
         lofars.append(LofarSpec(
@@ -380,7 +417,7 @@ def _emit_analysis_sheet(
         emit_docx(gram_folder / name, title=title)
     else:
         name = "Analysis.png"
-        emit_png(gram_folder / name, width=16, height=16, shade=240)
+        emit_spectrogram(gram_folder / name)
     return f"{rel_folder_from_pptx}/{name}"
 
 

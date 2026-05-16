@@ -156,8 +156,8 @@ the output tree is deleted before writing on each run.
   total skipped, total errors).
 - WARNING: image not found at the resolved `png_path`; row uses the
   empty time/freq values.
-- ERROR: row skipped (per `wav_treatment=TBD` rule); CSV missing or
-  malformed.
+- ERROR: row skipped (GLC inner asset missing or unrecognised
+  extension); CSV missing or malformed.
 
 ---
 

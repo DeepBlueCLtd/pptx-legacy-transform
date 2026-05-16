@@ -15,9 +15,13 @@ toolchain (Oxygen) renders in both an instructor profile and a
 trainee profile. Each gram has a title with vessel name, a hyperlinked
 analysis sheet, and one or more `Lofar`-labelled hyperlinks that
 **always** point to a `.glc` configuration file. The `.glc` in turn
-references a sibling `.png` (a pre-rendered spectrogram, ~82% of
-files) or `.wav` (raw audio that GAPS-Lite would have rendered live,
-~18%). The pipeline extracts those into an intermediate CSV, lets the
+references a sibling asset: usually a `.png` / `.jpg` (~82%,
+pre-rendered spectrogram), occasionally a `.wav` (~18%, raw audio
+rendered live by the on-PC GLC viewer). The generator dispatches on
+the inner asset extension: image assets are embedded inline, audio
+assets are surfaced as a link to the `.glc` (with both `.glc` and
+`.wav` copied next to the topic so the viewer can resolve the audio).
+The pipeline extracts everything into an intermediate CSV, lets the
 technical author triage warnings in Excel, then emits the deterministic
 DITA tree.
 
@@ -110,12 +114,12 @@ A more detailed walkthrough lives in
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,
-   - set `wav_treatment` for every WAV row (`screenshot`, `gaps-lite`,
-     or `TBD` if undecided),
    - resolve any rows whose `warnings` column is non-empty,
    - save back as UTF-8 CSV (not `.xlsx`).
    The CSV's UTF-8-with-BOM and CRLF format keeps Excel's encoding
-   detection happy.
+   detection happy. The `wav_treatment` column is deprecated and
+   ignored — the generator dispatches on the GLC's inner asset
+   extension, no author decision is required.
 
 5. **Stage 5 — DITA generation.** `generate_dita.py` consumes the
    signed-off CSV and writes a self-contained DITA tree: each topic
@@ -153,12 +157,12 @@ Reviewers should not edit the identity columns
 | 6 | `sequence` | no | 1-based per gram, scoped per `topic_type`. |
 | 7 | `topic_filename` | no | `gram_NN_lofarM.dita` or `gram_NN_analysis.dita`. |
 | 8 | `display_text` | yes (rare) | Human-readable link label from the PPTX run. |
-| 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run (`.glc`, `.wav`, or other). Source of truth for WAV detection and the stub topic's `xref href`. |
-| 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder; empty for WAV rows. |
+| 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run; always a `.glc` in the audited corpus. |
+| 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
 | 11 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
 | 12 | `freq_end` | yes | From GLC `bandwidth`; numeric string. |
-| 13 | `png_path` | yes | Resolved relative to the source folder. |
-| 14 | `wav_treatment` | yes | `screenshot`, `gaps-lite`, `TBD`, or empty. |
+| 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
+| 14 | `wav_treatment` | yes | Deprecated; left blank. Retained only for CSV round-trip compatibility. |
 | 15 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
 
 ### Editing the CSV in Excel — what can go wrong
@@ -212,8 +216,7 @@ When a test fails on the air-gapped network:
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | `GLC missing bottom_crop` / `bandwidth` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `freq_end` directly or accept the empty defaults. |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
-| `WAV link; treatment required` warning. | A WAV-targeted link with no `wav_treatment`. | Author sets `wav_treatment` to one of `screenshot`, `gaps-lite`, or `TBD`. |
-| Generator produces `skipped.txt` rows. | `wav_treatment=TBD`, empty, or unknown (R8). | Either set the treatment to `screenshot` / `gaps-lite`, or accept the skip. |
+| Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 
 ## Publishing to HTML (optional)
 

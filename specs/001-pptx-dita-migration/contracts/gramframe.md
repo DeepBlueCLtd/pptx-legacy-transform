@@ -115,21 +115,16 @@ four GramFrame viewers stacked vertically — one per spectrogram.
 
 All `Lofar` hyperlinks in the PPTX corpus target `.glc` files; none
 target `.wav` directly. About 18% of the `.glc` files, however,
-configure GAPS-Lite to render a fresh spectrogram from a sibling
-`.wav` rather than displaying a pre-rendered `.png`. These rows carry
-a `.wav` path in `png_path` and the author's Stage 3 decision in
-`wav_treatment`:
-
-- `wav_treatment="screenshot"` — the pipeline (or the author
-  upstream) has supplied a pre-rendered PNG of the spectrogram and
-  `png_path` points at that PNG; the row produces a normal
-  GramFrame table.
-- `wav_treatment="gaps-lite"` — leave a non-GramFrame stub inside
-  the gram topic (a `<note>` plus an `<xref format="wav">`) so the
-  WAV is reachable but no GramFrame viewer is emitted.
-- `wav_treatment="TBD"` or empty — the row is recorded in
-  `skipped.txt` until the author decides.
+configure the on-PC GLC viewer to render a fresh spectrogram from a
+sibling `.wav` rather than displaying a pre-rendered image. These
+rows do not produce a GramFrame table — there is no static
+spectrogram to embed. Instead the generator emits an `<xref>`
+linking to the `.glc` and copies both the `.glc` and the named
+`.wav` into the per-gram folder (see
+[`dita-topic-schema.md`](./dita-topic-schema.md) §1.3). When a
+student opens the link the on-PC GLC viewer loads the `.glc`, finds
+the `.wav` next to it, and renders the spectrogram interactively.
 
 The bundle ignores anything that is not a `table.gram-config`, so the
-stub blocks render as plain HTML next to the GramFrame viewers
-without interference.
+GLC-viewer-link blocks render as plain HTML next to the GramFrame
+viewers without interference.

@@ -182,12 +182,12 @@ def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
 # XML emission
 # -----------------------------------------------------------------------------
 
-def _serialise(root: ET.Element, leading: str = "") -> str:
+def _serialise(root: ET.Element) -> str:
     """Serialise ``root`` to a UTF-8 XML string with LF endings, no preamble."""
     body = ET.tostring(root, encoding="unicode")
     # ElementTree uses self-closing for empty elements; that matches the
     # contract examples (e.g. <image .../>, <link .../>).
-    return f"{leading}{body}\n"
+    return f"{body}\n"
 
 
 def _append_gramframe_table(
@@ -255,18 +255,24 @@ def _append_analysis_section(
         xref.text = "Analysis Sheet"
 
 
-def _append_wav_stub(
-    parent: ET.Element, wav_href: str, display_text: str,
+def _append_glc_viewer_link(
+    parent: ET.Element, glc_href: str, display_text: str,
 ) -> None:
-    """Append a GAPS-Lite stub block (note + WAV xref) to the gram body."""
+    """Append a GLC-viewer link block (§1.3) to the gram body.
+
+    Emitted instead of a GramFrame table when the GLC's inner
+    ``data_source/filename`` is a ``.wav``: there is no pre-rendered
+    spectrogram to embed, so the gram page links to the ``.glc`` itself
+    and the on-PC GLC viewer reads the file and resolves the adjacent
+    ``.wav`` for live aural analysis. The companion ``.wav`` is copied
+    next to the ``.glc`` by the caller.
+    """
     section = ET.SubElement(parent, "section")
-    note = ET.SubElement(section, "note")
-    note.text = "This gram requires GAPS-Lite playback."
     p = ET.SubElement(section, "p")
     xref = ET.SubElement(p, "xref", {
-        "href": wav_href, "format": "wav", "scope": "local",
+        "href": glc_href, "format": "glc", "scope": "local",
     })
-    xref.text = display_text or wav_href
+    xref.text = display_text or glc_href
 
 
 def emit_gram_topic(
@@ -278,16 +284,20 @@ def emit_gram_topic(
 
     1. The analysis-sheet section (DOCX link or embedded PNG), once,
        wrapped with ``audience="-trainee"``.
-    2. One GramFrame table per ``topic_type="glc"`` row (the screenshot
-       grams), in CSV ``sequence`` order. Each table is the shape the
-       ``gramframe.bundle.js`` browser plugin recognises.
-    3. One GAPS-Lite stub block per ``wav_treatment="gaps-lite"`` row,
-       inline with the GramFrame tables in the same sequence order.
+    2. One block per ``topic_type="glc"`` row, in CSV ``sequence``
+       order. The block shape is chosen by the extension of the asset
+       named inside the ``.glc`` (carried through as ``png_path``):
 
-    Rows with ``wav_treatment="TBD"``, empty treatment on a WAV link,
-    or any unknown treatment are skipped — they contribute no block to
-    the gram but the gram topic still renders the rest. If any GAPS-Lite
-    block is emitted the topic gets a leading ``MANUAL REVIEW`` comment.
+       - ``.png`` / ``.jpg`` → GramFrame ``gram-config`` table
+         embedding the image (`dita-topic-schema.md` §1.2). This is
+         the shape `gramframe.bundle.js` recognises.
+       - ``.wav`` → an ``<xref>`` linking to the ``.glc`` itself
+         (§1.3); both the ``.glc`` and the named ``.wav`` are copied
+         into the per-gram folder so the on-PC GLC viewer can find
+         the audio when a student opens the link.
+
+    Rows whose ``png_path`` is empty or carries any other extension
+    are skipped with a warning recorded in ``skipped.txt``.
     """
     analysis_rows = [r for r in gram_rows if r["topic_type"] == "analysis"]
     glc_rows = [r for r in gram_rows if r["topic_type"] == "glc"]
@@ -309,7 +319,6 @@ def emit_gram_topic(
 
     written: list[Path] = []
     skipped: list[dict] = []
-    needs_review = False
 
     if analysis_rows:
         analysis_row = analysis_rows[0]
@@ -321,27 +330,11 @@ def emit_gram_topic(
         _append_analysis_section(body, href)
 
     for row in glc_rows:
-        treatment = (row.get("wav_treatment") or "").strip().lower()
-        link_href = row.get("link_href", "") or ""
-        is_wav_link = (not row.get("glc_path")) and (
-            link_href.lower().endswith(".wav") or bool(treatment)
-        )
+        png_path = row.get("png_path", "") or ""
+        asset_suffix = Path(png_path).suffix.lower()
 
-        if treatment == "gaps-lite":
-            wav_relpath = (
-                row.get("png_path", "") or link_href or row.get("glc_path", "")
-            )
-            wav_href, copied = copy_asset(wav_relpath, image_root, topic_dir)
-            if copied is not None:
-                written.append(copied)
-            _append_wav_stub(body, wav_href, row.get("display_text", ""))
-            needs_review = True
-            continue
-
-        if treatment in ("", "screenshot") and not is_wav_link:
-            image_href, copied = copy_asset(
-                row.get("png_path", ""), image_root, topic_dir,
-            )
+        if asset_suffix in (".png", ".jpg", ".jpeg"):
+            image_href, copied = copy_asset(png_path, image_root, topic_dir)
             if copied is not None:
                 written.append(copied)
             _append_gramframe_table(
@@ -350,24 +343,30 @@ def emit_gram_topic(
             )
             continue
 
-        if treatment == "screenshot":
-            image_href, copied = copy_asset(
-                row.get("png_path", ""), image_root, topic_dir,
-            )
-            if copied is not None:
-                written.append(copied)
-            _append_gramframe_table(
-                body, image_href,
-                row.get("time_end", ""), row.get("freq_end", ""),
-            )
+        if asset_suffix == ".wav":
+            glc_path = row.get("glc_path", "") or ""
+            if not glc_path:
+                reason = "wav-typed GLC row has no glc_path to link to"
+                LOGGER.error(
+                    "Skipping row %s/%s/%s seq=%s: %s",
+                    row["publication"], row["gram_id"], row["topic_type"],
+                    row["sequence"], reason,
+                )
+                skipped.append(_skip_record(row, reason))
+                continue
+            glc_href, glc_copied = copy_asset(glc_path, image_root, topic_dir)
+            wav_href, wav_copied = copy_asset(png_path, image_root, topic_dir)
+            if glc_copied is not None:
+                written.append(glc_copied)
+            if wav_copied is not None:
+                written.append(wav_copied)
+            _append_glc_viewer_link(body, glc_href, row.get("display_text", ""))
             continue
 
-        if treatment == "":
-            reason = "wav_treatment is empty"
-        elif treatment == "tbd":
-            reason = "wav_treatment is TBD"
+        if not png_path:
+            reason = "png_path missing"
         else:
-            reason = f"unknown wav_treatment {treatment!r}"
+            reason = f"unsupported asset extension {asset_suffix!r}"
         LOGGER.error(
             "Skipping row %s/%s/%s seq=%s: %s",
             row["publication"], row["gram_id"], row["topic_type"],
@@ -378,8 +377,7 @@ def emit_gram_topic(
     related = ET.SubElement(topic, "related-links")
     ET.SubElement(related, "link", {"href": "../gram-index.dita", "format": "dita"})
 
-    leading = "<!-- MANUAL REVIEW: GAPS-Lite required -->\n" if needs_review else ""
-    topic_path.write_text(_serialise(topic, leading=leading), encoding="utf-8", newline="\n")
+    topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
     return [topic_path] + written, skipped
 
 

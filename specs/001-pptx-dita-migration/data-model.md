@@ -148,13 +148,13 @@ row per resulting DITA topic. The unique key per row is
 | `sequence` | `str` | `1`-based per gram, type-scoped | `"1"` for analysis rows; `"1..N"` for glc rows |
 | `topic_filename` | `str` | computed | matches `gram_xx.dita`; identical across all rows belonging to the same gram (the CSV's N+1 rows collapse into one DITA topic) |
 | `display_text` | `str` | from `GlcLink.display_text` | human-readable link label; empty for analysis rows |
-| `link_href` | `str` | from `GlcLink.href` | raw hyperlink URI; source of truth for WAV detection and stub `xref href`; empty for analysis rows |
-| `glc_path` | `str` | resolved relative to source folder | empty for analysis rows and for WAV-targeted rows |
+| `link_href` | `str` | from `GlcLink.href` | raw hyperlink URI; in the audited corpus always a `.glc`; empty for analysis rows |
+| `glc_path` | `str` | resolved relative to source folder | empty for analysis rows |
 | `time_end` | `str` | from `GlcDocument.time_end` | empty for analysis rows |
 | `freq_end` | `str` | from `GlcDocument.freq_end` | empty for analysis rows |
-| `png_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.png_path` for analysis rows | empty for glc rows whose link target was a `.glc`; populated for analysis rows post-FR-023 unless renderer failed |
+| `png_path` | `str` | resolved relative to source folder; sourced from `GlcDocument.image_filename` for glc rows and from `AnalysisSheet.png_path` for analysis rows | for glc rows: the asset named inside the `.glc` — `.png`/`.jpg` triggers inline embedding, `.wav` triggers the GLC-viewer-link branch (see `dita-topic-schema.md` §1.2/§1.3); for analysis rows: populated post-FR-023 unless renderer failed |
 | `analysis_docx_path` | `str` | resolved relative to source folder; sourced from `AnalysisSheet.docx_path` | empty for glc rows; populated for analysis rows post-FR-023 unless renderer failed |
-| `wav_treatment` | `str` | author-supplied | empty unless link was .wav; values: `screenshot`, `gaps-lite`, `TBD`, empty |
+| `wav_treatment` | `str` | (deprecated) | retained for round-trip compatibility only; extractor leaves it empty and generator ignores it (see `csv-schema.md` column 15) |
 | `warnings` | `str` | comma-joined warning list | empty if clean |
 
 **Row-construction rules**:
@@ -164,12 +164,11 @@ row per resulting DITA topic. The unique key per row is
    construction).
 3. GLC rows are numbered by their order of appearance in the link text
    box, starting at `1`.
-4. WAV-targeted links produce a row whose `topic_type` is `"glc"` and
-   whose `wav_treatment` is left for the technical author to fill in.
-   `glc_path` is empty for such rows; the raw `.wav` URI lives in
-   `link_href` (source of truth for the generator's WAV branching and
-   stub `xref href`), and `display_text` carries the visible link label
-   exactly as it appeared in the PPTX run.
+4. A GLC row's downstream rendering is selected by the extension of
+   `png_path` (the asset named inside the `.glc`): `.png`/`.jpg`
+   produces a §1.2 GramFrame table with the image embedded; `.wav`
+   produces a §1.3 GLC-viewer link block. The historical
+   `wav_treatment` author-decision workflow is retired.
 5. The warnings column accumulates *all* recoverable issues for the row,
    joined by `", "`.
 6. Analysis rows carry both `png_path` and `analysis_docx_path`
@@ -240,10 +239,13 @@ Required structure:
       </table>
     </section>
 
-    <!-- 3. Optional GAPS-Lite stub block(s), inline among the GramFrame tables -->
+    <!-- 3. GLC-viewer link block — emitted instead of (2) when the GLC's
+         inner data_source/filename is a .wav rather than an image.
+         Both the .glc and its companion .wav are copied alongside the
+         topic; the on-PC GLC viewer reads the .glc and resolves the .wav
+         next to it. See dita-topic-schema.md §1.3. -->
     <section>
-      <note>This gram requires GAPS-Lite playback.</note>
-      <p><xref href="{slug}.wav" format="wav" scope="local">{display_text}</xref></p>
+      <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
     </section>
   </body>
   <related-links>
@@ -251,10 +253,6 @@ Required structure:
   </related-links>
 </topic>
 ```
-
-When any GAPS-Lite stub block is present, the topic file is prefixed
-with a `<!-- MANUAL REVIEW: GAPS-Lite required -->` comment so the
-technical author can find the affected grams later.
 
 Validation:
 
@@ -327,7 +325,7 @@ generator overwrites this on every run.
 Plain-text file produced when at least one row is skipped (per R8 / FR-011).
 
 ```
-publication=main chapter=nordic-fishing-vessels gram_id="Gram 05" topic_type=glc sequence=1 reason="wav_treatment is TBD"
+publication=main chapter=nordic-fishing-vessels gram_id="Gram 05" topic_type=glc sequence=1 reason="png_path missing"
 ...
 ```
 

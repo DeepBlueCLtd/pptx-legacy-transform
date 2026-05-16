@@ -44,11 +44,16 @@ in the correct folder structure and parse as well-formed XML.
 3. **Given** a CSV containing rows for a progress-test publication, **When**
    the generator runs, **Then** a flat ditamap with no chapter level is
    produced for that test publication.
-4. **Given** a WAV row with treatment `gaps-lite`, **When** the generator
-   runs, **Then** a stub topic linking to the WAV with a manual-review
-   warning is produced.
-5. **Given** a WAV row with treatment `TBD`, **When** the generator runs,
-   **Then** the row is skipped, an error is logged, and the row appears in a
+4. **Given** a GLC row whose inner `data_source/filename` names a
+   `.wav`, **When** the generator runs, **Then** the gram topic carries
+   an `<xref>` link to the `.glc` (not the `.wav`), both the `.glc`
+   and its companion `.wav` are copied next to the topic, and no
+   `<image>` is emitted for that row so the on-PC GLC viewer can
+   render the spectrogram from audio.
+5. **Given** a GLC row whose `png_path` is empty or names an asset
+   the generator cannot classify (extension other than `.png`,
+   `.jpg`, `.wav`), **When** the generator runs, **Then** the row is
+   skipped, an error is logged, and the row appears in a
    `skipped.txt` report.
 6. **Given** the same CSV is processed twice, **When** the generator runs
    the second time, **Then** the output is byte-identical to the first run
@@ -266,10 +271,12 @@ produces the expected output tree on continue.
 - A presentation contains a slide whose shape count differs significantly
   from the expected 15-gram layout; introspection must surface this rather
   than silently producing a misaligned report.
-- A `.wav` link is encountered but the technical author has not yet decided
-  on its treatment (`screenshot`, `gaps-lite`, or unresolved); the
-  generator must skip unresolved rows with an error and emit a
-  `skipped.txt` report rather than producing partial output.
+- A GLC row references an asset (via `png_path`) whose extension is
+  neither a still image (`.png`, `.jpg`) nor `.wav`, or whose source
+  file is missing; the generator must skip such rows with a warning
+  and emit a `skipped.txt` report rather than producing partial
+  output. (The historical `wav_treatment` author-decision workflow is
+  retired — see backlog item 007.)
 - The CSV contains a row whose `glc_path` is non-empty but cannot be
   resolved on disk; extraction must still emit the row with empty
   measurements and a recorded warning so it appears in the author's review.
@@ -342,12 +349,15 @@ produces the expected output tree on continue.
   same `gram_xx.dita` as an instructor-only section
   (`<section audience="-trainee">`) whose contents are an embedded
   `<image>` when the analysis asset is a PNG or an `<xref>` link when
-  it is a DOCX. For WAV rows it MUST inline a stub block (note plus
-  WAV `<xref>`) into the gram topic when treatment is `gaps-lite`
-  (and prefix the topic file with a manual-review comment), treat
-  `screenshot` rows as if they were PNG rows, and skip rows with
-  treatment `TBD` (logging an error and recording the skip in
-  `skipped.txt`).
+  it is a DOCX. For each GLC row it MUST dispatch on the extension of
+  the asset named in `png_path`: a `.png` or `.jpg` produces a
+  GramFrame table embedding the image (`dita-topic-schema.md` §1.2);
+  a `.wav` produces an `<xref>` block linking to the `.glc`
+  (`dita-topic-schema.md` §1.3), with both the `.glc` and the
+  companion `.wav` copied side-by-side into the per-gram folder so
+  the on-PC GLC viewer can resolve the audio when a student opens
+  the link; any other extension (or a missing asset) is skipped
+  with a warning recorded in `skipped.txt`.
 - **FR-012**: The DITA generator MUST emit one ditamap per publication,
   using `<topichead>` chapter elements with `<topicref>` children for
   the main publication and a flat `<topicref>` list for each progress-
@@ -475,8 +485,9 @@ produces the expected output tree on continue.
   treatment, and accumulated warnings.
 - **DITA Topic**: One generated XML file per gram (`gram_xx.dita`)
   containing an instructor-only analysis-sheet section followed by one
-  GramFrame `gram-config` table per GLC row (and any GAPS-Lite stub
-  blocks for WAV rows). The vessel name in the title is wrapped in an
+  block per GLC row — a GramFrame `gram-config` table when the GLC
+  names an image asset, or an `<xref>` link to the `.glc` when it
+  names a `.wav`. The vessel name in the title is wrapped in an
   instructor-only `<ph>`, and the topic carries a related link back
   to the gram index.
 - **Ditamap**: One per publication; main-publication maps use chapter
@@ -487,9 +498,9 @@ produces the expected output tree on continue.
 - **Chapter**: A subdivision of the main publication, derived from
   source folder or filename; absent from progress-test publications.
 - **Warning**: A recoverable issue captured against a CSV row (missing
-  GLC, malformed XML, unexpected shape, unresolved WAV treatment, etc.)
-  and surfaced in the run summary so the technical author can triage all
-  issues from the CSV.
+  GLC, malformed XML, unexpected shape, GLC inner asset with an
+  unrecognised extension, etc.) and surfaced in the run summary so
+  the technical author can triage all issues from the CSV.
 
 ## Success Criteria *(mandatory)*
 
@@ -553,8 +564,10 @@ produces the expected output tree on continue.
   the matching pattern can be expressed as a substring or simple glob
   configurable at run time.
 - The technical author performing Stage 3 review is comfortable editing
-  CSV in a spreadsheet tool and is the authority on `wav_treatment`
-  values; the pipeline does not attempt to infer WAV treatment.
+  CSV in a spreadsheet tool. The author has no decisions to make about
+  WAV-typed GLC rows: the generator dispatches on the extension of the
+  asset named inside the `.glc` and treats audio assets as
+  GLC-viewer links (see FR-011 and `dita-topic-schema.md` §1.3).
 - The publishing toolchain (Oxygen) is available outside this pipeline
   for Stage 5 QA and is the production HTML publishing path; the
   pipeline's contract ends at producing DITA topics and ditamaps that

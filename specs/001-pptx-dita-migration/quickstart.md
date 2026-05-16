@@ -76,10 +76,12 @@ shape grouping.)
 Open `extracted.csv` in Excel. The reviewer:
 
 - Fills in any empty `vessel_name` they recognise.
-- Sets `wav_treatment` for every WAV row (`screenshot`, `gaps-lite`,
-  or `TBD` if undecided).
 - Resolves any rows whose `warnings` column is non-empty.
 - Saves the file as UTF-8 CSV (not `.xlsx`).
+
+  (The `wav_treatment` column is deprecated and ignored; no author
+  decision is required for GLC rows whose inner asset is a `.wav` —
+  see `dita-topic-schema.md` §1.3.)
 
 ## 6. Generate DITA
 
@@ -92,19 +94,21 @@ python generate_dita.py --csv extracted.csv \
 
 Expected output under `dita/`:
 
-- `main/<chapter-slug>/gram_NN_lofarM.dita` for every GLC row
-- `main/<chapter-slug>/gram_NN_lofarM.png` — the referenced image
-  asset, copied and renamed to match the topic's stem (FR-022). For
-  WAV-stub rows the copied file is the `.wav`; for analysis rows it is
-  whatever extension the source carried.
-- `main/<chapter-slug>/gram_NN_analysis.dita` for every analysis row
-  (plus the matching renamed asset)
+- `main/<chapter-slug>/gram-NN/gram_NN.dita` per gram (one topic per
+  gram regardless of how many GLC rows it carries)
+- `main/<chapter-slug>/gram-NN/lofar-M.png` — the asset copied next to
+  the topic and renamed to a slug of the source filename. For
+  GLC-viewer-link rows (GLC whose inner asset is a `.wav`) the
+  generator instead copies the `.glc` and its companion `.wav`
+  side-by-side (e.g. `lofar-1.glc` + `lofar-1.wav`). For analysis
+  rows the asset retains whatever extension the source carried.
 - `progress-test-N/...` flat trees for any test publications, with
   topics and assets sitting side-by-side
-- `ditamaps/main.ditamap` plus one ditamap per progress test
+- `main.ditamap` plus one ditamap per progress test, at the output root
 - `manifest.txt` listing every file produced (topics + assets +
   ditamaps)
-- `skipped.txt` if any rows were skipped (e.g. `wav_treatment=TBD`)
+- `skipped.txt` if any rows were skipped (e.g. GLC row whose inner
+  asset is missing or has an unrecognised extension)
 
 If a referenced asset is missing on disk, the generator logs a warning
 and still emits the topic with the intended local href. Dropping the
