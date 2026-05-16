@@ -16,6 +16,7 @@ The source ``dita/`` tree is never modified.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -231,6 +232,45 @@ def prettify_tree(root: Path) -> int:
     return count
 
 
+_TITLE_RE = re.compile(r'<map[^>]*\btitle="([^"]*)"', re.IGNORECASE)
+
+
+def _ditamap_title(ditamap: Path) -> str:
+    match = _TITLE_RE.search(ditamap.read_text(encoding="utf-8"))
+    return match.group(1) if match else ditamap.stem
+
+
+def _escape(text: str) -> str:
+    return (text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;"))
+
+
+def write_root_index(out_root: Path, entries: list[tuple[str, str]]) -> None:
+    """Write html/index.html with one link per ditamap landing page."""
+    items = "\n".join(
+        f'      <li><a href="{_escape(href)}/index.html">{_escape(title)}</a></li>'
+        for title, href in entries
+    )
+    out_root.joinpath("index.html").write_text(
+        '<!DOCTYPE html>\n'
+        '<html lang="en">\n'
+        '  <head>\n'
+        '    <meta charset="UTF-8">\n'
+        '    <title>Published DITA output</title>\n'
+        '  </head>\n'
+        '  <body>\n'
+        '    <h1>Published DITA output</h1>\n'
+        '    <ul>\n'
+        f'{items}\n'
+        '    </ul>\n'
+        '  </body>\n'
+        '</html>\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def publish(dita_ot: Path, staged: Path, out_root: Path) -> int:
     ditamaps = sorted(staged.glob("*.ditamap"))
     if not ditamaps:
@@ -283,6 +323,12 @@ def main(argv: list[str] | None = None) -> int:
     rc = publish(args.dita_ot, args.staged, args.out)
 
     if rc == 0:
+        entries = [
+            (_ditamap_title(m), m.stem)
+            for m in sorted(args.staged.glob("*.ditamap"))
+        ]
+        write_root_index(args.out, entries)
+        print(f"[index] wrote {args.out / 'index.html'} ({len(entries)} entries)")
         formatted = prettify_tree(args.out)
         print(f"[prettify] reformatted {formatted} HTML file(s) under {args.out}")
 
