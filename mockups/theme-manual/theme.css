@@ -1,0 +1,184 @@
+/* Theme: Naval Training Manual
+   - Cosmetic-only. Selectors target classes the DITA-OT XHTML transform already emits,
+     plus a handful that would come from `outputclass` on the DITA side
+     (.vessel-name, .analysis-sheet, .lofar-stage, .instructor-only).
+*/
+
+:root {
+  --navy: #0b2545;
+  --navy-ink: #08213f;
+  --gold: #b08a2e;
+  --gold-soft: #e9d8a6;
+  --paper: #fbfaf6;
+  --rule: #d8d3c4;
+  --muted: #5b6776;
+  --instructor: #b34700;
+  --student: #2a6f4a;
+}
+
+html, body {
+  background: var(--paper);
+  color: #1d2733;
+  font-family: "Source Sans 3", "Source Sans Pro", "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Edition strip across the very top */
+body::before {
+  content: "INSTRUCTOR EDITION — TRAINING USE";
+  display: block;
+  background: var(--instructor);
+  color: #fff;
+  font: 600 12px/1 "Source Sans 3", sans-serif;
+  letter-spacing: 0.18em;
+  text-align: center;
+  padding: 8px 12px;
+}
+body[data-edition="student"]::before {
+  content: "STUDENT EDITION";
+  background: var(--student);
+}
+
+main[role="main"] {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 28px 64px;
+}
+
+/* Topic header */
+article > h1.topictitle1 {
+  font-family: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  font-weight: 700;
+  font-size: 30px;
+  color: var(--navy);
+  margin: 0 0 4px;
+  padding: 0 0 14px;
+  border-bottom: 3px double var(--gold);
+}
+article > h1 .ph {
+  display: block;
+  font-family: "Source Sans 3", sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+/* Section headings */
+section.section > h2.sectiontitle {
+  font: 600 13px/1 "Source Sans 3", sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 32px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* Strip empty captions and the cosmetic <br>s DITA-OT scatters everywhere */
+caption:empty { display: none; }
+section.section > br,
+td.entry > br { display: none; }
+
+/* Analysis sheet image — large, framed */
+.imagecenter {
+  text-align: center;
+  margin: 12px 0;
+}
+.imagecenter img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 1px 0 rgba(11,37,69,0.04);
+}
+
+/* Gram-config tables: re-cast the 2-col key/value blocks as a tight metadata strip.
+   Each .gram-config table currently holds: row 0 = image (colspan 2),
+   then rows of label / value. We hide the table chrome and lay it out flat. */
+table.gram-config {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 28px;
+}
+table.gram-config, table.gram-config tbody, table.gram-config tr, table.gram-config td {
+  border: 0;
+  background: transparent;
+}
+table.gram-config tr:first-child td { padding: 0; }   /* the image row */
+table.gram-config tr:not(:first-child) {
+  display: inline-table;            /* lay the metadata rows side-by-side */
+  margin: 6px 16px 0 0;
+}
+table.gram-config tr:not(:first-child) td {
+  padding: 2px 6px;
+  font-family: "JetBrains Mono", "Source Code Pro", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--navy-ink);
+}
+table.gram-config tr:not(:first-child) td:first-child {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+table.gram-config tr:not(:first-child) td:last-child::before {
+  content: "= ";
+  color: var(--gold);
+}
+
+/* Stage labels — these would be emitted from outputclass="lofar-stage-N" on the section
+   in DITA. For the mockup we add them manually so you can see the effect. */
+section.lofar-stage {
+  border-left: 3px solid var(--gold-soft);
+  padding-left: 18px;
+  margin-top: 28px;
+}
+section.lofar-stage > h2.sectiontitle {
+  color: var(--navy);
+  border-bottom: none;
+  margin-bottom: 4px;
+}
+section.lofar-stage > h2.sectiontitle::before {
+  content: "Stage ";
+  color: var(--gold);
+}
+
+/* Instructor-only callouts (from outputclass="instructor-only" on DITA <section> /
+   <ph>). Visible in instructor edition; trainee.ditaval already strips them for student. */
+.instructor-only,
+.vessel-name {
+  background: #fff7e0;
+  border-left: 3px solid var(--instructor);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-style: italic;
+}
+body[data-edition="student"] .instructor-only { display: none; }
+
+/* Related links → back-pill */
+nav.related-links {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+nav.related-links strong { display: none; }
+nav.related-links ul.linklist { list-style: none; padding: 0; margin: 0; }
+nav.related-links a.link {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--navy);
+  border: 1px solid var(--navy);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+nav.related-links a.link::before { content: "← "; color: var(--gold); }
+nav.related-links a.link:hover { background: var(--navy); color: #fff; }

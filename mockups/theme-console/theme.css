@@ -1,0 +1,163 @@
+/* Theme: Operator Console (dark) */
+:root {
+  --bg: #0d1620;
+  --panel: #14202d;
+  --panel-2: #1a2a3a;
+  --rule: #243648;
+  --ink: #cfe2f3;
+  --ink-dim: #8aa3ba;
+  --cyan: #4dd0e1;
+  --amber: #ffb74d;
+  --instructor: #ff8a3d;
+  --student: #4dd0e1;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+body::before {
+  content: "● INSTRUCTOR  ·  TRAINING USE ONLY  ·  CLASS-RESTRICTED";
+  display: block;
+  background: linear-gradient(90deg, var(--instructor), #b34700);
+  color: #1a0e00;
+  font: 700 11px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.28em;
+  text-align: center;
+  padding: 8px 12px;
+  text-transform: uppercase;
+}
+body[data-edition="student"]::before {
+  content: "● STUDENT  ·  TRAINING";
+  background: linear-gradient(90deg, var(--student), #00838f);
+  color: #002328;
+}
+
+main[role="main"] {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+}
+
+article > h1.topictitle1 {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 26px;
+  color: var(--cyan);
+  margin: 0 0 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+article > h1 .ph.vessel-name {
+  display: block;
+  font-family: "Inter", sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--amber);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+section.section > h2.sectiontitle {
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin: 28px 0 10px;
+}
+
+caption:empty { display: none; }
+section.section > br,
+td.entry > br { display: none; }
+
+.imagecenter { text-align: center; margin: 10px 0; }
+.imagecenter img {
+  max-width: 100%;
+  height: auto;
+  background: #000;
+  padding: 4px;
+  border: 1px solid var(--rule);
+  box-shadow: 0 0 0 1px rgba(77,208,225,0.08), 0 6px 20px rgba(0,0,0,0.5);
+}
+
+/* Each LOFAR stage becomes a dark instrument panel */
+section.lofar-stage {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 14px 16px 8px;
+  margin-top: 18px;
+}
+section.lofar-stage > h2.sectiontitle {
+  color: var(--cyan);
+  margin: 0 0 8px;
+}
+section.lofar-stage > h2.sectiontitle::before {
+  content: "▌ STAGE ";
+  color: var(--amber);
+}
+
+/* Metadata strip under the gram image */
+table.gram-config {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 4px;
+  background: transparent;
+}
+table.gram-config, table.gram-config tbody, table.gram-config tr, table.gram-config td {
+  border: 0; background: transparent;
+}
+table.gram-config tr:first-child td { padding: 0; }
+table.gram-config tr:not(:first-child) {
+  display: inline-table;
+  margin: 8px 18px 0 0;
+}
+table.gram-config tr:not(:first-child) td {
+  padding: 2px 4px;
+  font: 12px/1.2 "JetBrains Mono", monospace;
+  color: var(--ink);
+}
+table.gram-config tr:not(:first-child) td:first-child {
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+}
+table.gram-config tr:not(:first-child) td:last-child::before {
+  content: "= ";
+  color: var(--amber);
+}
+
+.vessel-name { color: var(--amber); }
+.instructor-only {
+  background: rgba(255,138,61,0.1);
+  border-left: 3px solid var(--instructor);
+  padding: 2px 8px;
+}
+body[data-edition="student"] .instructor-only { display: none; }
+
+nav.related-links {
+  margin-top: 40px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+nav.related-links strong { display: none; }
+nav.related-links ul.linklist { list-style: none; padding: 0; margin: 0; }
+nav.related-links a.link {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--cyan);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font: 600 12px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+}
+nav.related-links a.link::before { content: "← "; color: var(--amber); }
+nav.related-links a.link:hover { background: var(--panel-2); border-color: var(--cyan); }
