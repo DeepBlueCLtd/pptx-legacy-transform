@@ -30,19 +30,19 @@
         <div class="two-col">
           <div>
             <ul>
-              <li><strong>~15 instructor PowerPoints</strong> across weeks, progress tests, and a final assessment</li>
+              <li><strong>11 instructor PowerPoints</strong> &mdash; one main course deck, five progress tests, one final assessment, and four week-by-week decks</li>
               <li><strong>~1,000 acoustic "grams"</strong> embedded as hyperlinked tiles across those decks</li>
-              <li><strong>Each gram</strong>: a vessel/contact title, an analysis sheet, and one or more `Lofar` hyperlinks &mdash; each pointing to a <code>.glc</code> configuration file</li>
-              <li><strong>Goal</strong>: bring all of this into the modern DITA publication set (alongside pub-9 / pub-10) so it renders in <em>instructor</em> and <em>trainee</em> profiles</li>
+              <li><strong>Each gram</strong>: a vessel/contact title, an analysis sheet, and one or more <code>Lofar</code> hyperlinks &mdash; <em>always</em> pointing to a <code>.glc</code> configuration file</li>
+              <li><strong>Goal</strong>: bring all of this into the modern DITA publication set (alongside pub-9 / pub-10) and render it as two parallel HTML editions &mdash; <em>instructor</em> and <em>student</em></li>
             </ul>
           </div>
           <div class="stat-card">
-            <div class="stat-num">15</div>
+            <div class="stat-num">11</div>
             <div class="stat-label">legacy PPTX decks</div>
             <div class="stat-num">~1,000</div>
-            <div class="stat-label">grams</div>
+            <div class="stat-label">grams across 7 publications</div>
             <div class="stat-num">2</div>
-            <div class="stat-label">output profiles<br/>(instructor / trainee)</div>
+            <div class="stat-label">parallel HTML editions<br/>(instructor / student)</div>
           </div>
         </div>
       </section>
@@ -55,10 +55,10 @@
             <p>A small, self-contained training artifact:</p>
             <ul>
               <li><strong>Title</strong> &mdash; vessel name, category, codename</li>
-              <li><strong>Analysis sheet</strong> &mdash; PNG spectrogram or .docx commentary</li>
-              <li><strong>One or more Lofar links</strong> &mdash; <em>always</em> a hyperlink to a <code>.glc</code> configuration file. The <code>.glc</code> in turn references the spectrogram asset GAPS-Lite would render: usually a <code>.png</code> screenshot (~82%), occasionally a <code>.wav</code> raw recording (~18%).</li>
+              <li><strong>Analysis sheet</strong> &mdash; PNG spectrogram or <code>.docx</code> commentary</li>
+              <li><strong>One or more Lofar links</strong> &mdash; <em>always</em> a hyperlink to a <code>.glc</code> configuration file. The <code>.glc</code> in turn references the spectrogram asset GAPS-Lite would render: usually a <code>.png</code>/<code>.jpg</code> pre-rendered image (~82%), occasionally a <code>.wav</code> raw recording rendered live by the on-PC viewer (~18%).</li>
             </ul>
-            <p class="small muted">In the legacy decks each tile is a coloured box with hyperlinks. Instructors click through during a session.</p>
+            <p class="small muted">Audited across 1,004 Lofar text-run hyperlinks: every one targets a <code>.glc</code>. The <code>.wav</code> case is always one indirection deeper, inside the GLC's <code>data_source/filename</code>.</p>
           </div>
           <div>
             <div class="diagram-card">
@@ -114,13 +114,13 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <div class="problem-grid">
           <div class="problem-card">
             <div class="icon">🗂️</div>
-            <h3>15 isolated decks</h3>
+            <h3>11 isolated decks</h3>
             <p>No way to search across the whole corpus. A trainee looking for "Akira-class Cat 4" has to know which deck.</p>
           </div>
           <div class="problem-card">
             <div class="icon">👥</div>
             <h3>One audience only</h3>
-            <p>Instructor decks reveal the vessel name. There's no automatic <em>trainee</em> view that hides it &mdash; that's done manually.</p>
+            <p>Instructor decks reveal the vessel name. There's no automatic <em>student</em> view that hides it &mdash; that's done manually.</p>
           </div>
           <div class="problem-card">
             <div class="icon">📎</div>
@@ -171,7 +171,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
             <div class="stage-num">5</div>
             <div class="stage-name">Publish</div>
             <div class="stage-tool"><code>publish_html.py</code> / Oxygen</div>
-            <div class="stage-desc">Render DITA to HTML for preview, or to the production publication via Oxygen.</div>
+            <div class="stage-desc">Render DITA twice &mdash; once for the instructor edition, once for the student edition.</div>
           </div>
         </div>
         <p class="caption" style="margin-top:1em">Five small Python scripts, one third-party dependency. Designed to be debuggable on an air-gapped network.</p>
@@ -188,10 +188,10 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
           <tbody>
             <tr><td>progress-test-1</td><td></td><td>Gram 04</td><td>Enterprise contact bearing 291, codename Hoth</td><td>glc</td><td>1</td><td>gram_04_lofar1.dita</td><td>360</td><td>100</td><td></td></tr>
             <tr><td>progress-test-1</td><td></td><td>Gram 04</td><td>Enterprise contact bearing 291, codename Hoth</td><td>analysis</td><td>1</td><td>gram_04_analysis.dita</td><td></td><td></td><td></td></tr>
-            <tr><td>progress-test-1</td><td></td><td>Gram 18</td><td>FR Razor Crest, Category 2, Gandalf</td><td>glc</td><td>2</td><td>gram_18_lofar2.dita</td><td>240</td><td>200</td><td></td></tr>
+            <tr><td>main</td><td>week-4-grams-updated</td><td>Gram 20</td><td>FR Discovery, Category 3, Naboo</td><td>glc</td><td>2</td><td>gram_20_lofar2.dita</td><td>300</td><td>200</td><td></td></tr>
           </tbody>
         </table>
-        <p class="caption">One row per topic. The <em>warnings</em> column is where the next stage takes over.</p>
+        <p class="caption">One row per topic. Today's CSV: <strong>1,409 rows</strong> across 7 publications. The <em>warnings</em> column is where the next stage takes over.</p>
       </section>
 
       <!-- 9. Stage 3: Manual review -->
@@ -206,7 +206,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
               <li>Edits vessel names, sequencing, or chapter assignment as needed</li>
               <li>Saves &mdash; the file becomes the <em>signed-off</em> source of truth for generation</li>
             </ul>
-            <p class="muted small">CSV is deliberately chosen because Excel is universal, diff-able under version control, and survives review-edit-review cycles without proprietary tooling.</p>
+            <p class="muted small">CSV is deliberately chosen because Excel is universal, diff-able under version control, and survives review-edit-review cycles without proprietary tooling. README documents the Excel save-as risks (BOM stripped, line endings flipped, leading zeros coerced) and a CSV round-trip test now guards the byte-level invariant.</p>
           </div>
           <div class="callout">
             <h3>Why this matters</h3>
@@ -220,97 +220,158 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
       <section>
         <h2>Stage 4 &mdash; Generate DITA</h2>
         <p>One CSV row becomes one DITA topic. Standardised, structured XML.</p>
-<pre class="code-xml"><code>&lt;topic id="gram_04_lofar1"&gt;
+<pre class="code-xml"><code>&lt;topic id="gram_04"&gt;
   &lt;title&gt;Gram 04&lt;ph audience="-trainee"&gt; - Enterprise contact bearing 291, codename Hoth&lt;/ph&gt;&lt;/title&gt;
   &lt;body&gt;
-    &lt;section&gt;
+    &lt;section audience="-trainee" outputclass="analysis-sheet"&gt;
+      &lt;title&gt;Analysis Sheet&lt;/title&gt;
+      &lt;image href="analysis.png" placement="break" align="center" /&gt;
+    &lt;/section&gt;
+    &lt;section outputclass="lofar-stage"&gt;
+      &lt;title&gt;Lofar 1&lt;/title&gt;       &lt;!-- ← section heading lifted from the PPTX link label --&gt;
       &lt;table outputclass="gram-config"&gt;
         &lt;tgroup cols="2"&gt;&lt;tbody&gt;
           &lt;row&gt;&lt;entry namest="c1" nameend="c2"&gt;
-            &lt;image href="gram_04_lofar1.wav" placement="break" align="center" /&gt;
+            &lt;image href="lofar-1-i.png" placement="break" align="center" /&gt;
           &lt;/entry&gt;&lt;/row&gt;
-          &lt;row&gt;&lt;entry&gt;time-start&lt;/entry&gt;&lt;entry&gt;0&lt;/entry&gt;&lt;/row&gt;
           &lt;row&gt;&lt;entry&gt;time-end&lt;/entry&gt;&lt;entry&gt;360&lt;/entry&gt;&lt;/row&gt;
-          &lt;row&gt;&lt;entry&gt;freq-start&lt;/entry&gt;&lt;entry&gt;0&lt;/entry&gt;&lt;/row&gt;
           &lt;row&gt;&lt;entry&gt;freq-end&lt;/entry&gt;&lt;entry&gt;100&lt;/entry&gt;&lt;/row&gt;
         &lt;/tbody&gt;&lt;/tgroup&gt;
       &lt;/table&gt;
     &lt;/section&gt;
   &lt;/body&gt;
-  &lt;related-links&gt;&lt;link href="../gram-index.dita" format="dita" /&gt;&lt;/related-links&gt;
 &lt;/topic&gt;</code></pre>
-        <p class="caption">Note the <code>audience="-trainee"</code> attribute on the vessel name &mdash; that's how one source produces two profiles.</p>
+        <p class="caption"><code>audience="-trainee"</code> is the single attribute that drives the dual-edition split &mdash; on the vessel-name decoration <em>and</em> on the whole Analysis Sheet section. Section titles ("Lofar 1", "Stage 1 — Broadband", ...) come straight from the PPTX link labels.</p>
       </section>
 
-      <!-- 11. Stage 5: Publish HTML -->
+      <!-- 11. Stage 5: Publish - dual edition -->
       <section>
-        <h2>Stage 5 &mdash; Publish</h2>
+        <h2>Stage 5 &mdash; Publish two editions</h2>
         <div class="two-col">
           <div>
-            <p>From the DITA tree, the existing publication toolchain produces:</p>
+            <p>One DITA source tree, two DITA-OT passes:</p>
             <ul>
-              <li><strong>Preview HTML</strong> via <code>publish_html.py</code> (DITA-OT). Used during development.</li>
-              <li><strong>Final publication</strong> via Oxygen, matching the look of pub-9 / pub-10.</li>
-              <li><strong>Filtered profiles</strong> &mdash; instructor (full content) and trainee (vessel names hidden).</li>
+              <li><strong>Instructor edition</strong> &mdash; no filter, full content.</li>
+              <li><strong>Student edition</strong> &mdash; DITA-OT run with <code>--filter=dita/trainee.ditaval</code>, excluding every element tagged <code>audience="-trainee"</code>.</li>
             </ul>
-            <p class="muted small">The same DITA source, two different reader audiences, no duplicated content.</p>
+            <p>A shared landing page (<code>html/index.html</code>) lets the reader pick. URL paths below the edition segment are identical &mdash; swapping <code>instructor/</code> ↔ <code>student/</code> reaches the same gram in the other edition.</p>
+            <p class="muted small">A Jest test sweep over <code>html/student/</code> asserts <em>zero</em> case-insensitive occurrences of the string "instructor" in any rendered text or URL &mdash; the edition split is enforced by build, not by review.</p>
+          </div>
+<pre class="terminal" style="font-size:0.45em"><code>html/
+├── index.html                  ← shared landing
+├── instructor/
+│   ├── index.html
+│   ├── main/
+│   ├── progress-final-assessment/
+│   ├── progress-test-1/  ...  progress-test-5/
+└── student/
+    ├── index.html
+    ├── main/             ← --filter=trainee.ditaval
+    ├── progress-final-assessment/
+    ├── progress-test-1/  ...  progress-test-5/</code></pre>
+        </div>
+      </section>
+
+      <!-- 12. Dual editions side-by-side -->
+      <section>
+        <h2>Two editions, one source &mdash; side by side</h2>
+        <div class="two-col">
+          <div>
+            <img src="assets/screenshots/styled-instructor-index.png" alt="Instructor edition main index" class="frame-img" style="max-height:48vh" />
+            <p class="caption"><strong>Instructor</strong> &mdash; every gram exposes vessel name, category, codename. The Analysis Sheet section is present on every topic.</p>
           </div>
           <div>
-            <img src="assets/screenshots/new-main-index.png" alt="Published HTML main index" class="frame-img" />
-            <p class="caption">Combined main publication index &mdash; all decks, browsable as one set.</p>
+            <img src="assets/screenshots/styled-student-index.png" alt="Student edition main index" class="frame-img" style="max-height:48vh" />
+            <p class="caption"><strong>Student</strong> &mdash; same tree, same URLs, but vessel names are gone and Analysis Sheet sections are filtered out of every topic.</p>
           </div>
         </div>
       </section>
 
-      <!-- 12. New end state: deck index -->
+      <!-- 13. Styling: Operator Console v2 -->
       <section>
-        <h2>New end state &mdash; navigable publication</h2>
-        <img src="assets/screenshots/new-progress-test-1.png" alt="Progress Test 1 index" class="hero-img" style="max-height:60vh" />
-        <p class="caption">Progress Test 1, rendered as a DITA publication. Every gram &mdash; analysis sheet and each Lofar configuration &mdash; is now its own addressable topic.</p>
+        <h2>Styled for the operator &mdash; "Operator Console v2"</h2>
+        <div class="two-col">
+          <div>
+            <p>The default DITA-OT output is functional but plain. The new theme reads as a piece of equipment:</p>
+            <ul>
+              <li><strong>Classification banner</strong> top and bottom &mdash; amber for instructor, cyan for student, plus a coloured edge so a glance at the page reveals which edition you're in</li>
+              <li><strong>Each Lofar section is a "trace"</strong> &mdash; a header bar with a session id, a status LED, and a CRT-style scanline overlay over the spectrogram</li>
+              <li><strong>LCD-style readouts</strong> for time / frequency values</li>
+              <li><strong>Engineering grid background</strong>, monospaced display fonts, monochromatic accents</li>
+              <li>Drives off a single <code>data-edition</code> attribute on <code>&lt;body&gt;</code> &mdash; one CSS file, no per-edition fork</li>
+            </ul>
+          </div>
+          <div>
+            <img src="assets/screenshots/styled-gram.png" alt="Styled gram topic in dark Operator Console v2 theme" class="frame-img" style="max-height:62vh" />
+            <p class="caption">A single styled gram &mdash; instructor edition.</p>
+          </div>
+        </div>
       </section>
 
-      <!-- 13. Live demo: gram topic -->
+      <!-- 14. Before / after styling -->
       <section>
-        <h2>A single gram, in the new publication</h2>
-        <iframe class="live-demo" src="assets/embeds/progress-test-1/progress-test-1/gram_04_lofar1.html"></iframe>
-        <p class="caption">Live page from the generated HTML (Gram 04, LOFAR 1). Time/frequency parameters captured from the CSV. <span class="muted">Spectrogram is illustrative &mdash; the test corpus uses placeholder media.</span></p>
+        <h2>Before / after &mdash; what styling changed</h2>
+        <div class="two-col">
+          <div>
+            <img src="assets/screenshots/baseline-gram.png" alt="Baseline DITA-OT output, no theme" class="frame-img" style="max-height:55vh" />
+            <p class="caption"><strong>Baseline</strong> &mdash; default DITA-OT HTML5. Correct, readable, but reads like documentation, not equipment.</p>
+          </div>
+          <div>
+            <img src="assets/screenshots/styled-gram.png" alt="Operator Console v2 styled gram" class="frame-img" style="max-height:55vh" />
+            <p class="caption"><strong>Operator Console v2</strong> &mdash; same DITA, same HTML, themed with a single stylesheet plus the GramFrame plugin (interactive spectrogram component bundled and auto-injected).</p>
+          </div>
+        </div>
       </section>
 
-      <!-- 14. Live demo: browse the structure -->
+      <!-- 15. Live demo: gram topic (instructor) -->
       <section>
-        <h2>Live demo &mdash; browse the deck</h2>
-        <iframe class="live-demo" src="assets/embeds/progress-test-1/index.html"></iframe>
-        <p class="caption">Try clicking through. This is the actual generator output, served straight from the repo.</p>
+        <h2>Live demo &mdash; a single gram, instructor edition</h2>
+        <iframe class="live-demo" src="assets/embeds/instructor/progress-test-1/gram-04/gram_04.html"></iframe>
+        <p class="caption">Live page from the generated HTML (Progress Test 1 &middot; Gram 04 &middot; instructor edition). Spectrogram is illustrative &mdash; the test corpus uses placeholder media. <span class="muted">Note the amber classification banner and the vessel-name decoration.</span></p>
       </section>
 
-      <!-- 15. Benefits -->
+      <!-- 16. Live demo: gram topic (student) -->
+      <section>
+        <h2>Same gram, student edition</h2>
+        <iframe class="live-demo" src="assets/embeds/student/progress-test-1/gram-04/gram_04.html"></iframe>
+        <p class="caption">Identical URL path, just <code>student/</code> instead of <code>instructor/</code>. Vessel name and Analysis Sheet section are gone &mdash; same source, filtered at publish.</p>
+      </section>
+
+      <!-- 17. Live demo: landing page -->
+      <section>
+        <h2>Live demo &mdash; browse the publication set</h2>
+        <iframe class="live-demo" src="assets/embeds/index.html"></iframe>
+        <p class="caption">Shared landing page &rarr; per-edition index &rarr; per-publication index &rarr; gram topic. This is the actual generator output, served straight from the repo.</p>
+      </section>
+
+      <!-- 18. Benefits -->
       <section>
         <h2>Benefits at a glance</h2>
         <div class="benefits-grid">
           <div class="benefit-card">
             <div class="icon">🔍</div>
             <h3>Searchable, structured</h3>
-            <p>One publication, ~1,000 topics, all cross-referenced. Find any gram by vessel, category, or codename without knowing which deck it's in.</p>
+            <p>One publication set, ~1,000 topics, all cross-referenced. Find any gram by vessel, category, or codename without knowing which deck it's in.</p>
           </div>
           <div class="benefit-card">
             <div class="icon">👥</div>
-            <h3>Two profiles, one source</h3>
-            <p>Instructor view shows the answer; trainee view hides it. Driven by a single attribute (<code>audience="-trainee"</code>) &mdash; impossible to drift out of sync.</p>
+            <h3>Two editions, one source</h3>
+            <p>Instructor edition reveals the answer; student edition redacts it. Driven by a single attribute (<code>audience="-trainee"</code>) and a 4-line DITAVAL profile &mdash; impossible to drift out of sync.</p>
           </div>
           <div class="benefit-card">
             <div class="icon">✅</div>
             <h3>Consistency by construction</h3>
-            <p>Every output row came through the signed-off CSV. Nothing gets published that the technical author hasn't reviewed.</p>
+            <p>Every output row came through the signed-off CSV. A Jest test sweep guarantees no instructor-only string leaks into the student edition.</p>
           </div>
           <div class="benefit-card">
-            <div class="icon">🧰</div>
-            <h3>In the publication toolchain</h3>
-            <p>Renders through the same Oxygen flow as pub-9 / pub-10. One workflow to maintain, one look-and-feel.</p>
+            <div class="icon">🎛️</div>
+            <h3>Reads like equipment</h3>
+            <p>The "Operator Console v2" theme dresses the output as a piece of training hardware. One CSS file, no per-edition fork &mdash; the banner colour just flips.</p>
           </div>
         </div>
       </section>
 
-      <!-- 16. Roadmap -->
+      <!-- 19. Roadmap -->
       <section>
         <h2>Where we are &mdash; and what's next</h2>
         <div class="two-col">
@@ -318,18 +379,22 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
             <h3 class="done-header">✅ Shipped</h3>
             <ul class="check-list">
               <li>End-to-end pipeline: <code>introspect</code> → <code>extract</code> → <code>review</code> → <code>generate</code> → <code>publish</code></li>
-              <li>CSV round-trip safety (Excel-survivable schema)</li>
-              <li>WAV link href as first-class CSV column (item #002, closed)</li>
-              <li>Round-trip regression test (item #003, closed)</li>
-              <li>5-deck preview build under <code>html/</code></li>
+              <li><strong>Dual instructor / student editions</strong> via DITA-OT audience filtering (spec 003)</li>
+              <li><strong>Operator Console v2 dark theme</strong> wired into the publish pipeline</li>
+              <li><strong>GramFrame plugin</strong> bundled and auto-injected for interactive spectrograms</li>
+              <li><strong>PPTX link labels</strong> ("Lofar 1", "Stage 2 — Intermediate") promoted to DITA section headings</li>
+              <li><strong>Progress Final Assessment</strong> reclassified as its own publication</li>
+              <li>CSV round-trip safety + Excel-survivable schema (items #002, #003)</li>
+              <li>HTML regenerated on push to <code>main</code> in CI</li>
             </ul>
           </div>
           <div>
             <h3 class="todo-header">🚧 In flight / proposed</h3>
             <ul class="check-list todo">
-              <li><strong>Backlog Navigator</strong> &mdash; browse <code>backlog.md</code> from mobile, PR-driven edits (spec 002, planned)</li>
+              <li><strong>Audited Lofar → .glc → asset model</strong> (item #007, clarified) &mdash; tighten generator dispatch to use the GLC's inner asset extension and remove the dead direct-<code>.wav</code> code path</li>
+              <li><strong>speckit-navigator SPA</strong> (item #001) &mdash; browser-based spec viewer for reviewers</li>
               <li>WAV-row extractor test against the mock generator (item #004)</li>
-              <li><code>topic_filename</code> collision check at load time (item #005)</li>
+              <li><code>topic_filename</code> collision check at CSV-load time (item #005)</li>
               <li>Doc-rot fixes in spec branches (item #006)</li>
             </ul>
           </div>
@@ -337,13 +402,13 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <p class="caption" style="margin-top:1em">Today's review is a chance to redirect this list &mdash; <strong>what would you add, drop, or re-rank?</strong></p>
       </section>
 
-      <!-- 17. Discussion -->
+      <!-- 20. Discussion -->
       <section data-background-color="#0f2a4f">
         <div class="title-slide">
           <h1>Discussion</h1>
           <ul class="discussion-prompts">
-            <li>Does the published output match what you'd expect to use in a teaching session?</li>
-            <li>Are the trainee-profile rules correct? (vessel names hidden, anything else?)</li>
+            <li>Does the styled output read as a teaching tool, or has it tipped over into novelty?</li>
+            <li>Is the student-edition filter complete? (vessel names, Analysis Sheet &mdash; anything else?)</li>
             <li>Anything in the CSV review step that's missing or risky?</li>
             <li>Where should we draw the line on what gets migrated vs. left in PowerPoint?</li>
           </ul>
