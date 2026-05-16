@@ -31,14 +31,16 @@
 
 ## Notes
 
-- Chapter-navtitle clarification (Q1) resolved on 2026-05-16: Option C —
-  the leading "Instructor " is stripped from both displayed navtitle and
-  chapter folder slug in the student edition, while the instructor
-  edition retains the source-derived navtitles and slugs unchanged.
-  The student edition therefore contains no "Instructor" string in any
-  rendered text *or* URL path (FR-010, FR-013, SC-002). The cost of this
-  choice — divergent URL paths between editions for affected chapters —
-  is acknowledged in FR-014 and in the Edge Cases section.
+- Chapter-navtitle clarification (Q1) resolved on 2026-05-16: the
+  word "Instructor" appears nowhere in the student edition's rendered
+  text or URL paths (FR-010, FR-015, SC-002). The resolution shape is
+  *one* DITA source tree (FR-013) in which chapter folder slugs drop
+  the "Instructor " prefix (FR-014) and the displayed navtitle
+  carries the "Instructor " word as an audience-tagged prefix. Two
+  publish-time DITA-OT invocations against that single source tree
+  produce the two editions. URL paths below the edition segment are
+  identical across editions (FR-016) so cross-edition spot-checking
+  works by swapping `instructor/` ↔ `student/` in any URL.
 - The spec deliberately treats DITA-OT, the `audience` attribute, and
   DITAVAL profile mechanics as implementation details — they appear in
   Assumptions for context, not in Requirements or Success Criteria.

@@ -148,15 +148,18 @@ the address bar makes it obvious which edition is in view).
   an empty "Analysis Sheet" heading behind in the instructor edition.
 - A publication's source title already contains the word "Instructor"
   embedded (today: chapter navtitles such as "Instructor Week 1 Grams",
-  "Instructor Pub10_Ed22B_Updated"). The student edition MUST strip the
-  leading "Instructor " from both the displayed chapter navtitle *and*
-  the chapter folder slug — so the student edition's URLs read
-  `student/main/week-1-grams/...` while the instructor edition retains
-  `instructor/main/instructor-week-1-grams/...`. The two editions
-  therefore have intentionally divergent URL paths for chapters whose
-  source name carries the "Instructor" prefix; a bookmark from one
-  edition cannot be mechanically transposed to the other by swapping
-  the edition segment alone.
+  "Instructor Pub10_Ed22B_Updated"). In the *single* DITA source tree
+  the displayed chapter navtitle MUST split into an audience-tagged
+  "Instructor " prefix plus the audience-neutral remainder, and the
+  chapter folder slug emitted in the source tree MUST drop the
+  "Instructor " word entirely. The instructor edition then shows
+  "Instructor Week 1 Grams" as the navtitle at the URL
+  `instructor/main/week-1-grams/…`; the student edition shows
+  "Week 1 Grams" as the navtitle at the URL
+  `student/main/week-1-grams/…`. URL paths below the edition
+  segment stay identical across editions — a reader with one
+  edition's URL can transpose to the other by swapping the
+  `instructor/` segment for `student/` (and vice-versa).
 - A reviewer opens a deep-link URL that pre-dates this feature (e.g.
   `html/progress-test-1/...`). The behaviour after re-publish is well-
   defined: the path either redirects, 404s with a hint, or remains
@@ -212,18 +215,6 @@ the address bar makes it obvious which edition is in view).
   heading, or a navigation link label), any vessel-name decoration
   on a gram heading, or any Analysis Sheet section — verifiable by
   a full-text grep over the student-edition HTML output.
-- **FR-013**: The student edition MUST NOT contain the literal string
-  "instructor" (case-insensitive) in any URL path under its root —
-  verifiable by walking the student-edition output tree and grepping
-  every file path. Chapter folder names whose source carried the
-  "Instructor " prefix are emitted with that prefix stripped in the
-  student edition only; the instructor edition retains the source-
-  derived slugs unchanged.
-- **FR-014**: The two editions therefore have intentionally divergent
-  URL structures for any chapter whose source name carries the
-  "Instructor" prefix. The per-edition landing pages (FR-007) are the
-  authoritative entry points; cross-edition deep links are not
-  supported and need not resolve.
 - **FR-011**: The publish process MUST log clearly which audience
   filter (if any) was applied for each edition, so a reviewer reading
   the build log can confirm which output was produced for which
@@ -232,6 +223,31 @@ the address bar makes it obvious which edition is in view).
   `mock_pptx.py`, `introspect_pptx.py`, `extract_to_csv.py`, and the
   signed-off `source.csv` contract remain unchanged. Only the DITA
   generator and the HTML publisher may be modified.
+- **FR-013**: The pipeline MUST maintain exactly one DITA source tree.
+  The two HTML editions MUST be produced by two publish-time
+  invocations against the same source tree — one without an
+  audience filter (instructor edition) and one with the `-trainee`
+  audience excluded (student edition). No per-edition forking,
+  copying, or post-publish rewriting of source DITA files is
+  permitted.
+- **FR-014**: The chapter folder slugs emitted into the single DITA
+  source tree MUST NOT contain the substring "instructor"
+  (case-insensitive). Where a source chapter name carries an
+  "Instructor " prefix today, the prefix MUST be stripped before the
+  slug is computed, so both editions render the affected chapter at
+  the same path below the edition segment.
+- **FR-015**: The student edition MUST NOT contain the substring
+  "instructor" (case-insensitive) in any URL path beneath its
+  top-level `student/` segment, in any rendered page body, in any
+  page title, or in any navigation-link label — verifiable by
+  walking the student-edition output tree and grepping its files
+  and paths.
+- **FR-016**: URL paths below the top-level edition segment MUST be
+  identical across editions for every gram. A reader with the URL
+  of a gram in one edition MUST be able to reach the same gram in
+  the other edition by swapping the single edition segment
+  (`instructor/` ↔ `student/`) — supporting cross-edition
+  spot-checking during instructor review.
 
 ### Key Entities
 
@@ -262,8 +278,8 @@ the address bar makes it obvious which edition is in view).
   in the heading.
 - **SC-002**: 0 occurrences of the substring "instructor"
   (case-insensitive) in the rendered HTML body, page title, link
-  label, or URL path of any page reachable from the student
-  edition's landing page.
+  label, or URL path (below the top-level `student/` segment) of
+  any page reachable from the student edition's landing page.
 - **SC-003**: 0 Analysis Sheet sections rendered in the student
   edition; 100% of source-defined Analysis Sheets retained in the
   instructor edition.
@@ -298,19 +314,29 @@ the address bar makes it obvious which edition is in view).
   `audience="-trainee"`, so the trainee filter removes it.
 - The chapter navtitles in `main.ditamap` (today: "Instructor Week 1
   Grams", "Instructor Pub10_Ed22B_Updated", etc.) carry the literal
-  word "Instructor" baked into the navtitle. In the student edition
-  these are emitted with the leading "Instructor " stripped from
-  *both* the displayed navtitle and the chapter folder slug
-  (e.g. `week-1-grams/`, `pub10-ed22b-updated/`). In the instructor
-  edition the source-derived navtitles and slugs are retained
-  unchanged. The two editions therefore have divergent URL paths
-  for those chapters — a deliberate cost accepted in exchange for
-  the guarantee that the word "Instructor" appears nowhere in the
-  student edition (FR-013, SC-002).
-- The `instructor/` vs `student/` segment at the top of each
-  edition's URL is the only path component shared by both editions
-  for a given gram; below that, paths may diverge whenever the
-  source chapter name carries the "Instructor" prefix.
+  word "Instructor" baked into the navtitle. In the *single* DITA
+  source tree this becomes: (a) chapter folder slugs with the
+  "Instructor " word stripped (`week-1-grams/`,
+  `pub10-ed22b-updated/`); (b) the displayed navtitle expressed as
+  an audience-tagged "Instructor " prefix plus the audience-neutral
+  remainder, so the instructor publish run renders the full
+  "Instructor Week 1 Grams" navtitle while the student publish run
+  (with `-trainee` excluded) renders just "Week 1 Grams".
+- One source tree, two publish runs. The instructor edition is
+  produced by running DITA-OT against the source tree with no
+  audience filter; the student edition is produced by a second
+  invocation of DITA-OT against the *same* source tree with a
+  DITAVAL profile that excludes `-trainee`. No per-edition forking
+  of the source DITA, no post-publish rewriting of folder names
+  or links.
+- URL paths below the top-level edition segment are identical
+  across editions for every gram. The only differences between
+  what an instructor and a trainee see at the same path are
+  (a) the presence vs absence of vessel-name decoration in the
+  page heading, (b) the presence vs absence of the Analysis Sheet
+  section, and (c) the presence vs absence of the "Instructor "
+  prefix on chapter navtitles and the "Instructor Version"
+  decoration on document titles.
 - The progress-test ditamaps (`progress-test-1` … `progress-test-5`)
   already strip the "Instructor" prefix from their `<map title="…">`
   attribute (today: "Progress Test 1"). The "Instructor Version"
