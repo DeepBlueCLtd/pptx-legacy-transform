@@ -1,11 +1,11 @@
 <topic id="gram_06">
-  <title>Gram 06<ph audience="-trainee"> - FR Venator-class, Category 2, Caprica</ph></title>
+  <title>Gram 06<ph audience="-trainee" outputclass="vessel-name"> - FR Venator-class, Category 2, Caprica</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">

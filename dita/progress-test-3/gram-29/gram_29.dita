@@ -1,13 +1,13 @@
 <topic id="gram_29">
-  <title>Gram 29<ph audience="-trainee"> - Miranda-class contact bearing 190, codename Defiant</ph></title>
+  <title>Gram 29<ph audience="-trainee" outputclass="vessel-name"> - Miranda-class contact bearing 190, codename Defiant</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -39,7 +39,7 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 2</title>
       <table outputclass="gram-config">
         <tgroup cols="2">

@@ -1,11 +1,11 @@
 <topic id="gram_25">
-  <title>Gram 25<ph audience="-trainee"> - FR Razor Crest, Category 4, Trill</ph></title>
+  <title>Gram 25<ph audience="-trainee" outputclass="vessel-name"> - FR Razor Crest, Category 4, Trill</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">

@@ -278,7 +278,7 @@ def _append_gramframe_table(
     PPTX, e.g. ``"Lofar 1"``), a ``<title>`` is emitted inside the
     section so multi-gram pages get a clear heading per spectrogram.
     """
-    section = ET.SubElement(parent, "section")
+    section = ET.SubElement(parent, "section", {"outputclass": "lofar-stage"})
     if display_text:
         ET.SubElement(section, "title").text = display_text
     table = ET.SubElement(section, "table", {"outputclass": "gram-config"})
@@ -312,7 +312,9 @@ def _append_analysis_section(
     carries ``audience="-trainee"`` so the trainee profile elides the
     analysis sheet entirely.
     """
-    section = ET.SubElement(parent, "section", {"audience": "-trainee"})
+    section = ET.SubElement(parent, "section", {
+        "audience": "-trainee", "outputclass": "analysis-sheet",
+    })
     title = ET.SubElement(section, "title")
     title.text = "Analysis Sheet"
     if not href:
@@ -346,7 +348,7 @@ def _append_glc_viewer_link(
     PPTX), a ``<title>`` is emitted inside the section so multi-gram
     pages get a clear heading per audio link.
     """
-    section = ET.SubElement(parent, "section")
+    section = ET.SubElement(parent, "section", {"outputclass": "lofar-stage"})
     if display_text:
         ET.SubElement(section, "title").text = display_text
     p = ET.SubElement(section, "p")
@@ -394,7 +396,9 @@ def emit_gram_topic(
     title = ET.SubElement(topic, "title")
     title.text = f"Gram {gram_num}"
     if first.get("vessel_name"):
-        ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
+        ph = ET.SubElement(title, "ph", {
+            "audience": "-trainee", "outputclass": "vessel-name",
+        })
         ph.text = f" - {first['vessel_name']}"
     body = ET.SubElement(topic, "body")
 

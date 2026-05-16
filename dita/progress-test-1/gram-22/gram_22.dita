@@ -1,13 +1,13 @@
 <topic id="gram_22">
-  <title>Gram 22<ph audience="-trainee"> - FR Venator-class, Category 4, Coruscant</ph></title>
+  <title>Gram 22<ph audience="-trainee" outputclass="vessel-name"> - FR Venator-class, Category 4, Coruscant</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">

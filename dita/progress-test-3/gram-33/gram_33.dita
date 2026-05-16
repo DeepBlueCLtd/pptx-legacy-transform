@@ -1,11 +1,11 @@
 <topic id="gram_33">
-  <title>Gram 33<ph audience="-trainee"> - FR Voyager, Category 4, Hoth</ph></title>
+  <title>Gram 33<ph audience="-trainee" outputclass="vessel-name"> - FR Voyager, Category 4, Hoth</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">

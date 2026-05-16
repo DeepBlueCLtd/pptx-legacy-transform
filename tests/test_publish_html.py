@@ -22,8 +22,10 @@ from publish_html import (
     EDITIONS,
     Edition,
     GRAMFRAME_BUNDLE_NAME,
+    THEME_BUNDLE_NAME,
     _dita_ot_command,
     inject_gramframe_plugin,
+    inject_operator_console_theme,
     prettify_html,
     prettify_tree,
     publish,
@@ -618,6 +620,152 @@ class InjectGramframePluginTests(unittest.TestCase):
             publish_html.GRAMFRAME_BUNDLE_SRC.is_file(),
             f"Vendor the GramFrame bundle at "
             f"{publish_html.GRAMFRAME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
+        )
+
+
+# -----------------------------------------------------------------------------
+# Operator Console v2 dark-theme injection
+# -----------------------------------------------------------------------------
+
+
+class InjectOperatorConsoleThemeTests(unittest.TestCase):
+    """Wire theme.css into every emitted HTML page, with the right body
+    classification and data-edition for the page type."""
+
+    @staticmethod
+    def _fake_theme(tmp: Path) -> Path:
+        src = tmp / "vendor" / "theme.css"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("/* operator console */\n", encoding="utf-8", newline="\n")
+        return src
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _shell(body_tag: str = "<body>") -> str:
+        return (
+            '<!DOCTYPE html>\n'
+            '<html lang="en">\n'
+            '  <head>\n'
+            '    <meta charset="UTF-8">\n'
+            '    <title>X</title>\n'
+            '  </head>\n'
+            f'  {body_tag}\n'
+            '    <p>x</p>\n'
+            '  </body>\n'
+            '</html>\n'
+        )
+
+    def test_drops_theme_at_root_and_each_edition(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            self.assertTrue((out / THEME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "instructor" / THEME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "student" / THEME_BUNDLE_NAME).is_file())
+
+    def test_shared_landing_gets_landing_class_and_no_edition(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = (out / "index.html").read_text(encoding="utf-8")
+            self.assertIn('<link rel="stylesheet" type="text/css" href="theme.css">', body)
+            self.assertIn('class="landing"', body)
+            self.assertNotIn("data-edition", body)
+
+    def test_edition_index_gets_edition_index_class(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "instructor" / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = (out / "instructor" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('data-edition="instructor"', body)
+            self.assertIn('class="edition-index"', body)
+            self.assertIn('href="theme.css"', body)
+
+    def test_publication_index_gets_ditamap_index_class(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "instructor" / "main" / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('data-edition="instructor"', body)
+            self.assertIn('class="ditamap-index"', body)
+            self.assertIn('href="../theme.css"', body)
+
+    def test_topic_page_gets_edition_only_and_relative_theme_href(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            topic = (
+                out / "instructor" / "main" / "main" / "week-2-grams"
+                / "gram-20" / "gram_20.html"
+            )
+            self._write(topic, self._shell('<body id="gram_20">'))
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = topic.read_text(encoding="utf-8")
+            self.assertIn('data-edition="instructor"', body)
+            self.assertNotIn('class="ditamap-index"', body)
+            self.assertNotIn('class="landing"', body)
+            self.assertNotIn('class="edition-index"', body)
+            # Theme css is at out/instructor/theme.css; gram_20.html lives
+            # four directories below that under instructor/main/main/
+            # week-2-grams/gram-20/.
+            self.assertIn(
+                '<link rel="stylesheet" type="text/css" href="../../../../theme.css">',
+                body,
+            )
+            # Existing body attributes are preserved.
+            self.assertIn('id="gram_20"', body)
+
+    def test_student_edition_is_tagged(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            topic = out / "student" / "main" / "main" / "gram-01" / "gram_01.html"
+            self._write(topic, self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = topic.read_text(encoding="utf-8")
+            self.assertIn('data-edition="student"', body)
+
+    def test_is_idempotent(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "instructor" / "main" / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            once = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            twice = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(once, twice)
+            self.assertEqual(once.count('href="../theme.css"'), 1)
+            self.assertEqual(once.count('data-edition='), 1)
+            self.assertEqual(once.count('class="ditamap-index"'), 1)
+
+    def test_raises_when_bundle_missing(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                inject_operator_console_theme(
+                    out, bundle_src=tmp / "does-not-exist.css",
+                )
+
+    def test_vendored_theme_is_present_in_repo(self):
+        self.assertTrue(
+            publish_html.THEME_BUNDLE_SRC.is_file(),
+            f"Vendor the Operator Console v2 theme at "
+            f"{publish_html.THEME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
         )
 
 

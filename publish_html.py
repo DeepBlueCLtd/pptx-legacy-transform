@@ -368,6 +368,175 @@ def inject_gramframe_plugin(
     return count
 
 
+# -----------------------------------------------------------------------------
+# Operator Console v2 dark theme
+# -----------------------------------------------------------------------------
+#
+# A single ``theme.css`` (vendored from the design mockups under
+# ``mockups/index-dark/``) drives every page type. Per-edition / per-page
+# variation is selected at runtime via attributes on ``<body>``:
+#
+# - ``data-edition="instructor"`` / ``"student"`` switches the
+#   classification banner and accent colours.
+# - ``class="ditamap-index"`` activates the index-page card grid
+#   (the DITA-OT-generated ``<pub>/index.html`` for each publication).
+# - ``class="edition-index"`` is the per-edition "choose a publication"
+#   index (``<edition>/index.html``, written by ``write_edition_index``).
+# - ``class="landing"`` is the shared top-level entry point
+#   (``html/index.html``, written by ``write_shared_landing``).
+#
+# Topic gram pages carry only ``data-edition``.
+
+THEME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "themes" / "operator-console-v2" / "theme.css"
+THEME_BUNDLE_NAME = "theme.css"
+
+_HEAD_CLOSE = "  </head>"
+# Matches any ``<link rel="stylesheet" … href="…/theme.css">`` line, so the
+# idempotency check works regardless of the relative-path depth in the href.
+_THEME_LINK_RE = re.compile(r'<link\b[^>]*\bhref="[^"]*theme\.css"', re.IGNORECASE)
+
+
+def _theme_link_for(file_path: Path, theme_dest: Path) -> str:
+    rel = os.path.relpath(theme_dest, start=file_path.parent).replace(os.sep, "/")
+    return f'    <link rel="stylesheet" type="text/css" href="{rel}">'
+
+
+def _theme_classify_page(
+    rel_path: tuple[str, ...], editions: tuple[Edition, ...],
+) -> tuple[str | None, str | None]:
+    """Return ``(edition, body_class)`` for an HTML file under ``out_root``.
+
+    ``rel_path`` is the file's path tuple relative to ``out_root``.
+
+    - ``("index.html",)`` → shared landing, no edition, class ``landing``.
+    - ``("<edition>", "index.html")`` → per-edition index, class ``edition-index``.
+    - ``("<edition>", "<pub>", "index.html")`` → DITA-OT map index, class ``ditamap-index``.
+    - Anything deeper under ``<edition>/`` → topic page, no special class.
+    """
+    edition_names = {e.output_subdir for e in editions}
+    if len(rel_path) == 1 and rel_path[0] == "index.html":
+        return None, "landing"
+    if len(rel_path) >= 1 and rel_path[0] in edition_names:
+        edition = rel_path[0]
+        if len(rel_path) == 2 and rel_path[1] == "index.html":
+            return edition, "edition-index"
+        if len(rel_path) == 3 and rel_path[2] == "index.html":
+            return edition, "ditamap-index"
+        return edition, None
+    return None, None
+
+
+def inject_operator_console_theme(
+    out_root: Path,
+    editions: tuple[Edition, ...] = EDITIONS,
+    bundle_src: Path = THEME_BUNDLE_SRC,
+) -> int:
+    """Vendor ``theme.css`` into ``out_root`` and link it from every page.
+
+    Drops one copy of the theme at ``<out_root>/theme.css`` (so the
+    shared landing can link it) and another copy at
+    ``<out_root>/<edition>/theme.css`` for each edition (so per-edition
+    index + every DITA-OT map index + every topic page can link a
+    nearby copy with a short relative href).
+
+    For each ``*.html`` under ``out_root``, ensures a
+    ``<link rel="stylesheet" type="text/css" href="…/theme.css">`` sits
+    in ``<head>`` and that ``<body>`` carries the appropriate
+    ``data-edition`` and (where applicable) page-type class.
+
+    Idempotent: pages that already carry the theme link are left
+    alone, preserving byte-determinism across re-runs.
+
+    Returns the count of HTML files modified.
+    """
+    if not bundle_src.is_file():
+        raise FileNotFoundError(
+            f"Operator Console v2 theme bundle missing at {bundle_src}."
+        )
+    out_root.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(bundle_src, out_root / THEME_BUNDLE_NAME)
+    for edition in editions:
+        edition_dir = out_root / edition.output_subdir
+        edition_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(bundle_src, edition_dir / THEME_BUNDLE_NAME)
+
+    edition_themes: dict[str, Path] = {
+        e.output_subdir: out_root / e.output_subdir / THEME_BUNDLE_NAME
+        for e in editions
+    }
+    root_theme = out_root / THEME_BUNDLE_NAME
+
+    count = 0
+    for path in sorted(out_root.rglob("*.html")):
+        rel_parts = path.relative_to(out_root).parts
+        edition, page_class = _theme_classify_page(rel_parts, editions)
+
+        theme_dest = (
+            edition_themes[edition] if edition is not None else root_theme
+        )
+        body = path.read_text(encoding="utf-8")
+
+        changed = False
+
+        if _THEME_LINK_RE.search(body) is None:
+            link_tag = _theme_link_for(path, theme_dest)
+            inserted = f"{link_tag}\n{_HEAD_CLOSE}"
+            new_body, replaced = re.subn(
+                re.escape(_HEAD_CLOSE), inserted, body, count=1,
+            )
+            if replaced:
+                body = new_body
+                changed = True
+
+        body, body_changed = _set_body_attrs(body, edition, page_class)
+        if body_changed:
+            changed = True
+
+        if changed:
+            path.write_text(body, encoding="utf-8", newline="\n")
+            count += 1
+    return count
+
+
+_BODY_OPEN_RE = re.compile(r"<body(\s[^>]*)?>", re.IGNORECASE)
+
+
+def _set_body_attrs(
+    body: str, edition: str | None, page_class: str | None,
+) -> tuple[str, bool]:
+    """Set ``data-edition`` and append a page-type class on the ``<body>`` tag.
+
+    Returns ``(new_body, changed)``. Existing attributes are preserved;
+    when ``page_class`` is set and ``class`` already exists, the new
+    token is appended unless already present.
+    """
+    match = _BODY_OPEN_RE.search(body)
+    if match is None:
+        return body, False
+    attrs = match.group(1) or ""
+    new_attrs = attrs
+    changed = False
+
+    if edition is not None and 'data-edition=' not in attrs:
+        new_attrs = f'{new_attrs} data-edition="{edition}"'
+        changed = True
+
+    if page_class is not None:
+        class_match = re.search(r'\bclass="([^"]*)"', new_attrs)
+        if class_match is None:
+            new_attrs = f'{new_attrs} class="{page_class}"'
+            changed = True
+        elif page_class not in class_match.group(1).split():
+            existing = class_match.group(1)
+            replacement = f'class="{existing} {page_class}"'
+            new_attrs = new_attrs.replace(class_match.group(0), replacement, 1)
+            changed = True
+
+    if not changed:
+        return body, False
+    return body[:match.start()] + f"<body{new_attrs}>" + body[match.end():], True
+
+
 def scrub_nondeterministic_metadata(root: Path) -> int:
     """Strip DITA-OT wall-clock metadata from every HTML file under ``root``.
 
@@ -677,6 +846,11 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[gramframe] vendored {GRAMFRAME_BUNDLE_NAME} into {args.out} "
             f"and linked it from {injected} HTML file(s)"
+        )
+        themed = inject_operator_console_theme(args.out)
+        print(
+            f"[theme] vendored {THEME_BUNDLE_NAME} (Operator Console v2) "
+            f"and linked it from {themed} HTML file(s)"
         )
 
     shutil.rmtree(args.staged, ignore_errors=True)

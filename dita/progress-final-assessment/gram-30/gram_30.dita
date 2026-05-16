@@ -1,13 +1,13 @@
 <topic id="gram_30">
-  <title>Gram 30<ph audience="-trainee"> - Excelsior contact bearing 009, codename Cardassia</ph></title>
+  <title>Gram 30<ph audience="-trainee" outputclass="vessel-name"> - Excelsior contact bearing 009, codename Cardassia</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">

@@ -1,11 +1,11 @@
 <topic id="gram_15">
-  <title>Gram 15<ph audience="-trainee"> - FR B-wing, Category 1, Mustafar</ph></title>
+  <title>Gram 15<ph audience="-trainee" outputclass="vessel-name"> - FR B-wing, Category 1, Mustafar</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -37,7 +37,7 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 2</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -69,7 +69,7 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 3</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -101,7 +101,7 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 4</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
