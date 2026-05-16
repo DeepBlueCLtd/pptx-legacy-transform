@@ -594,14 +594,21 @@ class PublisherIdempotencyTests(unittest.TestCase):
 def _html_twin(dita_path: Path) -> Path:
     """Return the HTML file produced by DITA-OT for ``dita_path``.
 
-    DITA-OT writes each ditamap's output under ``html/<map>/<map>/...`` —
-    the map stem appears twice because DITA-OT preserves the source tree
-    relative to the build root, and we hand it the staged ditamap copy.
+    DITA-OT writes each ditamap's output under
+    ``html/<edition>/<map>/<map>/...`` — the map stem appears twice
+    because DITA-OT preserves the source tree relative to the build
+    root, and we hand it the staged ditamap copy. The image-presence
+    regression check targets the **instructor edition** (the
+    unfiltered superset) — that's where every image referenced by
+    ``dita/`` is required to exist. Student-edition image presence is
+    implicitly verified by the Jest URL-parity test, which asserts
+    each instructor HTML page has a sibling at the same path under
+    ``html/student/``.
     """
     rel = dita_path.relative_to(DITA_ROOT)
     map_stem = rel.parts[0]
     inner = Path(*rel.parts[1:]).with_suffix(".html")
-    return HTML_ROOT / map_stem / map_stem / inner
+    return HTML_ROOT / "instructor" / map_stem / map_stem / inner
 
 
 _IMG_SRC_RE = re.compile(r'<img\b[^>]*\bsrc="([^"]+)"', re.IGNORECASE)
