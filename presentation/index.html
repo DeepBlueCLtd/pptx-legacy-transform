@@ -292,33 +292,40 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <h2>Styled for the operator &mdash; "Operator Console v2"</h2>
         <div class="two-col">
           <div>
-            <p>The default DITA-OT output is functional but plain. The new theme reads as a piece of equipment:</p>
+            <p>The default DITA-OT output is functional but plain. The themed output reads as a piece of equipment:</p>
             <ul>
-              <li><strong>Classification banner</strong> top and bottom &mdash; amber for instructor, cyan for student, plus a coloured edge so a glance at the page reveals which edition you're in</li>
-              <li><strong>Each Lofar section is a "trace"</strong> &mdash; a header bar with a session id, a status LED, and a CRT-style scanline overlay over the spectrogram</li>
-              <li><strong>LCD-style readouts</strong> for time / frequency values</li>
+              <li><strong>Classification banner</strong> top and bottom &mdash; amber for instructor, cyan for student, so a glance at the page reveals which edition you're in</li>
+              <li><strong>Each Lofar section is a "trace"</strong> &mdash; a header bar with a session id, status LED, and CRT scanline overlay</li>
               <li><strong>Engineering grid background</strong>, monospaced display fonts, monochromatic accents</li>
               <li>Drives off a single <code>data-edition</code> attribute on <code>&lt;body&gt;</code> &mdash; one CSS file, no per-edition fork</li>
             </ul>
+            <p class="muted small">The static gram-config tables in the DITA source are replaced at runtime by the <strong>GramFrame</strong> plugin (next slide) &mdash; what you see at right isn't just styling.</p>
           </div>
           <div>
-            <img src="assets/screenshots/styled-gram.png" alt="Styled gram topic in dark Operator Console v2 theme" class="frame-img" style="max-height:62vh" />
-            <p class="caption">A single styled gram &mdash; instructor edition.</p>
+            <img src="assets/screenshots/styled-gram.png" alt="Styled gram topic in dark Operator Console v2 theme with GramFrame components" class="frame-img" style="max-height:62vh" />
+            <p class="caption">Gram 20, instructor edition &mdash; real screenshot of <code>html/instructor/main/week-4-grams-updated/gram-20/</code>.</p>
           </div>
         </div>
       </section>
 
-      <!-- 14. Before / after styling -->
+      <!-- 14. GramFrame plugin -->
       <section>
-        <h2>Before / after &mdash; what styling changed</h2>
+        <h2>GramFrame &mdash; the spectrogram becomes an instrument</h2>
         <div class="two-col">
           <div>
-            <img src="assets/screenshots/baseline-gram.png" alt="Baseline DITA-OT output, no theme" class="frame-img" style="max-height:55vh" />
-            <p class="caption"><strong>Baseline</strong> &mdash; default DITA-OT HTML5. Correct, readable, but reads like documentation, not equipment.</p>
+            <p>A bundled JavaScript plugin (<code>gramframe.bundle.js</code>) finds every gram-config table on a page and replaces it with an interactive component:</p>
+            <ul>
+              <li><strong>CURSOR / HARMONICS / DOPPLER</strong> mode buttons &mdash; switch the analysis tool without leaving the page</li>
+              <li><strong>LED readouts</strong> for live cursor time / frequency, plus the cursor colour-picker</li>
+              <li><strong>Click-to-add markers</strong> with a MARKERS table; right-click to delete</li>
+              <li><strong>Harmonics overlay</strong> with rate/spacing computed from the user's clicks</li>
+              <li>Talks to the SVG axes derived from the GLC's <code>time-end</code> / <code>freq-end</code> &mdash; values that came straight from the signed-off CSV</li>
+            </ul>
+            <p class="muted small">Injected by <code>publish_html.py</code>; the DITA source stays plain XML. The same component shipped on both editions.</p>
           </div>
           <div>
-            <img src="assets/screenshots/styled-gram.png" alt="Operator Console v2 styled gram" class="frame-img" style="max-height:55vh" />
-            <p class="caption"><strong>Operator Console v2</strong> &mdash; same DITA, same HTML, themed with a single stylesheet plus the GramFrame plugin (interactive spectrogram component bundled and auto-injected).</p>
+            <img src="assets/screenshots/baseline-gram.png" alt="Baseline DITA-OT output, static image + table" class="frame-img" style="max-height:55vh" />
+            <p class="caption"><strong>Before</strong>: a static PNG plus a four-row metadata table. Read-only.</p>
           </div>
         </div>
       </section>
@@ -327,14 +334,14 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
       <section>
         <h2>Live demo &mdash; a single gram, instructor edition</h2>
         <iframe class="live-demo" src="assets/embeds/instructor/progress-test-1/gram-04/gram_04.html"></iframe>
-        <p class="caption">Live page from the generated HTML (Progress Test 1 &middot; Gram 04 &middot; instructor edition). Spectrogram is illustrative &mdash; the test corpus uses placeholder media. <span class="muted">Note the amber classification banner and the vessel-name decoration.</span></p>
+        <p class="caption">Live page from the generated HTML &mdash; GramFrame is running inside this iframe. Try clicking the spectrogram to drop a marker, or switch modes. <span class="muted">Note the amber banner and the vessel-name decoration.</span></p>
       </section>
 
       <!-- 16. Live demo: gram topic (student) -->
       <section>
         <h2>Same gram, student edition</h2>
         <iframe class="live-demo" src="assets/embeds/student/progress-test-1/gram-04/gram_04.html"></iframe>
-        <p class="caption">Identical URL path, just <code>student/</code> instead of <code>instructor/</code>. Vessel name and Analysis Sheet section are gone &mdash; same source, filtered at publish.</p>
+        <p class="caption">Identical URL path, just <code>student/</code> instead of <code>instructor/</code>. Vessel name and Analysis Sheet section are gone, banner flips to cyan &mdash; same source, filtered at publish. GramFrame is still live.</p>
       </section>
 
       <!-- 17. Live demo: landing page -->
