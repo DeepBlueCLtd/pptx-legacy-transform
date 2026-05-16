@@ -44,21 +44,21 @@ All paths below are repository-relative.
 **Purpose**: Stand up the Jest test layer so HTML verification tasks
 have somewhere to land. None of these tasks change the Python pipeline.
 
-- [ ] T001 [P] Create `package.json` at the repo root with
+- [X] T001 [P] Create `package.json` at the repo root with
   `jest@^29` and `cheerio@^1` as `devDependencies`, a `"test": "jest"`
   npm script, and `"private": true` so it never publishes. Include
   `"name": "pptx-legacy-transform-web-tests"` and a one-line
   `"description"`.
-- [ ] T002 [P] Create `jest.config.js` at the repo root:
+- [X] T002 [P] Create `jest.config.js` at the repo root:
   `rootDir: "./tests/web"`, `testEnvironment: "node"`,
   `testMatch: ["**/*.test.js"]`. Keep the file minimal and
   CommonJS-flavoured (the project has no other JS tooling to align
   with).
-- [ ] T003 [P] Append `node_modules/`, `.jest-cache/`, and
+- [X] T003 [P] Append `node_modules/`, `.jest-cache/`, and
   `package-lock.json` to `.gitignore` (the package-lock for a dev-
   only Jest setup adds churn without value; the test stack is
   evergreen).
-- [ ] T004 [P] Add a "HTML output verification (Jest)" section to
+- [X] T004 [P] Add a "HTML output verification (Jest)" section to
   `README.md` explaining: prerequisite (`npm install` once), when to
   run (`npm test` after `python publish_html.py`), what it asserts
   (no-leakage grep, URL parity, gram-heading shape), and how it
@@ -78,12 +78,12 @@ depend on.
 **⚠️ CRITICAL**: No user-story work can begin until this phase is
 complete.
 
-- [ ] T005 [P] Create `dita/trainee.ditaval` with the byte-exact
+- [X] T005 [P] Create `dita/trainee.ditaval` with the byte-exact
   content from `specs/003-instructor-student-versions/contracts/audience-filter.md`
   §1.2 (UTF-8, LF line endings, no BOM). One `<prop>` rule excluding
   `audience="trainee"`. This file is the only DITAVAL profile this
   feature ships.
-- [ ] T006 [P] Create `tests/fixtures/audience_minimal.csv` covering
+- [X] T006 [P] Create `tests/fixtures/audience_minimal.csv` covering
   the three audience-shape cases the Python tests will assert on:
   (a) one chapter whose name begins with `"Instructor "` (e.g.
   `"Instructor Week 1 Grams"`), (b) one chapter whose name does NOT
@@ -116,7 +116,7 @@ with the heading `"Gram 01"` only and no Analysis Sheet section.
 
 ### Tests for User Story 1 (write FIRST — must fail before implementation)
 
-- [ ] T007 [P] [US1] In `tests/test_generate_dita.py`, add three
+- [X] T007 [P] [US1] In `tests/test_generate_dita.py`, add three
   failing test methods asserting the new DITA shape:
   (a) `test_chapter_slug_strips_instructor_prefix` — runs the
   generator against `tests/fixtures/audience_minimal.csv` and asserts
@@ -131,14 +131,14 @@ with the heading `"Gram 01"` only and no Analysis Sheet section.
   for the "Instructor "-prefixed chapter, and a plain `<navtitle>`
   with no `<ph>` for the plain chapter, and NO `navtitle=` attribute
   on either `<topichead>`.
-- [ ] T008 [P] [US1] In `tests/test_publish_html.py`, add a failing
+- [X] T008 [P] [US1] In `tests/test_publish_html.py`, add a failing
   test method `test_student_edition_dita_ot_invocation` that uses
   `subprocess.run` mocking to assert: for each ditamap, the publisher
   calls DITA-OT with `--filter=<absolute-path-to>/dita/trainee.ditaval`,
   `--output=<staged-out>/student/<stem>/`, and `--format=html5`.
   Also assert the publisher logs a line containing `student` and
   the filter path for each ditamap (FR-011).
-- [ ] T009 [P] [US1] Create `tests/web/student-edition.test.js` with
+- [X] T009 [P] [US1] Create `tests/web/student-edition.test.js` with
   failing Jest tests covering:
   (a) **SC-002 — no "instructor" content leakage**: walks every file
   under `html/student/` with a recursive helper, reads each as utf-8,
@@ -158,40 +158,40 @@ with the heading `"Gram 01"` only and no Analysis Sheet section.
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] In `generate_dita.py`, add a `_normalise_chapter(raw: str) -> tuple[str | None, str, str]`
+- [X] T010 [US1] In `generate_dita.py`, add a `_normalise_chapter(raw: str) -> tuple[str | None, str, str]`
   helper that returns `(audience_prefix, display_remainder, slug)`,
   matching the `ChapterNormalisation` shape defined in
   `data-model.md` §4.1. Use case-insensitive leading-`"Instructor "`
   detection per research R4. Add a short docstring with the four
   table-driven examples from `data-model.md`. No other code in
   `generate_dita.py` changes in this task.
-- [ ] T011 [US1] In `generate_dita.py`, replace every existing
+- [X] T011 [US1] In `generate_dita.py`, replace every existing
   `slugify(row.get("chapter", ""))` call (currently in
   `_publication_root()` and `emit_main_ditamap()`) with a call to
   `_normalise_chapter()`, using `.slug` for path computation. This
   task drops the `instructor-` prefix from every chapter folder name
   emitted under `dita/main/`; nothing else changes.
-- [ ] T012 [US1] In `generate_dita.py`, change `emit_main_ditamap()`
+- [X] T012 [US1] In `generate_dita.py`, change `emit_main_ditamap()`
   and `emit_test_ditamap()` to emit
   `<map><title>{title-text}<ph audience="-trainee"> — Instructor Version</ph></title>...</map>`
   in place of `<map title="...">…</map>`. The title text is "Main" or
   "Progress Test N" exactly as today; the audience-tagged suffix is
   identical across all ditamaps. Removes the `title=` attribute from
   the `<map>` element entirely.
-- [ ] T013 [US1] In `generate_dita.py`, change `emit_main_ditamap()`
+- [X] T013 [US1] In `generate_dita.py`, change `emit_main_ditamap()`
   to emit each chapter as
   `<topichead><topicmeta><navtitle>{decoration}</navtitle></topicmeta>...<topicref/>...</topichead>`,
   where `{decoration}` is `<ph audience="-trainee">Instructor </ph>{display_remainder}`
   when `_normalise_chapter()` returns a non-None `audience_prefix`, or
   just the plain text when it returns `None`. Removes the `navtitle=`
   attribute from `<topichead>` entirely.
-- [ ] T014 [US1] In `publish_html.py`, add a small `Edition` dataclass
+- [X] T014 [US1] In `publish_html.py`, add a small `Edition` dataclass
   near the top of the module (matching `data-model.md` §1.1) with
   fields `name: str`, `output_subdir: str`, `ditaval: Path | None`,
   `description: str`. Define the module-level constant
   `EDITIONS = (Edition("instructor", "instructor", None, "..."), Edition("student", "student", Path("trainee.ditaval"), "..."))`.
   No callers yet — pure structural addition this task.
-- [ ] T015 [US1] In `publish_html.py`, modify the `publish()` function
+- [X] T015 [US1] In `publish_html.py`, modify the `publish()` function
   to iterate over the student-edition entry in `EDITIONS`: for each
   ditamap, invoke DITA-OT with `--filter=<dita>/trainee.ditaval` and
   `--output=<staged-out>/student/<stem>/`. Log
@@ -201,7 +201,7 @@ with the heading `"Gram 01"` only and no Analysis Sheet section.
   instructor-edition entry is iterated over but the body of the loop
   is a stub call (`# wired up by T021`); this keeps US1 testable
   without the instructor pass.
-- [ ] T016 [US1] Re-run `python generate_dita.py --csv source.csv
+- [X] T016 [US1] Re-run `python generate_dita.py --csv source.csv
   --out dita/ --image-root <PPTX-source-tree> --clean` to refresh
   the committed DITA source tree with normalised chapter slugs and
   the new ditamap shape. Commit the regenerated `dita/` tree
@@ -212,7 +212,7 @@ with the heading `"Gram 01"` only and no Analysis Sheet section.
 
 ### Verification for User Story 1
 
-- [ ] T017 [US1] Run `python -m unittest discover tests/` from the
+- [X] T017 [US1] Run `python -m unittest discover tests/` from the
   repo root. All Python tests in `test_generate_dita.py` and
   `test_publish_html.py` should pass (including T007 and T008 added
   earlier). Pre-existing tests for feature 001 must also still pass
@@ -245,14 +245,14 @@ its Analysis Sheet section.
 
 ### Tests for User Story 2 (write FIRST — must fail before implementation)
 
-- [ ] T019 [P] [US2] In `tests/test_publish_html.py`, add a failing
+- [X] T019 [P] [US2] In `tests/test_publish_html.py`, add a failing
   test method `test_instructor_edition_dita_ot_invocation` that
   asserts: for each ditamap, the publisher ALSO calls DITA-OT
   *without* `--filter` and with `--output=<staged-out>/instructor/<stem>/`.
   The publisher logs `[publish:instructor] {ditamap.name} -> {target}
   (filter=none)` before each instructor pass. Both passes happen in
   the same publisher invocation (SC-005).
-- [ ] T020 [P] [US2] Create `tests/web/instructor-edition.test.js`
+- [X] T020 [P] [US2] Create `tests/web/instructor-edition.test.js`
   with failing Jest tests covering:
   (a) **SC-007 — instructor pages clearly marked**: globs
   `html/instructor/**/*.html`, parses each with cheerio, asserts the
@@ -270,12 +270,12 @@ its Analysis Sheet section.
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] In `publish_html.py`, wire up the instructor-edition
+- [X] T021 [US2] In `publish_html.py`, wire up the instructor-edition
   branch left stubbed in T015: for each ditamap, invoke DITA-OT
   with NO `--filter` and `--output=<staged-out>/instructor/<stem>/`.
   Same logging convention as the student pass but the
   `(filter=none)` suffix indicates no filter applied.
-- [ ] T022 [US2] In `publish_html.py`, update the post-publish
+- [X] T022 [US2] In `publish_html.py`, update the post-publish
   prettify pass: `prettify_tree()` now walks `html/instructor/` AND
   `html/student/` (not the old single `html/` root). Confirm the
   walk handles both subtrees in one call so the existing
@@ -312,7 +312,7 @@ publication, reach the same rendered topic tree US1 and US2 produced.
 
 ### Tests for User Story 3 (write FIRST — must fail before implementation)
 
-- [ ] T024 [P] [US3] In `tests/test_publish_html.py`, add a failing
+- [X] T024 [P] [US3] In `tests/test_publish_html.py`, add a failing
   test method `test_shared_landing_page_shape` asserting:
   `html/index.html` exists; contains exactly two `<a>` elements in
   body order pointing at `instructor/index.html` and
@@ -320,7 +320,7 @@ publication, reach the same rendered topic tree US1 and US2 produced.
   unambiguously ("Instructor edition", "Student edition"); a
   `Generated …` line is present; the page is byte-deterministic given
   a fixed `SOURCE_DATE_EPOCH`.
-- [ ] T025 [P] [US3] Create `tests/web/landing-page.test.js` with
+- [X] T025 [P] [US3] Create `tests/web/landing-page.test.js` with
   failing Jest tests covering:
   (a) **SC-004 — one-click navigation**: parses `html/index.html`,
   asserts exactly two `<a>` elements pointing at
@@ -338,20 +338,20 @@ publication, reach the same rendered topic tree US1 and US2 produced.
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] In `publish_html.py`, rename `write_root_index()` to
+- [X] T026 [US3] In `publish_html.py`, rename `write_root_index()` to
   `write_edition_index(out_subdir, edition, entries, generated_at)`.
   The function now takes an `Edition` instance and writes its index
   to `out_subdir/index.html`. Heading text reads
   "{edition.name.title()} edition". Link hrefs are
   `{stem}/index.html` (unchanged).
-- [ ] T027 [US3] In `publish_html.py`, add a new function
+- [X] T027 [US3] In `publish_html.py`, add a new function
   `write_shared_landing(out_root, editions, generated_at)` that
   writes `html/index.html` matching the shape pinned in
   `specs/003-instructor-student-versions/contracts/html-edition-layout.md`
   §2.1. Two `<li>` items in deterministic order (instructor first,
   student second), each linking to its per-edition index with an
   inline audience description sourced from `edition.description`.
-- [ ] T028 [US3] In `publish_html.py`'s `main()`, after the two
+- [X] T028 [US3] In `publish_html.py`'s `main()`, after the two
   DITA-OT passes complete: call `write_edition_index()` once for the
   instructor entries and once for the student entries (writing to
   `html/instructor/index.html` and `html/student/index.html`
@@ -377,25 +377,25 @@ named entry point into a tidy, audience-aware HTML tree.
 **Purpose**: Idempotency (FR-008 / SC-006), documentation, end-to-end
 validation.
 
-- [ ] T030 In `publish_html.py`, extend `prettify_tree()` (or add a
+- [X] T030 In `publish_html.py`, extend `prettify_tree()` (or add a
   sibling pass invoked right after it) to walk every emitted
   `*.html` file and strip the `<meta name="DC.date.created" …>`
   element and any DITA-OT-generated `<!-- Generated by DITA-OT … -->`
   comment that carries a wall-clock timestamp. This is the only
   known non-deterministic field in DITA-OT 4.x HTML5 output (R7).
-- [ ] T031 In `tests/test_publish_html.py`, add a failing-then-passing
+- [X] T031 In `tests/test_publish_html.py`, add a failing-then-passing
   test `test_idempotent_publish_run` that: runs the publisher twice
   into separate temp directories with a fixed `SOURCE_DATE_EPOCH`,
   collects sha256 hashes of every file under each `html/` tree,
   asserts the two hash maps are equal (SC-006).
-- [ ] T032 [P] Create `tests/web/idempotency.test.js` with a Jest
+- [X] T032 [P] Create `tests/web/idempotency.test.js` with a Jest
   companion test that walks `html/instructor/` and `html/student/`,
   computes a sha256 of each file's contents, snapshots the hash map
   via `expect(hashMap).toMatchSnapshot()`. The first run records the
   snapshot; subsequent runs over the same DITA source MUST match it
   (developer-visible signal when a non-deterministic change creeps
   in).
-- [ ] T033 [P] Update `README.md`'s "Run the pipeline" section to
+- [X] T033 [P] Update `README.md`'s "Run the pipeline" section to
   describe the new dual-edition output layout (cite
   `contracts/html-edition-layout.md` §1) and document the
   `npm install` / `npm test` step for HTML-output verification. Add
