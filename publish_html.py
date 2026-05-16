@@ -638,12 +638,12 @@ def _generated_timestamp() -> str:
     """Return a generation timestamp suitable for the landing-page chrome.
 
     Honours ``SOURCE_DATE_EPOCH`` for byte-deterministic output across
-    runs (research R6 / FR-008 / SC-006). Falls back to the literal
-    string ``"unset"`` when the environment variable is not present, so
-    a missing variable produces a stable known string rather than the
-    wall-clock time.
+    runs (research R6 / FR-008 / SC-006). When the variable is absent
+    or unparseable, falls back to the current UTC time so the landing
+    page always shows a real timestamp; this trades byte-determinism
+    for a readable preview, and CI/test runs that need determinism are
+    expected to set ``SOURCE_DATE_EPOCH`` explicitly.
     """
-    import os
     epoch = os.environ.get("SOURCE_DATE_EPOCH")
     if epoch:
         try:
@@ -651,7 +651,7 @@ def _generated_timestamp() -> str:
             return ts.strftime("%Y-%m-%d %H:%M UTC")
         except (TypeError, ValueError):
             pass
-    return "unset"
+    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def write_edition_index(
@@ -667,7 +667,7 @@ def write_edition_index(
     ``<stem>/index.html`` (relative to ``out_subdir``).
     """
     items = "\n".join(
-        f'      <li><a href="{_escape(href)}/index.html">{_escape(title)}</a></li>'
+        f'        <li><a href="{_escape(href)}/index.html">{_escape(title)}</a></li>'
         for title, href in entries
     )
     edition_name = edition.name.title()
@@ -681,11 +681,13 @@ def write_edition_index(
         f'    <title>{edition_name} edition — published DITA output</title>\n'
         '  </head>\n'
         '  <body>\n'
-        f'    <h1>{edition_name} edition</h1>\n'
-        f'    <p>Generated {generated_at}</p>\n'
-        '    <ul>\n'
+        '    <main role="main">\n'
+        f'      <h1>{edition_name} edition</h1>\n'
+        f'      <p class="generated">Generated {generated_at}</p>\n'
+        '      <ul class="deliverables">\n'
         f'{items}\n'
-        '    </ul>\n'
+        '      </ul>\n'
+        '    </main>\n'
         '  </body>\n'
         '</html>\n',
         encoding="utf-8",
@@ -708,9 +710,11 @@ def write_shared_landing(
     no longer resolve (research R8).
     """
     items = "\n".join(
-        f'      <li><a href="{_escape(ed.output_subdir)}/index.html">'
-        f'<strong>{_escape(ed.name.title())} edition</strong></a> — '
-        f'{_escape(ed.description)}</li>'
+        f'        <li>\n'
+        f'          <a href="{_escape(ed.output_subdir)}/index.html">'
+        f'<strong>{_escape(ed.name.title())} edition</strong></a>\n'
+        f'          <span class="meta">{_escape(ed.description)}</span>\n'
+        f'        </li>'
         for ed in editions
     )
     out_root.mkdir(parents=True, exist_ok=True)
@@ -723,11 +727,13 @@ def write_shared_landing(
         '    <title>Published DITA output — choose an edition</title>\n'
         '  </head>\n'
         '  <body>\n'
-        '    <h1>Published DITA output</h1>\n'
-        f'    <p>Generated {generated_at}</p>\n'
-        '    <ul>\n'
+        '    <main role="main">\n'
+        '      <h1>Published DITA output</h1>\n'
+        f'      <p class="generated">Generated {generated_at}</p>\n'
+        '      <ul class="deliverables">\n'
         f'{items}\n'
-        '    </ul>\n'
+        '      </ul>\n'
+        '    </main>\n'
         '  </body>\n'
         '</html>\n',
         encoding="utf-8",

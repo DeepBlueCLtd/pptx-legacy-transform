@@ -61,17 +61,30 @@ Cardinality:
     <title>Published DITA output — choose an edition</title>
   </head>
   <body>
-    <h1>Published DITA output</h1>
-    <p>Generated {timestamp}</p>
-    <ul>
-      <li><a href="instructor/index.html"><strong>Instructor edition</strong></a>
-        — full content, including answers, vessel names, and analysis sheets.</li>
-      <li><a href="student/index.html"><strong>Student edition</strong></a>
-        — exercises only, with answers, vessel names, and analysis sheets removed.</li>
-    </ul>
+    <main role="main">
+      <h1>Published DITA output</h1>
+      <p class="generated">Generated {timestamp}</p>
+      <ul class="deliverables">
+        <li>
+          <a href="instructor/index.html"><strong>Instructor edition</strong></a>
+          <span class="meta">Full content, including answers, vessel names, and analysis sheets.</span>
+        </li>
+        <li>
+          <a href="student/index.html"><strong>Student edition</strong></a>
+          <span class="meta">Exercises only, with answers, vessel names, and analysis sheets removed.</span>
+        </li>
+      </ul>
+    </main>
   </body>
 </html>
 ```
+
+The `class="generated"` / `class="deliverables"` / `class="meta"`
+hooks are the styling contract the Operator Console v2 theme targets
+(see `vendor/themes/operator-console-v2/theme.css`). Without them
+the in-theme rules silently fall back to default browser styling —
+the chooser links revert to default link colors and the card layout
+disappears.
 
 ### 2.2 Contract clauses
 
@@ -83,9 +96,11 @@ Cardinality:
   contains enough context for a reviewer to tell the editions apart
   in one read (SC-004).
 - `{timestamp}` is sourced from `SOURCE_DATE_EPOCH` when set
-  (formatted as `YYYY-MM-DD HH:MM UTC`) and falls back to the fixed
-  string `"unset"` otherwise — so two consecutive runs from the same
-  environment produce byte-identical landing pages (FR-008).
+  (formatted as `YYYY-MM-DD HH:MM UTC`); when absent or unparseable,
+  it falls back to the current UTC time in the same format. Two
+  consecutive runs from the same environment with `SOURCE_DATE_EPOCH`
+  set produce byte-identical landing pages (FR-008); runs without it
+  set produce a readable preview at the cost of byte-determinism.
 - The page is the **only** file in `html/` whose contents are
   permitted to contain the word "Instructor" — see §4.
 
@@ -105,12 +120,14 @@ to that publication's rendered subdirectory.
     <title>{Edition name} edition — published DITA output</title>
   </head>
   <body>
-    <h1>{Edition name} edition</h1>
-    <p>Generated {timestamp}</p>
-    <ul>
-      <li><a href="{ditamap-stem}/index.html">{Ditamap title}</a></li>
-      <!-- …one li per publication, in the same order in both editions… -->
-    </ul>
+    <main role="main">
+      <h1>{Edition name} edition</h1>
+      <p class="generated">Generated {timestamp}</p>
+      <ul class="deliverables">
+        <li><a href="{ditamap-stem}/index.html">{Ditamap title}</a></li>
+        <!-- …one li per publication, in the same order in both editions… -->
+      </ul>
+    </main>
   </body>
 </html>
 ```

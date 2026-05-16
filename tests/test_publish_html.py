@@ -790,14 +790,16 @@ class GeneratedTimestampTests(unittest.TestCase):
                 "2023-11-14 22:13 UTC",
             )
 
-    def test_falls_back_to_fixed_string_when_unset(self):
+    def test_falls_back_to_current_utc_when_unset(self):
         env = {k: v for k, v in os.environ.items() if k != "SOURCE_DATE_EPOCH"}
         with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(publish_html._generated_timestamp(), "unset")
+            ts = publish_html._generated_timestamp()
+        self.assertRegex(ts, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$")
 
     def test_falls_back_when_value_is_garbage(self):
         with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "not-a-number"}):
-            self.assertEqual(publish_html._generated_timestamp(), "unset")
+            ts = publish_html._generated_timestamp()
+        self.assertRegex(ts, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$")
 
 
 # -----------------------------------------------------------------------------
