@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -299,6 +300,72 @@ _DITAOT_DATE_META_RE = re.compile(
     r'\s*<meta[^>]+name="DC\.date\.(?:created|modified)"[^>]*>\s*',
     re.IGNORECASE,
 )
+
+
+# -----------------------------------------------------------------------------
+# GramFrame plugin integration
+# -----------------------------------------------------------------------------
+#
+# The DITA source already emits each spectrogram as a ``<table class="gram-config">``
+# carrying an ``<img colspan="2">`` plus the four parameter rows the
+# GramFrame plugin expects (time-start, time-end, freq-start, freq-end).
+# Loading ``gramframe.bundle.js`` on a page is therefore enough to upgrade
+# every gram on it into an interactive viewer — see
+# https://github.com/DeepBlueCLtd/GramFrame ``docs/HTML-Integration-Guide.md``.
+#
+# The bundle is vendored at ``vendor/gramframe/gramframe.bundle.js`` so
+# air-gapped publish runs do not reach for the network. We copy it once
+# to ``<out_root>/gramframe.bundle.js`` and inject a single relative
+# ``<script>`` tag into every emitted page; the script no-ops on pages
+# that have no ``gram-config`` tables.
+
+GRAMFRAME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "gramframe" / "gramframe.bundle.js"
+GRAMFRAME_BUNDLE_NAME = "gramframe.bundle.js"
+
+_GRAMFRAME_HEAD_CLOSE = "  </head>"
+
+
+def inject_gramframe_plugin(
+    out_root: Path,
+    bundle_src: Path = GRAMFRAME_BUNDLE_SRC,
+) -> int:
+    """Copy the GramFrame bundle into ``out_root`` and link it from every page.
+
+    Places one copy of the bundle at ``<out_root>/<GRAMFRAME_BUNDLE_NAME>``
+    and inserts a ``<script src="…/gramframe.bundle.js" defer></script>``
+    line into the ``<head>`` of every ``*.html`` file under ``out_root``,
+    with the ``src`` written as a path relative to that file's parent
+    directory (so ``file://`` browsing works).
+
+    Idempotent: pages that already carry the tag are left alone, so
+    re-running the publisher does not duplicate the tag and preserves
+    byte-determinism.
+
+    Returns the number of HTML files that received the tag on this call.
+    """
+    if not bundle_src.is_file():
+        raise FileNotFoundError(
+            f"GramFrame bundle missing at {bundle_src}. "
+            "Vendor the v0.1.9 release asset before publishing."
+        )
+    bundle_dest = out_root / GRAMFRAME_BUNDLE_NAME
+    bundle_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(bundle_src, bundle_dest)
+
+    count = 0
+    for path in sorted(out_root.rglob("*.html")):
+        body = path.read_text(encoding="utf-8")
+        if GRAMFRAME_BUNDLE_NAME in body:
+            continue
+        rel = os.path.relpath(bundle_dest, start=path.parent).replace(os.sep, "/")
+        tag = f'    <script src="{rel}" defer></script>\n{_GRAMFRAME_HEAD_CLOSE}'
+        new_body, replaced = re.subn(
+            re.escape(_GRAMFRAME_HEAD_CLOSE), tag, body, count=1,
+        )
+        if replaced:
+            path.write_text(new_body, encoding="utf-8", newline="\n")
+            count += 1
+    return count
 
 
 def scrub_nondeterministic_metadata(root: Path) -> int:
@@ -606,6 +673,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[prettify] reformatted {formatted} HTML file(s) under {args.out}")
         scrubbed = scrub_nondeterministic_metadata(args.out)
         print(f"[scrub] stripped DITA-OT timestamps from {scrubbed} file(s)")
+        injected = inject_gramframe_plugin(args.out)
+        print(
+            f"[gramframe] vendored {GRAMFRAME_BUNDLE_NAME} into {args.out} "
+            f"and linked it from {injected} HTML file(s)"
+        )
 
     shutil.rmtree(args.staged, ignore_errors=True)
     return rc

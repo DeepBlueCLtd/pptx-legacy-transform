@@ -21,7 +21,9 @@ import publish_html
 from publish_html import (
     EDITIONS,
     Edition,
+    GRAMFRAME_BUNDLE_NAME,
     _dita_ot_command,
+    inject_gramframe_plugin,
     prettify_html,
     prettify_tree,
     publish,
@@ -486,6 +488,137 @@ class ScrubMetadataTests(unittest.TestCase):
                 html,
                 "files without metadata must be untouched",
             )
+
+
+# -----------------------------------------------------------------------------
+# GramFrame plugin injection
+# -----------------------------------------------------------------------------
+
+
+class InjectGramframePluginTests(unittest.TestCase):
+    """The publisher vendors gramframe.bundle.js next to ``html/`` and links
+    it from every emitted page, so the gram-config tables DITA-OT
+    produces become interactive viewers in the browser."""
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _fake_bundle(tmp: Path) -> Path:
+        src = tmp / "vendor" / "gramframe.bundle.js"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("/* gramframe stub */\n", encoding="utf-8", newline="\n")
+        return src
+
+    def _gram_page(self) -> str:
+        return (
+            '<!DOCTYPE html>\n'
+            '<html lang="en">\n'
+            '  <head>\n'
+            '    <meta charset="UTF-8">\n'
+            '    <title>Gram</title>\n'
+            '  </head>\n'
+            '  <body>\n'
+            '    <table class="gram-config"><tr><td colspan="2">'
+            '<img src="g.png"></td></tr></table>\n'
+            '  </body>\n'
+            '</html>\n'
+        )
+
+    def test_copies_bundle_to_out_root(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            inject_gramframe_plugin(out, bundle_src=src)
+            self.assertTrue((out / GRAMFRAME_BUNDLE_NAME).is_file())
+            self.assertEqual(
+                (out / GRAMFRAME_BUNDLE_NAME).read_text(encoding="utf-8"),
+                "/* gramframe stub */\n",
+            )
+
+    def test_injects_script_into_head_of_every_html_file(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            self._write(
+                out / "instructor" / "main" / "main" / "gram-01" / "gram_01.html",
+                self._gram_page(),
+            )
+            count = inject_gramframe_plugin(out, bundle_src=src)
+            self.assertEqual(count, 2)
+
+            top = (out / "index.html").read_text(encoding="utf-8")
+            self.assertIn(
+                '<script src="gramframe.bundle.js" defer></script>',
+                top,
+            )
+
+            deep = (
+                out / "instructor" / "main" / "main" / "gram-01" / "gram_01.html"
+            ).read_text(encoding="utf-8")
+            # Deep page must reach four levels up to the bundle at out_root.
+            self.assertIn(
+                '<script src="../../../../gramframe.bundle.js" defer></script>',
+                deep,
+            )
+
+    def test_script_tag_sits_inside_head(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            inject_gramframe_plugin(out, bundle_src=src)
+            body = (out / "index.html").read_text(encoding="utf-8")
+            head_open = body.index("<head>")
+            head_close = body.index("</head>")
+            script_at = body.index("gramframe.bundle.js")
+            self.assertLess(head_open, script_at)
+            self.assertLess(script_at, head_close)
+
+    def test_is_idempotent(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            first = inject_gramframe_plugin(out, bundle_src=src)
+            after_once = (out / "index.html").read_text(encoding="utf-8")
+            second = inject_gramframe_plugin(out, bundle_src=src)
+            after_twice = (out / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(first, 1)
+            self.assertEqual(second, 0)
+            self.assertEqual(after_once, after_twice)
+            self.assertEqual(
+                after_twice.count('src="gramframe.bundle.js"'), 1,
+            )
+
+    def test_raises_when_bundle_missing(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                inject_gramframe_plugin(
+                    out, bundle_src=tmp / "does-not-exist.js",
+                )
+
+    def test_vendored_bundle_is_present_in_repo(self):
+        """The v0.1.9 bundle must be committed alongside the publisher."""
+        self.assertTrue(
+            publish_html.GRAMFRAME_BUNDLE_SRC.is_file(),
+            f"Vendor the GramFrame bundle at "
+            f"{publish_html.GRAMFRAME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
+        )
 
 
 # -----------------------------------------------------------------------------
