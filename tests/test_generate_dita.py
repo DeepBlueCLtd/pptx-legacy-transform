@@ -85,6 +85,26 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(image.get("href"), "gram12.png",
                          "href must be topic-relative, not an outward path")
 
+    def test_image_present_in_generated_dita(self) -> None:
+        """Regression guard: the gramframe block must carry an <image> element
+        with a non-empty href pointing at a file that actually exists next to
+        the topic. Without this, the published HTML would render an empty
+        gram cell — the failure mode that motivated this test."""
+        _run(self.out)
+        gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+        topic = gram_dir / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        images = root.findall(".//image")
+        self.assertGreaterEqual(len(images), 1,
+                                "generated DITA must contain at least one <image>")
+        for img in images:
+            href = img.get("href")
+            self.assertTrue(href, f"<image> is missing href: {ET.tostring(img)!r}")
+            self.assertFalse(href.startswith(("/", "..")),
+                             f"image href must be topic-relative, got {href!r}")
+            self.assertTrue((gram_dir / href).is_file(),
+                            f"image file referenced by DITA is missing: {gram_dir / href}")
+
     def test_analysis_section_in_gram_topic(self) -> None:
         """Analysis assets are copied into the per-gram folder and the gram
         topic carries an instructor-only analysis section (PNG embedded as
