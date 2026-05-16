@@ -1007,6 +1007,7 @@ main/week-3-grams/gram-26/lofar-3-b.png
 main/week-3-grams/gram-26/lofar-4-a.png
 main/week-3-grams/gram-27/analysis-sheet.docx
 main/week-3-grams/gram-27/gram_27.dita
+main/week-3-grams/gram-27/lofar-1-loop-2.glc
 main/week-3-grams/gram-27/lofar-1-loop-2.wav
 main/week-3-grams/gram-27/lofar-2.png
 main/week-3-grams/gram-29/analysis-sheet.docx
@@ -1191,6 +1192,7 @@ main/week-4-grams-updated/gram-27/analysis-sheet.docx
 main/week-4-grams-updated/gram-27/gram_27.dita
 main/week-4-grams-updated/gram-27/lofar-1.png
 main/week-4-grams-updated/gram-27/lofar-2-i.png
+main/week-4-grams-updated/gram-27/lofar-3-abc.glc
 main/week-4-grams-updated/gram-27/lofar-3-abc.wav
 main/week-4-grams-updated/gram-28/analysis-sheet.docx
 main/week-4-grams-updated/gram-28/gram_28.dita
