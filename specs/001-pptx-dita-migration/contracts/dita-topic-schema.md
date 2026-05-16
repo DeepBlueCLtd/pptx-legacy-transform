@@ -55,6 +55,7 @@ only and is ignored by the generator (see csv-schema.md §column 15).
     </section>
 
     <section>                            <!-- §1.2 GramFrame, when GLC names a PNG/JPG -->
+      <title>{display_text}</title>      <!-- emitted when display_text is non-empty -->
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1"/>
@@ -75,6 +76,7 @@ only and is ignored by the generator (see csv-schema.md §column 15).
     </section>
 
     <section>                            <!-- §1.3 GLC-viewer link, when GLC names a WAV -->
+      <title>{display_text}</title>      <!-- emitted when display_text is non-empty -->
       <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
     </section>
   </body>
@@ -118,6 +120,7 @@ Placeholders:
 | `image_href` | Slugified copy of the asset, placed in the same per-gram folder as the topic (see §10) |
 | `time_end` | CSV column; if empty, literal `""` is written |
 | `freq_end` | CSV column; if empty, literal `""` is written |
+| `display_text` | CSV column; the PPTX link label (e.g. `"Lofar 1"`). When non-empty, emitted as the section `<title>` so multi-gram pages get a clear heading per spectrogram. Omitted entirely when blank. |
 
 ### 1.3 GLC-viewer link block
 
@@ -127,6 +130,7 @@ paragraph linking to the `.glc` file:
 
 ```xml
 <section>
+  <title>{display_text}</title>
   <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
 </section>
 ```
