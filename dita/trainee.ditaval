@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <val>
-  <prop att="audience" val="trainee" action="exclude"/>
+  <prop att="audience" val="-trainee" action="exclude"/>
 </val>

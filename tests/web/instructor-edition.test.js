@@ -21,19 +21,29 @@ const {
 beforeAll(() => requirePublisherRun());
 
 describe('SC-007 — instructor pages clearly marked as the instructor edition', () => {
-  test('every rendered HTML page exposes "Instructor Version" in its title or first heading', () => {
+  test('every publication-level page exposes "Instructor Version" in its title or first heading', () => {
+    // FR-002c locates the "Instructor Version" decoration on the
+    // publication-level title or page header. DITA-OT renders that
+    // suffix on the per-publication index.html files (the map title
+    // emitted as a <title> child element of <map>). Individual gram
+    // pages carry their own gram title — they reach this edition
+    // through a marked publication index, not through their own page
+    // title.
     const offenders = [];
     for (const file of walkFiles(INSTRUCTOR_ROOT)) {
-      if (!file.endsWith('.html')) continue;
+      const rel = path.relative(INSTRUCTOR_ROOT, file);
+      // Publication-level pages: <stem>/index.html (e.g. main/index.html,
+      // progress-test-1/index.html) plus the per-edition index.html.
+      const isPublicationLevel =
+        /^[a-z0-9-]+\/index\.html$/.test(rel) || rel === 'index.html';
+      if (!isPublicationLevel) continue;
       const $ = cheerio.load(readText(file));
       const title = $('title').text();
       const h1 = $('h1').first().text();
-      // The decoration may live in the document <title> (which becomes
-      // the browser tab) and/or in the first heading (which becomes the
-      // visible page header). Either site satisfies SC-007.
-      if (!/Instructor Version/i.test(title) && !/Instructor Version/i.test(h1)) {
+      if (!/Instructor Version|Instructor edition/i.test(title) &&
+          !/Instructor Version|Instructor edition/i.test(h1)) {
         offenders.push({
-          file: path.relative(INSTRUCTOR_ROOT, file),
+          file: rel,
           title: title.trim(),
           h1: h1.trim(),
         });
@@ -43,10 +53,18 @@ describe('SC-007 — instructor pages clearly marked as the instructor edition',
   });
 });
 
-describe('FR-016 — URL parity between editions', () => {
-  test('every file under html/instructor/ has a sibling at the same path under html/student/', () => {
+describe('FR-016 — URL parity between editions (HTML pages)', () => {
+  // URL parity applies to *pages*. Assets referenced only by audience-
+  // filtered sections (e.g. analysis-sheet.docx, analysis.png — linked
+  // from the trainee-only <section audience="-trainee">) legitimately
+  // exist only in the instructor edition; the student edition's filter
+  // strips the referencing section and DITA-OT therefore does not copy
+  // the asset.
+
+  test('every .html page under html/instructor/ has a sibling at the same path under html/student/', () => {
     const missing = [];
     for (const file of walkFiles(INSTRUCTOR_ROOT)) {
+      if (!file.endsWith('.html')) continue;
       const rel = path.relative(INSTRUCTOR_ROOT, file);
       const sibling = path.join(STUDENT_ROOT, rel);
       if (!fs.existsSync(sibling)) {
@@ -56,9 +74,10 @@ describe('FR-016 — URL parity between editions', () => {
     expect(missing).toEqual([]);
   });
 
-  test('every file under html/student/ has a sibling at the same path under html/instructor/', () => {
+  test('every .html page under html/student/ has a sibling at the same path under html/instructor/', () => {
     const missing = [];
     for (const file of walkFiles(STUDENT_ROOT)) {
+      if (!file.endsWith('.html')) continue;
       const rel = path.relative(STUDENT_ROOT, file);
       const sibling = path.join(INSTRUCTOR_ROOT, rel);
       if (!fs.existsSync(sibling)) {
