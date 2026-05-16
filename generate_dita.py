@@ -198,7 +198,7 @@ def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
 def _publication_root(out_dir: Path, row: dict) -> Path:
     """Return the per-publication root, ``{out}/{pub}`` or ``{out}/main/{chapter}``."""
     pub = row["publication"]
-    if pub.startswith("progress-test-"):
+    if pub != "main":
         return out_dir / pub
     _, _, chapter_slug = _normalise_chapter(row.get("chapter", ""))
     return out_dir / "main" / chapter_slug
@@ -525,13 +525,28 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     return map_path
 
 
+def _flat_publication_title(publication: str) -> str:
+    """Human-readable map title for a non-``main`` (flat) publication.
+
+    ``progress-test-N`` → ``"Progress Test N"`` (preserves the legacy
+    title style from feature 001). Any other slug is title-cased with
+    hyphens turned into spaces (e.g. ``progress-final-assessment`` →
+    ``"Progress Final Assessment"``). This is what gets emitted into
+    the ditamap's ``<title>`` child element; the audience-tagged
+    " — Instructor Version" suffix is appended by ``_append_map_title``.
+    """
+    if publication.startswith("progress-test-"):
+        n = publication.removeprefix("progress-test-")
+        return f"Progress Test {n}"
+    return publication.replace("-", " ").title()
+
+
 def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path:
     """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / f"{publication}.ditamap"
-    n = publication.removeprefix("progress-test-")
     root = ET.Element("map")
-    _append_map_title(root, f"Progress Test {n}")
+    _append_map_title(root, _flat_publication_title(publication))
     seen: set[str] = set()
     for row in rows:
         if row["publication"] != publication:
@@ -623,7 +638,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         ditamap_paths.append(emit_main_ditamap(rows, args.out))
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
-        if pub.startswith("progress-test-"):
+        if pub != "main":
             path = emit_test_ditamap(pub, rows, args.out)
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)

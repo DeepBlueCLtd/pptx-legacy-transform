@@ -318,12 +318,53 @@ def scrub_nondeterministic_metadata(root: Path) -> int:
     return count
 
 
-_TITLE_RE = re.compile(r'<map[^>]*\btitle="([^"]*)"', re.IGNORECASE)
+import xml.etree.ElementTree as _ET
+
+_LEGACY_TITLE_ATTR_RE = re.compile(r'<map[^>]*\btitle="([^"]*)"', re.IGNORECASE)
 
 
-def _ditamap_title(ditamap: Path) -> str:
-    match = _TITLE_RE.search(ditamap.read_text(encoding="utf-8"))
-    return match.group(1) if match else ditamap.stem
+def _ditamap_title(ditamap: Path, edition: "Edition | None" = None) -> str:
+    """Return the human-readable map title for ``ditamap`` for ``edition``.
+
+    Spec 003 ditamaps use a ``<title>`` child element of ``<map>``
+    (replaces the legacy ``title=`` attribute) so the title can carry
+    an audience-tagged ``<ph audience="-trainee">`` suffix. When
+    ``edition`` is the student edition (its ``ditaval`` is set), every
+    such ``<ph>`` is stripped from the title to match what the trainee
+    filter renders in the per-page chrome. For the instructor edition
+    (or when ``edition`` is None) the full title is returned.
+
+    Falls back to the legacy ``title="..."`` attribute on ``<map>`` (no
+    audience handling) if the ditamap doesn't carry a ``<title>``
+    child, and finally to the ditamap stem if neither is present.
+    """
+    text = ditamap.read_text(encoding="utf-8")
+    try:
+        root = _ET.fromstring(text)
+    except _ET.ParseError:
+        return ditamap.stem
+
+    title_el = root.find("title")
+    if title_el is not None:
+        strip_trainee = edition is not None and edition.ditaval is not None
+        parts: list[str] = []
+        if title_el.text:
+            parts.append(title_el.text)
+        for child in title_el:
+            if (strip_trainee and child.tag == "ph"
+                    and child.get("audience") == "-trainee"):
+                # Audience filter excludes this element entirely.
+                pass
+            else:
+                parts.append("".join(child.itertext()))
+            if child.tail:
+                parts.append(child.tail)
+        return "".join(parts).strip()
+
+    legacy = _LEGACY_TITLE_ATTR_RE.search(text)
+    if legacy:
+        return legacy.group(1)
+    return ditamap.stem
 
 
 def _escape(text: str) -> str:
@@ -549,12 +590,10 @@ def main(argv: list[str] | None = None) -> int:
     rc = publish(args.dita_ot, args.staged, args.out)
 
     if rc == 0:
-        entries = [
-            (_ditamap_title(m), m.stem)
-            for m in sorted(args.staged.glob("*.ditamap"))
-        ]
+        ditamaps = sorted(args.staged.glob("*.ditamap"))
         generated_at = _generated_timestamp()
         for edition in EDITIONS:
+            entries = [(_ditamap_title(m, edition), m.stem) for m in ditamaps]
             edition_index = write_edition_index(
                 args.out / edition.output_subdir, edition, entries, generated_at,
             )
