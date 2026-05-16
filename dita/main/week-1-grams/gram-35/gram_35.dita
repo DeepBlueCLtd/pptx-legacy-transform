@@ -1,11 +1,11 @@
 <topic id="gram_35">
-  <title>Gram 35<ph audience="-trainee"> - Reliant contact bearing 251, codename Bespin</ph></title>
+  <title>Gram 35<ph audience="-trainee" outputclass="vessel-name"> - Reliant contact bearing 251, codename Bespin</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -38,7 +38,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

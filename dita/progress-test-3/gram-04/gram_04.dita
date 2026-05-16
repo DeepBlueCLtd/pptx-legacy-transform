@@ -1,25 +1,25 @@
 <topic id="gram_04">
-  <title>Gram 04<ph audience="-trainee"> - FR Rebel One, Category 2, Naboo</ph></title>
+  <title>Gram 04<ph audience="-trainee" outputclass="vessel-name"> - FR Rebel One, Category 2, Naboo</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <p>
         <xref href="lofar-1-loop-2.glc" format="glc" scope="local">Lofar 1</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 2</title>
       <p>
         <xref href="lofar-2-loop-1.glc" format="glc" scope="local">Lofar 2</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 3</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -52,7 +52,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

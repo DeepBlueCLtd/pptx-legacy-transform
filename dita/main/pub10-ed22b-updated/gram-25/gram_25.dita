@@ -1,11 +1,11 @@
 <topic id="gram_25">
-  <title>Gram 25<ph audience="-trainee"> - FR Akira-class, Category 2, Risa</ph></title>
+  <title>Gram 25<ph audience="-trainee" outputclass="vessel-name"> - FR Akira-class, Category 2, Risa</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -38,7 +38,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

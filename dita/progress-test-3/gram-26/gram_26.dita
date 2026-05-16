@@ -1,13 +1,13 @@
 <topic id="gram_26">
-  <title>Gram 26<ph audience="-trainee"> - Voyager contact bearing 256, codename Coruscant</ph></title>
+  <title>Gram 26<ph audience="-trainee" outputclass="vessel-name"> - Voyager contact bearing 256, codename Coruscant</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -40,7 +40,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

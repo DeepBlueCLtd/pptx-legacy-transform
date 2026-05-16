@@ -1,23 +1,23 @@
 <topic id="gram_01">
-  <title>Gram 01<ph audience="-trainee"> - FR Intrepid-class, Category 3, Dank</ph></title>
+  <title>Gram 01<ph audience="-trainee" outputclass="vessel-name"> - FR Intrepid-class, Category 3, Dank</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <p>
         <xref href="lofar-1-abc.glc" format="glc" scope="local">Lofar 1</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 2</title>
       <p>
         <xref href="lofar-2-a.glc" format="glc" scope="local">Lofar 2</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 3</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -49,7 +49,7 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 4</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -82,7 +82,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

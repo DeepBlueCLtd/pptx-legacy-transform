@@ -1,19 +1,19 @@
 <topic id="gram_18">
-  <title>Gram 18<ph audience="-trainee"> - Devastator, Category 4, Vulcan</ph></title>
+  <title>Gram 18<ph audience="-trainee" outputclass="vessel-name"> - Devastator, Category 4, Vulcan</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <p>
         <xref href="lofar-1-abc.glc" format="glc" scope="local">Lofar 1</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 2</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -45,7 +45,7 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 3</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -78,7 +78,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

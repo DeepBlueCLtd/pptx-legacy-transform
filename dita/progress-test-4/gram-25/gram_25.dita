@@ -1,13 +1,13 @@
 <topic id="gram_25">
-  <title>Gram 25<ph audience="-trainee"> - Corellian Corvette, Category 4, Dagobah</ph></title>
+  <title>Gram 25<ph audience="-trainee" outputclass="vessel-name"> - Corellian Corvette, Category 4, Dagobah</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -40,7 +40,4 @@
       </table>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

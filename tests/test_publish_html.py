@@ -21,7 +21,11 @@ import publish_html
 from publish_html import (
     EDITIONS,
     Edition,
+    GRAMFRAME_BUNDLE_NAME,
+    THEME_BUNDLE_NAME,
     _dita_ot_command,
+    inject_gramframe_plugin,
+    inject_operator_console_theme,
     prettify_html,
     prettify_tree,
     publish,
@@ -276,10 +280,18 @@ class PublishDualEditionTests(unittest.TestCase):
     """``publish()`` runs DITA-OT twice per ditamap — once per edition."""
 
     def _make_staged(self, tmp: Path) -> Path:
+        """Build a staged tree in the post-``stage()`` shape: each
+        ditamap lives inside its own publication folder so DITA-OT
+        publishes into ``<edition>/<stem>/`` without duplicating the
+        stem segment in the output path."""
         staged = tmp / ".dita-build"
         staged.mkdir()
-        (staged / "main.ditamap").write_text("<map/>", encoding="utf-8")
-        (staged / "progress-test-1.ditamap").write_text("<map/>", encoding="utf-8")
+        (staged / "main").mkdir()
+        (staged / "main" / "main.ditamap").write_text("<map/>", encoding="utf-8")
+        (staged / "progress-test-1").mkdir()
+        (staged / "progress-test-1" / "progress-test-1.ditamap").write_text(
+            "<map/>", encoding="utf-8",
+        )
         (staged / "trainee.ditaval").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n',
             encoding="utf-8",
@@ -486,6 +498,283 @@ class ScrubMetadataTests(unittest.TestCase):
                 html,
                 "files without metadata must be untouched",
             )
+
+
+# -----------------------------------------------------------------------------
+# GramFrame plugin injection
+# -----------------------------------------------------------------------------
+
+
+class InjectGramframePluginTests(unittest.TestCase):
+    """The publisher vendors gramframe.bundle.js next to ``html/`` and links
+    it from every emitted page, so the gram-config tables DITA-OT
+    produces become interactive viewers in the browser."""
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _fake_bundle(tmp: Path) -> Path:
+        src = tmp / "vendor" / "gramframe.bundle.js"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("/* gramframe stub */\n", encoding="utf-8", newline="\n")
+        return src
+
+    def _gram_page(self) -> str:
+        return (
+            '<!DOCTYPE html>\n'
+            '<html lang="en">\n'
+            '  <head>\n'
+            '    <meta charset="UTF-8">\n'
+            '    <title>Gram</title>\n'
+            '  </head>\n'
+            '  <body>\n'
+            '    <table class="gram-config"><tr><td colspan="2">'
+            '<img src="g.png"></td></tr></table>\n'
+            '  </body>\n'
+            '</html>\n'
+        )
+
+    def test_copies_bundle_to_out_root(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            inject_gramframe_plugin(out, bundle_src=src)
+            self.assertTrue((out / GRAMFRAME_BUNDLE_NAME).is_file())
+            self.assertEqual(
+                (out / GRAMFRAME_BUNDLE_NAME).read_text(encoding="utf-8"),
+                "/* gramframe stub */\n",
+            )
+
+    def test_injects_script_into_head_of_every_html_file(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            self._write(
+                out / "instructor" / "main" / "main" / "gram-01" / "gram_01.html",
+                self._gram_page(),
+            )
+            count = inject_gramframe_plugin(out, bundle_src=src)
+            self.assertEqual(count, 2)
+
+            top = (out / "index.html").read_text(encoding="utf-8")
+            self.assertIn(
+                '<script src="gramframe.bundle.js" defer></script>',
+                top,
+            )
+
+            deep = (
+                out / "instructor" / "main" / "main" / "gram-01" / "gram_01.html"
+            ).read_text(encoding="utf-8")
+            # Deep page must reach four levels up to the bundle at out_root.
+            self.assertIn(
+                '<script src="../../../../gramframe.bundle.js" defer></script>',
+                deep,
+            )
+
+    def test_script_tag_sits_inside_head(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            inject_gramframe_plugin(out, bundle_src=src)
+            body = (out / "index.html").read_text(encoding="utf-8")
+            head_open = body.index("<head>")
+            head_close = body.index("</head>")
+            script_at = body.index("gramframe.bundle.js")
+            self.assertLess(head_open, script_at)
+            self.assertLess(script_at, head_close)
+
+    def test_is_idempotent(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            first = inject_gramframe_plugin(out, bundle_src=src)
+            after_once = (out / "index.html").read_text(encoding="utf-8")
+            second = inject_gramframe_plugin(out, bundle_src=src)
+            after_twice = (out / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(first, 1)
+            self.assertEqual(second, 0)
+            self.assertEqual(after_once, after_twice)
+            self.assertEqual(
+                after_twice.count('src="gramframe.bundle.js"'), 1,
+            )
+
+    def test_raises_when_bundle_missing(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                inject_gramframe_plugin(
+                    out, bundle_src=tmp / "does-not-exist.js",
+                )
+
+    def test_vendored_bundle_is_present_in_repo(self):
+        """The v0.1.9 bundle must be committed alongside the publisher."""
+        self.assertTrue(
+            publish_html.GRAMFRAME_BUNDLE_SRC.is_file(),
+            f"Vendor the GramFrame bundle at "
+            f"{publish_html.GRAMFRAME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
+        )
+
+
+# -----------------------------------------------------------------------------
+# Operator Console v2 dark-theme injection
+# -----------------------------------------------------------------------------
+
+
+class InjectOperatorConsoleThemeTests(unittest.TestCase):
+    """Wire theme.css into every emitted HTML page, with the right body
+    classification and data-edition for the page type."""
+
+    @staticmethod
+    def _fake_theme(tmp: Path) -> Path:
+        src = tmp / "vendor" / "theme.css"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("/* operator console */\n", encoding="utf-8", newline="\n")
+        return src
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _shell(body_tag: str = "<body>") -> str:
+        return (
+            '<!DOCTYPE html>\n'
+            '<html lang="en">\n'
+            '  <head>\n'
+            '    <meta charset="UTF-8">\n'
+            '    <title>X</title>\n'
+            '  </head>\n'
+            f'  {body_tag}\n'
+            '    <p>x</p>\n'
+            '  </body>\n'
+            '</html>\n'
+        )
+
+    def test_drops_theme_at_root_and_each_edition(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            self.assertTrue((out / THEME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "instructor" / THEME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "student" / THEME_BUNDLE_NAME).is_file())
+
+    def test_shared_landing_gets_landing_class_and_no_edition(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = (out / "index.html").read_text(encoding="utf-8")
+            self.assertIn('<link rel="stylesheet" type="text/css" href="theme.css">', body)
+            self.assertIn('class="landing"', body)
+            self.assertNotIn("data-edition", body)
+
+    def test_edition_index_gets_edition_index_class(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "instructor" / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = (out / "instructor" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('data-edition="instructor"', body)
+            self.assertIn('class="edition-index"', body)
+            self.assertIn('href="theme.css"', body)
+
+    def test_publication_index_gets_ditamap_index_class(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "instructor" / "main" / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('data-edition="instructor"', body)
+            self.assertIn('class="ditamap-index"', body)
+            self.assertIn('href="../theme.css"', body)
+
+    def test_topic_page_gets_edition_only_and_relative_theme_href(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            topic = (
+                out / "instructor" / "main" / "main" / "week-2-grams"
+                / "gram-20" / "gram_20.html"
+            )
+            self._write(topic, self._shell('<body id="gram_20">'))
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = topic.read_text(encoding="utf-8")
+            self.assertIn('data-edition="instructor"', body)
+            self.assertNotIn('class="ditamap-index"', body)
+            self.assertNotIn('class="landing"', body)
+            self.assertNotIn('class="edition-index"', body)
+            # Theme css is at out/instructor/theme.css; gram_20.html lives
+            # four directories below that under instructor/main/main/
+            # week-2-grams/gram-20/.
+            self.assertIn(
+                '<link rel="stylesheet" type="text/css" href="../../../../theme.css">',
+                body,
+            )
+            # Existing body attributes are preserved.
+            self.assertIn('id="gram_20"', body)
+
+    def test_student_edition_is_tagged(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            topic = out / "student" / "main" / "main" / "gram-01" / "gram_01.html"
+            self._write(topic, self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            body = topic.read_text(encoding="utf-8")
+            self.assertIn('data-edition="student"', body)
+
+    def test_is_idempotent(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._write(out / "instructor" / "main" / "index.html", self._shell())
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            once = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
+            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
+            twice = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(once, twice)
+            self.assertEqual(once.count('href="../theme.css"'), 1)
+            self.assertEqual(once.count('data-edition='), 1)
+            self.assertEqual(once.count('class="ditamap-index"'), 1)
+
+    def test_raises_when_bundle_missing(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                inject_operator_console_theme(
+                    out, bundle_src=tmp / "does-not-exist.css",
+                )
+
+    def test_vendored_theme_is_present_in_repo(self):
+        self.assertTrue(
+            publish_html.THEME_BUNDLE_SRC.is_file(),
+            f"Vendor the Operator Console v2 theme at "
+            f"{publish_html.THEME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
+        )
 
 
 # -----------------------------------------------------------------------------

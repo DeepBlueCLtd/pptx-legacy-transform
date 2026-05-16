@@ -1,11 +1,11 @@
 <topic id="gram_63">
-  <title>Gram 63<ph audience="-trainee"> - FR Defiant-class, Category 3, Yavin</ph></title>
+  <title>Gram 63<ph audience="-trainee" outputclass="vessel-name"> - FR Defiant-class, Category 3, Yavin</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -37,13 +37,13 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 2</title>
       <p>
         <xref href="lofar-2-abc.glc" format="glc" scope="local">Lofar 2</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 3</title>
       <table outputclass="gram-config">
         <tgroup cols="2">
@@ -75,14 +75,11 @@
         </tgroup>
       </table>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 4</title>
       <p>
         <xref href="lofar-4-abc.glc" format="glc" scope="local">Lofar 4</xref>
       </p>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -87,7 +88,26 @@ EDITIONS: tuple[Edition, ...] = (
 
 
 def stage(src: Path, dst: Path) -> None:
-    """Copy src to dst and add DOCTYPEs to topics and ditamaps."""
+    """Copy ``src`` to ``dst``, add DOCTYPEs, and tuck each ditamap inside
+    its publication folder with hrefs rewritten relative to it.
+
+    The source ``dita/`` tree keeps a single root with the ditamaps as
+    siblings of the publication folders — that shape makes it easy for
+    a human author to scan the corpus. But DITA-OT mirrors the topic
+    paths it sees in the ditamap below the output directory, so a map
+    at ``dita/progress-test-5.ditamap`` referencing
+    ``progress-test-5/gram-01/gram_01.dita`` produces
+    ``html/.../progress-test-5/progress-test-5/gram-01/gram_01.html``
+    — a duplicated ``progress-test-5/`` segment that's visually
+    confusing.
+
+    Staging restructures the build-only copy so each ditamap lives at
+    ``<staged>/<stem>/<stem>.ditamap`` with topic hrefs of the form
+    ``<gram-folder>/<gram>.dita`` (no leading ``<stem>/``). DITA-OT
+    then publishes into ``html/<edition>/<stem>/<gram-folder>/...``
+    with no duplicated segment, and the original ``dita/`` tree is
+    untouched.
+    """
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
@@ -95,8 +115,14 @@ def stage(src: Path, dst: Path) -> None:
         body = path.read_text(encoding="utf-8")
         path.write_text(TOPIC_DOCTYPE + body, encoding="utf-8", newline="\n")
     for path in sorted(dst.glob("*.ditamap")):
+        stem = path.stem
         body = path.read_text(encoding="utf-8")
-        path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
+        body = body.replace(f'href="{stem}/', 'href="')
+        new_dir = dst / stem
+        new_dir.mkdir(parents=True, exist_ok=True)
+        new_path = new_dir / path.name
+        new_path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
+        path.unlink()
 
 
 VOID_ELEMENTS = frozenset({
@@ -299,6 +325,241 @@ _DITAOT_DATE_META_RE = re.compile(
     r'\s*<meta[^>]+name="DC\.date\.(?:created|modified)"[^>]*>\s*',
     re.IGNORECASE,
 )
+
+
+# -----------------------------------------------------------------------------
+# GramFrame plugin integration
+# -----------------------------------------------------------------------------
+#
+# The DITA source already emits each spectrogram as a ``<table class="gram-config">``
+# carrying an ``<img colspan="2">`` plus the four parameter rows the
+# GramFrame plugin expects (time-start, time-end, freq-start, freq-end).
+# Loading ``gramframe.bundle.js`` on a page is therefore enough to upgrade
+# every gram on it into an interactive viewer — see
+# https://github.com/DeepBlueCLtd/GramFrame ``docs/HTML-Integration-Guide.md``.
+#
+# The bundle is vendored at ``vendor/gramframe/gramframe.bundle.js`` so
+# air-gapped publish runs do not reach for the network. We copy it once
+# to ``<out_root>/gramframe.bundle.js`` and inject a single relative
+# ``<script>`` tag into every emitted page; the script no-ops on pages
+# that have no ``gram-config`` tables.
+
+GRAMFRAME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "gramframe" / "gramframe.bundle.js"
+GRAMFRAME_BUNDLE_NAME = "gramframe.bundle.js"
+
+_GRAMFRAME_HEAD_CLOSE = "  </head>"
+
+
+def inject_gramframe_plugin(
+    out_root: Path,
+    bundle_src: Path = GRAMFRAME_BUNDLE_SRC,
+) -> int:
+    """Copy the GramFrame bundle into ``out_root`` and link it from every page.
+
+    Places one copy of the bundle at ``<out_root>/<GRAMFRAME_BUNDLE_NAME>``
+    and inserts a ``<script src="…/gramframe.bundle.js" defer></script>``
+    line into the ``<head>`` of every ``*.html`` file under ``out_root``,
+    with the ``src`` written as a path relative to that file's parent
+    directory (so ``file://`` browsing works).
+
+    Idempotent: pages that already carry the tag are left alone, so
+    re-running the publisher does not duplicate the tag and preserves
+    byte-determinism.
+
+    Returns the number of HTML files that received the tag on this call.
+    """
+    if not bundle_src.is_file():
+        raise FileNotFoundError(
+            f"GramFrame bundle missing at {bundle_src}. "
+            "Vendor the v0.1.9 release asset before publishing."
+        )
+    bundle_dest = out_root / GRAMFRAME_BUNDLE_NAME
+    bundle_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(bundle_src, bundle_dest)
+
+    count = 0
+    for path in sorted(out_root.rglob("*.html")):
+        body = path.read_text(encoding="utf-8")
+        if GRAMFRAME_BUNDLE_NAME in body:
+            continue
+        rel = os.path.relpath(bundle_dest, start=path.parent).replace(os.sep, "/")
+        tag = f'    <script src="{rel}" defer></script>\n{_GRAMFRAME_HEAD_CLOSE}'
+        new_body, replaced = re.subn(
+            re.escape(_GRAMFRAME_HEAD_CLOSE), tag, body, count=1,
+        )
+        if replaced:
+            path.write_text(new_body, encoding="utf-8", newline="\n")
+            count += 1
+    return count
+
+
+# -----------------------------------------------------------------------------
+# Operator Console v2 dark theme
+# -----------------------------------------------------------------------------
+#
+# A single ``theme.css`` (vendored from the design mockups under
+# ``mockups/index-dark/``) drives every page type. Per-edition / per-page
+# variation is selected at runtime via attributes on ``<body>``:
+#
+# - ``data-edition="instructor"`` / ``"student"`` switches the
+#   classification banner and accent colours.
+# - ``class="ditamap-index"`` activates the index-page card grid
+#   (the DITA-OT-generated ``<pub>/index.html`` for each publication).
+# - ``class="edition-index"`` is the per-edition "choose a publication"
+#   index (``<edition>/index.html``, written by ``write_edition_index``).
+# - ``class="landing"`` is the shared top-level entry point
+#   (``html/index.html``, written by ``write_shared_landing``).
+#
+# Topic gram pages carry only ``data-edition``.
+
+THEME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "themes" / "operator-console-v2" / "theme.css"
+THEME_BUNDLE_NAME = "theme.css"
+
+_HEAD_CLOSE = "  </head>"
+# Matches any ``<link rel="stylesheet" … href="…/theme.css">`` line, so the
+# idempotency check works regardless of the relative-path depth in the href.
+_THEME_LINK_RE = re.compile(r'<link\b[^>]*\bhref="[^"]*theme\.css"', re.IGNORECASE)
+
+
+def _theme_link_for(file_path: Path, theme_dest: Path) -> str:
+    rel = os.path.relpath(theme_dest, start=file_path.parent).replace(os.sep, "/")
+    return f'    <link rel="stylesheet" type="text/css" href="{rel}">'
+
+
+def _theme_classify_page(
+    rel_path: tuple[str, ...], editions: tuple[Edition, ...],
+) -> tuple[str | None, str | None]:
+    """Return ``(edition, body_class)`` for an HTML file under ``out_root``.
+
+    ``rel_path`` is the file's path tuple relative to ``out_root``.
+
+    - ``("index.html",)`` → shared landing, no edition, class ``landing``.
+    - ``("<edition>", "index.html")`` → per-edition index, class ``edition-index``.
+    - ``("<edition>", "<pub>", "index.html")`` → DITA-OT map index, class ``ditamap-index``.
+    - Anything deeper under ``<edition>/`` → topic page, no special class.
+    """
+    edition_names = {e.output_subdir for e in editions}
+    if len(rel_path) == 1 and rel_path[0] == "index.html":
+        return None, "landing"
+    if len(rel_path) >= 1 and rel_path[0] in edition_names:
+        edition = rel_path[0]
+        if len(rel_path) == 2 and rel_path[1] == "index.html":
+            return edition, "edition-index"
+        if len(rel_path) == 3 and rel_path[2] == "index.html":
+            return edition, "ditamap-index"
+        return edition, None
+    return None, None
+
+
+def inject_operator_console_theme(
+    out_root: Path,
+    editions: tuple[Edition, ...] = EDITIONS,
+    bundle_src: Path = THEME_BUNDLE_SRC,
+) -> int:
+    """Vendor ``theme.css`` into ``out_root`` and link it from every page.
+
+    Drops one copy of the theme at ``<out_root>/theme.css`` (so the
+    shared landing can link it) and another copy at
+    ``<out_root>/<edition>/theme.css`` for each edition (so per-edition
+    index + every DITA-OT map index + every topic page can link a
+    nearby copy with a short relative href).
+
+    For each ``*.html`` under ``out_root``, ensures a
+    ``<link rel="stylesheet" type="text/css" href="…/theme.css">`` sits
+    in ``<head>`` and that ``<body>`` carries the appropriate
+    ``data-edition`` and (where applicable) page-type class.
+
+    Idempotent: pages that already carry the theme link are left
+    alone, preserving byte-determinism across re-runs.
+
+    Returns the count of HTML files modified.
+    """
+    if not bundle_src.is_file():
+        raise FileNotFoundError(
+            f"Operator Console v2 theme bundle missing at {bundle_src}."
+        )
+    out_root.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(bundle_src, out_root / THEME_BUNDLE_NAME)
+    for edition in editions:
+        edition_dir = out_root / edition.output_subdir
+        edition_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(bundle_src, edition_dir / THEME_BUNDLE_NAME)
+
+    edition_themes: dict[str, Path] = {
+        e.output_subdir: out_root / e.output_subdir / THEME_BUNDLE_NAME
+        for e in editions
+    }
+    root_theme = out_root / THEME_BUNDLE_NAME
+
+    count = 0
+    for path in sorted(out_root.rglob("*.html")):
+        rel_parts = path.relative_to(out_root).parts
+        edition, page_class = _theme_classify_page(rel_parts, editions)
+
+        theme_dest = (
+            edition_themes[edition] if edition is not None else root_theme
+        )
+        body = path.read_text(encoding="utf-8")
+
+        changed = False
+
+        if _THEME_LINK_RE.search(body) is None:
+            link_tag = _theme_link_for(path, theme_dest)
+            inserted = f"{link_tag}\n{_HEAD_CLOSE}"
+            new_body, replaced = re.subn(
+                re.escape(_HEAD_CLOSE), inserted, body, count=1,
+            )
+            if replaced:
+                body = new_body
+                changed = True
+
+        body, body_changed = _set_body_attrs(body, edition, page_class)
+        if body_changed:
+            changed = True
+
+        if changed:
+            path.write_text(body, encoding="utf-8", newline="\n")
+            count += 1
+    return count
+
+
+_BODY_OPEN_RE = re.compile(r"<body(\s[^>]*)?>", re.IGNORECASE)
+
+
+def _set_body_attrs(
+    body: str, edition: str | None, page_class: str | None,
+) -> tuple[str, bool]:
+    """Set ``data-edition`` and append a page-type class on the ``<body>`` tag.
+
+    Returns ``(new_body, changed)``. Existing attributes are preserved;
+    when ``page_class`` is set and ``class`` already exists, the new
+    token is appended unless already present.
+    """
+    match = _BODY_OPEN_RE.search(body)
+    if match is None:
+        return body, False
+    attrs = match.group(1) or ""
+    new_attrs = attrs
+    changed = False
+
+    if edition is not None and 'data-edition=' not in attrs:
+        new_attrs = f'{new_attrs} data-edition="{edition}"'
+        changed = True
+
+    if page_class is not None:
+        class_match = re.search(r'\bclass="([^"]*)"', new_attrs)
+        if class_match is None:
+            new_attrs = f'{new_attrs} class="{page_class}"'
+            changed = True
+        elif page_class not in class_match.group(1).split():
+            existing = class_match.group(1)
+            replacement = f'class="{existing} {page_class}"'
+            new_attrs = new_attrs.replace(class_match.group(0), replacement, 1)
+            changed = True
+
+    if not changed:
+        return body, False
+    return body[:match.start()] + f"<body{new_attrs}>" + body[match.end():], True
 
 
 def scrub_nondeterministic_metadata(root: Path) -> int:
@@ -517,7 +778,7 @@ def publish(
     DITA-OT remains stable across runs and the staged tree is fully
     self-contained.
     """
-    ditamaps = sorted(staged.glob("*.ditamap"))
+    ditamaps = sorted(staged.glob("*/*.ditamap"))
     if not ditamaps:
         print(f"No ditamaps found under {staged}", file=sys.stderr)
         return 1
@@ -590,7 +851,7 @@ def main(argv: list[str] | None = None) -> int:
     rc = publish(args.dita_ot, args.staged, args.out)
 
     if rc == 0:
-        ditamaps = sorted(args.staged.glob("*.ditamap"))
+        ditamaps = sorted(args.staged.glob("*/*.ditamap"))
         generated_at = _generated_timestamp()
         for edition in EDITIONS:
             entries = [(_ditamap_title(m, edition), m.stem) for m in ditamaps]
@@ -606,6 +867,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[prettify] reformatted {formatted} HTML file(s) under {args.out}")
         scrubbed = scrub_nondeterministic_metadata(args.out)
         print(f"[scrub] stripped DITA-OT timestamps from {scrubbed} file(s)")
+        injected = inject_gramframe_plugin(args.out)
+        print(
+            f"[gramframe] vendored {GRAMFRAME_BUNDLE_NAME} into {args.out} "
+            f"and linked it from {injected} HTML file(s)"
+        )
+        themed = inject_operator_console_theme(args.out)
+        print(
+            f"[theme] vendored {THEME_BUNDLE_NAME} (Operator Console v2) "
+            f"and linked it from {themed} HTML file(s)"
+        )
 
     shutil.rmtree(args.staged, ignore_errors=True)
     return rc

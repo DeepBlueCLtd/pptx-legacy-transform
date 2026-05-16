@@ -1,20 +1,17 @@
 <topic id="gram_04">
-  <title>Gram 04<ph audience="-trainee"> - FR Galaxy-class, Category 3, Dank</ph></title>
+  <title>Gram 04<ph audience="-trainee" outputclass="vessel-name"> - FR Galaxy-class, Category 3, Dank</ph></title>
   <body>
-    <section audience="-trainee">
+    <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <p>
         <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
       </p>
     </section>
-    <section>
+    <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <p>
         <xref href="lofar-1-b.glc" format="glc" scope="local">Lofar 1</xref>
       </p>
     </section>
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita" />
-  </related-links>
 </topic>
