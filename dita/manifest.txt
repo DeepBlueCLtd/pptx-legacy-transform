@@ -865,7 +865,6 @@ main/week-2-grams/gram-36/analysis.png
 main/week-2-grams/gram-36/gram_36.dita
 main/week-2-grams/gram-36/lofar-1-a.glc
 main/week-2-grams/gram-36/lofar-1-a.wav
-main/week-2-grams/gram-36/lofar-1-loop-1.glc
 main/week-2-grams/gram-36/lofar-2-b.png
 main/week-2-grams/gram-36/lofar-3-i.png
 main/week-2-grams/gram-36/lofar-4.png
