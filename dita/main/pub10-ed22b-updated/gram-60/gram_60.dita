@@ -1,1 +1,17 @@
-<topic id="gram_60"><title>Gram 60<ph audience="-trainee"> - Constitution-class contact bearing 355, codename Dank</ph></title><body><section audience="-trainee"><title>Analysis Sheet</title><p><xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref></p></section><section><title>Lofar 1</title><p><xref href="lofar-1-abc.glc" format="glc" scope="local">Lofar 1</xref></p></section></body></topic>
+<topic id="gram_60">
+  <title>Gram 60<ph audience="-trainee"> - Constitution-class contact bearing 355, codename Dank</ph></title>
+  <body>
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <p>
+        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
+      </p>
+    </section>
+    <section>
+      <title>Lofar 1</title>
+      <p>
+        <xref href="lofar-1-abc.glc" format="glc" scope="local">Lofar 1</xref>
+      </p>
+    </section>
+  </body>
+</topic>

@@ -218,8 +218,40 @@ def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
 # XML emission
 # -----------------------------------------------------------------------------
 
+def _pretty_indent(elem: ET.Element, level: int = 0, indent: str = "  ") -> None:
+    """Indent ``elem`` in place, preserving mixed-content elements verbatim.
+
+    A mixed-content element — one whose ``text`` or whose children's ``tail``
+    carry non-whitespace characters — is left untouched (its children are
+    still descended into so any nested block elements get indented). This
+    keeps DITA titles like ``<title>Gram 34<ph> - FR Reliant</ph></title>``
+    byte-stable while still pretty-printing the block structure around them.
+    """
+    children = list(elem)
+    if not children:
+        return
+    has_text = bool(elem.text and elem.text.strip())
+    has_inline_tail = any(c.tail and c.tail.strip() for c in children)
+    if has_text or has_inline_tail:
+        for child in children:
+            _pretty_indent(child, level + 1, indent)
+        return
+    inner_pad = "\n" + indent * (level + 1)
+    closing_pad = "\n" + indent * level
+    elem.text = inner_pad
+    for child in children:
+        _pretty_indent(child, level + 1, indent)
+        child.tail = inner_pad
+    children[-1].tail = closing_pad
+
+
 def _serialise(root: ET.Element) -> str:
-    """Serialise ``root`` to a UTF-8 XML string with LF endings, no preamble."""
+    """Serialise ``root`` to a UTF-8 XML string with LF endings, no preamble.
+
+    Output is pretty-printed for human review while preserving mixed-content
+    elements (titles, paragraphs with inline phrases) byte-for-byte.
+    """
+    _pretty_indent(root)
     body = ET.tostring(root, encoding="unicode")
     # ElementTree uses self-closing for empty elements; that matches the
     # contract examples (e.g. <image .../>, <link .../>).

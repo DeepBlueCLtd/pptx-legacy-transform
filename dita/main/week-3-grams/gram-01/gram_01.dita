@@ -1,1 +1,107 @@
-<topic id="gram_01"><title>Gram 01<ph audience="-trainee"> - Intrepid-class contact bearing 127, codename Defiant</ph></title><body><section audience="-trainee"><title>Analysis Sheet</title><p><xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref></p></section><section><title>Lofar 1</title><table outputclass="gram-config"><tgroup cols="2"><colspec colname="c1" colnum="1" /><colspec colname="c2" colnum="2" /><tbody><row><entry namest="c1" nameend="c2"><image href="lofar-1-abc.png" placement="break" align="center" /></entry></row><row><entry>time-start</entry><entry>0</entry></row><row><entry>time-end</entry><entry>360</entry></row><row><entry>freq-start</entry><entry>0</entry></row><row><entry>freq-end</entry><entry>100</entry></row></tbody></tgroup></table></section><section><title>Lofar 2</title><table outputclass="gram-config"><tgroup cols="2"><colspec colname="c1" colnum="1" /><colspec colname="c2" colnum="2" /><tbody><row><entry namest="c1" nameend="c2"><image href="lofar-2-loop-1.png" placement="break" align="center" /></entry></row><row><entry>time-start</entry><entry>0</entry></row><row><entry>time-end</entry><entry>240</entry></row><row><entry>freq-start</entry><entry>0</entry></row><row><entry>freq-end</entry><entry>100</entry></row></tbody></tgroup></table></section><section><title>Lofar 3</title><table outputclass="gram-config"><tgroup cols="2"><colspec colname="c1" colnum="1" /><colspec colname="c2" colnum="2" /><tbody><row><entry namest="c1" nameend="c2"><image href="lofar-3-i.png" placement="break" align="center" /></entry></row><row><entry>time-start</entry><entry>0</entry></row><row><entry>time-end</entry><entry>271</entry></row><row><entry>freq-start</entry><entry>0</entry></row><row><entry>freq-end</entry><entry>400</entry></row></tbody></tgroup></table></section></body></topic>
+<topic id="gram_01">
+  <title>Gram 01<ph audience="-trainee"> - Intrepid-class contact bearing 127, codename Defiant</ph></title>
+  <body>
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <p>
+        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
+      </p>
+    </section>
+    <section>
+      <title>Lofar 1</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-1-abc.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>360</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>100</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    <section>
+      <title>Lofar 2</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-2-loop-1.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>240</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>100</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    <section>
+      <title>Lofar 3</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-3-i.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>271</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>400</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+  </body>
+</topic>
