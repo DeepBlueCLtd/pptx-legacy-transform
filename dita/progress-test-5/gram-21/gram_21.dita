@@ -1,1 +1,20 @@
-<topic id="gram_21"><title>Gram 21<ph audience="-trainee"> - Akira-class contact bearing 296, codename Bespin</ph></title><body><section audience="-trainee"><title>Analysis Sheet</title><p><xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref></p></section><section><title>Lofar 1</title><p><xref href="lofar-1-i.glc" format="glc" scope="local">Lofar 1</xref></p></section></body><related-links><link href="../gram-index.dita" format="dita" /></related-links></topic>
+<topic id="gram_21">
+  <title>Gram 21<ph audience="-trainee"> - Akira-class contact bearing 296, codename Bespin</ph></title>
+  <body>
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <p>
+        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
+      </p>
+    </section>
+    <section>
+      <title>Lofar 1</title>
+      <p>
+        <xref href="lofar-1-i.glc" format="glc" scope="local">Lofar 1</xref>
+      </p>
+    </section>
+  </body>
+  <related-links>
+    <link href="../gram-index.dita" format="dita" />
+  </related-links>
+</topic>

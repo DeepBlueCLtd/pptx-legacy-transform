@@ -1,1 +1,20 @@
-<topic id="gram_36"><title>Gram 36<ph audience="-trainee"> - FR Venator-class, Category 4, Defiant</ph></title><body><section audience="-trainee"><title>Analysis Sheet</title><p><xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref></p></section><section><title>Lofar 1</title><p><xref href="lofar-1-abc.glc" format="glc" scope="local">Lofar 1</xref></p></section></body><related-links><link href="../gram-index.dita" format="dita" /></related-links></topic>
+<topic id="gram_36">
+  <title>Gram 36<ph audience="-trainee"> - FR Venator-class, Category 4, Defiant</ph></title>
+  <body>
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <p>
+        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
+      </p>
+    </section>
+    <section>
+      <title>Lofar 1</title>
+      <p>
+        <xref href="lofar-1-abc.glc" format="glc" scope="local">Lofar 1</xref>
+      </p>
+    </section>
+  </body>
+  <related-links>
+    <link href="../gram-index.dita" format="dita" />
+  </related-links>
+</topic>

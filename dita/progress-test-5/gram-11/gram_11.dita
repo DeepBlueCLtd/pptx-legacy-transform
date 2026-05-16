@@ -1,1 +1,20 @@
-<topic id="gram_11"><title>Gram 11<ph audience="-trainee"> - FR Enterprise, Category 2, Mustafar</ph></title><body><section audience="-trainee"><title>Analysis Sheet</title><p><xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref></p></section><section><title>Lofar 1</title><p><xref href="lofar-1-loop-2.glc" format="glc" scope="local">Lofar 1</xref></p></section></body><related-links><link href="../gram-index.dita" format="dita" /></related-links></topic>
+<topic id="gram_11">
+  <title>Gram 11<ph audience="-trainee"> - FR Enterprise, Category 2, Mustafar</ph></title>
+  <body>
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <p>
+        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
+      </p>
+    </section>
+    <section>
+      <title>Lofar 1</title>
+      <p>
+        <xref href="lofar-1-loop-2.glc" format="glc" scope="local">Lofar 1</xref>
+      </p>
+    </section>
+  </body>
+  <related-links>
+    <link href="../gram-index.dita" format="dita" />
+  </related-links>
+</topic>

@@ -1,1 +1,18 @@
-<topic id="gram_32"><title>Gram 32<ph audience="-trainee"> - FR Rebel One, Category 2, Mustafar</ph></title><body><section audience="-trainee"><title>Analysis Sheet</title><image href="analysis.png" placement="break" align="center" /></section><section><title>Lofar 1</title><p><xref href="lofar-1-loop-2.glc" format="glc" scope="local">Lofar 1</xref></p></section></body><related-links><link href="../gram-index.dita" format="dita" /></related-links></topic>
+<topic id="gram_32">
+  <title>Gram 32<ph audience="-trainee"> - FR Rebel One, Category 2, Mustafar</ph></title>
+  <body>
+    <section audience="-trainee">
+      <title>Analysis Sheet</title>
+      <image href="analysis.png" placement="break" align="center" />
+    </section>
+    <section>
+      <title>Lofar 1</title>
+      <p>
+        <xref href="lofar-1-loop-2.glc" format="glc" scope="local">Lofar 1</xref>
+      </p>
+    </section>
+  </body>
+  <related-links>
+    <link href="../gram-index.dita" format="dita" />
+  </related-links>
+</topic>
