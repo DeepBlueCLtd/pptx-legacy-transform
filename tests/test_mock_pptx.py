@@ -136,7 +136,7 @@ class CorpusShapeTests(unittest.TestCase):
                 self.assertGreaterEqual(len(hrefs), 1)
                 self.assertLessEqual(len(hrefs), 4)
                 for h in hrefs:
-                    self.assertTrue(h.endswith(".glc") or h.endswith(".wav"),
+                    self.assertTrue(h.endswith(".glc"),
                                     f"unexpected Lofar target: {h}")
 
     def test_analysis_sheet_mix_includes_both_docx_and_png(self) -> None:

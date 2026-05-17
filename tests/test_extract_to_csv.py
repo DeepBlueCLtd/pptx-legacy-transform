@@ -166,16 +166,16 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(rows[0]["link_href"], "supporting/gram12/config_1.glc")
 
     def test_wav_targeted_link_is_treated_as_unresolvable_glc(self) -> None:
-        # Backlog 007: the audited corpus has no Lofar text run targeting a
-        # .wav directly — every Lofar link points to a .glc. The shape-
-        # grouping filter in extract_grams_from_slide drops .wav-targeted
-        # candidates with a warning, so gram_to_rows never sees one in
-        # normal operation. If it does (defensive path), the row is
-        # produced as an unresolvable-GLC row — empty measurements, no
-        # png_path — which downstream generate_dita skips with
-        # "png_path missing" and records in skipped.txt. No special
-        # "wav_treatment" handling, no row that would emit broken
-        # <image> output (the failure mode that motivated the rewrite).
+        # Backlog 007: the audited corpus has no Lofar text run targeting
+        # anything other than a .glc — every Lofar link points to a .glc.
+        # The shape-grouping filter in extract_grams_from_slide drops
+        # non-.glc candidates with a warning, so gram_to_rows never sees
+        # one in normal operation. If it does (defensive path), the row
+        # is produced as an unresolvable-GLC row — empty measurements,
+        # no png_path — which downstream generate_dita skips with
+        # "png_path missing" and records in skipped.txt. No row that
+        # would emit broken <image> output (the failure mode that
+        # motivated the rewrite).
         gram = _gram(links=[("Audio sample", "supporting/gram12/audio_clip.wav")])
         rows = extract_to_csv.gram_to_rows(
             gram, publication="main", chapter="Arctic Survey",
