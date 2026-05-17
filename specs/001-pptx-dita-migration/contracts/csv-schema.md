@@ -21,7 +21,7 @@ generator never re-reads PPTX or GLC files.
 |---|---|---|---|---|
 | 1 | `publication` | string | no | `main` or `progress-test-N` |
 | 2 | `chapter` | string | yes (when publication is a test) | human-readable chapter title |
-| 3 | `gram_id` | string | no | format `"Gram NN"`; may be `"Gram 100+"` if corpus grows |
+| 3 | `gram_id` | string | no | canonical form `"Gram NN"` (zero-padded). The extractor always writes the canonical form. The generator also accepts bare integers (`"12"`, `"5"`) and assorted legacy variants (`"gram 5"`, `"Gram-7"`) on read — these are normalised to `"Gram NN"` so authors can renumber grams quickly when refactoring content between chapters. |
 | 4 | `vessel_name` | string | yes | instructor-only content |
 | 5 | `topic_type` | enum | no | `glc` or `analysis` |
 | 6 | `sequence` | string | no | `1`-based per gram, scoped per `topic_type` |
@@ -47,6 +47,12 @@ belonging to the same gram. The generator groups rows by gram and
 merges them into one DITA topic per `topic_filename`; the trailing
 columns (`topic_type`, `sequence`) determine *which block* a row
 contributes to inside that topic.
+
+`generate_dita.py` enforces this tuple's uniqueness before emitting
+anything: a duplicate row identity aborts the run with an error
+pinpointing both colliding CSV lines. This catches the common
+refactoring mistake of moving a gram into a chapter that already
+holds a gram with the same `gram_id` without renumbering one of them.
 
 ## Row construction rules
 
