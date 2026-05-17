@@ -447,6 +447,17 @@ body.ditamap-index ul.map ul {
 }
 body.ditamap-index ul.map { display: flex; flex-direction: column; gap: 22px; }
 
+/* Flat ditamaps (progress tests, final assessment) put grams directly
+   under ul.map with no enclosing li.topichead. The default column flex
+   above produces a long single-column list that's slow to scan. When
+   the map only contains bare topicrefs, switch to the same dense tile
+   grid used for the nested case below. */
+body.ditamap-index ul.map:has(> li.topicref:not(.topichead)) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+}
+
 /* Section card (li.topichead) */
 body.ditamap-index li.topichead {
   background: var(--panel);
