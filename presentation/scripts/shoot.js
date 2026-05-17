@@ -26,14 +26,16 @@ const targets = [
   {
     name: 'styled-instructor-index',
     file: 'instructor/main/index.html',
-    viewport: { width: 1280, height: 1800 },
+    viewport: { width: 1280, height: 720 },
     wait: 600,
+    clip: { x: 0, y: 0, width: 1280, height: 720 },
   },
   {
     name: 'styled-student-index',
     file: 'student/main/index.html',
-    viewport: { width: 1280, height: 1800 },
+    viewport: { width: 1280, height: 720 },
     wait: 600,
+    clip: { x: 0, y: 0, width: 1280, height: 720 },
   },
   {
     name: 'styled-landing',
@@ -53,7 +55,11 @@ const targets = [
     await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(t.wait);
     const out = path.join(outDir, t.name + '.png');
-    await page.screenshot({ path: out, fullPage: true });
+    if (t.clip) {
+      await page.screenshot({ path: out, clip: t.clip });
+    } else {
+      await page.screenshot({ path: out, fullPage: true });
+    }
     console.log('wrote', out);
     await ctx.close();
   }
