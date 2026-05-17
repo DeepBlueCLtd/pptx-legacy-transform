@@ -1,0 +1,68 @@
+name: Sync presentation/ to gh-pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'presentation/**'
+      - '.github/workflows/sync-presentation.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          path: main-checkout
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-checkout
+
+      - name: Sync presentation/ into gh-pages
+        run: |
+          set -euo pipefail
+          rm -rf gh-pages-checkout/presentation
+          mkdir -p gh-pages-checkout/presentation
+          cp -R main-checkout/presentation/. gh-pages-checkout/presentation/
+
+      - name: Ensure DITA-CSS deck link on gh-pages index
+        run: |
+          set -euo pipefail
+          cd gh-pages-checkout
+          if ! grep -q 'href="presentation/dita-css.html"' index.html; then
+            sed -i 's|  </ul>|    <li><a href="presentation/dita-css.html">DITA processing \&amp; CSS theming walkthrough</a> \&mdash; how the published HTML is built and styled, with the air-gapped Oxygen handover.</li>\n  </ul>|' index.html
+          fi
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          cd gh-pages-checkout
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Sync presentation/ from ${GITHUB_SHA::7}"
+          for attempt in 1 2 3 4; do
+            if git push origin gh-pages; then
+              exit 0
+            fi
+            sleep $((2 ** attempt))
+            git pull --rebase origin gh-pages
+          done
+          echo "push failed after retries" >&2
+          exit 1
