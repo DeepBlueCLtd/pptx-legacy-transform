@@ -310,10 +310,11 @@ Flat — no `<topichead>` elements (FR-012, section 1.11).
 Plain-text file written at the root of the output tree per R9.
 
 ```
-output/main/nordic-fishing-vessels/gram_12_lofar1.dita
-output/main/nordic-fishing-vessels/gram_12_lofar2.dita
-output/main/nordic-fishing-vessels/gram_12_analysis.dita
-output/ditamaps/main.ditamap
+output/main/nordic-fishing-vessels/gram-12/gram_12.dita
+output/main/nordic-fishing-vessels/gram-12/analysis.png
+output/main/nordic-fishing-vessels/gram-12/lofar-1.png
+output/main/nordic-fishing-vessels/gram-12/lofar-2.png
+output/main.ditamap
 ...
 ```
 

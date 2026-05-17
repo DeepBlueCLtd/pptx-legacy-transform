@@ -122,56 +122,64 @@ Key points:
 
 ### 1.7 Target DITA Structure
 
-DITA output uses a gram-config table structure matching existing pub-9/pub-10:
+**One DITA topic per gram.** The body groups everything for that gram —
+an Analysis Sheet section (instructor-only) followed by one section
+per Lofar in CSV `sequence` order, each Lofar carrying a `gram-config`
+table matching the pub-9/pub-10 shape:
 
 ```xml
-<topic id="gram_12_lofar1">
+<topic id="gram_12">
   <title>Gram 12<ph audience="-trainee"> - Nordik Jockey</ph></title>
   <body>
-    <section>
+    <section audience="-trainee" outputclass="analysis-sheet">
+      <title>Analysis Sheet</title>
+      <image href="analysis.png" placement="break" align="center"/>
+    </section>
+    <section outputclass="lofar-stage">
+      <title>Lofar 1</title>           <!-- ← title lifted from PPTX link label -->
       <table outputclass="gram-config">
-        <tgroup cols="2">
-          <tbody>
-            <row>
-              <entry namest="c1" nameend="c2">
-                <image href="gram12.png" placement="break" align="center"/>
-              </entry>
-            </row>
-            <row><entry>time-start</entry><entry>0</entry></row>
-            <row><entry>time-end</entry><entry>271</entry></row>
-            <row><entry>freq-start</entry><entry>0</entry></row>
-            <row><entry>freq-end</entry><entry>400</entry></row>
-          </tbody>
-        </tgroup>
+        <tgroup cols="2"><tbody>
+          <row><entry namest="c1" nameend="c2">
+            <image href="lofar-1.png" placement="break" align="center"/>
+          </entry></row>
+          <row><entry>time-start</entry><entry>0</entry></row>
+          <row><entry>time-end</entry><entry>271</entry></row>
+          <row><entry>freq-start</entry><entry>0</entry></row>
+          <row><entry>freq-end</entry><entry>400</entry></row>
+        </tbody></tgroup>
       </table>
     </section>
+    <!-- Lofar 2, Lofar 3, ... follow in sequence order -->
   </body>
-  <related-links>
-    <link href="../gram-index.dita" format="dita"/>
-  </related-links>
 </topic>
 ```
 
-Per gram placeholder, the following DITA files are generated:
-- One `gram_xx_lofarN.dita` per `.glc` link (each with its own measurements)
-- One `gram_xx_analysis.dita` — instructor-only, contains the analysis PNG
+Per gram placeholder, exactly **one** `gram_NN.dita` topic file is
+generated. The CSV's N+1 rows for the gram (one per Lofar plus one
+analysis) collapse into the sections shown above.
 
 ### 1.8 Output Folder Structure
 
-Folder structure acts as namespace — no filename prefixing needed:
+Each gram lives in its own folder, named after the topic, so its
+assets (analysis sheet, per-Lofar PNG / WAV pairs) sit next to the
+topic with bare filenames — no `../` traversal anywhere:
 
 ```
 output/
   main.ditamap
   main/
     nordic-fishing-vessels/
-      gram_12_lofar1.dita
-      gram_12_lofar2.dita
-      gram_12_analysis.dita
+      gram-12/
+        gram_12.dita
+        analysis.png
+        lofar-1.png
+        lofar-2.png
   progress-test-1.ditamap
   progress-test-1/
-    gram_01_lofar1.dita
-    gram_01_analysis.dita
+    gram-01/
+      gram_01.dita
+      analysis.png
+      lofar-1.png
   progress-test-2.ditamap
   progress-test-2/
     ...
@@ -183,9 +191,11 @@ its topics, so `topicref` hrefs in the map are simple forward paths
 
 ### 1.9 Intermediate CSV Structure
 
-The CSV produced by Stage 2 has **one row per DITA topic**. A gram placeholder with
-4 GLC links and 1 analysis PNG produces 5 rows. The unique key per row is:
-`publication + chapter + gram_id + topic_type + sequence`.
+The CSV produced by Stage 2 has **one row per Lofar (plus one row per analysis sheet)**.
+A gram placeholder with 4 Lofar links and 1 analysis sheet produces 5 rows that all
+share the same `topic_filename` — the generator collapses them into one DITA topic per
+gram (one Analysis Sheet section followed by one section per Lofar in `sequence` order).
+The unique key per row is: `publication + chapter + gram_id + topic_type + sequence`.
 
 | Column | Example | Notes |
 |---|---|---|
@@ -194,8 +204,8 @@ The CSV produced by Stage 2 has **one row per DITA topic**. A gram placeholder w
 | `gram_id` | `Gram 12` | Not globally unique across publications |
 | `vessel_name` | `Nordik Jockey` | Instructor-only |
 | `topic_type` | `glc` / `analysis` | |
-| `sequence` | `1` | For ordering multiple GLC topics per gram |
-| `topic_filename` | `gram_12_lofar1.dita` | |
+| `sequence` | `1` | For ordering multiple Lofar sections within the merged gram topic |
+| `topic_filename` | `gram_12.dita` | Identical across every row that belongs to the same gram |
 | `display_text` | `LOFAR 1` | Link label from PPTX |
 | `glc_path` | `./supporting/gram12/config.glc` | Blank for analysis rows |
 | `time_end` | `271` | From GLC `bottom_crop` |
@@ -473,20 +483,26 @@ ditamaps, and write them into the output folder structure.
 python generate_dita.py --csv extracted.csv --out output/ --image-root "W:\training\content"
 ```
 
-**Per GLC row:** generate `gram_xx_lofarN.dita` with:
-- Title using `<ph audience="-trainee">` for vessel name
+The N+1 rows of a gram are merged into a single `gram_NN.dita` topic.
+Within that topic:
+
+**Per GLC row:** append a `<section outputclass="lofar-stage">` with:
+- Section title from the row's `display_text` (the PPTX link label, e.g. "Lofar 1")
 - gram-config table with time/freq measurements from CSV
 - Image reference from `png_path` column (resolved relative to `--image-root`)
-- Related links back to gram index
 
-**Per analysis row:** generate `gram_xx_analysis.dita` with:
-- Instructor-only image (analysis PNG)
-- `audience="-trainee"` on the topic itself or via ditaval
+**Per analysis row:** prepend a `<section audience="-trainee" outputclass="analysis-sheet">` with:
+- Section title `Analysis Sheet`
+- Image reference to the analysis PNG (or a link to its `.docx` source)
+
+The topic's own `<title>` uses `<ph audience="-trainee">` for the
+vessel-name decoration. No `<related-links>` are emitted.
 
 **Per GLC row whose inner `data_source/filename` is a `.wav`:** emit
-a plain `<xref>` block in the gram topic linking to the `.glc` (not
-the WAV directly), and copy both the `.glc` and the named `.wav`
-side-by-side into the per-gram folder. The on-PC GLC viewer (assumed
+a plain `<xref>` block inside the Lofar section (instead of a
+gram-config table) linking to the `.glc` (not the WAV directly), and
+copy both the `.glc` and the named `.wav` side-by-side into the
+per-gram folder. The on-PC GLC viewer (assumed
 installed on student PCs) opens the `.glc`, reads its `<filename>`
 element, and loads the adjacent `.wav` for aural analysis. No
 gram-config table and no `<image>` are emitted for these rows.

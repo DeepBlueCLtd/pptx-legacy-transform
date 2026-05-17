@@ -122,13 +122,15 @@ A more detailed walkthrough lives in
    extension, no author decision is required.
 
 5. **Stage 5 — DITA generation.** `generate_dita.py` consumes the
-   signed-off CSV and writes a self-contained DITA tree: each topic
-   under `dita/<publication>/<chapter>/`, every referenced asset (PNG,
-   WAV, analysis sheet) copied next to its topic and renamed to match
-   the topic's stem (so `gram_12_lofar1.dita` sits beside
-   `gram_12_lofar1.png` and the topic's `href` is just that filename —
-   no `../` traversal). Ditamaps, manifest, and skipped report are
-   written alongside. Output is deterministic: re-running the same CSV
+   signed-off CSV and writes a self-contained DITA tree: **one topic
+   per gram** at `dita/<publication>/<chapter>/gram-NN/gram_NN.dita`
+   (the N+1 CSV rows for the gram are merged — Analysis Sheet
+   section first, then one section per Lofar in `sequence` order).
+   Every referenced asset (PNG, WAV, analysis sheet) is copied beside
+   the topic with a stable per-section name (`analysis.png`,
+   `lofar-1.png`, `lofar-2-i.png`, ...) so each `href` in the topic
+   is a bare filename — no `../` traversal. Ditamaps, manifest, and
+   skipped report are written alongside. Output is deterministic: re-running the same CSV
    produces byte-identical files (including the copied assets). If a
    referenced asset is missing on disk, the generator logs a warning
    and still emits the topic with the intended local href — dropping
@@ -155,7 +157,7 @@ Reviewers should not edit the identity columns
 | 4 | `vessel_name` | yes | Instructor-only content. |
 | 5 | `topic_type` | no | `glc` or `analysis`. |
 | 6 | `sequence` | no | 1-based per gram, scoped per `topic_type`. |
-| 7 | `topic_filename` | no | `gram_NN_lofarM.dita` or `gram_NN_analysis.dita`. |
+| 7 | `topic_filename` | no | `gram_NN.dita`. Every row of a single gram (one per Lofar plus one analysis) shares this filename; the generator merges the N+1 rows into one DITA topic per gram. |
 | 8 | `display_text` | yes (rare) | Human-readable link label from the PPTX run. |
 | 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run; always a `.glc` in the audited corpus. |
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
