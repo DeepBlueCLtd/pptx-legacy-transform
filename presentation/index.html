@@ -55,7 +55,7 @@
             <p>A small, self-contained training artifact:</p>
             <ul>
               <li><strong>Title</strong> &mdash; vessel name, category, codename</li>
-              <li><strong>Analysis sheet</strong> &mdash; PNG spectrogram or <code>.docx</code> commentary</li>
+              <li><strong>Analysis sheet</strong> &mdash; a Word document (<code>.docx</code>) of measured values the analyst fills in from their GramFrame readings (bearing, base frequency, harmonics, shaft / blade rate, classification, ...), or a PNG screenshot of that same sheet</li>
               <li><strong>One or more Lofar links</strong> &mdash; <em>always</em> a hyperlink to a <code>.glc</code> configuration file. The <code>.glc</code> in turn references the spectrogram asset GAPS-Lite would render: usually a <code>.png</code>/<code>.jpg</code> pre-rendered image (~82%), occasionally a <code>.wav</code> raw recording rendered live by the on-PC viewer (~18%).</li>
             </ul>
             <p class="small muted">Audited across 1,004 Lofar text-run hyperlinks: every one targets a <code>.glc</code>. The <code>.wav</code> case is always one indirection deeper, inside the GLC's <code>data_source/filename</code>.</p>
@@ -119,8 +119,8 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
           </div>
           <div class="problem-card">
             <div class="icon">👥</div>
-            <h3>One audience only</h3>
-            <p>Instructor decks reveal the vessel name. There's no automatic <em>student</em> view that hides it &mdash; that's done manually.</p>
+            <h3>Two decks to maintain</h3>
+            <p>Each instructor PPTX has a parallel student deck with vessel names and analysis sheets stripped out. Authors keep both in sync <em>by hand</em> &mdash; any edit risks drift between the two.</p>
           </div>
           <div class="problem-card">
             <div class="icon">📎</div>

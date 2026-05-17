@@ -13,14 +13,14 @@ const outDir = path.join(repoRoot, 'presentation', 'assets', 'screenshots');
 const targets = [
   {
     name: 'styled-gram',
-    file: 'instructor/main/week-4-grams-updated/gram-20/gram_20.html',
-    viewport: { width: 1100, height: 1600 },
+    file: 'instructor/main/week-1-grams/gram-09/gram_09.html',
+    viewport: { width: 1100, height: 1700 },
     wait: 2500,
   },
   {
     name: 'styled-gram-student',
-    file: 'student/main/week-4-grams-updated/gram-20/gram_20.html',
-    viewport: { width: 1100, height: 1600 },
+    file: 'student/main/week-1-grams/gram-09/gram_09.html',
+    viewport: { width: 1100, height: 1700 },
     wait: 2500,
   },
   {
