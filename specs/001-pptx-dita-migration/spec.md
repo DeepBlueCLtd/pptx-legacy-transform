@@ -426,10 +426,11 @@ produces the expected output tree on continue.
 - **FR-022**: The DITA generator MUST produce self-contained
   publication trees. For every topic that references an external asset
   (PNG, WAV, analysis sheet) the generator MUST copy the source asset
-  into the same directory as the topic, rename the copy to match the
-  topic's filename stem (e.g. the asset referenced by
-  `gram_12_lofar1.dita` is copied to `gram_12_lofar1.png`), and emit
-  the bare local filename as the topic's `href`. References MUST NOT
+  into the same directory as the topic (one folder per gram, named
+  `gram-NN/` next to the gram's single `gram_NN.dita` topic), rename
+  the copy to a stable per-section name (e.g. `analysis.png`,
+  `lofar-1.png`, `lofar-2-i.png`), and emit the bare local filename
+  as the topic's `href`. References MUST NOT
   traverse out of the chapter directory. Asset copies MUST preserve
   source modification time so that the idempotency requirement
   (FR-013) holds for the asset tree as well as the topic XML. When a

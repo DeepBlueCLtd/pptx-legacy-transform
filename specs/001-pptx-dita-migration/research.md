@@ -186,9 +186,13 @@ spec:
 1. *Inline `<ph audience="-trainee">` around vessel names* in topic titles
    (FR-010, section 1.10) — keeps the topic visible to trainees with the
    vessel name elided.
-2. *Topic-level `audience="-trainee"` attribute* on
-   `gram_xx_analysis.dita` topics — entire instructor-only topics are
-   excluded by the trainee profile rather than emptied.
+2. *Section-level `audience="-trainee"` attribute* on the Analysis
+   Sheet section inside each gram topic — the whole instructor-only
+   section is excluded by the trainee profile rather than emptied.
+   (Originally framed as a topic-level attribute on a separate
+   `gram_xx_analysis.dita`; the design has since collapsed to one
+   topic per gram with the analysis content as a `<section>`. The
+   audience-attribute mechanism is otherwise unchanged.)
 
 The generator emits both forms; whether they end up in any particular
 build is decided by the publishing toolchain's ditaval. No ditaval is
@@ -214,8 +218,8 @@ profiles build cleanly in Oxygen.
 **Decision**: Treat the four `wav_treatment` values exactly as specified
 (FR-011, section 6.2):
 
-- `screenshot`: emit a normal `gram_xx_lofarN.dita` topic, identical to
-  the PNG path.
+- `screenshot`: emit a normal Lofar section inside the gram's
+  `gram_NN.dita` topic, identical to the PNG path.
 - `gaps-lite`: emit a stub topic containing a `<note>` warning about
   GAPS-Lite dependency, an `<xref>` to the WAV path, and an XML comment
   reading `MANUAL REVIEW: GAPS-Lite required`.

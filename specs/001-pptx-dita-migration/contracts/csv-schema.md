@@ -132,5 +132,5 @@ main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05.dita,Lofar 1,supporting
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 17,,analysis,1,gram_17_analysis.dita,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
+main,Nordic Fishing Vessels,Gram 17,,analysis,1,gram_17.dita,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
 ```

@@ -173,18 +173,20 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
       <!-- 8. Stage 1: Extract -->
       <section>
         <h2>Stage 1 &mdash; Extract to CSV</h2>
-        <p>The pipeline first explodes every gram into a flat, reviewable table.</p>
+        <p>One row per <strong>Lofar</strong> (plus one per analysis sheet). Every row of a single gram shares the same <code>topic_filename</code> &mdash; the generator merges them downstream.</p>
         <table class="data-table">
           <thead>
-            <tr><th>publication</th><th>chapter</th><th>gram_id</th><th>vessel_name</th><th>topic_type</th><th>seq</th><th>topic_filename</th><th>time_end</th><th>freq_end</th><th>warnings</th></tr>
+            <tr><th>publication</th><th>gram_id</th><th>vessel_name</th><th>topic_type</th><th>seq</th><th>topic_filename</th><th>time_end</th><th>freq_end</th></tr>
           </thead>
           <tbody>
-            <tr><td>progress-test-1</td><td></td><td>Gram 04</td><td>Enterprise contact bearing 291, codename Hoth</td><td>glc</td><td>1</td><td>gram_04_lofar1.dita</td><td>360</td><td>100</td><td></td></tr>
-            <tr><td>progress-test-1</td><td></td><td>Gram 04</td><td>Enterprise contact bearing 291, codename Hoth</td><td>analysis</td><td>1</td><td>gram_04_analysis.dita</td><td></td><td></td><td></td></tr>
-            <tr><td>main</td><td>week-4-grams-updated</td><td>Gram 20</td><td>FR Discovery, Category 3, Naboo</td><td>glc</td><td>2</td><td>gram_20_lofar2.dita</td><td>300</td><td>200</td><td></td></tr>
+            <tr><td>progress-test-1</td><td>Gram 18</td><td>FR Razor Crest, Category 2, Gandalf</td><td>glc</td><td>1</td><td>gram_18.dita</td><td>180</td><td>200</td></tr>
+            <tr><td>progress-test-1</td><td>Gram 18</td><td>FR Razor Crest, Category 2, Gandalf</td><td>glc</td><td>2</td><td>gram_18.dita</td><td>271</td><td>100</td></tr>
+            <tr><td>progress-test-1</td><td>Gram 18</td><td>FR Razor Crest, Category 2, Gandalf</td><td>glc</td><td>3</td><td>gram_18.dita</td><td>300</td><td>800</td></tr>
+            <tr><td>progress-test-1</td><td>Gram 18</td><td>FR Razor Crest, Category 2, Gandalf</td><td>glc</td><td>4</td><td>gram_18.dita</td><td>360</td><td>200</td></tr>
+            <tr><td>progress-test-1</td><td>Gram 18</td><td>FR Razor Crest, Category 2, Gandalf</td><td>analysis</td><td>1</td><td>gram_18.dita</td><td></td><td></td></tr>
           </tbody>
         </table>
-        <p class="caption">One row per topic. Today's CSV: <strong>1,409 rows</strong> across 7 publications. The <em>warnings</em> column is where the next stage takes over.</p>
+        <p class="caption">Gram 18 has four Lofars and one analysis sheet &mdash; <strong>five rows, one <code>topic_filename</code></strong>. Today's CSV: 1,409 rows of this shape across 7 publications. The author edits this in Excel; the <em>warnings</em> column is where the next stage takes over.</p>
       </section>
 
       <!-- 9. Stage 2: Manual review -->
@@ -212,9 +214,9 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
       <!-- 10. Stage 3: Generate DITA -->
       <section>
         <h2>Stage 3 &mdash; Generate DITA</h2>
-        <p>One CSV row becomes one DITA topic. Standardised, structured XML.</p>
-<pre class="code-xml"><code>&lt;topic id="gram_04"&gt;
-  &lt;title&gt;Gram 04&lt;ph audience="-trainee"&gt; - Enterprise contact bearing 291, codename Hoth&lt;/ph&gt;&lt;/title&gt;
+        <p>The N+1 CSV rows for a gram collapse into <strong>one DITA topic per gram</strong>: an Analysis Sheet section (instructor-only) followed by one section per Lofar, in CSV <code>sequence</code> order.</p>
+<pre class="code-xml"><code>&lt;topic id="gram_18"&gt;
+  &lt;title&gt;Gram 18&lt;ph audience="-trainee"&gt; - FR Razor Crest, Category 2, Gandalf&lt;/ph&gt;&lt;/title&gt;
   &lt;body&gt;
     &lt;section audience="-trainee" outputclass="analysis-sheet"&gt;
       &lt;title&gt;Analysis Sheet&lt;/title&gt;
@@ -222,19 +224,16 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
     &lt;/section&gt;
     &lt;section outputclass="lofar-stage"&gt;
       &lt;title&gt;Lofar 1&lt;/title&gt;       &lt;!-- ← section heading lifted from the PPTX link label --&gt;
-      &lt;table outputclass="gram-config"&gt;
-        &lt;tgroup cols="2"&gt;&lt;tbody&gt;
-          &lt;row&gt;&lt;entry namest="c1" nameend="c2"&gt;
-            &lt;image href="lofar-1-i.png" placement="break" align="center" /&gt;
-          &lt;/entry&gt;&lt;/row&gt;
-          &lt;row&gt;&lt;entry&gt;time-end&lt;/entry&gt;&lt;entry&gt;360&lt;/entry&gt;&lt;/row&gt;
-          &lt;row&gt;&lt;entry&gt;freq-end&lt;/entry&gt;&lt;entry&gt;100&lt;/entry&gt;&lt;/row&gt;
-        &lt;/tbody&gt;&lt;/tgroup&gt;
-      &lt;/table&gt;
+      &lt;table outputclass="gram-config"&gt;...time-end=180, freq-end=200, image=lofar-1.png...&lt;/table&gt;
     &lt;/section&gt;
+    &lt;section outputclass="lofar-stage"&gt;
+      &lt;title&gt;Lofar 2&lt;/title&gt;
+      &lt;table outputclass="gram-config"&gt;...time-end=271, freq-end=100, image=lofar-2.png...&lt;/table&gt;
+    &lt;/section&gt;
+    &lt;!-- Lofar 3, Lofar 4 sections follow, one per CSV glc row --&gt;
   &lt;/body&gt;
 &lt;/topic&gt;</code></pre>
-        <p class="caption"><code>audience="-trainee"</code> is the single attribute that drives the dual-edition split &mdash; on the vessel-name decoration <em>and</em> on the whole Analysis Sheet section. Section titles ("Lofar 1", "Stage 1 — Broadband", ...) come straight from the PPTX link labels.</p>
+        <p class="caption"><code>audience="-trainee"</code> drives the dual-edition split &mdash; on the vessel-name decoration <em>and</em> on the whole Analysis Sheet section. Section titles ("Lofar 1", "Stage 1 — Broadband", ...) come straight from the PPTX link labels.</p>
       </section>
 
       <!-- 11. Stage 4: Publish - dual edition -->

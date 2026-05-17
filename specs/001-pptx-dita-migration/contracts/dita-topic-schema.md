@@ -294,9 +294,9 @@ the generator:
    find the audio next to it.
 2. Copies the source file(s) into the topic's per-gram folder (`gram-NN/`).
 3. Renames the copy to a slug of the *source* filename, preserving the
-   original extension lower-cased. For example, the asset referenced
-   by `gram_12_lofar1.dita` whose source is `Lofar 1 ABC.PNG` is
-   copied to `gram-12/lofar-1-abc.png`. A WAV-typed GLC row whose
+   original extension lower-cased. For example, the Lofar-1 image of
+   `gram_12.dita` whose source is `Lofar 1 ABC.PNG` is copied to
+   `gram-12/lofar-1-abc.png`. A WAV-typed GLC row whose
    sources are `Lofar 1 I.glc` and `Lofar 1 I.wav` copies both files
    to `gram-NN/lofar-1-i.glc` and `gram-NN/lofar-1-i.wav` so they
    stay paired by basename.
