@@ -420,7 +420,33 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
             </ul>
           </div>
         </div>
-        <p class="caption" style="margin-top:1em">Today's review is a chance to redirect this list &mdash; <strong>what would you add, drop, or re-rank?</strong></p>
+      </section>
+
+      <!-- 21. Handover -->
+      <section>
+        <h2>What stays with the author &mdash; and what gets retired</h2>
+        <div class="two-col">
+          <div>
+            <h3 style="color:#166534;margin-bottom:0.2em">What the author keeps</h3>
+            <ul>
+              <li><strong>The DITA document set</strong> &mdash; the deliverable, in the same format as pub-9 and pub-10</li>
+              <li><strong>The existing authoring workflow</strong> &mdash; Oxygen and DITA-OT, the routines already in use; no new tooling to learn</li>
+              <li><strong>The Operator Console v2 theme and GramFrame plugin</strong> &mdash; carried with the publication, applied on every future build</li>
+            </ul>
+          </div>
+          <div>
+            <h3 style="color:#92400e;margin-bottom:0.2em">What gets retired</h3>
+            <ul>
+              <li><strong>The extractor, generator, and publish scripts</strong> &mdash; scaffolding built to run the conversion once</li>
+              <li><strong>The mock dataset</strong> &mdash; existed only to let development happen off-site</li>
+              <li><strong>The intermediate CSV</strong> &mdash; the sign-off record for the one conversion, archived rather than maintained</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:0.8em">
+          <h3>A one-way trip</h3>
+          <p>This whole toolchain exists to produce <strong>a single, complete conversion</strong> from PowerPoint to DITA. Once that conversion is signed off, the toolchain has done its job &mdash; it isn't infrastructure to host, maintain, or learn. From there on, the grams are maintained in DITA, alongside the rest of the publication set, by the author.</p>
+        </div>
       </section>
 
     </div>
