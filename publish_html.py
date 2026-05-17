@@ -398,13 +398,19 @@ def inject_gramframe_plugin(
 # -----------------------------------------------------------------------------
 #
 # A single ``theme.css`` (vendored from the design mockups under
-# ``mockups/index-dark/``) drives every page type. Per-edition / per-page
-# variation is selected at runtime via attributes on ``<body>``:
+# ``mockups/index-dark/``) drives every page type. The theme itself
+# detects edition and page type from elements DITA-OT already emits
+# (``ul.map`` for index pages, ``.ph`` for instructor edition); the
+# attributes this module sets on ``<body>`` are belt-and-braces — kept
+# so dev-side tooling (grep, dev-tools) can spot the page type at a
+# glance, but the CSS no longer depends on them. The air-gapped Oxygen
+# publish, which doesn't run this module, gets the same styling for
+# free via the ``:has()``-based selectors in ``theme.css``.
 #
-# - ``data-edition="instructor"`` / ``"student"`` switches the
-#   classification banner and accent colours.
-# - ``class="ditamap-index"`` activates the index-page card grid
-#   (the DITA-OT-generated ``<pub>/index.html`` for each publication).
+# - ``data-edition="instructor"`` / ``"student"`` — informational; the
+#   CSS detects edition via ``body:has(.ph)`` / ``body:not(:has(.ph))``.
+# - ``class="ditamap-index"`` — informational; the CSS detects index
+#   pages via ``body:has(ul.map)``.
 # - ``class="edition-index"`` is the per-edition "choose a publication"
 #   index (``<edition>/index.html``, written by ``write_edition_index``).
 # - ``class="landing"`` is the shared top-level entry point
@@ -466,8 +472,10 @@ def inject_operator_console_theme(
 
     For each ``*.html`` under ``out_root``, ensures a
     ``<link rel="stylesheet" type="text/css" href="…/theme.css">`` sits
-    in ``<head>`` and that ``<body>`` carries the appropriate
-    ``data-edition`` and (where applicable) page-type class.
+    in ``<head>``. Also stamps ``data-edition`` and page-type classes
+    on ``<body>``; the CSS no longer requires these (it detects edition
+    and page type via ``:has()`` against elements DITA-OT emits), but
+    the attributes remain useful for dev-side inspection and testing.
 
     Idempotent: pages that already carry the theme link are left
     alone, preserving byte-determinism across re-runs.
