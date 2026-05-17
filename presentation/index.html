@@ -371,7 +371,34 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 19. Roadmap -->
+      <!-- 19. Velocity now, velocity ahead -->
+      <section data-background-color="#fffbea">
+        <h2>Why this moved fast &mdash; and why the next phase won't <span class="badge">&#9888; expectations</span></h2>
+        <div class="two-col">
+          <div>
+            <h3 style="color:#166534;margin-bottom:0.2em">So far &mdash; <strong>two days</strong>, mock corpus</h3>
+            <ul>
+              <li>Mock data <strong>authored to mirror the patterns</strong> seen on the air-gapped corpus &mdash; the variance, reproduced on a corpus we can carry off-site</li>
+              <li>Worked from a <strong>normal office</strong>, with modern dev tooling: LSP, AI-assisted edits, fast test loops, CI on every push</li>
+              <li>Most of what you're seeing today &mdash; pipeline, dual editions, theming, GramFrame integration &mdash; landed in those two days. The mock-corpus strategy made that pace possible; it didn't replace the real work.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 style="color:#92400e;margin-bottom:0.2em">Next &mdash; real corpus, air gap</h3>
+            <ul>
+              <li>Extractor moves back to the <strong>client site</strong>; restricted tooling, no modern dev assists</li>
+              <li>On-site access is typically <strong>Fridays only</strong>, balanced against other commitments</li>
+              <li>Iteration measured in <strong>weeks per cycle</strong>, not hours &mdash; each Friday's run feeds a week of off-site refinement</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:0.8em">
+          <h3>The calibration loop</h3>
+          <p>Each Friday's run against the real corpus will surface variance &mdash; ambiguous labels, unexpected shapes, hyperlink anomalies, missing analysis sheets. Through the week, off-site, each fix lands in one of three places: <strong>the data</strong> (one-off correction), <strong>the mocks</strong> (newly-seen pattern, reproduced), or <strong>the extractor</strong> (pattern to be tolerated). The next Friday re-runs. Calibrating against the real ~1,000 grams is the next major phase &mdash; today covers the <em>pipeline</em>.</p>
+        </div>
+      </section>
+
+      <!-- 20. Roadmap -->
       <section>
         <h2>Where we are &mdash; and what's next</h2>
         <div class="two-col">
