@@ -11,36 +11,74 @@
   <link rel="stylesheet" href="styles.css" />
   <style>
     /* Deck-specific extras */
+    /* Reveal sets section width=100% of the configured 1280px slide and uses
+       content-box sizing for its own padding. Adding our own padding would
+       widen things and push content off the right edge. Instead, cap the
+       interior content elements at <100% of the slide so visual scaling
+       (scale 0.96) doesn't clip the rightmost characters. */
+    .reveal .slides section { overflow-wrap: break-word; }
+    .reveal .slides section > * { max-width: 1180px; margin-left: auto; margin-right: auto; }
+    .reveal h2 { font-size: 0.95em; margin-bottom: 0.3em; text-wrap: balance; overflow-wrap: break-word; }
+    .reveal p, .reveal li, .reveal small { overflow-wrap: break-word; }
     .reveal h2 .step { display: inline-block; background: #1a4778; color: #fff; border-radius: 4px; padding: 0.05em 0.4em; font-size: 0.65em; margin-right: 0.4em; vertical-align: middle; }
-    .reveal pre code.hljs { padding: 0.8em 1em; }
-    .reveal pre { font-size: 0.42em; }
     .reveal .micro { font-size: 0.42em; line-height: 1.4; }
+
+    /* --- Code block contrast fix ---------------------------------------
+       The vendored highlight.js theme (monokai) is designed for a dark
+       background. On reveal's white theme it produces near-invisible
+       greys / pale greens. Force every <pre><code> onto a dark slab so
+       monokai's accent colours land where they're meant to. Also override
+       any colour the hljs theme would inherit-into-light for "plain"
+       tokens, since with a black bg those defaulted to near-black ink. */
+    .reveal pre { font-size: 18px; background: #1e1e1e; border-radius: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.18); width: 100%; }
+    .reveal .key-points pre, .reveal .ed-card pre, .reveal .sites-table pre { font-size: 14px; }
+    .reveal pre code,
+    .reveal pre code.hljs { background: #1e1e1e !important; color: #e6e6e6 !important; padding: 0.9em 1.1em; display: block; border-radius: 5px; }
+    /* Make sure unhighlighted tokens (plain text in code) are readable */
+    .reveal pre code.hljs .hljs-tag,
+    .reveal pre code.hljs .hljs-name { color: #f06292 !important; }
+    .reveal pre code.hljs .hljs-string { color: #a5d6a7 !important; }
+    .reveal pre code.hljs .hljs-attr,
+    .reveal pre code.hljs .hljs-attribute { color: #80deea !important; }
+    .reveal pre code.hljs .hljs-comment { color: #9aa4af !important; font-style: italic; }
+    .reveal pre code.hljs .hljs-keyword,
+    .reveal pre code.hljs .hljs-selector-tag,
+    .reveal pre code.hljs .hljs-built_in { color: #ffb74d !important; }
+    .reveal pre code.hljs .hljs-meta,
+    .reveal pre code.hljs .hljs-doctag { color: #ce93d8 !important; }
+    /* Inline code on light slides */
+    .reveal code { color: #b91c1c; }
+    /* Inline code in dark table headers — invert to readable on navy */
+    .sites-table th code { color: #fde68a; background: rgba(255,255,255,0.08); }
+
     .ed-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6em; margin-top: 0.4em; }
     .ed-card { border: 1px solid #cbd5e1; border-radius: 5px; padding: 0.6em 0.8em; background: #f8fafc; }
     .ed-card.instructor { border-left: 5px solid #c08a3e; }
     .ed-card.student { border-left: 5px solid #14b8a6; }
     .ed-card h4 { margin: 0 0 0.2em; font-size: 0.8em; color: #1a2a44; }
-    .ed-card pre { margin: 0.3em 0 0; font-size: 0.4em; box-shadow: none; border-radius: 3px; }
-    .sites-table { width: 100%; border-collapse: collapse; font-size: 0.5em; margin-top: 0.4em; }
-    .sites-table th, .sites-table td { border: 1px solid #e2e8f0; padding: 0.45em 0.6em; vertical-align: top; text-align: left; }
+    .ed-card pre { margin: 0.3em 0 0; font-size: 0.36em; }
+    .sites-table { width: 100%; border-collapse: collapse; font-size: 0.48em; margin-top: 0.4em; table-layout: fixed; }
+    .sites-table th, .sites-table td { border: 1px solid #e2e8f0; padding: 0.45em 0.6em; vertical-align: top; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; }
     .sites-table th { background: #1a4778; color: #fff; }
-    .sites-table code { font-size: 0.95em; }
+    .sites-table code { font-size: 0.95em; word-break: break-all; }
     .tag { display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 3px; padding: 0 0.4em; font-size: 0.85em; }
     .ok { color: #166534; font-weight: 600; }
     .ko { color: #b91c1c; font-weight: 600; }
     .mini-pipeline { display: flex; gap: 0.3em; flex-wrap: wrap; justify-content: center; margin-top: 0.6em; }
-    .mini-pipeline .stage { background: #f1f5f9; border: 1px solid #cbd5e1; border-top: 3px solid #1a4778; border-radius: 4px; padding: 0.4em 0.6em; font-size: 0.55em; min-width: 120px; text-align: center; }
-    .mini-pipeline .stage code { font-size: 1em; }
+    .mini-pipeline .stage { background: #f1f5f9; border: 1px solid #cbd5e1; border-top: 3px solid #1a4778; border-radius: 4px; padding: 0.4em 0.6em; font-size: 0.55em; min-width: 120px; text-align: center; color: #1a2a44; }
+    .mini-pipeline .stage code { font-size: 1em; color: #b91c1c; }
     .mini-pipeline .arrow { display: flex; align-items: center; color: #94a3b8; }
     .mini-pipeline .stage.theme-step { border-top-color: #c08a3e; background: #fff7e0; }
     .key-points { font-size: 0.6em; }
     .key-points li { margin: 0.3em 0; }
     .swatch { display: inline-block; width: 0.9em; height: 0.9em; border-radius: 2px; vertical-align: middle; margin-right: 0.3em; border: 1px solid rgba(0,0,0,0.2); }
-    .preview-frame { width: 100%; height: 480px; background: #07101a; border: 1px solid #25415c; border-radius: 4px; }
-    .runbook { font-family: 'Consolas', monospace; background: #1a1a1a; color: #d4d4d4; padding: 0.9em 1em; border-radius: 5px; font-size: 0.5em; line-height: 1.55; text-align: left; }
-    .runbook .cmt { color: #6b7280; }
-    .runbook .ok { color: #6cff9d; }
-    .runbook .var { color: #80deea; }
+    /* Runbook: a styled <pre> so newlines are preserved verbatim */
+    pre.runbook { background: #1e1e1e; color: #e6e6e6; padding: 0.9em 1.1em; border-radius: 5px; font-size: 0.4em; line-height: 1.55; text-align: left; white-space: pre; font-family: 'Consolas', 'Monaco', monospace; box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+    pre.runbook code { background: transparent !important; color: inherit; padding: 0; font-size: inherit; }
+    pre.runbook .cmt { color: #9aa4af; font-style: italic; }
+    pre.runbook .ok  { color: #6cff9d; }
+    pre.runbook .ko  { color: #ff8a8a; }
+    pre.runbook .var { color: #80deea; }
   </style>
 </head>
 <body>
@@ -270,7 +308,7 @@ dita/
         <ol class="key-points">
           <li>Copy the bundle to <code>html/gramframe.bundle.js</code>.</li>
           <li>For every <code>*.html</code> under <code>html/</code>, insert one line before <code>  &lt;/head&gt;</code>:
-<pre style="font-size:0.5em"><code class="html" data-trim>&lt;script src="../../../../gramframe.bundle.js" defer&gt;&lt;/script&gt;</code></pre>
+<pre><code class="html" data-trim>&lt;script src="../../../../gramframe.bundle.js" defer&gt;&lt;/script&gt;</code></pre>
             (the relative path is computed per file so deep pages still resolve it)</li>
           <li>Skip any file that already contains the marker string &mdash; <strong>idempotent</strong>.</li>
         </ol>
@@ -414,7 +452,7 @@ body.ditamap-index ul.map:has(&gt; li.topicref:not(.topichead)) {
       <section>
         <h2>Running this by hand on the air-gapped target</h2>
         <p class="small">Everything in <code>publish_html.py</code>'s <code>main()</code> can be reproduced manually with stdlib Python and the bundled DITA-OT. Recipe:</p>
-<div class="runbook"><span class="cmt"># 0. Prereqs (all pre-vendored in the repo &mdash; no internet needed)</span>
+<pre class="runbook"><span class="cmt"># 0. Prereqs (all pre-vendored in the repo &mdash; no internet needed)</span>
 ls dita/                        <span class="cmt"># source tree, including trainee.ditaval</span>
 ls vendor/gramframe/            <span class="cmt"># gramframe.bundle.js</span>
 ls vendor/themes/operator-console-v2/  <span class="cmt"># theme.css</span>
@@ -455,7 +493,7 @@ find html/student -iname '*instructor*' | head -1 &amp;&amp; echo "<span class="
 
 <span class="cmt"># 8. Verify URL parity</span>
 diff &lt;(cd html/instructor &amp;&amp; find . -type f | sort) \
-     &lt;(cd html/student    &amp;&amp; find . -type f | sort)</div>
+     &lt;(cd html/student    &amp;&amp; find . -type f | sort)</pre>
         <p class="micro" style="margin-top:0.4em"><strong>Easier option:</strong> <code>python publish_html.py --dita dita --out html --dita-ot $DITA_OT</code> does all of the above in one invocation. The breakdown above exists so you can re-run any single step in isolation if a later step fails.</p>
       </section>
 
@@ -479,16 +517,16 @@ diff &lt;(cd html/instructor &amp;&amp; find . -type f | sort) \
 
       <!-- 17. Closing -->
       <section data-background-color="#07101a">
-        <div class="title-slide">
-          <h1 style="color:#80deea">Recap</h1>
-          <ul class="discussion-prompts" style="text-align:left">
-            <li><strong>One source tree</strong> with four <code>audience="-trainee"</code> sites + a four-line DITAVAL profile gives us two editions, no source forking.</li>
+        <div class="title-slide" style="padding:1em 0">
+          <h1 style="color:#80deea; font-size:1.6em; margin-bottom:0.6em">Recap</h1>
+          <ul class="discussion-prompts" style="text-align:left; max-width:980px">
+            <li><strong>One source tree</strong> + four <code>audience="-trainee"</code> sites + a four-line DITAVAL profile = two editions, no source forking.</li>
             <li><strong>DITA's <code>outputclass</code></strong> propagates verbatim to HTML <code>class=</code> &mdash; the theme's only contract.</li>
             <li><strong>One CSS file</strong> branches on <code>data-edition</code> + page-type classes set by a single post-publish injector.</li>
-            <li><strong>Determinism</strong> is enforced by prettify + scrub + <code>SOURCE_DATE_EPOCH</code>; rerunning the pipeline is safe and byte-stable.</li>
-            <li><strong>Every step is a plain Python function</strong> that you can run by hand on the air-gapped target if the orchestrator breaks.</li>
+            <li><strong>Determinism</strong> via prettify + scrub + <code>SOURCE_DATE_EPOCH</code>; rerunning the pipeline is byte-stable.</li>
+            <li><strong>Every step is a plain Python function</strong> &mdash; reproducible by hand on the air-gapped target if the orchestrator breaks.</li>
           </ul>
-          <p class="byline" style="color:#cbd5e1; margin-top:1.2em">Questions? Open <code>publish_html.py</code> alongside this deck &mdash; every function maps to one of these slides.</p>
+          <p class="byline" style="color:#cbd5e1; margin-top:0.8em">Questions? Open <code>publish_html.py</code> alongside this deck &mdash; every function maps to one of these slides.</p>
         </div>
       </section>
 
