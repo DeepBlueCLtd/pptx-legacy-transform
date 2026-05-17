@@ -426,18 +426,19 @@ def _split_descriptor(descriptor: str) -> tuple[str, str]:
 
     Returns ``(gram_id, instructor_detail)``. If no colon is present, the
     whole text is treated as the gram_id and instructor_detail is empty.
-    Gram_id is normalised to ``"Gram NN"`` (zero-padded to 2 digits) when
-    the left side parses cleanly.
+    Gram_id is normalised to a plain integer string (``"7"``, ``"12"``)
+    when the left side parses as ``"Gram N"`` — the canonical CSV form
+    per csv-schema.md so authors can renumber with a bare number when
+    refactoring content between chapters.
     """
     if not descriptor:
         return ("", "")
     left, sep, right = descriptor.partition(":")
     left = left.strip()
     right = right.strip() if sep else ""
-    # Normalise "Gram 7" → "Gram 07" for consistency with csv-schema's "Gram NN" example.
     m = re.match(r"^Gram\s+(\d+)$", left, re.IGNORECASE)
     if m:
-        left = f"Gram {int(m.group(1)):02d}"
+        left = str(int(m.group(1)))
     return (left, right)
 
 

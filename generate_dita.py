@@ -61,8 +61,37 @@ def setup_logging(log_path: Path) -> None:
 # CSV reader
 # -----------------------------------------------------------------------------
 
+def _normalise_gram_id(raw: str) -> str:
+    """Canonicalise a ``gram_id`` cell to a plain integer string.
+
+    The CSV stage doubles as the author's refactoring surface — when
+    moving grams between chapters/publications they often need to
+    renumber to avoid colliding with grams already in the target.
+    Keeping the column as a bare integer (``"5"``, ``"12"``) makes
+    that affordance obvious in any spreadsheet editor; the author
+    types the new number and moves on.
+
+    Legacy forms (``"Gram 5"``, ``"gram-12"``, etc.) are accepted on
+    read and folded to the integer form so an older CSV upgrades
+    transparently. Values without digits pass through unchanged so
+    downstream tooling can still flag them.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return s
+    digits = re.findall(r"\d+", s)
+    if not digits:
+        return s
+    return str(int(digits[0]))
+
+
 def read_csv(path: Path) -> list[dict]:
-    """Read the intermediate CSV with strict header validation (FR-014)."""
+    """Read the intermediate CSV with strict header validation (FR-014).
+
+    ``gram_id`` cells are normalised to the canonical ``"Gram NN"`` form
+    so downstream grouping treats ``"12"``, ``"Gram 12"``, and ``"Gram 12 "``
+    as the same gram.
+    """
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         actual = tuple(reader.fieldnames or ())
@@ -70,8 +99,51 @@ def read_csv(path: Path) -> list[dict]:
             raise ValueError(
                 f"CSV header mismatch.\nExpected: {CSV_COLUMNS}\nActual:   {actual}"
             )
-        rows = [dict(row) for row in reader]
+        rows: list[dict] = []
+        for row in reader:
+            row = dict(row)
+            row["gram_id"] = _normalise_gram_id(row.get("gram_id", ""))
+            rows.append(row)
     return rows
+
+
+def check_row_identity(rows: list[dict]) -> list[str]:
+    """Verify the row-identity tuple is unique across ``rows``.
+
+    Per ``contracts/csv-schema.md`` the unique row key is
+    ``(publication, chapter, gram_id, topic_type, sequence)``. Two rows
+    sharing that tuple mean two source grams were silently merged at
+    the CSV-editing stage — typically a refactor where the author moved
+    a gram into a chapter that already had a gram with the same
+    ``gram_id`` and forgot to renumber. Without this check the generator
+    happily folds both into one topic, dropping the second analysis
+    section and interleaving the two grams' GLC sections.
+
+    Returns the list of human-readable error strings (one per
+    collision); empty means the CSV is clean. The first occurrence of
+    each duplicate tuple is reported as the anchor, so the author can
+    decide which side to renumber.
+    """
+    first_seen: dict[tuple[str, str, str, str, str], int] = {}
+    errors: list[str] = []
+    for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        key = (
+            row.get("publication", ""), row.get("chapter", ""),
+            row.get("gram_id", ""), row.get("topic_type", ""),
+            row.get("sequence", ""),
+        )
+        if key in first_seen:
+            errors.append(
+                f"Duplicate row identity at CSV line {line_no} "
+                f"(first seen at line {first_seen[key]}): "
+                f"publication={key[0]!r} chapter={key[1]!r} "
+                f"gram_id={key[2]!r} topic_type={key[3]!r} sequence={key[4]!r}. "
+                f"Two source grams collide on this slot — renumber one "
+                f"to disambiguate before regenerating."
+            )
+        else:
+            first_seen[key] = line_no
+    return errors
 
 
 # -----------------------------------------------------------------------------
@@ -150,8 +222,18 @@ def copy_asset(
 
 
 def _gram_num(gram_id: str) -> str:
+    """Return the on-disk numeric segment for ``gram_id``, zero-padded to 2.
+
+    Used to build deterministic, two-digit DITA paths and topic IDs
+    (``gram-05/gram_05.dita``, ``id="gram_05"``) regardless of how the
+    CSV cell is written — ``"5"``, ``"05"``, or the legacy ``"Gram 05"``
+    all resolve to ``"05"``. Three-digit corpora work too (``"123"`` →
+    ``"123"``) because the format width is a minimum, not a max.
+    """
     digits = re.findall(r"\d+", gram_id)
-    return digits[0] if digits else "00"
+    if not digits:
+        return "00"
+    return f"{int(digits[0]):02d}"
 
 
 def _gram_folder_name(gram_id: str) -> str:
@@ -688,6 +770,16 @@ def main(argv: Iterable[str] | None = None) -> int:
         rows = read_csv(args.csv_path)
     except Exception as exc:
         LOGGER.error("Failed to read CSV: %s", exc)
+        return 1
+
+    duplicates = check_row_identity(rows)
+    if duplicates:
+        for msg in duplicates:
+            LOGGER.error(msg)
+        LOGGER.error(
+            "Aborting before emission: %d duplicate row identit%s detected.",
+            len(duplicates), "y" if len(duplicates) == 1 else "ies",
+        )
         return 1
 
     written: list[Path] = []

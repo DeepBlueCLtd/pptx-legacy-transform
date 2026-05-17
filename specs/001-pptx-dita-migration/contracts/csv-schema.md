@@ -21,7 +21,7 @@ generator never re-reads PPTX or GLC files.
 |---|---|---|---|---|
 | 1 | `publication` | string | no | `main` or `progress-test-N` |
 | 2 | `chapter` | string | yes (when publication is a test) | human-readable chapter title |
-| 3 | `gram_id` | string | no | format `"Gram NN"`; may be `"Gram 100+"` if corpus grows |
+| 3 | `gram_id` | string | no | canonical form is a plain integer string (`"5"`, `"12"`, `"123"`). The extractor always writes the canonical form. The generator also accepts legacy `"Gram NN"` / `"gram 5"` / `"Gram-7"` variants on read and folds them to the integer form, so an older CSV upgrades transparently. The integer form is the affordance for the CSV's refactoring role — to move a gram into a chapter that already holds the same number, the author just types the new integer in the cell. The on-disk DITA path is always built zero-padded (`gram-05/gram_05.dita`) regardless of the CSV cell's form. |
 | 4 | `vessel_name` | string | yes | instructor-only content |
 | 5 | `topic_type` | enum | no | `glc` or `analysis` |
 | 6 | `sequence` | string | no | `1`-based per gram, scoped per `topic_type` |
@@ -47,6 +47,12 @@ belonging to the same gram. The generator groups rows by gram and
 merges them into one DITA topic per `topic_filename`; the trailing
 columns (`topic_type`, `sequence`) determine *which block* a row
 contributes to inside that topic.
+
+`generate_dita.py` enforces this tuple's uniqueness before emitting
+anything: a duplicate row identity aborts the run with an error
+pinpointing both colliding CSV lines. This catches the common
+refactoring mistake of moving a gram into a chapter that already
+holds a gram with the same `gram_id` without renumbering one of them.
 
 ## Row construction rules
 
@@ -97,9 +103,9 @@ preserved; the writer never normalises numerics.
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,1,gram_12.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,glc,2,gram_12.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,,
-main,Nordic Fishing Vessels,Gram 12,Nordik Jockey,analysis,1,gram_12.dita,,,,,,Gram 12/Analysis.png,Gram 12/Analysis Sheet.docx,,
+main,Nordic Fishing Vessels,12,Nordik Jockey,glc,1,gram_12.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,,
+main,Nordic Fishing Vessels,12,Nordik Jockey,glc,2,gram_12.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,,
+main,Nordic Fishing Vessels,12,Nordik Jockey,analysis,1,gram_12.dita,,,,,,Gram 12/Analysis.png,Gram 12/Analysis Sheet.docx,,
 ```
 
 All three rows share `topic_filename=gram_12.dita`; the generator merges
@@ -110,8 +116,8 @@ GramFrame tables.
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-progress-test-1,,Gram 03,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,"GLC not found"
-progress-test-1,,Gram 03,,analysis,1,gram_03.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
+progress-test-1,,3,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,"GLC not found"
+progress-test-1,,3,,analysis,1,gram_03.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
 ```
 
 ### GLC whose inner `data_source/filename` is `.wav` — GLC-viewer link
@@ -125,12 +131,12 @@ the `.glc` and the `.wav` next to the topic.
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Arctic Survey,Gram 05,Arctic Surveyor,glc,1,gram_05.dita,Lofar 1,supporting/gram05/config_1.glc,supporting/gram05/config_1.glc,180,400,supporting/gram05/audio_clip.wav,,,
+main,Arctic Survey,5,Arctic Surveyor,glc,1,gram_05.dita,Lofar 1,supporting/gram05/config_1.glc,supporting/gram05/config_1.glc,180,400,supporting/gram05/audio_clip.wav,,,
 ```
 
 ### Analysis row whose docx→png render failed
 
 ```csv
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,Gram 17,,analysis,1,gram_17.dita,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
+main,Nordic Fishing Vessels,17,,analysis,1,gram_17.dita,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
 ```

@@ -222,7 +222,10 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
         self.assertEqual(len(analysis_rows), len(gram_ids),
                          "Expected exactly one analysis row per gram")
 
-    def test_gram_id_is_normalized_two_digit_form(self) -> None:
+    def test_gram_id_is_normalized_integer_form(self) -> None:
+        """Per csv-schema.md the canonical ``gram_id`` cell is a plain
+        integer string so authors can renumber by typing a bare number
+        when refactoring content between chapters."""
         out_csv = TMP / "extract_corpus_gram_id.csv"
         rc = extract_to_csv.main([
             "--input-root", str(self.week1_dir),
@@ -233,8 +236,8 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
             rows = list(csv.DictReader(fh))
         self.assertTrue(rows)
         for row in rows:
-            self.assertRegex(row["gram_id"], r"^Gram \d{2,}$",
-                             f"gram_id not in normalised form: {row['gram_id']!r}")
+            self.assertRegex(row["gram_id"], r"^[1-9]\d*$",
+                             f"gram_id not in canonical integer form: {row['gram_id']!r}")
 
     def test_descriptor_split_populates_vessel_name(self) -> None:
         out_csv = TMP / "extract_corpus_vessel.csv"

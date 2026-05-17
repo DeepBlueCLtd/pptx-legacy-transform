@@ -350,7 +350,7 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
         skipped = self.out / "skipped.txt"
         self.assertTrue(skipped.is_file())
-        self.assertIn("Gram 05", skipped.read_text(encoding="utf-8"))
+        self.assertIn('gram_id="5"', skipped.read_text(encoding="utf-8"))
 
     def test_glc_inner_wav_copies_glc_and_wav_pair(self) -> None:
         """End-to-end happy path for the §1.3 GLC-viewer-link contract:
@@ -431,7 +431,7 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNone(root.find(".//image"))
         self.assertIsNone(root.find(".//xref"))
         skipped = (self.out / "skipped.txt").read_text(encoding="utf-8")
-        self.assertIn("Gram 08", skipped)
+        self.assertIn('gram_id="8"', skipped)
         self.assertIn(".bmp", skipped,
                       "the skip reason should name the rejected extension")
 
@@ -585,6 +585,145 @@ class AudienceShapeTests(unittest.TestCase):
                          "plain chapters emit text directly with no <ph> wrapper")
         self.assertEqual(len(list(plain)), 0,
                          "plain navtitle must have no child elements")
+
+
+class CsvRefactoringSupportTests(unittest.TestCase):
+    """Author-side refactoring support at the CSV stage.
+
+    The CSV doubles as the surface where the author redistributes
+    grams between chapters/publications (e.g. dissolving a Pub10
+    reference chapter). These tests cover the two affordances that
+    make that ergonomic and safe: integer-style ``gram_id`` cells and
+    pre-emission detection of duplicate row identities.
+    """
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.tmp = TMP / f"refactor_{self._testMethodName}"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _write_csv(self, rows: list[list[str]]) -> Path:
+        csv_path = self.tmp / "source.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.writer(fh, lineterminator="\r\n")
+            writer.writerow(list(generate_dita.CSV_COLUMNS))
+            writer.writerows(rows)
+        return csv_path
+
+    def test_normalise_gram_id_canonicalises_to_plain_integer(self) -> None:
+        self.assertEqual(generate_dita._normalise_gram_id("12"), "12")
+        self.assertEqual(generate_dita._normalise_gram_id("5"), "5")
+        self.assertEqual(generate_dita._normalise_gram_id(" 7 "), "7")
+        self.assertEqual(generate_dita._normalise_gram_id("05"), "5")
+
+    def test_normalise_gram_id_accepts_legacy_forms(self) -> None:
+        self.assertEqual(generate_dita._normalise_gram_id("Gram 12"), "12")
+        self.assertEqual(generate_dita._normalise_gram_id("gram 5"), "5")
+        self.assertEqual(generate_dita._normalise_gram_id("Gram-7"), "7")
+
+    def test_normalise_gram_id_passes_through_when_no_digits(self) -> None:
+        self.assertEqual(generate_dita._normalise_gram_id(""), "")
+        self.assertEqual(generate_dita._normalise_gram_id("TBD"), "TBD")
+
+    def test_read_csv_normalises_gram_id_column(self) -> None:
+        """Mixed integer/legacy forms in the same gram still group as one."""
+        csv_path = self._write_csv([
+            ["main", "Week 2 Grams", "12", "FR Foo", "glc", "1",
+             "gram_12.dita", "LOFAR 1", "supporting/gram12/c.glc",
+             "supporting/gram12/c.glc", "271", "400", "images/gram12.png", "", ""],
+            ["main", "Week 2 Grams", "Gram 12", "FR Foo", "analysis", "1",
+             "gram_12.dita", "", "", "", "", "", "images/gram12_analysis.png",
+             "", ""],
+        ])
+        rows = generate_dita.read_csv(csv_path)
+        self.assertEqual([r["gram_id"] for r in rows], ["12", "12"])
+
+    def test_main_succeeds_with_integer_gram_ids(self) -> None:
+        """A CSV authored with bare integers emits to the same paths as
+        the legacy ``"Gram NN"`` form would."""
+        csv_path = self._write_csv([
+            ["main", "Nordic Fishing Vessels", "12", "Nordik Jockey", "glc",
+             "1", "gram_12.dita", "LOFAR 1", "supporting/gram12/config_1.glc",
+             "supporting/gram12/config_1.glc", "271", "400",
+             "images/gram12.png", "", ""],
+            ["main", "Nordic Fishing Vessels", "12", "Nordik Jockey", "analysis",
+             "1", "gram_12.dita", "", "", "", "", "",
+             "images/gram12_analysis.png", "", ""],
+        ])
+        rc = generate_dita.main([
+            "--csv", str(csv_path),
+            "--out", str(self.tmp / "out"),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0)
+        topic = self.tmp / "out" / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        self.assertTrue(topic.is_file(), f"missing {topic}")
+
+    def test_check_row_identity_flags_two_grams_in_same_slot(self) -> None:
+        """Simulates: author moves a Pub10 gram into Week 2 but forgets
+        to renumber — Week 2 already had a Gram 05. Both analysis rows
+        and both ``glc:sequence=1`` rows collide."""
+        rows = [
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "glc", "sequence": "1"},
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "analysis", "sequence": "1"},
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "glc", "sequence": "1"},
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "analysis", "sequence": "1"},
+        ]
+        errors = generate_dita.check_row_identity(rows)
+        self.assertEqual(len(errors), 2,
+                         f"expected one error per duplicate slot, got {errors}")
+        for msg in errors:
+            self.assertIn("Gram 05", msg)
+            self.assertIn("renumber", msg.lower())
+
+    def test_check_row_identity_clean_on_distinct_rows(self) -> None:
+        rows = [
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "glc", "sequence": "1"},
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "glc", "sequence": "2"},
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 05",
+             "topic_type": "analysis", "sequence": "1"},
+            {"publication": "main", "chapter": "Week 2", "gram_id": "Gram 06",
+             "topic_type": "analysis", "sequence": "1"},
+        ]
+        self.assertEqual(generate_dita.check_row_identity(rows), [])
+
+    def test_main_aborts_with_duplicate_row_identity(self) -> None:
+        """Running the generator against a CSV with a collision exits
+        non-zero and writes nothing — refactoring mistakes never reach
+        DITA-OT."""
+        csv_path = self._write_csv([
+            # Original Week 2 / Gram 05
+            ["main", "Week 2 Grams", "5", "Vessel A", "glc", "1",
+             "gram_05.dita", "LOFAR 1", "supporting/a/c.glc",
+             "supporting/a/c.glc", "180", "400", "images/a.png", "", ""],
+            ["main", "Week 2 Grams", "5", "Vessel A", "analysis", "1",
+             "gram_05.dita", "", "", "", "", "", "images/a_an.png", "", ""],
+            # Moved-from-Pub10 Gram 05 — author forgot to renumber
+            ["main", "Week 2 Grams", "Gram 05", "Vessel B", "glc", "1",
+             "gram_05.dita", "LOFAR 1", "supporting/b/c.glc",
+             "supporting/b/c.glc", "271", "400", "images/b.png", "", ""],
+            ["main", "Week 2 Grams", "Gram 05", "Vessel B", "analysis", "1",
+             "gram_05.dita", "", "", "", "", "", "images/b_an.png", "", ""],
+        ])
+        out_dir = self.tmp / "out"
+        rc = generate_dita.main([
+            "--csv", str(csv_path),
+            "--out", str(out_dir),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 1, "generator must reject the duplicate")
+        # Nothing under the chapter should have been written.
+        chapter_dir = out_dir / "main" / "week-2-grams"
+        self.assertFalse(chapter_dir.exists(),
+                         "generator must abort before emitting topics")
 
 
 if __name__ == "__main__":
