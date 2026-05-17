@@ -1,5 +1,5 @@
 publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings
-main,Instructor Week 1 Grams,Gram 01,FR Prometheus,glc,1,gram_01.dita,LOFAR 1,supporting/gram01/config.glc,supporting/gram01/config.glc,271,400,images/gram01.png,,
-main,Instructor Week 1 Grams,Gram 01,FR Prometheus,analysis,1,gram_01.dita,,,,,,images/gram01_analysis.docx,,
-main,Plain Chapter,Gram 02,,glc,1,gram_02.dita,LOFAR 1,supporting/gram02/config.glc,supporting/gram02/config.glc,180,400,images/gram02.png,,
-progress-test-1,,Gram 03,FR Sovereign-class,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,240,400,images/gram03.png,,
+main,Instructor Week 1 Grams,1,FR Prometheus,glc,1,gram_01.dita,LOFAR 1,supporting/gram01/config.glc,supporting/gram01/config.glc,271,400,images/gram01.png,,
+main,Instructor Week 1 Grams,1,FR Prometheus,analysis,1,gram_01.dita,,,,,,images/gram01_analysis.docx,,
+main,Plain Chapter,2,,glc,1,gram_02.dita,LOFAR 1,supporting/gram02/config.glc,supporting/gram02/config.glc,180,400,images/gram02.png,,
+progress-test-1,,3,FR Sovereign-class,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,240,400,images/gram03.png,,

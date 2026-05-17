@@ -62,16 +62,19 @@ def setup_logging(log_path: Path) -> None:
 # -----------------------------------------------------------------------------
 
 def _normalise_gram_id(raw: str) -> str:
-    """Canonicalise a ``gram_id`` cell to ``"Gram NN"`` (zero-padded to 2).
+    """Canonicalise a ``gram_id`` cell to a plain integer string.
 
     The CSV stage doubles as the author's refactoring surface — when
     moving grams between chapters/publications they often need to
     renumber to avoid colliding with grams already in the target.
-    Typing ``12`` is faster and less error-prone than typing
-    ``Gram 12``, so the column accepts either form (plus assorted
-    legacy variants like ``"gram-12"``). Anything containing at least
-    one digit run normalises to ``"Gram NN"``; values without digits
-    pass through unchanged so other tooling can still flag them.
+    Keeping the column as a bare integer (``"5"``, ``"12"``) makes
+    that affordance obvious in any spreadsheet editor; the author
+    types the new number and moves on.
+
+    Legacy forms (``"Gram 5"``, ``"gram-12"``, etc.) are accepted on
+    read and folded to the integer form so an older CSV upgrades
+    transparently. Values without digits pass through unchanged so
+    downstream tooling can still flag them.
     """
     s = (raw or "").strip()
     if not s:
@@ -79,7 +82,7 @@ def _normalise_gram_id(raw: str) -> str:
     digits = re.findall(r"\d+", s)
     if not digits:
         return s
-    return f"Gram {int(digits[0]):02d}"
+    return str(int(digits[0]))
 
 
 def read_csv(path: Path) -> list[dict]:
@@ -219,8 +222,18 @@ def copy_asset(
 
 
 def _gram_num(gram_id: str) -> str:
+    """Return the on-disk numeric segment for ``gram_id``, zero-padded to 2.
+
+    Used to build deterministic, two-digit DITA paths and topic IDs
+    (``gram-05/gram_05.dita``, ``id="gram_05"``) regardless of how the
+    CSV cell is written — ``"5"``, ``"05"``, or the legacy ``"Gram 05"``
+    all resolve to ``"05"``. Three-digit corpora work too (``"123"`` →
+    ``"123"``) because the format width is a minimum, not a max.
+    """
     digits = re.findall(r"\d+", gram_id)
-    return digits[0] if digits else "00"
+    if not digits:
+        return "00"
+    return f"{int(digits[0]):02d}"
 
 
 def _gram_folder_name(gram_id: str) -> str:

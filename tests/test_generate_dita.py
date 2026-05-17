@@ -350,7 +350,7 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
         skipped = self.out / "skipped.txt"
         self.assertTrue(skipped.is_file())
-        self.assertIn("Gram 05", skipped.read_text(encoding="utf-8"))
+        self.assertIn('gram_id="5"', skipped.read_text(encoding="utf-8"))
 
     def test_glc_inner_wav_copies_glc_and_wav_pair(self) -> None:
         """End-to-end happy path for the §1.3 GLC-viewer-link contract:
@@ -431,7 +431,7 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNone(root.find(".//image"))
         self.assertIsNone(root.find(".//xref"))
         skipped = (self.out / "skipped.txt").read_text(encoding="utf-8")
-        self.assertIn("Gram 08", skipped)
+        self.assertIn('gram_id="8"', skipped)
         self.assertIn(".bmp", skipped,
                       "the skip reason should name the rejected extension")
 
@@ -612,15 +612,16 @@ class CsvRefactoringSupportTests(unittest.TestCase):
             writer.writerows(rows)
         return csv_path
 
-    def test_normalise_gram_id_accepts_bare_integer(self) -> None:
-        self.assertEqual(generate_dita._normalise_gram_id("12"), "Gram 12")
-        self.assertEqual(generate_dita._normalise_gram_id("5"), "Gram 05")
-        self.assertEqual(generate_dita._normalise_gram_id(" 7 "), "Gram 07")
+    def test_normalise_gram_id_canonicalises_to_plain_integer(self) -> None:
+        self.assertEqual(generate_dita._normalise_gram_id("12"), "12")
+        self.assertEqual(generate_dita._normalise_gram_id("5"), "5")
+        self.assertEqual(generate_dita._normalise_gram_id(" 7 "), "7")
+        self.assertEqual(generate_dita._normalise_gram_id("05"), "5")
 
     def test_normalise_gram_id_accepts_legacy_forms(self) -> None:
-        self.assertEqual(generate_dita._normalise_gram_id("Gram 12"), "Gram 12")
-        self.assertEqual(generate_dita._normalise_gram_id("gram 5"), "Gram 05")
-        self.assertEqual(generate_dita._normalise_gram_id("Gram-7"), "Gram 07")
+        self.assertEqual(generate_dita._normalise_gram_id("Gram 12"), "12")
+        self.assertEqual(generate_dita._normalise_gram_id("gram 5"), "5")
+        self.assertEqual(generate_dita._normalise_gram_id("Gram-7"), "7")
 
     def test_normalise_gram_id_passes_through_when_no_digits(self) -> None:
         self.assertEqual(generate_dita._normalise_gram_id(""), "")
@@ -637,7 +638,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
              "", ""],
         ])
         rows = generate_dita.read_csv(csv_path)
-        self.assertEqual([r["gram_id"] for r in rows], ["Gram 12", "Gram 12"])
+        self.assertEqual([r["gram_id"] for r in rows], ["12", "12"])
 
     def test_main_succeeds_with_integer_gram_ids(self) -> None:
         """A CSV authored with bare integers emits to the same paths as
