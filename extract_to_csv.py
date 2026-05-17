@@ -326,8 +326,11 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
       descriptor (split at the first colon — left side is the
       student-visible label, right side is instructor-visible);
     - one or more text-frame shapes positioned beneath the header
-      containing text *runs* hyperlinked to ``.glc`` (and occasionally
-      ``.wav``) files in the same gram folder.
+      containing text *runs* hyperlinked to ``.glc`` files in the same
+      gram folder. Every Lofar text-run hyperlink in the audited corpus
+      targets a ``.glc``; the ``.wav`` case is one indirection deeper,
+      inside the ``.glc``'s ``data_source/filename`` element (see
+      ``high-level-spec.md`` §1.5).
 
     Grouping is done by spatial proximity: for each header we collect
     every Lofar text run carried by text-frame shapes whose bounding
@@ -348,9 +351,7 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
 
     # 2) Identify candidate Lofar boxes (text frame with at least one .glc run).
     # Every Lofar text-run hyperlink in the audited corpus targets a .glc;
-    # the .wav case is always one indirection deeper, inside the .glc's
-    # data_source/filename element (see high-level-spec.md §1.5). A .wav
-    # appearing directly here is anomalous and worth surfacing.
+    # anything else is anomalous and surfaced rather than silently kept.
     candidates: list[tuple[object, list[tuple[str, str]]]] = []
     header_ids = {id(s) for s, _ in headers}
     for shape in leaves:
@@ -361,12 +362,11 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             continue
         keep: list[tuple[str, str]] = []
         for t, h in pairs:
-            lh = h.lower()
-            if lh.endswith(".glc"):
+            if h.lower().endswith(".glc"):
                 keep.append((t, h))
-            elif lh.endswith(".wav"):
+            else:
                 LOGGER.warning(
-                    "Lofar text run hyperlinks directly to a .wav (%r); "
+                    "Lofar text run hyperlinks to a non-.glc target (%r); "
                     "expected .glc — row dropped", h,
                 )
         if keep:
