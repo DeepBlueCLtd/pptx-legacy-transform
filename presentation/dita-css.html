@@ -97,31 +97,51 @@
 
       <!-- 2. The whole pipeline at a glance -->
       <section>
-        <h2>The publish pipeline at a glance</h2>
-        <p class="muted small">One source tree under <code>dita/</code> &rarr; two HTML editions under <code>html/</code>.</p>
+        <h2>The publish pipeline &mdash; two lanes, one source tree</h2>
+        <p class="muted small">One DITA source under <code>dita/</code> &rarr; two HTML editions under <code>html/</code>. What the air-gapped author actually runs vs. what the dev pipeline adds on top:</p>
+
+        <div class="lane-label">Air-gapped target (Oxygen XML Author)</div>
         <div class="mini-pipeline">
-          <div class="stage"><strong>1. stage</strong><br/><code>.dita-build/</code><br/>add DOCTYPEs<br/>nest ditamaps</div>
+          <div class="stage essential"><strong>A. DITA-OT</strong><br/>via Oxygen's<br/>publish dialog</div>
           <div class="arrow">&rarr;</div>
-          <div class="stage"><strong>2. publish</strong><br/>DITA-OT &times; 2<br/>(instructor + student)</div>
+          <div class="stage essential"><strong>B. DITAVAL filter</strong><br/>picked in Oxygen's UI<br/>(student edition only)</div>
           <div class="arrow">&rarr;</div>
-          <div class="stage"><strong>3. landing/index</strong><br/><code>html/index.html</code><br/>+ per-edition</div>
-          <div class="arrow">&rarr;</div>
-          <div class="stage"><strong>4. prettify</strong><br/>re-emit every .html<br/>readable in diff</div>
-          <div class="arrow">&rarr;</div>
-          <div class="stage"><strong>5. scrub</strong><br/>strip DITA-OT<br/>wall-clock <code>&lt;meta&gt;</code></div>
-          <div class="arrow">&rarr;</div>
-          <div class="stage theme-step"><strong>6. GramFrame</strong><br/>vendor bundle +<br/>inject <code>&lt;script&gt;</code></div>
-          <div class="arrow">&rarr;</div>
-          <div class="stage theme-step"><strong>7. theme</strong><br/>vendor <code>theme.css</code><br/>tag <code>&lt;body&gt;</code> + link</div>
+          <div class="stage essential"><strong>C. Template hooks</strong><br/>link <code>theme.css</code> +<br/><code>gramframe.bundle.js</code></div>
         </div>
-        <ul class="key-points" style="margin-top:1em">
-          <li>Steps 1&ndash;3 are <strong>DITA-OT's territory</strong>; steps 4&ndash;7 are <strong>post-publish passes</strong> we own in <code>publish_html.py</code>.</li>
-          <li>Everything is idempotent &mdash; running it twice produces byte-identical trees.</li>
+        <p class="micro" style="margin-top:0.3em">That's the whole air-gapped recipe. The CSS classifies pages itself via <code>:has()</code>; no body tagging, no landing page, no prettify pass.</p>
+
+        <div class="lane-label dev-lane">Dev side / CI (<code>publish_html.py</code>)</div>
+        <div class="mini-pipeline">
+          <div class="stage dev-only"><strong>1. stage</strong><br/><code>.dita-build/</code><br/>DOCTYPEs +<br/>ditamap nesting</div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage essential"><strong>2. publish</strong><br/>DITA-OT &times; 2<br/>(both editions)</div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage dev-only"><strong>3. landing/index</strong><br/><code>html/index.html</code><br/>+ per-edition</div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage dev-only"><strong>4. prettify</strong><br/>re-emit every<br/><code>.html</code> for diffs</div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage dev-only"><strong>5. scrub</strong><br/>strip DITA-OT<br/>wall-clock <code>&lt;meta&gt;</code></div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage essential theme-step"><strong>6. GramFrame</strong><br/>vendor bundle +<br/>inject <code>&lt;script&gt;</code></div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage essential theme-step"><strong>7. theme</strong><br/>vendor <code>theme.css</code><br/>+ inject <code>&lt;link&gt;</code></div>
+        </div>
+        <ul class="key-points" style="margin-top:0.5em">
+          <li><strong>Solid boxes</strong> = essential (their effect must appear in the air-gapped output, by whatever route). <strong>Faded boxes</strong> = dev convenience for CI: deterministic, diffable, indexed output. None of them changes what a reader sees inside a publication.</li>
+          <li>Step 2 maps onto lanes A+B; steps 6 and 7 map onto lane C (the Oxygen template's job).</li>
         </ul>
         <aside class="notes">
-          The order is significant. Prettify before scrub before inject &mdash; prettify normalises the HTML so the regexes used by scrub and inject have stable anchor points (in particular, the line <code>  &lt;/head&gt;</code> with exactly two spaces).
+          Order in the dev lane is significant: prettify before scrub before inject &mdash; prettify normalises the HTML so the regexes used by scrub and inject have stable anchor points.
         </aside>
       </section>
+
+      <style>
+        .lane-label { font: 600 11px/1 "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0.18em; text-transform: uppercase; color: #1a4778; margin: 0.7em 0 0.2em; }
+        .lane-label.dev-lane { color: #94a3b8; margin-top: 1.1em; }
+        .mini-pipeline .stage.essential { box-shadow: 0 2px 8px rgba(26,71,120,0.18); }
+        .mini-pipeline .stage.dev-only { opacity: 0.45; background: #f8fafc; border-top-style: dashed; }
+        .mini-pipeline .stage.dev-only code { opacity: 0.8; }
+      </style>
 
       <!-- 3. The DITA shape -->
       <section>
