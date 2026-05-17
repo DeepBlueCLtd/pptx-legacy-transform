@@ -170,7 +170,34 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <p class="caption" style="margin-top:1em">Four production stages, plus <code>introspect_pptx.py</code> as a standalone diagnostic tool (it produced the report on the previous slide). Small Python scripts, one third-party dependency &mdash; designed to be debuggable on an air-gapped network.</p>
       </section>
 
-      <!-- 8. Stage 1: Extract -->
+      <!-- 8. Handover -->
+      <section>
+        <h2>What stays with the author &mdash; and what gets retired</h2>
+        <div class="two-col">
+          <div>
+            <h3 style="color:#166534;margin-bottom:0.2em">What the author keeps</h3>
+            <ul>
+              <li><strong>The DITA document set</strong> &mdash; the deliverable, in the same format as pub-9 and pub-10</li>
+              <li><strong>The existing authoring workflow</strong> &mdash; Oxygen and DITA-OT, the routines already in use; no new tooling to learn</li>
+              <li><strong>The Operator Console v2 theme and GramFrame plugin</strong> &mdash; carried with the publication, applied on every future build</li>
+            </ul>
+          </div>
+          <div>
+            <h3 style="color:#92400e;margin-bottom:0.2em">What gets retired</h3>
+            <ul>
+              <li><strong>The extractor, generator, and publish scripts</strong> &mdash; scaffolding built to run the conversion once</li>
+              <li><strong>The mock dataset</strong> &mdash; used to develop the conversion off-site</li>
+              <li><strong>The intermediate CSV</strong> &mdash; the sign-off record for the one conversion, archived rather than maintained</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:0.8em">
+          <h3>A one-way trip</h3>
+          <p>This whole toolchain exists to produce <strong>a single, complete conversion</strong> from PowerPoint to DITA. Once that conversion is signed off, the toolchain has done its job &mdash; it isn't infrastructure to host, maintain, or learn. From there on, the grams are maintained in DITA, alongside the rest of the publication set, by the author.</p>
+        </div>
+      </section>
+
+      <!-- 9. Stage 1: Extract -->
       <section>
         <h2>Stage 1 &mdash; Extract to CSV</h2>
         <p>One row per <strong>Lofar</strong> (plus one per analysis sheet). Every row of a single gram shares the same <code>topic_filename</code> &mdash; the generator merges them downstream.</p>
@@ -189,7 +216,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <p class="caption">Gram 18 has four Lofars and one analysis sheet &mdash; <strong>five rows, one <code>topic_filename</code></strong>. Today's CSV: 1,409 rows of this shape across 7 publications. The author edits this in Excel; the <em>warnings</em> column is where the next stage takes over.</p>
       </section>
 
-      <!-- 9. Stage 2: Manual review -->
+      <!-- 10. Stage 2: Manual review -->
       <section data-background-color="#fffbea">
         <h2>Stage 2 &mdash; Human checkpoint <span class="badge">⭐ quality gate</span></h2>
         <div class="two-col">
@@ -211,7 +238,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 10. Stage 3: Generate DITA -->
+      <!-- 11. Stage 3: Generate DITA -->
       <section>
         <h2>Stage 3 &mdash; Generate DITA</h2>
         <p>The N+1 CSV rows for a gram collapse into <strong>one DITA topic per gram</strong>: an Analysis Sheet section (instructor-only) followed by one section per Lofar, in CSV <code>sequence</code> order.</p>
@@ -236,7 +263,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <p class="caption"><code>audience="-trainee"</code> drives the dual-edition split &mdash; on the vessel-name decoration <em>and</em> on the whole Analysis Sheet section. Section titles ("Lofar 1", "Stage 1 — Broadband", ...) come straight from the PPTX link labels.</p>
       </section>
 
-      <!-- 11. Stage 4: Publish - dual edition -->
+      <!-- 12. Stage 4: Publish - dual edition -->
       <section>
         <h2>Stage 4 &mdash; Publish two editions</h2>
         <div class="two-col">
@@ -264,7 +291,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 12. Dual editions side-by-side -->
+      <!-- 13. Dual editions side-by-side -->
       <section>
         <h2>Two editions, one source &mdash; side by side</h2>
         <div class="two-col">
@@ -279,7 +306,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 13. Styling: Operator Console v2 -->
+      <!-- 14. Styling: Operator Console v2 -->
       <section>
         <h2>Styled for the operator &mdash; "Operator Console v2"</h2>
         <div class="two-col">
@@ -300,7 +327,7 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 14. GramFrame plugin -->
+      <!-- 15. GramFrame plugin -->
       <section>
         <h2>GramFrame &mdash; analysis moves into the browser</h2>
         <div class="two-col">
@@ -323,28 +350,28 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 15. Live demo: gram topic (instructor) -->
+      <!-- 16. Live demo: gram topic (instructor) -->
       <section>
         <h2>Live demo &mdash; a single gram, instructor edition</h2>
         <iframe class="live-demo" src="assets/embeds/instructor/progress-test-1/gram-18/gram_18.html"></iframe>
         <p class="caption">Gram 18 &mdash; the five CSV rows from slide 8 merged into one topic: Analysis Sheet, then four live GramFrame instruments.</p>
       </section>
 
-      <!-- 16. Live demo: gram topic (student) -->
+      <!-- 17. Live demo: gram topic (student) -->
       <section>
         <h2>Same gram, student edition</h2>
         <iframe class="live-demo" src="assets/embeds/student/progress-test-1/gram-18/gram_18.html"></iframe>
         <p class="caption">Same URL path, just <code>student/</code> instead of <code>instructor/</code>. Vessel name and Analysis Sheet gone, banner flips to cyan &mdash; one source, filtered at publish.</p>
       </section>
 
-      <!-- 17. Live demo: landing page -->
+      <!-- 18. Live demo: landing page -->
       <section>
         <h2>Live demo &mdash; browse the publication set</h2>
         <iframe class="live-demo" src="assets/embeds/index.html"></iframe>
         <p class="caption">Shared landing page &rarr; per-edition index &rarr; per-publication index &rarr; gram topic. This is the actual generator output, served straight from the repo.</p>
       </section>
 
-      <!-- 18. Benefits -->
+      <!-- 19. Benefits -->
       <section>
         <h2>Benefits at a glance</h2>
         <div class="benefits-grid">
@@ -371,7 +398,34 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         </div>
       </section>
 
-      <!-- 19. Roadmap -->
+      <!-- 20. Velocity now, velocity ahead -->
+      <section data-background-color="#fffbea">
+        <h2>Why this moved fast &mdash; and what the next phase looks like <span class="badge">&#9888; expectations</span></h2>
+        <div class="two-col">
+          <div>
+            <h3 style="color:#166534;margin-bottom:0.2em">So far &mdash; <strong>two days</strong>, mock data</h3>
+            <ul>
+              <li>Built a <strong>mock version of the data</strong> that mirrors the shape and quirks of the real material &mdash; safe to carry off-site, faithful enough to develop against</li>
+              <li>Worked from a <strong>normal office</strong>, with the modern development tools I use day-to-day &mdash; fast feedback, instant error-checking, the things that compress days of work into hours</li>
+              <li>What you've seen today &mdash; the whole pipeline, both editions, the styling, the in-page spectrograms &mdash; was built in those two days. The mock-data approach is what made that pace possible.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 style="color:#92400e;margin-bottom:0.2em">Next &mdash; real data, on-site</h3>
+            <ul>
+              <li><strong>First, confirm the structure.</strong> Inspect real decks on-site to see exactly how their hyperlinks and embedded data are stored, then mirror what's seen in the mock data off-site. Hit-and-miss, because the real files can't cross the air gap.</li>
+              <li><strong>Then, calibrate against the data.</strong> Run the extractor on the real material, find what the mock didn't predict, route each fix to the right place.</li>
+              <li>On-site <strong>Fridays only</strong>, around other commitments. Most fixes land on the day; trickier ones travel off-site for a few hours, but the next run waits for the following Friday.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:0.8em">
+          <h3>Where each fix lands</h3>
+          <p>Whether the issue is a structural surprise inside a deck or an unexpected value in the data, every fix resolves in one of three places: <strong>the data itself</strong> (a one-off correction), <strong>the mock dataset</strong> (so the new pattern is captured for future testing), or <strong>the extractor</strong> (so it tolerates the pattern from now on). Working the real ~1,000 grams through this loop is the next major phase &mdash; today covers the pipeline that will carry them.</p>
+        </div>
+      </section>
+
+      <!-- 21. Roadmap -->
       <section>
         <h2>Where we are &mdash; and what's next</h2>
         <div class="two-col">
@@ -384,22 +438,15 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
               <li><strong>GramFrame plugin</strong> bundled and auto-injected for interactive spectrograms</li>
               <li><strong>PPTX link labels</strong> ("Lofar 1", "Stage 2 — Intermediate") promoted to DITA section headings</li>
               <li><strong>Progress Final Assessment</strong> reclassified as its own publication</li>
-              <li>CSV round-trip safety + Excel-survivable schema (items #002, #003)</li>
-              <li>HTML regenerated on push to <code>main</code> in CI</li>
             </ul>
           </div>
           <div>
             <h3 class="todo-header">🚧 In flight / proposed</h3>
             <ul class="check-list todo">
               <li><strong>Aural analysis &mdash; video under GramFrame</strong> (future phase) &mdash; embed a video player below the spectrogram so the WAV case can be analysed in the browser too, retiring the last GAPS-Lite drop-out</li>
-              <li><strong>Audited Lofar → .glc → asset model</strong> (item #007, clarified) &mdash; tighten generator dispatch to use the GLC's inner asset extension and remove the dead direct-<code>.wav</code> code path</li>
-              <li><strong>speckit-navigator SPA</strong> (item #001) &mdash; browser-based spec viewer for reviewers</li>
-              <li>WAV-row extractor test against the mock generator (item #004)</li>
-              <li><code>topic_filename</code> collision check at CSV-load time (item #005)</li>
             </ul>
           </div>
         </div>
-        <p class="caption" style="margin-top:1em">Today's review is a chance to redirect this list &mdash; <strong>what would you add, drop, or re-rank?</strong></p>
       </section>
 
     </div>
