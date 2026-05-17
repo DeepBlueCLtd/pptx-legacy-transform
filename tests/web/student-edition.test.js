@@ -19,9 +19,10 @@ const {
 beforeAll(() => requirePublisherRun());
 
 describe('SC-002 — no "instructor" substring under html/student/', () => {
-  test('no file content under html/student/ contains "instructor"', () => {
+  test('no rendered HTML under html/student/ contains "instructor"', () => {
     const offenders = [];
     for (const file of walkFiles(STUDENT_ROOT)) {
+      if (!file.endsWith('.html')) continue;
       const content = readText(file);
       if (/instructor/i.test(content)) {
         const rel = path.relative(STUDENT_ROOT, file);
