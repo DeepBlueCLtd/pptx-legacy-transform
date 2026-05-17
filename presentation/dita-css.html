@@ -320,60 +320,82 @@ dita/
 
       <!-- 10. inject_operator_console_theme -->
       <section>
-        <h2><span class="step">7</span> Inject the theme &mdash; one stylesheet, four page types</h2>
-        <p class="small">The theme step does two jobs: (a) vendor <code>theme.css</code> into the output tree, and (b) annotate each page's <code>&lt;body&gt;</code> so the stylesheet can branch.</p>
+        <h2><span class="step">7</span> Inject the theme &mdash; CSS detects everything itself</h2>
+        <p class="small">The theme step has one essential job: vendor <code>theme.css</code> + a <code>&lt;link&gt;</code> tag into every page. The stylesheet then classifies each page by what DITA-OT already emitted &mdash; no Python-set body attributes required.</p>
         <table class="sites-table">
           <thead>
-            <tr><th>Path under <code>html/</code></th><th>Edition</th><th><code>&lt;body&gt;</code> attributes added</th></tr>
+            <tr><th>Variation</th><th>CSS selector</th><th>Why it matches</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>index.html</code></td><td>&mdash;</td><td><code>class="landing"</code></td></tr>
-            <tr><td><code>instructor/index.html</code></td><td>instructor</td><td><code>data-edition="instructor" class="edition-index"</code></td></tr>
-            <tr><td><code>student/index.html</code></td><td>student</td><td><code>data-edition="student" class="edition-index"</code></td></tr>
-            <tr><td><code>instructor/main/index.html</code></td><td>instructor</td><td><code>data-edition="instructor" class="ditamap-index"</code></td></tr>
-            <tr><td><code>instructor/main/&hellip;/gram_01.html</code></td><td>instructor</td><td><code>data-edition="instructor"</code></td></tr>
-            <tr><td><code>student/&hellip;/gram_01.html</code></td><td>student</td><td><code>data-edition="student"</code></td></tr>
+            <tr>
+              <td>Ditamap index page</td>
+              <td><code>body:has(ul.map)</code></td>
+              <td><code>ul.map</code> only exists on the per-ditamap index DITA-OT emits</td>
+            </tr>
+            <tr>
+              <td>Instructor edition</td>
+              <td><code>body:has(.ph)</code></td>
+              <td>Every <code>&lt;ph&gt;</code> in the source is <code>audience="-trainee"</code> (chapter prefix, map-title suffix, vessel-name). DITAVAL strips them all from student.</td>
+            </tr>
+            <tr>
+              <td>Student edition</td>
+              <td><code>body:not(:has(.ph))</code></td>
+              <td>Inverse of the instructor detector</td>
+            </tr>
+            <tr>
+              <td>Instructor index</td>
+              <td><code>body:has(ul.map):has(.ph)</code></td>
+              <td>Compound &mdash; both detectors fire</td>
+            </tr>
+            <tr>
+              <td>Student index</td>
+              <td><code>body:has(ul.map):not(:has(.ph))</code></td>
+              <td>Compound &mdash; index but no <code>.ph</code></td>
+            </tr>
           </tbody>
         </table>
-        <p class="micro" style="margin-top:0.6em">Classification is a pure function of the path tuple under <code>html/</code> (<code>_theme_classify_page</code>). The stylesheet then uses <code>body[data-edition="student"]</code>, <code>body.ditamap-index</code>, etc. as branch points &mdash; <strong>no per-page CSS files, no inline styles, no JS</strong>.</p>
-        <p class="micro">A copy of <code>theme.css</code> is placed at the root <em>and</em> inside each edition folder so every page has a nearby copy to link with a short relative href. The link is only inserted if the page doesn't already have one (idempotent).</p>
+        <p class="micro" style="margin-top:0.6em">A copy of <code>theme.css</code> is placed at the root <em>and</em> inside each edition folder so every page has a nearby copy to link with a short relative href. The link is only inserted if the page doesn't already have one (idempotent).</p>
+        <p class="micro"><strong>Why this matters:</strong> the air-gapped target won't run our Python. Oxygen's publish template injects the <code>theme.css</code> link, the audience filter does its work, and the CSS classifies and styles each page <strong>without any post-publish step</strong>. The body attributes <code>publish_html.py</code> still writes are belt-and-braces &mdash; useful for dev-side inspection, irrelevant to the styling.</p>
       </section>
 
       <!-- 11. CSS architecture -->
       <section>
-        <h2>The CSS architecture &mdash; one file, switched by attributes</h2>
-        <p class="small"><code>vendor/themes/operator-console-v2/theme.css</code> (~585 lines). Every variation is driven by combinations of:</p>
+        <h2>The CSS architecture &mdash; one file, switched by DOM structure</h2>
+        <p class="small"><code>vendor/themes/operator-console-v2/theme.css</code> (~570 lines). Every variation is driven by combinations of:</p>
         <ul class="key-points">
-          <li><span class="tag">body[data-edition="instructor"]</span> / <span class="tag">body[data-edition="student"]</span> &mdash; classification banner, accent colour, tile density.</li>
-          <li><span class="tag">body.landing</span> / <span class="tag">body.edition-index</span> / <span class="tag">body.ditamap-index</span> &mdash; page type (set by the theme injector).</li>
+          <li><span class="tag">body:has(.ph)</span> / <span class="tag">body:not(:has(.ph))</span> &mdash; classification banner, accent colour, tile density (edition detection).</li>
+          <li><span class="tag">body:has(ul.map)</span> &mdash; ditamap-index page (page-type detection).</li>
           <li><span class="tag">section.lofar-stage</span> / <span class="tag">section.analysis-sheet</span> / <span class="tag">table.gram-config</span> / <span class="tag">.vessel-name</span> &mdash; carried straight through from DITA's <code>outputclass</code>.</li>
         </ul>
-<pre><code class="css" data-trim>/* Variant by edition: the classification banner */
+<pre><code class="css" data-trim>/* Variant by edition: the classification banner.
+   .ph elements only exist on instructor pages (every <ph> in the source is
+   audience-tagged and DITAVAL strips them all from student). */
 body::before {
   content: "┄ INSTRUCTOR ┄ TRAINING USE ONLY ┄ CLASS-RESTRICTED ┄";
   color: var(--instructor);
   ...
 }
-body[data-edition="student"]::before {
+body:not(:has(.ph))::before {
   content: "┄ STUDENT ┄ TRAINING ┄";
   color: var(--student);
   ...
 }
 
-/* Variant by outputclass: LOFAR stage gets the "trace" treatment */
+/* Variant by outputclass: LOFAR stage gets the "trace" treatment.
+   DITA-OT copies outputclass="lofar-stage" straight through to HTML class. */
 section.lofar-stage { background: var(--panel); border: 1px solid var(--rule); ... }
 section.lofar-stage > h2.sectiontitle::before { content: "● TRACE / STAGE"; ... }
 section.lofar-stage .imagecenter::after { /* CRT scanlines overlay */ ... }</code></pre>
-        <p class="micro">A short <code>:root</code> palette (<code>--bg</code>, <code>--panel</code>, <code>--cyan</code>, <code>--amber</code>, <code>--instructor</code>, <code>--student</code>&hellip;) is the only thing to edit if the colour scheme needs to shift.</p>
+        <p class="micro">A short <code>:root</code> palette (<code>--bg</code>, <code>--panel</code>, <code>--cyan</code>, <code>--amber</code>, <code>--instructor</code>, <code>--student</code>&hellip;) is the only thing to edit if the colour scheme needs to shift. <code>:has()</code> is Baseline 2023 &mdash; current Chromium/Firefox/Safari support it.</p>
       </section>
 
       <!-- 12. Theming the index pages -->
       <section>
         <h2>Theming the DITA-OT index pages</h2>
         <p class="small">DITA-OT emits an index page per ditamap with a deeply nested <code>&lt;ul class="map"&gt;</code>. By default it is a long single-column list &mdash; useless for a 480-gram publication.</p>
-        <p class="small"><code>body.ditamap-index</code> reshapes it into a card-and-tile grid <em>with CSS alone</em>:</p>
+        <p class="small"><code>body:has(ul.map)</code> reshapes it into a card-and-tile grid <em>with CSS alone</em>:</p>
 <pre><code class="css" data-trim>/* Section card &mdash; one per &lt;li class="topichead"&gt; (= chapter heading) */
-body.ditamap-index li.topichead {
+body:has(ul.map) li.topichead {
   background: var(--panel);
   border: 1px solid var(--rule);
   border-left: 3px solid var(--cyan);
@@ -381,26 +403,32 @@ body.ditamap-index li.topichead {
   padding: 16px 18px 18px;
 }
 /* Colour-code the five chapters by position */
-body.ditamap-index li.topichead:nth-child(1) { border-left-color: var(--amber); color: var(--amber); }
-body.ditamap-index li.topichead:nth-child(2) { border-left-color: #4dd0e1; ... }
-body.ditamap-index li.topichead:nth-child(3) { border-left-color: #66bb6a; ... }
+body:has(ul.map) li.topichead:nth-child(1) { border-left-color: var(--amber); color: var(--amber); }
+body:has(ul.map) li.topichead:nth-child(2) { border-left-color: #4dd0e1; ... }
+body:has(ul.map) li.topichead:nth-child(3) { border-left-color: #66bb6a; ... }
 ...
 
 /* Inner gram list &mdash; dense responsive tile grid */
-body.ditamap-index li.topichead &gt; ul {
+body:has(ul.map) li.topichead &gt; ul {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 6px;
 }
 
-/* Flat ditamaps (progress tests) have no chapter cards. The :has() selector
+/* Flat ditamaps (progress tests) have no chapter cards. A nested :has()
    detects that shape and switches the outer list itself into a tile grid. */
-body.ditamap-index ul.map:has(&gt; li.topicref:not(.topichead)) {
+body:has(ul.map) ul.map:has(&gt; li.topicref:not(.topichead)) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 6px;
+}
+
+/* Student edition: short "Gram NN" labels -- tighten the grid further.
+   Compound :has() combines page-type and edition detection in one selector. */
+body:has(ul.map):not(:has(.ph)) li.topichead &gt; ul,
+body:has(ul.map):not(:has(.ph)) ul.map:has(&gt; li.topicref:not(.topichead)) {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }</code></pre>
-        <p class="micro">The student edition also gets a tighter grid (labels are shorter &mdash; "Gram 20" not "Gram 20 &mdash; FR Stargazer&hellip;") via <code>body[data-edition="student"].ditamap-index li.topichead &gt; ul</code>.</p>
       </section>
 
       <!-- 13. Per-edition CSS contrast -->
@@ -428,7 +456,31 @@ body.ditamap-index ul.map:has(&gt; li.topicref:not(.topichead)) {
             </ul>
           </div>
         </div>
-        <p class="micro" style="margin-top:0.6em">The HTML emitted by DITA-OT is genuinely different between the two editions (the filter strips elements). The CSS branching on top of that only handles the chrome (banner colour, tile density) &mdash; the structural difference is already there from the audience filter.</p>
+        <p class="micro" style="margin-top:0.6em">The HTML emitted by DITA-OT is genuinely different between the two editions (the filter strips elements). The CSS branching on top of that only handles the chrome (banner colour, tile density) &mdash; the structural difference is already there from the audience filter, and the CSS reads it directly via <code>:has(.ph)</code>.</p>
+      </section>
+
+      <!-- 13b. The air-gapped handover -->
+      <section>
+        <h2>The air-gapped handover &mdash; what stays, what we lose</h2>
+        <p class="small">The author on the air-gapped target has Oxygen XML Author and nothing else &mdash; no Python, no custom DITA-OT plugin. <code>publish_html.py</code> is a dev/CI convenience. The Oxygen template only has to copy <code>theme.css</code> + <code>gramframe.bundle.js</code> into the output and link them from each page (the pub-9 / pub-10 pattern). After that:</p>
+        <table class="sites-table" style="margin-top:0.4em">
+          <thead>
+            <tr><th>Capability</th><th>On the air-gapped target</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Audience filter (instructor / student split)</td><td><span class="ok">&#x2713; Kept</span> &mdash; Oxygen's DITAVAL UI</td></tr>
+            <tr><td>Per-publication standalone output</td><td><span class="ok">&#x2713; Kept</span> &mdash; each ditamap publishes to its own folder</td></tr>
+            <tr><td>LOFAR / Analysis Sheet / vessel-name styling</td><td><span class="ok">&#x2713; Kept</span> &mdash; DITA <code>outputclass</code> &rarr; HTML <code>class</code></td></tr>
+            <tr><td>Edition banner (instructor amber / student cyan)</td><td><span class="ok">&#x2713; Kept</span> &mdash; CSS <code>:has(.ph)</code> detects edition</td></tr>
+            <tr><td>Multi-column gram tile grid (chapter colour-coding)</td><td><span class="ok">&#x2713; Kept</span> &mdash; CSS <code>:has(ul.map)</code> detects index pages</td></tr>
+            <tr><td>Per-edition tile density (wide instructor / dense student)</td><td><span class="ok">&#x2713; Kept</span> &mdash; compound <code>:has()</code> selectors</td></tr>
+            <tr><td>Shared <code>html/index.html</code> landing page</td><td><span class="ko">&#x2717; Lost</span> &mdash; hand-write one if needed</td></tr>
+            <tr><td>Per-edition "choose a publication" index</td><td><span class="ko">&#x2717; Lost</span> &mdash; per-publication ditamap-index pages still exist (DITA-OT default)</td></tr>
+            <tr><td>Prettified HTML, scrubbed timestamps, byte-deterministic output</td><td><span class="ko">&#x2717; Lost</span> &mdash; cosmetic only, no functional impact</td></tr>
+            <tr><td>Automated trainee-leakage verification</td><td><span class="ko">&#x2717; Lost</span> &mdash; the <em>guarantee</em> still holds via DITAVAL; run a manual <code>grep -ri instructor &hellip;/student/</code> after each publish</td></tr>
+          </tbody>
+        </table>
+        <p class="micro" style="margin-top:0.4em">Net effect: the styling and content guarantees survive the move; what we lose is the curated cross-publication chrome (one landing, two edition indexes) and the dev-side determinism passes. Everything that matters to a reader inside one publication is intact.</p>
       </section>
 
       <!-- 14. Idempotency / determinism -->
@@ -450,8 +502,8 @@ body.ditamap-index ul.map:has(&gt; li.topicref:not(.topichead)) {
 
       <!-- 15. Running it by hand -->
       <section>
-        <h2>Running this by hand on the air-gapped target</h2>
-        <p class="small">Everything in <code>publish_html.py</code>'s <code>main()</code> can be reproduced manually with stdlib Python and the bundled DITA-OT. Recipe:</p>
+        <h2>Running the dev pipeline by hand (when the orchestrator misbehaves)</h2>
+        <p class="small">On the air-gapped target the author uses Oxygen + the DITAVAL filter &mdash; nothing below. This recipe is for the dev side: everything in <code>publish_html.py</code>'s <code>main()</code> reproduced manually with stdlib Python so any one step can be re-run in isolation if a later step fails:</p>
 <pre class="runbook"><span class="cmt"># 0. Prereqs (all pre-vendored in the repo &mdash; no internet needed)</span>
 ls dita/                        <span class="cmt"># source tree, including trainee.ditaval</span>
 ls vendor/gramframe/            <span class="cmt"># gramframe.bundle.js</span>
@@ -500,33 +552,47 @@ diff &lt;(cd html/instructor &amp;&amp; find . -type f | sort) \
       <!-- 16. Verification checklist -->
       <section>
         <h2>Verification &mdash; what "good output" looks like</h2>
-        <ul class="key-points">
-          <li><span class="ok">&#x2713;</span> <code>html/index.html</code> exists, links to both editions, carries <code>body.landing</code>.</li>
-          <li><span class="ok">&#x2713;</span> <code>html/instructor/</code> and <code>html/student/</code> contain the same set of file paths (URL parity).</li>
-          <li><span class="ok">&#x2713;</span> Every <code>*.html</code> has a <code>&lt;link rel="stylesheet" &hellip; href="&hellip;/theme.css"&gt;</code> in <code>&lt;head&gt;</code>.</li>
-          <li><span class="ok">&#x2713;</span> Every <code>*.html</code> has a <code>&lt;script src="&hellip;/gramframe.bundle.js" defer&gt;</code> in <code>&lt;head&gt;</code>.</li>
-          <li><span class="ok">&#x2713;</span> Every topic <code>&lt;body&gt;</code> has <code>data-edition="instructor"</code> or <code>"student"</code>.</li>
-          <li><span class="ok">&#x2713;</span> Every per-edition <code>index.html</code> has <code>class="edition-index"</code>; every per-publication <code>index.html</code> has <code>class="ditamap-index"</code>.</li>
-          <li><span class="ok">&#x2713;</span> <code>grep -ri instructor html/student/</code> returns nothing.</li>
-          <li><span class="ok">&#x2713;</span> <code>find html/student -iname '*instructor*'</code> returns nothing.</li>
-          <li><span class="ok">&#x2713;</span> Re-running the pipeline produces a tree whose file hashes are unchanged (modulo <code>SOURCE_DATE_EPOCH</code>).</li>
-          <li><span class="ok">&#x2713;</span> No <code>&lt;meta name="DC.date.*"&gt;</code> tags anywhere under <code>html/</code>.</li>
-        </ul>
-        <p class="small" style="margin-top:1em">The test suite (<code>python -m unittest discover tests/</code>) checks every one of these &mdash; run it before shipping to confirm the manual recipe matches the automated one.</p>
+        <div class="two-col">
+          <div>
+            <h3 class="small">Air-gapped author's checklist</h3>
+            <ul class="micro">
+              <li><span class="ok">&#x2713;</span> Each publication folder contains <code>theme.css</code> and <code>gramframe.bundle.js</code>.</li>
+              <li><span class="ok">&#x2713;</span> Every <code>*.html</code> has a <code>&lt;link rel="stylesheet" &hellip;/theme.css&gt;</code> in <code>&lt;head&gt;</code>.</li>
+              <li><span class="ok">&#x2713;</span> Every <code>*.html</code> has a <code>&lt;script src="&hellip;/gramframe.bundle.js" defer&gt;</code> in <code>&lt;head&gt;</code>.</li>
+              <li><span class="ok">&#x2713;</span> Opening any gram page shows the dark theme, the right edition banner, and an interactive spectrogram.</li>
+              <li><span class="ok">&#x2713;</span> Opening a ditamap index shows multi-column tiles (not a single long list).</li>
+              <li><span class="ok">&#x2713;</span> <code>grep -ri instructor &hellip;/student/</code> returns nothing.</li>
+              <li><span class="ok">&#x2713;</span> <code>find &hellip;/student -iname '*instructor*'</code> returns nothing.</li>
+            </ul>
+            <p class="micro">These are the only checks the author needs after each Oxygen publish.</p>
+          </div>
+          <div>
+            <h3 class="small">Dev-side checklist (CI / pre-handover)</h3>
+            <ul class="micro">
+              <li><span class="ok">&#x2713;</span> <code>html/index.html</code> exists, links to both editions, carries <code>body.landing</code>.</li>
+              <li><span class="ok">&#x2713;</span> <code>html/instructor/</code> and <code>html/student/</code> have the same set of file paths (URL parity).</li>
+              <li><span class="ok">&#x2713;</span> Every per-edition <code>index.html</code> has <code>class="edition-index"</code>; every per-publication <code>index.html</code> has <code>class="ditamap-index"</code> (belt-and-braces, theme no longer needs these).</li>
+              <li><span class="ok">&#x2713;</span> Every topic <code>&lt;body&gt;</code> has <code>data-edition="instructor"</code> or <code>"student"</code> (same caveat).</li>
+              <li><span class="ok">&#x2713;</span> Re-running the pipeline produces a tree whose file hashes are unchanged (modulo <code>SOURCE_DATE_EPOCH</code>).</li>
+              <li><span class="ok">&#x2713;</span> No <code>&lt;meta name="DC.date.*"&gt;</code> tags anywhere under <code>html/</code>.</li>
+            </ul>
+            <p class="micro">The test suite (<code>python -m unittest discover tests/</code>) checks every one of these &mdash; run it before each handover.</p>
+          </div>
+        </div>
       </section>
 
       <!-- 17. Closing -->
       <section data-background-color="#07101a">
         <div class="title-slide" style="padding:1em 0">
-          <h1 style="color:#80deea; font-size:1.6em; margin-bottom:0.6em">Recap</h1>
-          <ul class="discussion-prompts" style="text-align:left; max-width:980px">
-            <li><strong>One source tree</strong> + four <code>audience="-trainee"</code> sites + a four-line DITAVAL profile = two editions, no source forking.</li>
-            <li><strong>DITA's <code>outputclass</code></strong> propagates verbatim to HTML <code>class=</code> &mdash; the theme's only contract.</li>
-            <li><strong>One CSS file</strong> branches on <code>data-edition</code> + page-type classes set by a single post-publish injector.</li>
-            <li><strong>Determinism</strong> via prettify + scrub + <code>SOURCE_DATE_EPOCH</code>; rerunning the pipeline is byte-stable.</li>
-            <li><strong>Every step is a plain Python function</strong> &mdash; reproducible by hand on the air-gapped target if the orchestrator breaks.</li>
+          <h1 style="color:#80deea; font-size:1.4em; margin-bottom:0.4em">Recap</h1>
+          <ul class="discussion-prompts" style="text-align:left; max-width:980px; font-size:0.92em">
+            <li><strong>One source tree</strong> + four <code>audience="-trainee"</code> sites + a four-line DITAVAL = two editions, no forking.</li>
+            <li><strong>DITA <code>outputclass</code></strong> &rarr; HTML <code>class</code> verbatim &mdash; the theme's only contract for content styling.</li>
+            <li><strong>One CSS file</strong> classifies pages itself via <code>:has(ul.map)</code> (index) and <code>:has(.ph)</code> (instructor). No injector, no plugin, no JS.</li>
+            <li><strong>Air-gapped delivery</strong>: Oxygen template links <code>theme.css</code> + <code>gramframe.bundle.js</code>; author picks DITAVAL in Oxygen's UI. Done.</li>
+            <li><strong><code>publish_html.py</code></strong> is a dev convenience &mdash; CI runs it for determinism + the test suite. The target never sees it.</li>
           </ul>
-          <p class="byline" style="color:#cbd5e1; margin-top:0.8em">Questions? Open <code>publish_html.py</code> alongside this deck &mdash; every function maps to one of these slides.</p>
+          <p class="byline" style="color:#cbd5e1; margin-top:0.6em; font-size:0.7em">Questions? Open <code>theme.css</code> alongside this deck &mdash; every <code>:has()</code> selector maps to one of these slides.</p>
         </div>
       </section>
 
