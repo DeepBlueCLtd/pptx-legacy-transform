@@ -1,0 +1,281 @@
+=== Section 1: Summary ===
+Filename: Instructor Progress Test 1 Grams.pptx
+Total slides: 4
+Hyperlink target extensions:
+  .docx: 19
+  .glc: 64
+  .png: 11
+Shape-level hyperlinks: 30
+Text-run hyperlinks: 64
+Slides flagged (deviating shape count): none
+
+=== Section 2: Per-slide ===
+-- Slide 1 (shapes: 2) --
+  [0] name=TextBox 1 type=TEXT_BOX (17) pos=(1.00,2.60) size=(11.33x1.40) text='Welcome to Instructor Progress Test 1 Grams' shape_hyperlink=None
+      run[0]: text='Welcome to Instructor Progress Test 1 Grams' hyperlink=None
+  [1] name=TextBox 2 type=TEXT_BOX (17) pos=(1.00,4.20) size=(11.33x0.80) text='Instructor Version' shape_hyperlink=None
+      run[0]: text='Instructor Version' hyperlink=None
+-- Slide 2 (shapes: 31) --
+  [0] name=Rectangle 1 type=AUTO_SHAPE (1) pos=(0.00,0.00) size=(13.33x0.60) text='Instructor Progress Test 1 Grams — Page 1 of 2' shape_hyperlink=None
+      run[0]: text='Instructor Progress Test 1 Grams — Page 1 of 2' hyperlink=None
+  [1] name=Rounded Rectangle 2 type=AUTO_SHAPE (1) pos=(0.40,0.80) size=(2.41x0.40) text='Gram 1: FR Prometheus, Category 1, Bespin' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 1/Analysis Sheet.docx
+      run[0]: text='Gram 1: FR Prometheus, Category 1, Bespin' hyperlink=None
+  [2] name=TextBox 3 type=TEXT_BOX (17) pos=(0.40,1.22) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 1/Lofar 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 1/Lofar 2 I.glc
+  [3] name=Rounded Rectangle 4 type=AUTO_SHAPE (1) pos=(2.91,0.80) size=(2.41x0.40) text='Gram 3: FR Ghost, Category 1, Tantive' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 3/Analysis Sheet.docx
+      run[0]: text='Gram 3: FR Ghost, Category 1, Tantive' hyperlink=None
+  [4] name=TextBox 5 type=TEXT_BOX (17) pos=(2.91,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 3/Lofar 1 ABC.glc
+  [5] name=Rounded Rectangle 6 type=AUTO_SHAPE (1) pos=(5.41,0.80) size=(2.41x0.40) text='Gram 4: Enterprise contact bearing 291, codename Hoth' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 4/Analysis.png
+      run[0]: text='Gram 4: Enterprise contact bearing 291, codename Hoth' hyperlink=None
+  [6] name=TextBox 7 type=TEXT_BOX (17) pos=(5.41,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 4/Lofar 1 Loop 2.glc
+  [7] name=Rounded Rectangle 8 type=AUTO_SHAPE (1) pos=(7.92,0.80) size=(2.41x0.40) text='Gram 5: FR Enterprise, Category 4, Bespin' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 5/Analysis.png
+      run[0]: text='Gram 5: FR Enterprise, Category 4, Bespin' hyperlink=None
+  [8] name=TextBox 9 type=TEXT_BOX (17) pos=(7.92,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 5/Lofar 1 Loop 1.glc
+  [9] name=Rounded Rectangle 10 type=AUTO_SHAPE (1) pos=(10.42,0.80) size=(2.41x0.40) text='Gram 6: FR Akira-class, Category 4, Hoth' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 6/Analysis.png
+      run[0]: text='Gram 6: FR Akira-class, Category 4, Hoth' hyperlink=None
+  [10] name=TextBox 11 type=TEXT_BOX (17) pos=(10.42,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 6/Lofar 1 I.glc
+  [11] name=Rounded Rectangle 12 type=AUTO_SHAPE (1) pos=(0.40,2.93) size=(2.41x0.40) text='Gram 7: FR Rebel One, Category 1, Naboo' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 7/Analysis Sheet.docx
+      run[0]: text='Gram 7: FR Rebel One, Category 1, Naboo' hyperlink=None
+  [12] name=TextBox 13 type=TEXT_BOX (17) pos=(0.40,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 7/Lofar 1 I.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 7/Lofar 2.glc
+  [13] name=Rounded Rectangle 14 type=AUTO_SHAPE (1) pos=(2.91,2.93) size=(2.41x0.40) text='Gram 8: FR TIE Bomber, Category 4, Kronos' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 8/Analysis Sheet.docx
+      run[0]: text='Gram 8: FR TIE Bomber, Category 4, Kronos' hyperlink=None
+  [14] name=TextBox 15 type=TEXT_BOX (17) pos=(2.91,3.35) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 8/Lofar 1 Loop 1.glc
+  [15] name=Rounded Rectangle 16 type=AUTO_SHAPE (1) pos=(5.41,2.93) size=(2.41x0.40) text='Gram 9: FR Star Destroyer, Category 1, Tatooine' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 9/Analysis Sheet.docx
+      run[0]: text='Gram 9: FR Star Destroyer, Category 1, Tatooine' hyperlink=None
+  [16] name=TextBox 17 type=TEXT_BOX (17) pos=(5.41,3.35) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 9/Lofar 1 I.glc
+  [17] name=Rounded Rectangle 18 type=AUTO_SHAPE (1) pos=(7.92,2.93) size=(2.41x0.40) text='Gram 10: FR Stargazer, Category 3, Risa' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 10/Analysis.png
+      run[0]: text='Gram 10: FR Stargazer, Category 3, Risa' hyperlink=None
+  [18] name=TextBox 19 type=TEXT_BOX (17) pos=(7.92,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3 Lofar 4' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 10/Lofar 1 Loop 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 10/Lofar 2_a.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 10/Lofar 3 ABC.glc
+      run[3]: text='Lofar 4' hyperlink=Instructor Progress Test 1 Grams Files/Gram 10/Lofar 4 Loop 1.glc
+  [19] name=Rounded Rectangle 20 type=AUTO_SHAPE (1) pos=(10.42,2.93) size=(2.41x0.40) text='Gram 11: FR Imperial-class, Category 2, Caprica' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 11/Analysis Sheet.docx
+      run[0]: text='Gram 11: FR Imperial-class, Category 2, Caprica' hyperlink=None
+  [20] name=TextBox 21 type=TEXT_BOX (17) pos=(10.42,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 11/Lofar 1 I.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 11/Lofar 2 Loop 1.glc
+  [21] name=Rounded Rectangle 22 type=AUTO_SHAPE (1) pos=(0.40,5.07) size=(2.41x0.40) text='Gram 14: FR Tantive IV, Category 4, Trill' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 14/Analysis Sheet.docx
+      run[0]: text='Gram 14: FR Tantive IV, Category 4, Trill' hyperlink=None
+  [22] name=TextBox 23 type=TEXT_BOX (17) pos=(0.40,5.49) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 14/Lofar 1 Loop 1.glc
+  [23] name=Rounded Rectangle 24 type=AUTO_SHAPE (1) pos=(2.91,5.07) size=(2.41x0.40) text='Gram 16: Corellian Corvette contact bearing 224, codename Vulcan' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 16/Analysis Sheet.docx
+      run[0]: text='Gram 16: Corellian Corvette contact bearing 224, codename Vulcan' hyperlink=None
+  [24] name=TextBox 25 type=TEXT_BOX (17) pos=(2.91,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3 Lofar 4' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 16/Lofar 1 I.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 16/Lofar 2_b.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 16/Lofar 3 Loop 1.glc
+      run[3]: text='Lofar 4' hyperlink=Instructor Progress Test 1 Grams Files/Gram 16/Lofar 4.glc
+  [25] name=Rounded Rectangle 26 type=AUTO_SHAPE (1) pos=(5.41,5.07) size=(2.41x0.40) text='Gram 17: FR Outrider, Category 3, Cardassia' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 17/Analysis Sheet.docx
+      run[0]: text='Gram 17: FR Outrider, Category 3, Cardassia' hyperlink=None
+  [26] name=TextBox 27 type=TEXT_BOX (17) pos=(5.41,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 17/Lofar 1_b.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 17/Lofar 2 Loop 2.glc
+  [27] name=Rounded Rectangle 28 type=AUTO_SHAPE (1) pos=(7.92,5.07) size=(2.41x0.40) text='Gram 18: FR Razor Crest, Category 2, Gandalf' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 18/Analysis.png
+      run[0]: text='Gram 18: FR Razor Crest, Category 2, Gandalf' hyperlink=None
+  [28] name=TextBox 29 type=TEXT_BOX (17) pos=(7.92,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3 Lofar 4' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 18/Lofar 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 18/Lofar 2.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 18/Lofar 3.glc
+      run[3]: text='Lofar 4' hyperlink=Instructor Progress Test 1 Grams Files/Gram 18/Lofar 4 I.glc
+  [29] name=Rounded Rectangle 30 type=AUTO_SHAPE (1) pos=(10.42,5.07) size=(2.41x0.40) text='Gram 19: FR Ghost, Category 1, Romulus' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 19/Analysis Sheet.docx
+      run[0]: text='Gram 19: FR Ghost, Category 1, Romulus' hyperlink=None
+  [30] name=TextBox 31 type=TEXT_BOX (17) pos=(10.42,5.49) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 19/Lofar 1_a.glc
+-- Slide 3 (shapes: 31) --
+  [0] name=Rectangle 1 type=AUTO_SHAPE (1) pos=(0.00,0.00) size=(13.33x0.60) text='Instructor Progress Test 1 Grams — Page 2 of 2' shape_hyperlink=None
+      run[0]: text='Instructor Progress Test 1 Grams — Page 2 of 2' hyperlink=None
+  [1] name=Rounded Rectangle 2 type=AUTO_SHAPE (1) pos=(0.40,0.80) size=(2.41x0.40) text='Gram 20: FR Nebulon-B, Category 3, Mustafar' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 20/Analysis Sheet.docx
+      run[0]: text='Gram 20: FR Nebulon-B, Category 3, Mustafar' hyperlink=None
+  [2] name=TextBox 3 type=TEXT_BOX (17) pos=(0.40,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 20/Lofar 1.glc
+  [3] name=Rounded Rectangle 4 type=AUTO_SHAPE (1) pos=(2.91,0.80) size=(2.41x0.40) text='Gram 21: Outrider contact bearing 131, codename Yavin' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 21/Analysis.png
+      run[0]: text='Gram 21: Outrider contact bearing 131, codename Yavin' hyperlink=None
+  [4] name=TextBox 5 type=TEXT_BOX (17) pos=(2.91,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 21/Lofar 1.glc
+  [5] name=Rounded Rectangle 6 type=AUTO_SHAPE (1) pos=(5.41,0.80) size=(2.41x0.40) text='Gram 22: FR Venator-class, Category 4, Coruscant' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 22/Analysis Sheet.docx
+      run[0]: text='Gram 22: FR Venator-class, Category 4, Coruscant' hyperlink=None
+  [6] name=TextBox 7 type=TEXT_BOX (17) pos=(5.41,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 22/Lofar 1_b.glc
+  [7] name=Rounded Rectangle 8 type=AUTO_SHAPE (1) pos=(7.92,0.80) size=(2.41x0.40) text='Gram 23: X-wing contact bearing 097, codename Tantive' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 23/Analysis Sheet.docx
+      run[0]: text='Gram 23: X-wing contact bearing 097, codename Tantive' hyperlink=None
+  [8] name=TextBox 9 type=TEXT_BOX (17) pos=(7.92,1.22) size=(2.41x1.58) text='Lofar 1' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 23/Lofar 1 Loop 2.glc
+  [9] name=Rounded Rectangle 10 type=AUTO_SHAPE (1) pos=(10.42,0.80) size=(2.41x0.40) text='Gram 24: FR X-wing, Category 4, Naboo' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 24/Analysis.png
+      run[0]: text='Gram 24: FR X-wing, Category 4, Naboo' hyperlink=None
+  [10] name=TextBox 11 type=TEXT_BOX (17) pos=(10.42,1.22) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 24/Lofar 1 Loop 2.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 24/Lofar 2 Loop 1.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 24/Lofar 3.glc
+  [11] name=Rounded Rectangle 12 type=AUTO_SHAPE (1) pos=(0.40,2.93) size=(2.41x0.40) text='Gram 25: FR Defiant, Category 2, Endor' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 25/Analysis Sheet.docx
+      run[0]: text='Gram 25: FR Defiant, Category 2, Endor' hyperlink=None
+  [12] name=TextBox 13 type=TEXT_BOX (17) pos=(0.40,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 25/Lofar 1 I.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 25/Lofar 2 I.glc
+  [13] name=Rounded Rectangle 14 type=AUTO_SHAPE (1) pos=(2.91,2.93) size=(2.41x0.40) text='Gram 26: FR Defiant, Category 2, Naboo' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 26/Analysis Sheet.docx
+      run[0]: text='Gram 26: FR Defiant, Category 2, Naboo' hyperlink=None
+  [14] name=TextBox 15 type=TEXT_BOX (17) pos=(2.91,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3 Lofar 4' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 26/Lofar 1 Loop 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 26/Lofar 2 Loop 2.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 26/Lofar 3.glc
+      run[3]: text='Lofar 4' hyperlink=Instructor Progress Test 1 Grams Files/Gram 26/Lofar 4 Loop 1.glc
+  [15] name=Rounded Rectangle 16 type=AUTO_SHAPE (1) pos=(5.41,2.93) size=(2.41x0.40) text='Gram 27: Y-wing contact bearing 197, codename Dagobah' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 27/Analysis.png
+      run[0]: text='Gram 27: Y-wing contact bearing 197, codename Dagobah' hyperlink=None
+  [16] name=TextBox 17 type=TEXT_BOX (17) pos=(5.41,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 27/Lofar 1_b.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 27/Lofar 2_b.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 27/Lofar 3 Loop 2.glc
+  [17] name=Rounded Rectangle 18 type=AUTO_SHAPE (1) pos=(7.92,2.93) size=(2.41x0.40) text='Gram 28: FR Nebula-class, Category 1, Tantive' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 28/Analysis Sheet.docx
+      run[0]: text='Gram 28: FR Nebula-class, Category 1, Tantive' hyperlink=None
+  [18] name=TextBox 19 type=TEXT_BOX (17) pos=(7.92,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3 Lofar 4' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 28/Lofar 1 ABC.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 28/Lofar 2 ABC.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 28/Lofar 3.glc
+      run[3]: text='Lofar 4' hyperlink=Instructor Progress Test 1 Grams Files/Gram 28/Lofar 4_a.glc
+  [19] name=Rounded Rectangle 20 type=AUTO_SHAPE (1) pos=(10.42,2.93) size=(2.41x0.40) text='Gram 29: FR Akira-class, Category 2, Romulus' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 29/Analysis Sheet.docx
+      run[0]: text='Gram 29: FR Akira-class, Category 2, Romulus' hyperlink=None
+  [20] name=TextBox 21 type=TEXT_BOX (17) pos=(10.42,3.35) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 29/Lofar 1_a.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 29/Lofar 2_a.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 29/Lofar 3 Loop 1.glc
+  [21] name=Rounded Rectangle 22 type=AUTO_SHAPE (1) pos=(0.40,5.07) size=(2.41x0.40) text='Gram 30: Defiant-class contact bearing 058, codename Naboo' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 30/Analysis Sheet.docx
+      run[0]: text='Gram 30: Defiant-class contact bearing 058, codename Naboo' hyperlink=None
+  [22] name=TextBox 23 type=TEXT_BOX (17) pos=(0.40,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3 Lofar 4' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 30/Lofar 1 I.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 30/Lofar 2_b.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 30/Lofar 3 Loop 1.glc
+      run[3]: text='Lofar 4' hyperlink=Instructor Progress Test 1 Grams Files/Gram 30/Lofar 4 I.glc
+  [23] name=Rounded Rectangle 24 type=AUTO_SHAPE (1) pos=(2.91,5.07) size=(2.41x0.40) text='Gram 31: Imperial-class contact bearing 170, codename Tantive' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 31/Analysis.png
+      run[0]: text='Gram 31: Imperial-class contact bearing 170, codename Tantive' hyperlink=None
+  [24] name=TextBox 25 type=TEXT_BOX (17) pos=(2.91,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 31/Lofar 1 I.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 31/Lofar 2_a.glc
+  [25] name=Rounded Rectangle 26 type=AUTO_SHAPE (1) pos=(5.41,5.07) size=(2.41x0.40) text='Gram 32: FR A-wing, Category 4, Naboo' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 32/Analysis.png
+      run[0]: text='Gram 32: FR A-wing, Category 4, Naboo' hyperlink=None
+  [26] name=TextBox 27 type=TEXT_BOX (17) pos=(5.41,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 32/Lofar 1 Loop 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 32/Lofar 2.glc
+  [27] name=Rounded Rectangle 28 type=AUTO_SHAPE (1) pos=(7.92,5.07) size=(2.41x0.40) text='Gram 33: FR Rebel One, Category 3, Tatooine' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 33/Analysis.png
+      run[0]: text='Gram 33: FR Rebel One, Category 3, Tatooine' hyperlink=None
+  [28] name=TextBox 29 type=TEXT_BOX (17) pos=(7.92,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2 Lofar 3' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 33/Lofar 1_b.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 33/Lofar 2.glc
+      run[2]: text='Lofar 3' hyperlink=Instructor Progress Test 1 Grams Files/Gram 33/Lofar 3_b.glc
+  [29] name=Rounded Rectangle 30 type=AUTO_SHAPE (1) pos=(10.42,5.07) size=(2.41x0.40) text='Gram 36: Rebel One contact bearing 103, codename Tatooine' shape_hyperlink=Instructor Progress Test 1 Grams Files/Gram 36/Analysis Sheet.docx
+      run[0]: text='Gram 36: Rebel One contact bearing 103, codename Tatooine' hyperlink=None
+  [30] name=TextBox 31 type=TEXT_BOX (17) pos=(10.42,5.49) size=(2.41x1.58) text='Lofar 1 Lofar 2' shape_hyperlink=None
+      run[0]: text='Lofar 1' hyperlink=Instructor Progress Test 1 Grams Files/Gram 36/Lofar 1.glc
+      run[1]: text='Lofar 2' hyperlink=Instructor Progress Test 1 Grams Files/Gram 36/Lofar 2.glc
+-- Slide 4 (shapes: 2) --
+  [0] name=TextBox 1 type=TEXT_BOX (17) pos=(1.00,2.60) size=(11.33x1.40) text='End of Instructor Progress Test 1 Grams' shape_hyperlink=None
+      run[0]: text='End of Instructor Progress Test 1 Grams' hyperlink=None
+  [1] name=TextBox 2 type=TEXT_BOX (17) pos=(1.00,4.20) size=(11.33x0.80) text='Instructor Version' shape_hyperlink=None
+      run[0]: text='Instructor Version' hyperlink=None
+
+=== Section 3: Hyperlink targets ===
+-- .docx --
+  Instructor Progress Test 1 Grams Files/Gram 1/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 2
+  Instructor Progress Test 1 Grams Files/Gram 11/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 20
+  Instructor Progress Test 1 Grams Files/Gram 14/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 22
+  Instructor Progress Test 1 Grams Files/Gram 16/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 24
+  Instructor Progress Test 1 Grams Files/Gram 17/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 26
+  Instructor Progress Test 1 Grams Files/Gram 19/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 30
+  Instructor Progress Test 1 Grams Files/Gram 20/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 2
+  Instructor Progress Test 1 Grams Files/Gram 22/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 6
+  Instructor Progress Test 1 Grams Files/Gram 23/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 8
+  Instructor Progress Test 1 Grams Files/Gram 25/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 12
+  Instructor Progress Test 1 Grams Files/Gram 26/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 14
+  Instructor Progress Test 1 Grams Files/Gram 28/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 18
+  Instructor Progress Test 1 Grams Files/Gram 29/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 20
+  Instructor Progress Test 1 Grams Files/Gram 3/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 4
+  Instructor Progress Test 1 Grams Files/Gram 30/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 22
+  Instructor Progress Test 1 Grams Files/Gram 36/Analysis Sheet.docx [shape-level] slide=3 shape=Rounded Rectangle 30
+  Instructor Progress Test 1 Grams Files/Gram 7/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 12
+  Instructor Progress Test 1 Grams Files/Gram 8/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 14
+  Instructor Progress Test 1 Grams Files/Gram 9/Analysis Sheet.docx [shape-level] slide=2 shape=Rounded Rectangle 16
+-- .glc --
+  Instructor Progress Test 1 Grams Files/Gram 1/Lofar 1.glc [text-run] slide=2 shape=TextBox 3
+  Instructor Progress Test 1 Grams Files/Gram 1/Lofar 2 I.glc [text-run] slide=2 shape=TextBox 3
+  Instructor Progress Test 1 Grams Files/Gram 10/Lofar 1 Loop 1.glc [text-run] slide=2 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 10/Lofar 2_a.glc [text-run] slide=2 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 10/Lofar 3 ABC.glc [text-run] slide=2 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 10/Lofar 4 Loop 1.glc [text-run] slide=2 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 11/Lofar 1 I.glc [text-run] slide=2 shape=TextBox 21
+  Instructor Progress Test 1 Grams Files/Gram 11/Lofar 2 Loop 1.glc [text-run] slide=2 shape=TextBox 21
+  Instructor Progress Test 1 Grams Files/Gram 14/Lofar 1 Loop 1.glc [text-run] slide=2 shape=TextBox 23
+  Instructor Progress Test 1 Grams Files/Gram 16/Lofar 1 I.glc [text-run] slide=2 shape=TextBox 25
+  Instructor Progress Test 1 Grams Files/Gram 16/Lofar 2_b.glc [text-run] slide=2 shape=TextBox 25
+  Instructor Progress Test 1 Grams Files/Gram 16/Lofar 3 Loop 1.glc [text-run] slide=2 shape=TextBox 25
+  Instructor Progress Test 1 Grams Files/Gram 16/Lofar 4.glc [text-run] slide=2 shape=TextBox 25
+  Instructor Progress Test 1 Grams Files/Gram 17/Lofar 1_b.glc [text-run] slide=2 shape=TextBox 27
+  Instructor Progress Test 1 Grams Files/Gram 17/Lofar 2 Loop 2.glc [text-run] slide=2 shape=TextBox 27
+  Instructor Progress Test 1 Grams Files/Gram 18/Lofar 1.glc [text-run] slide=2 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 18/Lofar 2.glc [text-run] slide=2 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 18/Lofar 3.glc [text-run] slide=2 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 18/Lofar 4 I.glc [text-run] slide=2 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 19/Lofar 1_a.glc [text-run] slide=2 shape=TextBox 31
+  Instructor Progress Test 1 Grams Files/Gram 20/Lofar 1.glc [text-run] slide=3 shape=TextBox 3
+  Instructor Progress Test 1 Grams Files/Gram 21/Lofar 1.glc [text-run] slide=3 shape=TextBox 5
+  Instructor Progress Test 1 Grams Files/Gram 22/Lofar 1_b.glc [text-run] slide=3 shape=TextBox 7
+  Instructor Progress Test 1 Grams Files/Gram 23/Lofar 1 Loop 2.glc [text-run] slide=3 shape=TextBox 9
+  Instructor Progress Test 1 Grams Files/Gram 24/Lofar 1 Loop 2.glc [text-run] slide=3 shape=TextBox 11
+  Instructor Progress Test 1 Grams Files/Gram 24/Lofar 2 Loop 1.glc [text-run] slide=3 shape=TextBox 11
+  Instructor Progress Test 1 Grams Files/Gram 24/Lofar 3.glc [text-run] slide=3 shape=TextBox 11
+  Instructor Progress Test 1 Grams Files/Gram 25/Lofar 1 I.glc [text-run] slide=3 shape=TextBox 13
+  Instructor Progress Test 1 Grams Files/Gram 25/Lofar 2 I.glc [text-run] slide=3 shape=TextBox 13
+  Instructor Progress Test 1 Grams Files/Gram 26/Lofar 1 Loop 1.glc [text-run] slide=3 shape=TextBox 15
+  Instructor Progress Test 1 Grams Files/Gram 26/Lofar 2 Loop 2.glc [text-run] slide=3 shape=TextBox 15
+  Instructor Progress Test 1 Grams Files/Gram 26/Lofar 3.glc [text-run] slide=3 shape=TextBox 15
+  Instructor Progress Test 1 Grams Files/Gram 26/Lofar 4 Loop 1.glc [text-run] slide=3 shape=TextBox 15
+  Instructor Progress Test 1 Grams Files/Gram 27/Lofar 1_b.glc [text-run] slide=3 shape=TextBox 17
+  Instructor Progress Test 1 Grams Files/Gram 27/Lofar 2_b.glc [text-run] slide=3 shape=TextBox 17
+  Instructor Progress Test 1 Grams Files/Gram 27/Lofar 3 Loop 2.glc [text-run] slide=3 shape=TextBox 17
+  Instructor Progress Test 1 Grams Files/Gram 28/Lofar 1 ABC.glc [text-run] slide=3 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 28/Lofar 2 ABC.glc [text-run] slide=3 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 28/Lofar 3.glc [text-run] slide=3 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 28/Lofar 4_a.glc [text-run] slide=3 shape=TextBox 19
+  Instructor Progress Test 1 Grams Files/Gram 29/Lofar 1_a.glc [text-run] slide=3 shape=TextBox 21
+  Instructor Progress Test 1 Grams Files/Gram 29/Lofar 2_a.glc [text-run] slide=3 shape=TextBox 21
+  Instructor Progress Test 1 Grams Files/Gram 29/Lofar 3 Loop 1.glc [text-run] slide=3 shape=TextBox 21
+  Instructor Progress Test 1 Grams Files/Gram 3/Lofar 1 ABC.glc [text-run] slide=2 shape=TextBox 5
+  Instructor Progress Test 1 Grams Files/Gram 30/Lofar 1 I.glc [text-run] slide=3 shape=TextBox 23
+  Instructor Progress Test 1 Grams Files/Gram 30/Lofar 2_b.glc [text-run] slide=3 shape=TextBox 23
+  Instructor Progress Test 1 Grams Files/Gram 30/Lofar 3 Loop 1.glc [text-run] slide=3 shape=TextBox 23
+  Instructor Progress Test 1 Grams Files/Gram 30/Lofar 4 I.glc [text-run] slide=3 shape=TextBox 23
+  Instructor Progress Test 1 Grams Files/Gram 31/Lofar 1 I.glc [text-run] slide=3 shape=TextBox 25
+  Instructor Progress Test 1 Grams Files/Gram 31/Lofar 2_a.glc [text-run] slide=3 shape=TextBox 25
+  Instructor Progress Test 1 Grams Files/Gram 32/Lofar 1 Loop 1.glc [text-run] slide=3 shape=TextBox 27
+  Instructor Progress Test 1 Grams Files/Gram 32/Lofar 2.glc [text-run] slide=3 shape=TextBox 27
+  Instructor Progress Test 1 Grams Files/Gram 33/Lofar 1_b.glc [text-run] slide=3 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 33/Lofar 2.glc [text-run] slide=3 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 33/Lofar 3_b.glc [text-run] slide=3 shape=TextBox 29
+  Instructor Progress Test 1 Grams Files/Gram 36/Lofar 1.glc [text-run] slide=3 shape=TextBox 31
+  Instructor Progress Test 1 Grams Files/Gram 36/Lofar 2.glc [text-run] slide=3 shape=TextBox 31
+  Instructor Progress Test 1 Grams Files/Gram 4/Lofar 1 Loop 2.glc [text-run] slide=2 shape=TextBox 7
+  Instructor Progress Test 1 Grams Files/Gram 5/Lofar 1 Loop 1.glc [text-run] slide=2 shape=TextBox 9
+  Instructor Progress Test 1 Grams Files/Gram 6/Lofar 1 I.glc [text-run] slide=2 shape=TextBox 11
+  Instructor Progress Test 1 Grams Files/Gram 7/Lofar 1 I.glc [text-run] slide=2 shape=TextBox 13
+  Instructor Progress Test 1 Grams Files/Gram 7/Lofar 2.glc [text-run] slide=2 shape=TextBox 13
+  Instructor Progress Test 1 Grams Files/Gram 8/Lofar 1 Loop 1.glc [text-run] slide=2 shape=TextBox 15
+  Instructor Progress Test 1 Grams Files/Gram 9/Lofar 1 I.glc [text-run] slide=2 shape=TextBox 17
+-- .png --
+  Instructor Progress Test 1 Grams Files/Gram 10/Analysis.png [shape-level] slide=2 shape=Rounded Rectangle 18
+  Instructor Progress Test 1 Grams Files/Gram 18/Analysis.png [shape-level] slide=2 shape=Rounded Rectangle 28
+  Instructor Progress Test 1 Grams Files/Gram 21/Analysis.png [shape-level] slide=3 shape=Rounded Rectangle 4
+  Instructor Progress Test 1 Grams Files/Gram 24/Analysis.png [shape-level] slide=3 shape=Rounded Rectangle 10
+  Instructor Progress Test 1 Grams Files/Gram 27/Analysis.png [shape-level] slide=3 shape=Rounded Rectangle 16
+  Instructor Progress Test 1 Grams Files/Gram 31/Analysis.png [shape-level] slide=3 shape=Rounded Rectangle 24
+  Instructor Progress Test 1 Grams Files/Gram 32/Analysis.png [shape-level] slide=3 shape=Rounded Rectangle 26
+  Instructor Progress Test 1 Grams Files/Gram 33/Analysis.png [shape-level] slide=3 shape=Rounded Rectangle 28
+  Instructor Progress Test 1 Grams Files/Gram 4/Analysis.png [shape-level] slide=2 shape=Rounded Rectangle 6
+  Instructor Progress Test 1 Grams Files/Gram 5/Analysis.png [shape-level] slide=2 shape=Rounded Rectangle 8
+  Instructor Progress Test 1 Grams Files/Gram 6/Analysis.png [shape-level] slide=2 shape=Rounded Rectangle 10
