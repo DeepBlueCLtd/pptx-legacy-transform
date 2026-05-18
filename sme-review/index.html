@@ -30,15 +30,15 @@
         <div class="two-col">
           <div>
             <ul>
-              <li><strong>11 instructor PowerPoints</strong> &mdash; one main course deck, five progress tests, one final assessment, and four week-by-week decks</li>
-              <li><strong>~1,000 acoustic "grams"</strong> embedded as hyperlinked tiles across those decks</li>
-              <li><strong>Each gram</strong>: a vessel/contact title, an analysis sheet, and one or more <code>Lofar</code> hyperlinks &mdash; <em>always</em> pointing to a <code>.glc</code> configuration file</li>
-              <li><strong>Goal</strong>: bring all of this into the modern DITA publication set (alongside pub-9 / pub-10) and render it as two parallel HTML editions &mdash; <em>instructor</em> and <em>student</em></li>
+              <li><strong>Around 11 instructor decks</strong> &mdash; main course, progress tests, the final, week-by-weeks</li>
+              <li><strong>~1,000 grams</strong> between them, every one a hyperlinked tile</li>
+              <li><strong>Every gram</strong>: vessel name, an analysis sheet, one or more Lofar links &mdash; every Lofar pointing at a <code>.glc</code></li>
+              <li><strong>Job</strong>: bring the lot into the same publication set as pub-9 and pub-10, and have it come out two ways &mdash; your version and the trainee's</li>
             </ul>
           </div>
           <div class="stat-card">
-            <div class="stat-num">11</div>
-            <div class="stat-label">legacy PPTX decks</div>
+            <div class="stat-num">~11</div>
+            <div class="stat-label">legacy PowerPoint decks</div>
             <div class="stat-num">~1,000</div>
             <div class="stat-label">grams across 7 publications</div>
             <div class="stat-num">2</div>
@@ -114,8 +114,8 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <div class="problem-grid">
           <div class="problem-card">
             <div class="icon">🗂️</div>
-            <h3>11 isolated decks</h3>
-            <p>No way to search across the whole corpus. A trainee looking for "Akira-class Cat 4" has to know which deck.</p>
+            <h3>Hopping between decks to find a gram</h3>
+            <p>Need to find a particular gram? You'd have to know which deck it's in before you start.</p>
           </div>
           <div class="problem-card">
             <div class="icon">👥</div>
@@ -124,15 +124,22 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
           </div>
           <div class="problem-card">
             <div class="icon">📎</div>
-            <h3>External hyperlinks</h3>
-            <p>Each tile points to a sibling file on disk. Move or rename the parent folder and every link breaks silently.</p>
+            <h3>Links sat next to the decks</h3>
+            <p>Every tile points at a file in the folder next door. Move the folder, rename it &mdash; links break and nothing tells you.</p>
           </div>
           <div class="problem-card">
             <div class="icon">🔄</div>
-            <h3>Outside the publication toolchain</h3>
-            <p>Pub-9 and pub-10 already render through DITA &rarr; Oxygen. Grams sit outside, in a different format with a different workflow.</p>
+            <h3>Yet another way of publishing content</h3>
+            <p>Pub-9 and pub-10 already go through Oxygen. The grams come out of PowerPoint &mdash; different format, different workflow.</p>
           </div>
         </div>
+      </section>
+
+      <!-- 6b. Before any code -->
+      <section>
+        <h2>Before any code &mdash; a sample to work against</h2>
+        <p>I didn't survey every deck. I pulled a <strong>random sample of content</strong> from across them, enough to see the patterns repeat. Off that sample I built an <strong>unclassified stand-in</strong>: fake vessel names, real structure. Safe to take off-site, faithful enough to work against &mdash; and that's what the script was written against.</p>
+        <p>Honest about the catch: real decks will show variance the sample didn't cover. Handling that variance is the work ahead.</p>
       </section>
 
       <!-- 7. Pipeline overview -->
@@ -377,23 +384,23 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <div class="benefits-grid">
           <div class="benefit-card">
             <div class="icon">🔍</div>
-            <h3>Searchable, structured</h3>
-            <p>One publication set, ~1,000 topics, all cross-referenced. Find any gram by vessel, category, or codename without knowing which deck it's in.</p>
+            <h3>Searchable, all in one place</h3>
+            <p>One publication set, ~1,000 grams, all cross-referenced. Find a gram by vessel, category or codename without knowing which deck it lives in.</p>
           </div>
           <div class="benefit-card">
             <div class="icon">👥</div>
-            <h3>Two editions, one source</h3>
-            <p>Instructor edition reveals the answer; student edition redacts it. Driven by a single attribute (<code>audience="-trainee"</code>) and a 4-line DITAVAL profile &mdash; impossible to drift out of sync.</p>
+            <h3>Two versions, one source</h3>
+            <p>Instructor edition shows the vessel name; trainee edition doesn't. Same source, can't drift out of sync.</p>
           </div>
           <div class="benefit-card">
             <div class="icon">✅</div>
-            <h3>Consistency by construction</h3>
-            <p>Every output row came through the signed-off CSV. A Jest test sweep guarantees no instructor-only string leaks into the student edition.</p>
+            <h3>Right by construction</h3>
+            <p>Every row went through the signed-off review sheet, and an automated check makes sure nothing instructor-only leaks into the trainee edition.</p>
           </div>
           <div class="benefit-card">
             <div class="icon">🎛️</div>
-            <h3>Reads like equipment</h3>
-            <p>The "Operator Console v2" theme dresses the output as a piece of training hardware. One CSS file, no per-edition fork &mdash; the banner colour just flips.</p>
+            <h3>Looks like equipment</h3>
+            <p>Operator Console v2 styling dresses the output as a piece of training kit. The banner colour flips between editions; everything else is shared.</p>
           </div>
         </div>
       </section>
@@ -403,24 +410,24 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
         <h2>Why this moved fast &mdash; what's next</h2>
         <div class="two-col">
           <div>
-            <h3 style="color:#166534;margin-bottom:0.2em">So far &mdash; <strong>two days</strong>, mock data</h3>
+            <h3 style="color:#166534;margin-bottom:0.2em">So far &mdash; <strong>two days</strong>, stand-in data</h3>
             <ul>
-              <li>Built a <strong>mock version of the data</strong> mirroring the shape and quirks of the real material &mdash; safe to carry off-site, faithful enough to develop against</li>
-              <li>Worked from a <strong>normal office</strong> with modern dev tools &mdash; fast feedback and instant error-checking compress days of work into hours</li>
-              <li>Everything you've seen today was built in those two days &mdash; the mock-data approach is what made that pace possible</li>
+              <li>Built an <strong>unclassified stand-in</strong> from samples across the decks &mdash; fake vessel names, real structure. Safe to take off-site, faithful enough to work against.</li>
+              <li>Sat in a <strong>normal office</strong> with the tools I use day to day &mdash; fast feedback, instant checks, the things that compress days of work into hours</li>
+              <li>Everything you've seen today was built in those two days. The stand-in is what made that pace possible.</li>
             </ul>
           </div>
           <div>
             <h3 style="color:#92400e;margin-bottom:0.2em">Next &mdash; real data, on-site</h3>
             <ul>
-              <li><strong>Confirm the structure.</strong> Inspect real decks on-site to see how hyperlinks and embedded data are stored, then mirror what we find in the mock &mdash; hit-and-miss, since the real files can't cross the air gap</li>
-              <li><strong>Calibrate against the data.</strong> Run the extractor on the real material, find what the mock didn't predict, route each fix to the right place</li>
-              <li>On-site <strong>Fridays only</strong>. Most fixes land on the day; trickier ones travel off-site and the next run waits for the following Friday</li>
+              <li><strong>Find where the real decks differ.</strong> On-site, see how they store hyperlinks and embedded files, then update the stand-in for what the sample didn't cover. The real material can't come off-site with me.</li>
+              <li><strong>Grinding through the real grams.</strong> Run the script across the real decks, fix what the stand-in didn't predict. Fair chunk of work ahead.</li>
+              <li><strong>Fridays on-site only</strong>, around other commitments. Most fixes land on the day; the harder ones travel off-site for a few hours, but the next run waits till the following Friday.</li>
             </ul>
           </div>
         </div>
         <div class="callout" style="margin-top:0.4em;padding:0.4em 0.8em">
-          <p style="margin:0"><strong>Where each fix lands:</strong> the data itself (one-off correction), the mock dataset (pattern captured for future testing), or the extractor (tolerates it from now on).</p>
+          <p style="margin:0"><strong>Where each fix lands:</strong> the data itself (one-off correction), the stand-in (pattern captured for next time), or the script (so it copes from then on).</p>
         </div>
       </section>
 
@@ -431,17 +438,17 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
           <div>
             <h3 class="done-header">✅ Shipped</h3>
             <ul class="check-list">
-              <li>End-to-end pipeline: <code>extract</code> → <code>review</code> → <code>generate</code> → <code>publish</code> (plus <code>introspect</code> as a standalone diagnostic)</li>
-              <li><strong>Dual instructor / student editions</strong> via DITA-OT audience filtering (spec 003)</li>
-              <li><strong>Operator Console v2 dark theme</strong> wired into the publish pipeline</li>
-              <li><strong>GramFrame plugin</strong> bundled and auto-injected for interactive spectrograms</li>
-              <li><strong>PPTX link labels</strong> ("Lofar 1", "Stage 2 — Intermediate") promoted to DITA section headings</li>
+              <li>End-to-end working draft: read the decks → review the rows → build the gram pages → publish two HTML versions</li>
+              <li><strong>Two editions from one source</strong> &mdash; instructor with vessel names, trainee without</li>
+              <li><strong>Operator Console v2 dark styling</strong> on every page, same look as pub-9 / pub-10</li>
+              <li><strong>GramFrame on every spectrogram</strong> &mdash; pan, measure harmonics, drop markers, the lot</li>
+              <li>Lofar labels (e.g. "Lofar 1", "Stage 2 — Intermediate") carried through as section headings, not lost</li>
             </ul>
           </div>
           <div>
             <h3 class="todo-header">🚧 In flight / proposed</h3>
             <ul class="check-list todo">
-              <li><strong>Aural analysis &mdash; video-driven GramFrame</strong> (future phase) &mdash; extend GramFrame to play a video as its source rather than a still image, so the WAV case can be analysed in the browser too, retiring the last GAPS-Lite drop-out</li>
+              <li><strong>Aural analysis in-browser</strong> &mdash; extend GramFrame to play a video as its source rather than a still, so the sound-file grams work the same way. Retires the last GAPS-Lite handoff.</li>
             </ul>
           </div>
         </div>
