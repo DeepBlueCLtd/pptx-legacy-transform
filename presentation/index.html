@@ -400,28 +400,27 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
 
       <!-- 20. Velocity now, velocity ahead -->
       <section data-background-color="#fffbea">
-        <h2>Why this moved fast &mdash; and what the next phase looks like <span class="badge">&#9888; expectations</span></h2>
+        <h2>Why this moved fast &mdash; what's next</h2>
         <div class="two-col">
           <div>
             <h3 style="color:#166534;margin-bottom:0.2em">So far &mdash; <strong>two days</strong>, mock data</h3>
             <ul>
-              <li>Built a <strong>mock version of the data</strong> that mirrors the shape and quirks of the real material &mdash; safe to carry off-site, faithful enough to develop against</li>
-              <li>Worked from a <strong>normal office</strong>, with the modern development tools I use day-to-day &mdash; fast feedback, instant error-checking, the things that compress days of work into hours</li>
-              <li>What you've seen today &mdash; the whole pipeline, both editions, the styling, the in-page spectrograms &mdash; was built in those two days. The mock-data approach is what made that pace possible.</li>
+              <li>Built a <strong>mock version of the data</strong> mirroring the shape and quirks of the real material &mdash; safe to carry off-site, faithful enough to develop against</li>
+              <li>Worked from a <strong>normal office</strong> with modern dev tools &mdash; fast feedback and instant error-checking compress days of work into hours</li>
+              <li>Everything you've seen today was built in those two days &mdash; the mock-data approach is what made that pace possible</li>
             </ul>
           </div>
           <div>
             <h3 style="color:#92400e;margin-bottom:0.2em">Next &mdash; real data, on-site</h3>
             <ul>
-              <li><strong>First, confirm the structure.</strong> Inspect real decks on-site to see exactly how their hyperlinks and embedded data are stored, then mirror what's seen in the mock data off-site. Hit-and-miss, because the real files can't cross the air gap.</li>
-              <li><strong>Then, calibrate against the data.</strong> Run the extractor on the real material, find what the mock didn't predict, route each fix to the right place.</li>
-              <li>On-site <strong>Fridays only</strong>, around other commitments. Most fixes land on the day; trickier ones travel off-site for a few hours, but the next run waits for the following Friday.</li>
+              <li><strong>Confirm the structure.</strong> Inspect real decks on-site to see how hyperlinks and embedded data are stored, then mirror what we find in the mock &mdash; hit-and-miss, since the real files can't cross the air gap</li>
+              <li><strong>Calibrate against the data.</strong> Run the extractor on the real material, find what the mock didn't predict, route each fix to the right place</li>
+              <li>On-site <strong>Fridays only</strong>. Most fixes land on the day; trickier ones travel off-site and the next run waits for the following Friday</li>
             </ul>
           </div>
         </div>
-        <div class="callout" style="margin-top:0.8em">
-          <h3>Where each fix lands</h3>
-          <p>Whether the issue is a structural surprise inside a deck or an unexpected value in the data, every fix resolves in one of three places: <strong>the data itself</strong> (a one-off correction), <strong>the mock dataset</strong> (so the new pattern is captured for future testing), or <strong>the extractor</strong> (so it tolerates the pattern from now on). Working the real ~1,000 grams through this loop is the next major phase &mdash; today covers the pipeline that will carry them.</p>
+        <div class="callout" style="margin-top:0.4em;padding:0.4em 0.8em">
+          <p style="margin:0"><strong>Where each fix lands:</strong> the data itself (one-off correction), the mock dataset (pattern captured for future testing), or the extractor (tolerates it from now on).</p>
         </div>
       </section>
 
@@ -437,13 +436,12 @@ Text-run hyperlinks:    64   ← "Lofar 1", "Lofar 2"...
               <li><strong>Operator Console v2 dark theme</strong> wired into the publish pipeline</li>
               <li><strong>GramFrame plugin</strong> bundled and auto-injected for interactive spectrograms</li>
               <li><strong>PPTX link labels</strong> ("Lofar 1", "Stage 2 — Intermediate") promoted to DITA section headings</li>
-              <li><strong>Progress Final Assessment</strong> reclassified as its own publication</li>
             </ul>
           </div>
           <div>
             <h3 class="todo-header">🚧 In flight / proposed</h3>
             <ul class="check-list todo">
-              <li><strong>Aural analysis &mdash; video under GramFrame</strong> (future phase) &mdash; embed a video player below the spectrogram so the WAV case can be analysed in the browser too, retiring the last GAPS-Lite drop-out</li>
+              <li><strong>Aural analysis &mdash; video-driven GramFrame</strong> (future phase) &mdash; extend GramFrame to play a video as its source rather than a still image, so the WAV case can be analysed in the browser too, retiring the last GAPS-Lite drop-out</li>
             </ul>
           </div>
         </div>
