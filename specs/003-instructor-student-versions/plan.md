@@ -32,7 +32,11 @@ landing page plus per-edition index pages.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+, no new third-party dependencies.
+**Language/Version**: Python 3.9+, no new third-party dependencies.
+The codebase uses `from __future__ import annotations` throughout, so
+modern type-hint syntax (`list[X]`, `X | None`) is evaluated as strings
+and runs on 3.9. The air-gapped target ships WinPython 3.9.4.0, which
+is the floor this feature is verified against.
 The DITA generator and publisher use standard-library XML/text APIs
 only, consistent with the air-gapped operating constraint from feature
 001.
