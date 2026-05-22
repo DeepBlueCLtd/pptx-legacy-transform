@@ -20,10 +20,11 @@ import csv
 import logging
 import re
 import sys
+import urllib.parse
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Iterator
 
 from pptx import Presentation
@@ -287,6 +288,25 @@ def _run_hyperlinks_in_shape(shape) -> list[tuple[str, str]]:
     return pairs
 
 
+def _gram_folder_key(href: str) -> str:
+    """Last directory segment of a hyperlink target, URL-decoded and
+    lowercased. Used to associate each .glc with the gram-header that
+    points at the same ``GramNN/`` directory on disk.
+
+    Returns the empty string if the href has no parent directory
+    (e.g. a bare filename) — such links can't be folder-matched and
+    are skipped by the caller.
+    """
+    if not href:
+        return ""
+    decoded = urllib.parse.unquote(href.split("?", 1)[0].split("#", 1)[0])
+    path = PurePosixPath(decoded.replace("\\", "/"))
+    parts = path.parts
+    if len(parts) < 2:
+        return ""
+    return parts[-2].lower()
+
+
 def _bbox(shape) -> tuple[int, int, int, int]:
     """Return ``(left, top, right, bottom)`` in EMUs."""
     left = shape.left or 0
@@ -393,38 +413,52 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
         if keep:
             candidates.append((shape, keep))
 
-    # 3) Assign each candidate to the closest header above it (with
-    #    horizontal overlap). This handles both legacy layouts where N
-    #    .glc channels live in one text frame ("Lofar box") AND the
-    #    later layout where N .glc-bearing shapes are stacked vertically
-    #    beneath a header rectangle — a header collects everything
-    #    pointing at it, not just the single closest neighbour.
+    # 3) Match each .glc to its gram header by shared parent folder on
+    #    disk (e.g. both targets live under ``.../Gram001/``). This is
+    #    far more robust than spatial proximity: it survives shapes
+    #    moved off-screen, off-grid layouts, hidden overlay rectangles,
+    #    and decks where the .glc shapes don't sit directly beneath
+    #    their header rectangle. Per the corpus survey, every live
+    #    header and its .glc children share a single ``GramNN/`` parent.
+    folder_to_header: dict[str, tuple[object, str]] = {}
+    for header, href in headers:
+        key = _gram_folder_key(href)
+        if not key:
+            h_left, h_top, _, _ = _bbox(header)
+            LOGGER.warning(
+                "Slide %d: header at top=%d left=%d has no gram-folder in href %r",
+                slide_num, h_top, h_left, href,
+            )
+            continue
+        if key in folder_to_header:
+            LOGGER.warning(
+                "Slide %d: duplicate gram folder %r — second header for %r ignored",
+                slide_num, key, href,
+            )
+            continue
+        folder_to_header[key] = (header, href)
+
     header_to_pairs: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for cand, pairs in candidates:
-        c_left, c_top, c_right, c_bottom = _bbox(cand)
-        best_distance: float | None = None
-        best_header_id: int | None = None
-        for header, _ in headers:
-            h_left, h_top, h_right, h_bottom = _bbox(header)
-            # Candidate must sit at or below the header's top.
-            if c_top < h_top:
+        for text, glc_href in pairs:
+            key = _gram_folder_key(glc_href)
+            if not key:
+                LOGGER.warning(
+                    "Slide %d: .glc %r has no gram-folder in href",
+                    slide_num, glc_href,
+                )
                 continue
-            overlap = min(h_right, c_right) - max(h_left, c_left)
-            if overlap <= 0:
+            hdr_entry = folder_to_header.get(key)
+            if hdr_entry is None:
+                LOGGER.warning(
+                    "Slide %d: .glc %r names folder %r but no matching header on this slide",
+                    slide_num, glc_href, key,
+                )
                 continue
-            distance = max(0, c_top - h_bottom)
-            if best_distance is None or distance < best_distance:
-                best_distance = distance
-                best_header_id = id(header)
-        if best_header_id is not None:
-            header_to_pairs[best_header_id].extend(pairs)
-        else:
-            LOGGER.warning(
-                "Slide %d: Lofar candidate at top=%d left=%d has no header above",
-                slide_num, c_top, c_left,
-            )
+            header_id = id(hdr_entry[0])
+            header_to_pairs[header_id].append((text, glc_href))
 
-    # 4) Build grams in reading order.
+    # 4) Build grams in reading order (top, left) for stable CSV output.
     grams: list[GramPlaceholder] = []
     headers.sort(key=lambda hb: (hb[0].top or 0, hb[0].left or 0))
 
