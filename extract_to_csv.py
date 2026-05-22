@@ -21,7 +21,7 @@ import logging
 import re
 import sys
 import xml.etree.ElementTree as ET
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Iterable, Iterator
@@ -42,6 +42,13 @@ DEFAULT_TEST_PATTERN: str = "progress test"
 # ``mock_pptx.py``. These slides carry no gram content and must not
 # contribute rows to the CSV.
 FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
+
+# A gram header's shape-level hyperlink must target one of these
+# extensions. The audited legacy corpora use ``analysis sheet.doc`` or
+# the newer ``*ANALYSIS.png`` variant; ``.docx`` is included for forward
+# compatibility with re-authored decks. A ``.glc`` target on a
+# shape-level link is treated as an authoring residue, not a header.
+ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png")
 
 LOGGER = logging.getLogger(__name__)
 
@@ -339,7 +346,8 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
     """
     leaves = list(_iter_leaf_shapes(slide.shapes))
 
-    # 1) Identify headers (shape-level hyperlink + text frame holding the descriptor).
+    # 1) Identify headers (shape-level hyperlink to an analysis-sheet
+    #    asset, on a text-bearing shape).
     headers: list[tuple[object, str]] = []  # (shape, analysis_href)
     for shape in leaves:
         href = _shape_level_hyperlink(shape)
@@ -353,6 +361,12 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
         # overlay (e.g. Group 197/Rectangle children) is left over from
         # earlier authoring iterations and never resolves.
         if href.lower().startswith("file:///"):
+            continue
+        # Whitelist the analysis-sheet extensions. Legacy authoring
+        # sometimes promotes a .glc text-run hyperlink to the shape
+        # level on the small .glc-bearing shapes; without this filter
+        # those would be mistaken for gram headers.
+        if not href.lower().endswith(ANALYSIS_SHEET_EXTENSIONS):
             continue
         headers.append((shape, href))
 
@@ -379,39 +393,49 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
         if keep:
             candidates.append((shape, keep))
 
-    # 3) Pair each header with the closest Lofar box below that horizontally overlaps.
-    grams: list[GramPlaceholder] = []
-    used_candidate_ids: set[int] = set()
-    # Sort headers in reading order so gram_id sequencing matches CSV order.
-    headers.sort(key=lambda hb: (hb[0].top or 0, hb[0].left or 0))
-
-    for header, analysis_href in headers:
-        h_left, h_top, h_right, h_bottom = _bbox(header)
-        best: tuple[float, object, list[tuple[str, str]]] | None = None
-        for cand, pairs in candidates:
-            if id(cand) in used_candidate_ids:
-                continue
-            c_left, c_top, c_right, c_bottom = _bbox(cand)
-            # Must sit at or below the header's top (we want neighbours under it).
+    # 3) Assign each candidate to the closest header above it (with
+    #    horizontal overlap). This handles both legacy layouts where N
+    #    .glc channels live in one text frame ("Lofar box") AND the
+    #    later layout where N .glc-bearing shapes are stacked vertically
+    #    beneath a header rectangle — a header collects everything
+    #    pointing at it, not just the single closest neighbour.
+    header_to_pairs: dict[int, list[tuple[str, str]]] = defaultdict(list)
+    for cand, pairs in candidates:
+        c_left, c_top, c_right, c_bottom = _bbox(cand)
+        best_distance: float | None = None
+        best_header_id: int | None = None
+        for header, _ in headers:
+            h_left, h_top, h_right, h_bottom = _bbox(header)
+            # Candidate must sit at or below the header's top.
             if c_top < h_top:
                 continue
-            # Horizontal overlap with header.
             overlap = min(h_right, c_right) - max(h_left, c_left)
             if overlap <= 0:
                 continue
-            vertical_distance = max(0, c_top - h_bottom)
-            score = vertical_distance - 0.1 * overlap  # prefer close + well-aligned
-            if best is None or score < best[0]:
-                best = (score, cand, pairs)
-        if best is None:
+            distance = max(0, c_top - h_bottom)
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_header_id = id(header)
+        if best_header_id is not None:
+            header_to_pairs[best_header_id].extend(pairs)
+        else:
+            LOGGER.warning(
+                "Slide %d: Lofar candidate at top=%d left=%d has no header above",
+                slide_num, c_top, c_left,
+            )
+
+    # 4) Build grams in reading order.
+    grams: list[GramPlaceholder] = []
+    headers.sort(key=lambda hb: (hb[0].top or 0, hb[0].left or 0))
+
+    for header, analysis_href in headers:
+        lofar_pairs = header_to_pairs.get(id(header), [])
+        if not lofar_pairs:
+            h_left, h_top, _, _ = _bbox(header)
             LOGGER.warning(
                 "Slide %d: gram header at top=%d left=%d has no Lofar box",
                 slide_num, h_top, h_left,
             )
-            lofar_pairs: list[tuple[str, str]] = []
-        else:
-            _, chosen, lofar_pairs = best
-            used_candidate_ids.add(id(chosen))
 
         descriptor = "".join(
             run.text or "" for para in header.text_frame.paragraphs for run in para.runs
