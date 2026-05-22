@@ -378,7 +378,11 @@ def main(argv: Iterable[str] | None = None) -> int:
             framing_slides.append(i)
             grams_by_slide[i] = []
         else:
-            grams_by_slide[i] = extract_grams_from_slide(slide, slide_num=i)
+            grams_by_slide[i] = extract_grams_from_slide(
+                slide, slide_num=i,
+                content_root=args.input.parent,
+                source_dir=args.input.parent,
+            )
 
     slides_filter = _parse_slides_filter(args.slides)
     sections = [

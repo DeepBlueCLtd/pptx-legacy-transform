@@ -430,7 +430,12 @@ def is_framing_slide(slide) -> bool:
     return False
 
 
-def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
+def extract_grams_from_slide(
+    slide,
+    slide_num: int,
+    content_root: Path | None = None,
+    source_dir: Path | None = None,
+) -> list[GramPlaceholder]:
     """Return the gram placeholders on ``slide`` per reverse-spec §4.
 
     Each gram tile has:
@@ -581,6 +586,35 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
                 continue
             header_id = id(hdr_entry[0])
             header_to_pairs[header_id].append((text, glc_href))
+
+    # 3b) Optional filesystem validation. Legacy decks can carry
+    #     .glc hyperlinks whose target no longer exists on disk —
+    #     usually a renamed/removed channel that the author forgot to
+    #     unlink. Such links don't click anywhere in PowerPoint either,
+    #     so we drop them rather than emit a phantom Lofar row. The
+    #     check only runs when the caller provides ``content_root``;
+    #     unit tests that don't have a filesystem layout in mind keep
+    #     working unchanged.
+    if content_root is not None:
+        dropped = 0
+        for header_id in list(header_to_pairs.keys()):
+            kept: list[tuple[str, str]] = []
+            for text, href in header_to_pairs[header_id]:
+                resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
+                if resolved is None:
+                    LOGGER.warning(
+                        "Slide %d: .glc target %r not present on disk — "
+                        "dropped as legacy artefact", slide_num, href,
+                    )
+                    dropped += 1
+                    continue
+                kept.append((text, href))
+            header_to_pairs[header_id] = kept
+        if dropped:
+            LOGGER.info(
+                "Slide %d: filesystem-validation dropped %d stale .glc link(s)",
+                slide_num, dropped,
+            )
 
     # 4) Build grams in reading order (top, left) for stable CSV output.
     grams: list[GramPlaceholder] = []
@@ -782,7 +816,11 @@ def main(argv: Iterable[str] | None = None) -> int:
                 if is_framing_slide(slide):
                     LOGGER.info("Skipping framing slide %d in %s", slide_num, pptx.name)
                     continue
-                grams = extract_grams_from_slide(slide, slide_num)
+                grams = extract_grams_from_slide(
+                    slide, slide_num,
+                    content_root=args.input_root,
+                    source_dir=pptx.parent,
+                )
                 for gram in grams:
                     gram_rows = gram_to_rows(
                         gram, publication, chapter, chapter_slug,
