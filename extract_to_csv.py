@@ -337,10 +337,19 @@ def _slide_diagram_hyperlinks(slide) -> list[tuple[str, str]]:
     relationships and recurses one level to cover both data1 and
     drawing1 hyperlink sets. Targets are deduplicated by URI.
 
-    ``display_text`` is left empty — the SmartArt data tree carries
-    per-node text we could correlate, but the folder-key gram match
-    doesn't need it. Add the parse if/when downstream needs labels.
+    ``display_text`` is harvested from the SmartArt data tree: each
+    ``<dgm:pt>`` carries its own ``<dgm:prSet><a:hlinkClick r:id="…"/>``
+    plus inline ``<a:t>`` runs. We index node text by rId, then look it
+    up when the matching relationship is found.
     """
+    DGM_NS = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+    A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    PT_TAG = f"{{{DGM_NS}}}pt"
+    HLINK_TAG = f"{{{A_NS}}}hlinkClick"
+    T_TAG = f"{{{A_NS}}}t"
+    RID_ATTR = f"{{{R_NS}}}id"
+
     pairs: list[tuple[str, str]] = []
     seen_targets: set[str] = set()
     visited: set[int] = set()
@@ -351,17 +360,37 @@ def _slide_diagram_hyperlinks(slide) -> list[tuple[str, str]]:
         except Exception:
             return False
 
+    def _text_by_rid(part) -> dict[str, str]:
+        """Map rId → concatenated visible text from each SmartArt node."""
+        result: dict[str, str] = {}
+        try:
+            tree = ET.fromstring(part.blob)
+        except Exception:
+            return result
+        for pt in tree.iter(PT_TAG):
+            rid = None
+            for hlink in pt.iter(HLINK_TAG):
+                rid = hlink.get(RID_ATTR)
+                if rid:
+                    break
+            if not rid:
+                continue
+            text = "".join((t.text or "") for t in pt.iter(T_TAG)).strip()
+            result[rid] = text
+        return result
+
     def _walk(part) -> None:
         if id(part) in visited:
             return
         visited.add(id(part))
-        for rel in part.rels.values():
+        node_text = _text_by_rid(part)
+        for rid, rel in part.rels.items():
             if rel.is_external:
                 if rel.reltype.endswith("/hyperlink"):
                     target = rel.target_ref
                     if target and target not in seen_targets:
                         seen_targets.add(target)
-                        pairs.append(("", target))
+                        pairs.append((node_text.get(rid, ""), target))
                 continue
             try:
                 target_part = rel.target_part
@@ -460,11 +489,19 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
     for shape in leaves:
         if id(shape) in header_ids:
             continue
+        # Fallback display text: legacy decks frequently put the hyperlink
+        # on a zero-width run while the visible label sits in a sibling
+        # run of the same shape. When the run.text is empty, use the
+        # whole shape's collapsed text-frame text as the link label.
+        shape_text = ""
+        if getattr(shape, "has_text_frame", False):
+            shape_text = " ".join((shape.text_frame.text or "").split())
         keep: list[tuple[str, str]] = []
         # (a) text-run .glc hyperlinks
         for text, href in _run_hyperlinks_in_shape(shape):
             if href.lower().endswith(".glc"):
-                keep.append((text, href))
+                display = " ".join((text or "").split()) or shape_text
+                keep.append((display, href))
             else:
                 LOGGER.warning(
                     "Lofar text run hyperlinks to a non-.glc target (%r); "
@@ -478,10 +515,7 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             and shape_href.lower().endswith(".glc")
             and not shape_href.lower().startswith("file:///")
         ):
-            display = ""
-            if getattr(shape, "has_text_frame", False):
-                display = (shape.text_frame.text or "").strip()
-            keep.append((display, shape_href))
+            keep.append((shape_text, shape_href))
         if keep:
             candidates.append((shape, keep))
 
