@@ -264,7 +264,16 @@ def render_per_gram(
             lines.append(f"-- Slide {slide_num} (no grams — framing or anomalous) --")
             continue
         lines.append(f"-- Slide {slide_num} ({len(grams)} grams) --")
-        for idx, g in enumerate(grams, start=1):
+        # Sort grams alphabetically by vessel name (with gram_id as
+        # tiebreaker) so report scanning is predictable across decks.
+        grams_sorted = sorted(
+            grams,
+            key=lambda g: (
+                _collapse_ws(g.vessel_name).lower(),
+                g.gram_id or "",
+            ),
+        )
+        for idx, g in enumerate(grams_sorted, start=1):
             title_bits = [g.gram_id or "(no id)"]
             if g.vessel_name:
                 title_bits.append(_collapse_ws(g.vessel_name))
