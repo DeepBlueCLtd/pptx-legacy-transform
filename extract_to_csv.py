@@ -619,6 +619,33 @@ def extract_grams_from_slide(
                 slide_num, dropped,
             )
 
+    # 3c) Per-header dedup. Legacy decks sometimes carry a second
+    #     hyperlink to the same .glc within a gram — typically a
+    #     leftover from iterative authoring, recognisable by an
+    #     integer-only label (e.g. "1", "2") next to the real label
+    #     ("0-300 Hz"). Keep the entry with the longest display text
+    #     per unique href; first-seen order is preserved.
+    deduped = 0
+    for header_id in list(header_to_pairs.keys()):
+        best_by_href: dict[str, tuple[str, str]] = {}
+        order: list[str] = []
+        for text, href in header_to_pairs[header_id]:
+            existing = best_by_href.get(href)
+            if existing is None:
+                best_by_href[href] = (text, href)
+                order.append(href)
+            elif len(text) > len(existing[0]):
+                best_by_href[href] = (text, href)
+                deduped += 1
+            else:
+                deduped += 1
+        header_to_pairs[header_id] = [best_by_href[h] for h in order]
+    if deduped:
+        LOGGER.info(
+            "Slide %d: deduplicated %d .glc link(s) — kept longest-label variant",
+            slide_num, deduped,
+        )
+
     # 4) Build grams in reading order (top, left) for stable CSV output.
     grams: list[GramPlaceholder] = []
     headers.sort(key=lambda hb: (hb[0].top or 0, hb[0].left or 0))
