@@ -33,7 +33,7 @@ from pptx.oxml.ns import qn
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
+    "time_end", "freq_end", "png_path", "file_size", "wav_treatment", "warnings",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
@@ -451,6 +451,23 @@ def _gram_num_from_id(gram_id: str) -> str:
     return digits[0] if digits else "00"
 
 
+def _png_file_size(png_path: str, content_root: Path) -> str:
+    """Return the on-disk size of ``png_path`` (as a decimal string) or ``""``.
+
+    ``png_path`` is recorded as a content-root-relative POSIX string;
+    resolve it back to a real Path and stat it. Used by the duplicate-
+    detection workflow (the author groups duplicate lofars/analysis assets
+    by exact byte size rather than filename, since names can drift).
+    """
+    if not png_path:
+        return ""
+    candidate = (content_root / png_path)
+    try:
+        return str(candidate.stat().st_size)
+    except OSError:
+        return ""
+
+
 def gram_to_rows(
     gram: GramPlaceholder,
     publication: str,
@@ -506,6 +523,7 @@ def gram_to_rows(
             "time_end": time_end,
             "freq_end": freq_end,
             "png_path": png_path,
+            "file_size": _png_file_size(png_path, content_root),
             "wav_treatment": "",
             "warnings": ", ".join(warnings),
         })
@@ -531,6 +549,7 @@ def gram_to_rows(
         "time_end": "",
         "freq_end": "",
         "png_path": analysis_png_resolved,
+        "file_size": _png_file_size(analysis_png_resolved, content_root),
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
     })
