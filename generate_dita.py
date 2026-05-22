@@ -37,6 +37,13 @@ CSV_COLUMNS: tuple[str, ...] = (
     "time_end", "freq_end", "png_path", "file_size", "wav_treatment", "warnings",
 )
 
+# Optional refactoring-planning columns the extractor now writes. Their
+# presence is not required (old CSVs still validate) but when present
+# they steer DITA generation per spec 005-style refactor flow.
+OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
+    "target_doc", "target_chapter", "target_ext",
+)
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -95,9 +102,11 @@ def read_csv(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         actual = tuple(reader.fieldnames or ())
-        if actual != CSV_COLUMNS:
+        missing = [c for c in CSV_COLUMNS if c not in actual]
+        if missing:
             raise ValueError(
-                f"CSV header mismatch.\nExpected: {CSV_COLUMNS}\nActual:   {actual}"
+                f"CSV missing required columns: {missing}\n"
+                f"Actual header: {actual}"
             )
         rows: list[dict] = []
         for row in reader:
@@ -124,22 +133,30 @@ def check_row_identity(rows: list[dict]) -> list[str]:
     each duplicate tuple is reported as the anchor, so the author can
     decide which side to renumber.
     """
-    first_seen: dict[tuple[str, str, str, str, str], int] = {}
+    first_seen: dict[tuple, int] = {}
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        # Identity now includes effective_chapter + effective_doc + the
+        # gram's source chapter + vessel name so the same gram_id can
+        # coexist across decks / chapters or across distinct grams within
+        # a single (chapter, deck) bucket — the collision check fires
+        # only when two rows are truly indistinguishable.
         key = (
-            row.get("publication", ""), row.get("chapter", ""),
-            row.get("gram_id", ""), row.get("topic_type", ""),
-            row.get("sequence", ""),
+            row.get("publication", ""), _effective_chapter(row),
+            _effective_doc(row), row.get("gram_id", ""),
+            row.get("chapter", ""), row.get("vessel_name", ""),
+            row.get("topic_type", ""), row.get("sequence", ""),
         )
         if key in first_seen:
             errors.append(
                 f"Duplicate row identity at CSV line {line_no} "
                 f"(first seen at line {first_seen[key]}): "
-                f"publication={key[0]!r} chapter={key[1]!r} "
-                f"gram_id={key[2]!r} topic_type={key[3]!r} sequence={key[4]!r}. "
-                f"Two source grams collide on this slot — renumber one "
-                f"to disambiguate before regenerating."
+                f"publication={key[0]!r} target_chapter={key[1]!r} "
+                f"target_doc={key[2]!r} gram_id={key[3]!r} "
+                f"chapter={key[4]!r} vessel_name={key[5]!r} "
+                f"topic_type={key[6]!r} sequence={key[7]!r}. "
+                f"Two source rows are indistinguishable on every field — "
+                f"renumber one or amend vessel_name to disambiguate."
             )
         else:
             first_seen[key] = line_no
@@ -236,9 +253,107 @@ def _gram_num(gram_id: str) -> str:
     return f"{int(digits[0]):02d}"
 
 
-def _gram_folder_name(gram_id: str) -> str:
-    """Return the per-gram folder name, e.g. ``"gram-01"``."""
-    return f"gram-{_gram_num(gram_id)}"
+def _gram_folder_name(gram_id: str, suffix: str = "") -> str:
+    """Return the per-gram folder name, e.g. ``"gram-01"`` or ``"gram-01a"``.
+
+    ``suffix`` disambiguates two grams that legitimately share a
+    ``gram_id`` within the same ``(target_chapter, target_doc)`` bucket
+    after a CSV-driven refactor (computed by ``_compute_gram_suffixes``).
+    """
+    return f"gram-{_gram_num(gram_id)}{suffix}"
+
+
+def _topic_filename(gram_id: str, suffix: str = "") -> str:
+    """Return the per-gram topic filename, e.g. ``"gram_01.dita"``."""
+    return f"gram_{_gram_num(gram_id)}{suffix}.dita"
+
+
+def _topic_id(gram_id: str, suffix: str = "") -> str:
+    """Return the topic ``id`` attribute, e.g. ``"gram_01"``."""
+    return f"gram_{_gram_num(gram_id)}{suffix}"
+
+
+def _effective_chapter(row: dict) -> str:
+    """Chapter the row will land in after refactoring. Falls back to source."""
+    return row.get("target_chapter") or row.get("chapter", "")
+
+
+def _effective_doc(row: dict) -> str:
+    """Deck filename the row will land in after refactoring (may be empty)."""
+    return row.get("target_doc", "") or ""
+
+
+def _doc_slug(target_doc: str) -> str:
+    """Slugified stem of a target-deck filename for use as a path segment.
+
+    Empty input → empty output, so a missing ``target_doc`` omits the
+    deck level from the output path entirely.
+    """
+    if not target_doc:
+        return ""
+    return slugify(Path(target_doc).stem)
+
+
+def _compute_gram_suffixes(rows: list[dict]) -> dict[tuple, str]:
+    """Detect gram_id collisions and assign letter suffixes.
+
+    After a CSV refactor a single ``(publication, target_chapter,
+    target_doc, gram_id)`` bucket may end up containing two distinct
+    grams (e.g. a Week 1 Gram 5 and a Week 2 Gram 5 both moved into the
+    same target deck without renumbering). Two grams are treated as
+    distinct when they differ on ``(chapter, vessel_name)`` — the
+    source chapter the gram came from plus its vessel label.
+
+    Returns a mapping ``{(publication, effective_chapter, effective_doc,
+    gram_id, chapter, vessel_name): suffix}`` where ``suffix`` is ``""``
+    for grams that don't collide and ``"a"``, ``"b"``, … (first-seen
+    order) for those that do.
+    """
+    # First pass: identities seen per bucket, in first-seen order.
+    identities_by_bucket: dict[tuple, list[tuple]] = {}
+    for row in rows:
+        bucket = (
+            row.get("publication", ""),
+            _effective_chapter(row),
+            _effective_doc(row),
+            row.get("gram_id", ""),
+        )
+        identity = (row.get("chapter", ""), row.get("vessel_name", ""))
+        ids = identities_by_bucket.setdefault(bucket, [])
+        if identity not in ids:
+            ids.append(identity)
+    # Second pass: assign a suffix only when a bucket carries >1 identity.
+    suffixes: dict[tuple, str] = {}
+    for bucket, ids in identities_by_bucket.items():
+        if len(ids) <= 1:
+            for ident in ids:
+                suffixes[bucket + ident] = ""
+        else:
+            for n, ident in enumerate(ids):
+                # 'a', 'b', …, 'z', then 'aa' once we'd run out — letter
+                # blocks of 26 are plenty for any plausible CSV.
+                suffix = ""
+                idx = n
+                while True:
+                    suffix = chr(ord("a") + (idx % 26)) + suffix
+                    idx = idx // 26 - 1
+                    if idx < 0:
+                        break
+                suffixes[bucket + ident] = suffix
+    return suffixes
+
+
+def _suffix_for_row(row: dict, suffixes: dict[tuple, str]) -> str:
+    """Lookup helper paired with ``_compute_gram_suffixes``."""
+    key = (
+        row.get("publication", ""),
+        _effective_chapter(row),
+        _effective_doc(row),
+        row.get("gram_id", ""),
+        row.get("chapter", ""),
+        row.get("vessel_name", ""),
+    )
+    return suffixes.get(key, "")
 
 
 _INSTRUCTOR_PREFIX_RE = re.compile(r"^(Instructor )", re.IGNORECASE)
@@ -278,22 +393,35 @@ def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
 
 
 def _publication_root(out_dir: Path, row: dict) -> Path:
-    """Return the per-publication root, ``{out}/{pub}`` or ``{out}/main/{chapter}``."""
+    """Return the per-publication root.
+
+    Layout: ``{out}/{pub}/[{doc_slug}/]`` for non-main publications and
+    ``{out}/main/{chapter_slug}/[{doc_slug}/]`` for the main pub. The
+    ``doc_slug`` segment is only inserted when ``target_doc`` is
+    populated, keeping pre-refactor CSVs producing the original layout.
+    """
     pub = row["publication"]
+    doc_slug = _doc_slug(_effective_doc(row))
     if pub != "main":
-        return out_dir / pub
-    _, _, chapter_slug = _normalise_chapter(row.get("chapter", ""))
-    return out_dir / "main" / chapter_slug
+        root = out_dir / pub
+    else:
+        _, _, chapter_slug = _normalise_chapter(_effective_chapter(row))
+        root = out_dir / "main" / chapter_slug
+    if doc_slug:
+        root = root / doc_slug
+    return root
 
 
-def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
+def _topic_dir_for_row(out_dir: Path, row: dict, suffix: str = "") -> Path:
     """Return the directory the topic + its asset live in.
 
     Each gram gets its own sub-directory so the original asset filenames
     can be preserved (slugified) without colliding across grams in the
-    same chapter.
+    same chapter. ``suffix`` is the collision-disambiguation letter
+    computed by ``_compute_gram_suffixes`` (empty when the gram doesn't
+    collide).
     """
-    return _publication_root(out_dir, row) / _gram_folder_name(row["gram_id"])
+    return _publication_root(out_dir, row) / _gram_folder_name(row["gram_id"], suffix)
 
 
 # -----------------------------------------------------------------------------
@@ -442,6 +570,7 @@ def _append_glc_viewer_link(
 
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
+    suffix: str = "",
 ) -> tuple[list[Path], list[dict]]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
@@ -470,13 +599,13 @@ def emit_gram_topic(
 
     first = analysis_rows[0] if analysis_rows else glc_rows[0]
     gram_num = _gram_num(first["gram_id"])
-    topic_dir = _topic_dir_for_row(out_dir, first)
+    topic_dir = _topic_dir_for_row(out_dir, first, suffix)
     topic_dir.mkdir(parents=True, exist_ok=True)
-    topic_path = topic_dir / first["topic_filename"]
+    topic_path = topic_dir / _topic_filename(first["gram_id"], suffix)
 
-    topic = ET.Element("topic", {"id": f"gram_{gram_num}"})
+    topic = ET.Element("topic", {"id": _topic_id(first["gram_id"], suffix)})
     title = ET.SubElement(topic, "title")
-    title.text = f"Gram {gram_num}"
+    title.text = f"Gram {gram_num}{suffix}"
     if first.get("vessel_name"):
         ph = ET.SubElement(title, "ph", {
             "audience": "-trainee", "outputclass": "vessel-name",
@@ -562,11 +691,26 @@ class EmitResult:
     errors: int
 
 
-def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple[str, str, str], list[dict]]":
-    """Group rows by ``(publication, chapter, gram_id)`` preserving CSV order."""
-    groups: OrderedDict[tuple[str, str, str], list[dict]] = OrderedDict()
+def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple, list[dict]]":
+    """Group rows into grams, preserving CSV order.
+
+    A "gram" is the rows sharing ``(publication, effective_chapter,
+    effective_doc, gram_id, chapter, vessel_name)`` — the same tuple
+    used by the suffix map. Including ``chapter`` and ``vessel_name``
+    keeps two distinct grams with the same ``gram_id`` (e.g. moved into
+    the same target chapter without renumbering) as separate groups
+    rather than silently merged.
+    """
+    groups: OrderedDict[tuple, list[dict]] = OrderedDict()
     for row in rows:
-        key = (row["publication"], row.get("chapter", ""), row["gram_id"])
+        key = (
+            row.get("publication", ""),
+            _effective_chapter(row),
+            _effective_doc(row),
+            row.get("gram_id", ""),
+            row.get("chapter", ""),
+            row.get("vessel_name", ""),
+        )
         groups.setdefault(key, []).append(row)
     return groups
 
@@ -625,7 +769,9 @@ def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
         ph.tail = display_remainder
 
 
-def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
+def emit_main_ditamap(
+    rows: list[dict], out_dir: Path, suffixes: dict[tuple, str] | None = None,
+) -> Path:
     """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter."""
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / "main.ditamap"
@@ -648,11 +794,16 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
         _append_chapter_navtitle(topichead, title)
         seen: set[str] = set()
         for row in chapter_rows:
-            gram_dir = _gram_folder_name(row["gram_id"])
-            if gram_dir in seen:
+            sfx = _suffix_for_row(row, suffixes) if suffixes else ""
+            doc_slug = _doc_slug(_effective_doc(row))
+            gram_dir = _gram_folder_name(row["gram_id"], sfx)
+            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+            if uniq in seen:
                 continue
-            seen.add(gram_dir)
-            href = f"main/{slug}/{gram_dir}/{row['topic_filename']}"
+            seen.add(uniq)
+            topic_file = _topic_filename(row["gram_id"], sfx)
+            prefix = f"{doc_slug}/" if doc_slug else ""
+            href = f"main/{slug}/{prefix}{gram_dir}/{topic_file}"
             ET.SubElement(topichead, "topicref", {"href": href})
 
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
@@ -675,7 +826,10 @@ def _flat_publication_title(publication: str) -> str:
     return publication.replace("-", " ").title()
 
 
-def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path:
+def emit_test_ditamap(
+    publication: str, rows: list[dict], out_dir: Path,
+    suffixes: dict[tuple, str] | None = None,
+) -> Path:
     """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / f"{publication}.ditamap"
@@ -685,11 +839,16 @@ def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path
     for row in rows:
         if row["publication"] != publication:
             continue
-        gram_dir = _gram_folder_name(row["gram_id"])
-        if gram_dir in seen:
+        sfx = _suffix_for_row(row, suffixes) if suffixes else ""
+        doc_slug = _doc_slug(_effective_doc(row))
+        gram_dir = _gram_folder_name(row["gram_id"], sfx)
+        uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+        if uniq in seen:
             continue
-        seen.add(gram_dir)
-        href = f"{publication}/{gram_dir}/{row['topic_filename']}"
+        seen.add(uniq)
+        topic_file = _topic_filename(row["gram_id"], sfx)
+        prefix = f"{doc_slug}/" if doc_slug else ""
+        href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
         ET.SubElement(root, "topicref", {"href": href})
     map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
     return map_path
@@ -785,9 +944,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     written: list[Path] = []
     skipped: list[dict] = []
     errors = 0
+    suffixes = _compute_gram_suffixes(rows)
     for key, gram_rows in _gram_groups(rows).items():
         try:
-            paths, skips = emit_gram_topic(gram_rows, args.out, args.image_root)
+            suffix = suffixes.get(key, "")
+            paths, skips = emit_gram_topic(
+                gram_rows, args.out, args.image_root, suffix=suffix,
+            )
             for path in paths:
                 written.append(path)
                 LOGGER.info("Wrote %s", path)
@@ -799,11 +962,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     publications = sorted({r["publication"] for r in rows})
     ditamap_paths: list[Path] = []
     if any(r["publication"] == "main" for r in rows):
-        ditamap_paths.append(emit_main_ditamap(rows, args.out))
+        ditamap_paths.append(emit_main_ditamap(rows, args.out, suffixes))
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
         if pub != "main":
-            path = emit_test_ditamap(pub, rows, args.out)
+            path = emit_test_ditamap(pub, rows, args.out, suffixes)
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
 

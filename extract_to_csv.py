@@ -20,10 +20,11 @@ import csv
 import logging
 import re
 import sys
+import urllib.parse
 import xml.etree.ElementTree as ET
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Iterator
 
 from pptx import Presentation
@@ -31,17 +32,26 @@ from pptx.oxml.ns import qn
 
 
 CSV_COLUMNS: tuple[str, ...] = (
-    "publication", "chapter", "gram_id", "vessel_name", "topic_type",
+    "publication", "chapter", "target_doc", "target_chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "file_size", "wav_treatment", "warnings",
+    "time_end", "freq_end", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
+DEFAULT_FINAL_PATTERN: str = "final assessment"
 
 # Prefixes that identify the welcome / exit framing slides emitted by
 # ``mock_pptx.py``. These slides carry no gram content and must not
 # contribute rows to the CSV.
 FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
+
+# A gram header's shape-level hyperlink must target one of these
+# extensions. The audited legacy corpora use ``analysis sheet.doc``,
+# the newer ``*ANALYSIS.png`` variant, or a JPG export; ``.docx`` is
+# included for forward compatibility with re-authored decks. A ``.glc``
+# target on a shape-level link is treated as an authoring residue,
+# not a header.
+ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", ".jpeg")
 
 LOGGER = logging.getLogger(__name__)
 
@@ -139,11 +149,14 @@ def resolve_glc_path(href: str, content_root: Path, source_dir: Path | None = No
     """Resolve a GLC href against the per-gram or per-ten-grams layout (FR-006).
 
     Returns ``None`` and logs a WARNING when the file cannot be found.
+    Hrefs in PowerPoint relationships are URL-encoded (``%20`` for space,
+    etc.); the filesystem lookup needs the decoded form.
     """
     if not href:
         LOGGER.warning("GLC not found: empty href")
         return None
-    rel = Path(href.replace("\\", "/"))
+    decoded = urllib.parse.unquote(href)
+    rel = Path(decoded.replace("\\", "/"))
     candidates: list[Path] = []
     if source_dir is not None:
         candidates.append((source_dir / rel).resolve(strict=False))
@@ -180,8 +193,15 @@ def resolve_asset_path(href: str, content_root: Path, source_dir: Path | None) -
 
 
 def walk_pptxs(input_root: Path) -> Iterator[Path]:
-    """Yield every ``.pptx`` under ``input_root`` in deterministic sorted order."""
-    yield from sorted(input_root.rglob("*.pptx"))
+    """Yield every ``.pptx`` under ``input_root`` in deterministic sorted order.
+
+    Skips Office lock files (``~$Foo.pptx``) which Word/PowerPoint
+    create alongside any open document and which are not real content.
+    """
+    for path in sorted(input_root.rglob("*.pptx")):
+        if path.name.startswith("~$"):
+            continue
+        yield path
 
 
 # -----------------------------------------------------------------------------
@@ -202,14 +222,26 @@ def classify_publication(
     pptx: Path,
     test_pattern: str,
     allocated: dict[str, int],
+    final_pattern: str = "",
+    final_allocated: dict[str, int] | None = None,
 ) -> tuple[str, str | None, str | None]:
     """Return ``(publication, chapter, chapter_slug)`` per R2/R3.
 
     Progress-test PPTXs are detected by case-insensitive substring match
     against the filename. Test numbering is allocated stably in the order
     callers request previously-unseen test PPTXs.
+
+    Final-assessment PPTXs (matched against ``final_pattern`` when
+    non-empty and a separate ``final_allocated`` map is supplied) get
+    their own ``final-assessment-N`` publication prefix. The final
+    pattern is checked first so a filename containing both phrases
+    routes to the final-assessment bucket.
     """
     name = pptx.name.lower()
+    if final_pattern and final_allocated is not None and final_pattern.lower() in name:
+        if pptx.stem not in final_allocated:
+            final_allocated[pptx.stem] = len(final_allocated) + 1
+        return (f"final-assessment-{final_allocated[pptx.stem]}", None, None)
     if test_pattern.lower() in name:
         if pptx.stem not in allocated:
             allocated[pptx.stem] = len(allocated) + 1
@@ -239,45 +271,81 @@ class GramPlaceholder:
 def _shape_level_hyperlink(shape) -> str | None:
     """Return the shape-level hyperlink target, or None.
 
-    Walks the lxml element so we don't depend on python-pptx exposing a
-    high-level accessor (it doesn't, for shape-level clicks).
+    Walks the lxml element directly so we don't depend on python-pptx
+    exposing a high-level accessor (it doesn't, for shape-level clicks).
+    Searches every descendant ``p:cNvPr`` so the lookup works regardless
+    of the shape's outer XML wrapper — ``p:sp`` (autoshape/textbox),
+    ``p:pic`` (picture), ``p:cxnSp`` (connector), or
+    ``p:graphicFrame`` (chart/table/etc.). The actual ``a:hlinkClick``
+    always sits under ``cNvPr`` regardless of wrapper.
     """
-    nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
-    if nv_sp_pr is None:
-        return None
-    c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
-    if c_nv_pr is None:
-        return None
-    hlink = c_nv_pr.find(qn("a:hlinkClick"))
-    if hlink is None:
-        return None
-    rel_id = hlink.get(qn("r:id"))
-    if not rel_id:
-        return None
-    try:
-        return shape.part.rels[rel_id].target_ref
-    except KeyError:
-        return None
+    for c_nv_pr in shape._element.iter(qn("p:cNvPr")):
+        hlink = c_nv_pr.find(qn("a:hlinkClick"))
+        if hlink is None:
+            continue
+        rel_id = hlink.get(qn("r:id"))
+        if not rel_id:
+            continue
+        try:
+            return shape.part.rels[rel_id].target_ref
+        except KeyError:
+            continue
+    return None
 
 
 def _run_hyperlinks_in_shape(shape) -> list[tuple[str, str]]:
     """Return a list of ``(visible_text, href)`` per hyperlinked text run.
 
-    Only runs whose ``a:hlinkClick`` resolves to an external relationship
-    target are returned. Plain runs without hyperlinks are skipped.
+    When a paragraph contains exactly one hyperlinked run the whole
+    paragraph's combined text is returned as ``visible_text`` — legacy
+    decks frequently split a single label across multiple runs
+    (e.g. ``"Lofar"`` carries the hyperlink, a sibling run carries
+    ``" 2"``), and the user-visible label is the paragraph total.
+
+    When a paragraph carries multiple hyperlinks (the multi-channel
+    "Lofar box" pattern), each link keeps its own run-text as label.
     """
     pairs: list[tuple[str, str]] = []
     if not shape.has_text_frame:
         return pairs
     for paragraph in shape.text_frame.paragraphs:
+        link_runs: list[tuple[object, str]] = []
         for run in paragraph.runs:
             try:
                 href = run.hyperlink.address
             except Exception:
                 href = None
             if href:
+                link_runs.append((run, href))
+        if not link_runs:
+            continue
+        if len(link_runs) == 1:
+            para_text = "".join(r.text or "" for r in paragraph.runs)
+            _, href = link_runs[0]
+            pairs.append((para_text, href))
+        else:
+            for run, href in link_runs:
                 pairs.append((run.text or "", href))
     return pairs
+
+
+def _gram_folder_key(href: str) -> str:
+    """Last directory segment of a hyperlink target, URL-decoded and
+    lowercased. Used to associate each .glc with the gram-header that
+    points at the same ``GramNN/`` directory on disk.
+
+    Returns the empty string if the href has no parent directory
+    (e.g. a bare filename) — such links can't be folder-matched and
+    are skipped by the caller.
+    """
+    if not href:
+        return ""
+    decoded = urllib.parse.unquote(href.split("?", 1)[0].split("#", 1)[0])
+    path = PurePosixPath(decoded.replace("\\", "/"))
+    parts = path.parts
+    if len(parts) < 2:
+        return ""
+    return parts[-2].lower()
 
 
 def _bbox(shape) -> tuple[int, int, int, int]:
@@ -298,6 +366,92 @@ def _iter_leaf_shapes(shapes):
             yield shape
 
 
+def _slide_diagram_hyperlinks(slide) -> list[tuple[str, str]]:
+    """Return ``(display_text, href)`` for every external hyperlink
+    reachable from a SmartArt diagram on ``slide``.
+
+    SmartArt nodes can carry click hyperlinks stored in the diagram's
+    own relationships (``ppt/diagrams/_rels/data1.xml.rels``,
+    ``drawing1.xml.rels``, …), invisible to python-pptx's slide-level
+    shape walks. Walks from the slide's part through any diagram
+    relationships and recurses one level to cover both data1 and
+    drawing1 hyperlink sets. Targets are deduplicated by URI.
+
+    ``display_text`` is harvested from the SmartArt data tree: each
+    ``<dgm:pt>`` carries its own ``<dgm:prSet><a:hlinkClick r:id="…"/>``
+    plus inline ``<a:t>`` runs. We index node text by rId, then look it
+    up when the matching relationship is found.
+    """
+    DGM_NS = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+    A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    PT_TAG = f"{{{DGM_NS}}}pt"
+    HLINK_TAG = f"{{{A_NS}}}hlinkClick"
+    T_TAG = f"{{{A_NS}}}t"
+    RID_ATTR = f"{{{R_NS}}}id"
+
+    pairs: list[tuple[str, str]] = []
+    seen_targets: set[str] = set()
+    visited: set[int] = set()
+
+    def _is_diagram_part(part) -> bool:
+        try:
+            return "/diagrams/" in str(part.partname).lower()
+        except Exception:
+            return False
+
+    def _text_by_rid(part) -> dict[str, str]:
+        """Map rId → concatenated visible text from each SmartArt node."""
+        result: dict[str, str] = {}
+        try:
+            tree = ET.fromstring(part.blob)
+        except Exception:
+            return result
+        for pt in tree.iter(PT_TAG):
+            rid = None
+            for hlink in pt.iter(HLINK_TAG):
+                rid = hlink.get(RID_ATTR)
+                if rid:
+                    break
+            if not rid:
+                continue
+            text = "".join((t.text or "") for t in pt.iter(T_TAG)).strip()
+            result[rid] = text
+        return result
+
+    def _walk(part) -> None:
+        if id(part) in visited:
+            return
+        visited.add(id(part))
+        node_text = _text_by_rid(part)
+        for rid, rel in part.rels.items():
+            if rel.is_external:
+                if rel.reltype.endswith("/hyperlink"):
+                    target = rel.target_ref
+                    if target and target not in seen_targets:
+                        seen_targets.add(target)
+                        pairs.append((node_text.get(rid, ""), target))
+                continue
+            try:
+                target_part = rel.target_part
+            except Exception:
+                continue
+            if _is_diagram_part(target_part):
+                _walk(target_part)
+
+    for rel in slide.part.rels.values():
+        if rel.is_external:
+            continue
+        try:
+            target_part = rel.target_part
+        except Exception:
+            continue
+        if _is_diagram_part(target_part):
+            _walk(target_part)
+
+    return pairs
+
+
 def is_framing_slide(slide) -> bool:
     """Return True for welcome / exit slides that should be skipped.
 
@@ -316,7 +470,12 @@ def is_framing_slide(slide) -> bool:
     return False
 
 
-def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
+def extract_grams_from_slide(
+    slide,
+    slide_num: int,
+    content_root: Path | None = None,
+    source_dir: Path | None = None,
+) -> list[GramPlaceholder]:
     """Return the gram placeholders on ``slide`` per reverse-spec §4.
 
     Each gram tile has:
@@ -339,7 +498,8 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
     """
     leaves = list(_iter_leaf_shapes(slide.shapes))
 
-    # 1) Identify headers (shape-level hyperlink + text frame holding the descriptor).
+    # 1) Identify headers (shape-level hyperlink to an analysis-sheet
+    #    asset, on a text-bearing shape).
     headers: list[tuple[object, str]] = []  # (shape, analysis_href)
     for shape in leaves:
         href = _shape_level_hyperlink(shape)
@@ -347,64 +507,207 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             continue
         if not shape.has_text_frame:
             continue
+        # Skip vestigial overlay shapes whose shape-level hyperlinks point
+        # at absolute file:/// URIs from a long-gone authoring path. The
+        # live header buttons use paths relative to the PPTX; the dead
+        # overlay (e.g. Group 197/Rectangle children) is left over from
+        # earlier authoring iterations and never resolves.
+        if href.lower().startswith("file:///"):
+            continue
+        # Whitelist the analysis-sheet extensions. Legacy authoring
+        # sometimes promotes a .glc text-run hyperlink to the shape
+        # level on the small .glc-bearing shapes; without this filter
+        # those would be mistaken for gram headers.
+        if not href.lower().endswith(ANALYSIS_SHEET_EXTENSIONS):
+            continue
         headers.append((shape, href))
 
-    # 2) Identify candidate Lofar boxes (text frame with at least one .glc run).
-    # Every Lofar text-run hyperlink in the audited corpus targets a .glc;
-    # anything else is anomalous and surfaced rather than silently kept.
+    # 2) Identify candidate Lofar shapes — shapes whose hyperlink targets
+    #    a .glc. Two authoring styles both occur in the legacy corpus:
+    #      (a) text-bearing shapes (autoshape/textbox) with the .glc
+    #          hyperlink on a text *run* — the common case;
+    #      (b) picture shapes with the .glc hyperlink at the shape level
+    #          — used for at least one gram per slide in some decks
+    #          (e.g. the gram whose analysis sheet is "V III .doc").
     candidates: list[tuple[object, list[tuple[str, str]]]] = []
     header_ids = {id(s) for s, _ in headers}
     for shape in leaves:
         if id(shape) in header_ids:
             continue
-        pairs = _run_hyperlinks_in_shape(shape)
-        if not pairs:
-            continue
+        # Fallback display text: legacy decks frequently put the hyperlink
+        # on a zero-width run while the visible label sits in a sibling
+        # run of the same shape. When the run.text is empty, use the
+        # whole shape's collapsed text-frame text as the link label.
+        shape_text = ""
+        if getattr(shape, "has_text_frame", False):
+            shape_text = " ".join((shape.text_frame.text or "").split())
         keep: list[tuple[str, str]] = []
-        for t, h in pairs:
-            if h.lower().endswith(".glc"):
-                keep.append((t, h))
+        # (a) text-run .glc hyperlinks
+        for text, href in _run_hyperlinks_in_shape(shape):
+            if href.lower().endswith(".glc"):
+                display = " ".join((text or "").split()) or shape_text
+                keep.append((display, href))
             else:
                 LOGGER.warning(
                     "Lofar text run hyperlinks to a non-.glc target (%r); "
-                    "expected .glc — row dropped", h,
+                    "expected .glc — row dropped", href,
                 )
+        # (b) shape-level .glc hyperlink (picture-style). Skip vestigial
+        # absolute file:/// URIs the same way the header step does.
+        shape_href = _shape_level_hyperlink(shape)
+        if (
+            shape_href
+            and shape_href.lower().endswith(".glc")
+            and not shape_href.lower().startswith("file:///")
+        ):
+            keep.append((shape_text, shape_href))
         if keep:
             candidates.append((shape, keep))
 
-    # 3) Pair each header with the closest Lofar box below that horizontally overlaps.
+    # 2b) SmartArt-embedded .glc hyperlinks. Pulled from the diagram's
+    #     own .rels files (``ppt/diagrams/_rels/...``) rather than the
+    #     slide's, so they're invisible to the per-shape walk above.
+    #     At least one gram per slide in the audited corpus is
+    #     authored as SmartArt (e.g. the gram whose analysis sheet is
+    #     "V III .doc"). Attached to the candidates list as a synthetic
+    #     entry (no associated shape) — the folder-key pairing in
+    #     step 3 doesn't reference the shape.
+    diagram_keep: list[tuple[str, str]] = []
+    for text, href in _slide_diagram_hyperlinks(slide):
+        if not href.lower().endswith(".glc"):
+            continue
+        if href.lower().startswith("file:///"):
+            continue
+        diagram_keep.append((text, href))
+    if diagram_keep:
+        candidates.append((None, diagram_keep))
+
+    # 3) Match each .glc to its gram header by shared parent folder on
+    #    disk (e.g. both targets live under ``.../Gram001/``). This is
+    #    far more robust than spatial proximity: it survives shapes
+    #    moved off-screen, off-grid layouts, hidden overlay rectangles,
+    #    and decks where the .glc shapes don't sit directly beneath
+    #    their header rectangle. Per the corpus survey, every live
+    #    header and its .glc children share a single ``GramNN/`` parent.
+    folder_to_header: dict[str, tuple[object, str]] = {}
+    for header, href in headers:
+        key = _gram_folder_key(href)
+        if not key:
+            h_left, h_top, _, _ = _bbox(header)
+            LOGGER.warning(
+                "Slide %d: header at top=%d left=%d has no gram-folder in href %r",
+                slide_num, h_top, h_left, href,
+            )
+            continue
+        if key in folder_to_header:
+            LOGGER.warning(
+                "Slide %d: duplicate gram folder %r — second header for %r ignored",
+                slide_num, key, href,
+            )
+            continue
+        folder_to_header[key] = (header, href)
+
+    header_to_pairs: dict[int, list[tuple[str, str]]] = defaultdict(list)
+    for cand, pairs in candidates:
+        for text, glc_href in pairs:
+            key = _gram_folder_key(glc_href)
+            if not key:
+                LOGGER.warning(
+                    "Slide %d: .glc %r has no gram-folder in href",
+                    slide_num, glc_href,
+                )
+                continue
+            hdr_entry = folder_to_header.get(key)
+            if hdr_entry is None and len(key) > 1 and key.endswith("a"):
+                # Legacy authoring pattern: gram's .glc files live in a
+                # sibling folder named with a trailing 'a' suffix
+                # (e.g. analysis sheet in "Gram_11/" but .glc in
+                # "Gram_11a/"). Try the trimmed key as a fallback so
+                # the gram still groups correctly.
+                fallback = key[:-1]
+                hdr_entry = folder_to_header.get(fallback)
+                if hdr_entry is not None:
+                    LOGGER.info(
+                        "Slide %d: .glc %r folder %r matched header %r via "
+                        "trailing-'a' fallback", slide_num, glc_href, key, fallback,
+                    )
+            if hdr_entry is None:
+                LOGGER.warning(
+                    "Slide %d: .glc %r names folder %r but no matching header on this slide",
+                    slide_num, glc_href, key,
+                )
+                continue
+            header_id = id(hdr_entry[0])
+            header_to_pairs[header_id].append((text, glc_href))
+
+    # 3b) Optional filesystem validation. Legacy decks can carry
+    #     .glc hyperlinks whose target no longer exists on disk —
+    #     usually a renamed/removed channel that the author forgot to
+    #     unlink. Such links don't click anywhere in PowerPoint either,
+    #     so we drop them rather than emit a phantom Lofar row. The
+    #     check only runs when the caller provides ``content_root``;
+    #     unit tests that don't have a filesystem layout in mind keep
+    #     working unchanged.
+    if content_root is not None:
+        dropped = 0
+        for header_id in list(header_to_pairs.keys()):
+            kept: list[tuple[str, str]] = []
+            for text, href in header_to_pairs[header_id]:
+                resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
+                if resolved is None:
+                    LOGGER.warning(
+                        "Slide %d: .glc target %r not present on disk — "
+                        "dropped as legacy artefact", slide_num, href,
+                    )
+                    dropped += 1
+                    continue
+                kept.append((text, href))
+            header_to_pairs[header_id] = kept
+        if dropped:
+            LOGGER.info(
+                "Slide %d: filesystem-validation dropped %d stale .glc link(s)",
+                slide_num, dropped,
+            )
+
+    # 3c) Per-header dedup. Legacy decks sometimes carry a second
+    #     hyperlink to the same .glc within a gram — typically a
+    #     leftover from iterative authoring, recognisable by an
+    #     integer-only label (e.g. "1", "2") next to the real label
+    #     ("0-300 Hz"). Keep the entry with the longest display text
+    #     per unique href; first-seen order is preserved.
+    deduped = 0
+    for header_id in list(header_to_pairs.keys()):
+        best_by_href: dict[str, tuple[str, str]] = {}
+        order: list[str] = []
+        for text, href in header_to_pairs[header_id]:
+            existing = best_by_href.get(href)
+            if existing is None:
+                best_by_href[href] = (text, href)
+                order.append(href)
+            elif len(text) > len(existing[0]):
+                best_by_href[href] = (text, href)
+                deduped += 1
+            else:
+                deduped += 1
+        header_to_pairs[header_id] = [best_by_href[h] for h in order]
+    if deduped:
+        LOGGER.info(
+            "Slide %d: deduplicated %d .glc link(s) — kept longest-label variant",
+            slide_num, deduped,
+        )
+
+    # 4) Build grams in reading order (top, left) for stable CSV output.
     grams: list[GramPlaceholder] = []
-    used_candidate_ids: set[int] = set()
-    # Sort headers in reading order so gram_id sequencing matches CSV order.
     headers.sort(key=lambda hb: (hb[0].top or 0, hb[0].left or 0))
 
     for header, analysis_href in headers:
-        h_left, h_top, h_right, h_bottom = _bbox(header)
-        best: tuple[float, object, list[tuple[str, str]]] | None = None
-        for cand, pairs in candidates:
-            if id(cand) in used_candidate_ids:
-                continue
-            c_left, c_top, c_right, c_bottom = _bbox(cand)
-            # Must sit at or below the header's top (we want neighbours under it).
-            if c_top < h_top:
-                continue
-            # Horizontal overlap with header.
-            overlap = min(h_right, c_right) - max(h_left, c_left)
-            if overlap <= 0:
-                continue
-            vertical_distance = max(0, c_top - h_bottom)
-            score = vertical_distance - 0.1 * overlap  # prefer close + well-aligned
-            if best is None or score < best[0]:
-                best = (score, cand, pairs)
-        if best is None:
+        lofar_pairs = header_to_pairs.get(id(header), [])
+        if not lofar_pairs:
+            h_left, h_top, _, _ = _bbox(header)
             LOGGER.warning(
                 "Slide %d: gram header at top=%d left=%d has no Lofar box",
                 slide_num, h_top, h_left,
             )
-            lofar_pairs: list[tuple[str, str]] = []
-        else:
-            _, chosen, lofar_pairs = best
-            used_candidate_ids.add(id(chosen))
 
         descriptor = "".join(
             run.text or "" for para in header.text_frame.paragraphs for run in para.runs
@@ -418,6 +721,16 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             png_href=analysis_href,
             glc_links=glc_links,
         ))
+
+    # Sort by leading-integer gram_id so "2" precedes "10" (lexicographic
+    # would reverse them). Falls back to vessel name when ids are
+    # missing or equal. Determines both CSV row order and the report's
+    # per-gram listing — single source of truth for ordering.
+    def _gram_sort_key(g: GramPlaceholder) -> tuple[float, str]:
+        m = re.match(r"\d+", g.gram_id or "")
+        num = float(m.group(0)) if m else float("inf")
+        return (num, (g.vessel_name or "").lower())
+    grams.sort(key=_gram_sort_key)
     return grams
 
 
@@ -431,6 +744,9 @@ def _split_descriptor(descriptor: str) -> tuple[str, str]:
     per csv-schema.md so authors can renumber with a bare number when
     refactoring content between chapters.
     """
+    # Collapse runs of whitespace (legacy decks pad gram titles with
+    # multi-space sequences to force in-shape line breaks).
+    descriptor = " ".join(descriptor.split())
     if not descriptor:
         return ("", "")
     left, sep, right = descriptor.partition(":")
@@ -475,6 +791,7 @@ def gram_to_rows(
     chapter_slug: str | None,
     content_root: Path,
     source_dir: Path,
+    target_doc: str = "",
 ) -> list[dict]:
     """Expand one gram into N+1 CSV rows (N GLC links + 1 analysis row)."""
     rows: list[dict] = []
@@ -512,6 +829,8 @@ def gram_to_rows(
         rows.append({
             "publication": publication,
             "chapter": chapter or "",
+            "target_doc": target_doc,
+        "target_chapter": chapter or "",
             "gram_id": gram.gram_id,
             "vessel_name": gram.vessel_name,
             "topic_type": "glc",
@@ -523,6 +842,7 @@ def gram_to_rows(
             "time_end": time_end,
             "freq_end": freq_end,
             "png_path": png_path,
+            "target_ext": Path(png_path).suffix.lower(),
             "file_size": _png_file_size(png_path, content_root),
             "wav_treatment": "",
             "warnings": ", ".join(warnings),
@@ -538,6 +858,8 @@ def gram_to_rows(
     rows.append({
         "publication": publication,
         "chapter": chapter or "",
+        "target_doc": target_doc,
+        "target_chapter": chapter or "",
         "gram_id": gram.gram_id,
         "vessel_name": gram.vessel_name,
         "topic_type": "analysis",
@@ -549,6 +871,7 @@ def gram_to_rows(
         "time_end": "",
         "freq_end": "",
         "png_path": analysis_png_resolved,
+        "target_ext": Path(analysis_png_resolved).suffix.lower(),
         "file_size": _png_file_size(analysis_png_resolved, content_root),
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
@@ -582,6 +905,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--input-root", required=True, type=Path, dest="input_root")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--test-pattern", default=DEFAULT_TEST_PATTERN, dest="test_pattern")
+    parser.add_argument("--final-pattern", default=DEFAULT_FINAL_PATTERN, dest="final_pattern")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("extract.log"))
@@ -594,12 +918,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     pptx_count = 0
     warning_counter: Counter[str] = Counter()
     allocated: dict[str, int] = {}
+    final_allocated: dict[str, int] = {}
 
     try:
         for pptx in walk_pptxs(args.input_root):
             pptx_count += 1
             LOGGER.info("Processing PPTX %s", pptx)
-            publication, chapter, chapter_slug = classify_publication(pptx, args.test_pattern, allocated)
+            publication, chapter, chapter_slug = classify_publication(
+                pptx, args.test_pattern, allocated,
+                args.final_pattern, final_allocated,
+            )
             try:
                 prs = Presentation(pptx)
             except Exception as exc:
@@ -609,11 +937,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                 if is_framing_slide(slide):
                     LOGGER.info("Skipping framing slide %d in %s", slide_num, pptx.name)
                     continue
-                grams = extract_grams_from_slide(slide, slide_num)
+                grams = extract_grams_from_slide(
+                    slide, slide_num,
+                    content_root=args.input_root,
+                    source_dir=pptx.parent,
+                )
                 for gram in grams:
                     gram_rows = gram_to_rows(
                         gram, publication, chapter, chapter_slug,
                         args.input_root, source_dir=pptx.parent,
+                        target_doc=pptx.name,
                     )
                     rows.extend(gram_rows)
                     for r in gram_rows:
