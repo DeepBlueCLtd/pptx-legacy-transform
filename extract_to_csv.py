@@ -34,7 +34,7 @@ from pptx.oxml.ns import qn
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
+    "time_end", "freq_end", "png_path", "target_ext", "wav_treatment", "warnings",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
@@ -809,6 +809,7 @@ def gram_to_rows(
             "time_end": time_end,
             "freq_end": freq_end,
             "png_path": png_path,
+            "target_ext": Path(png_path).suffix.lower(),
             "wav_treatment": "",
             "warnings": ", ".join(warnings),
         })
@@ -834,6 +835,7 @@ def gram_to_rows(
         "time_end": "",
         "freq_end": "",
         "png_path": analysis_png_resolved,
+        "target_ext": Path(analysis_png_resolved).suffix.lower(),
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
     })
