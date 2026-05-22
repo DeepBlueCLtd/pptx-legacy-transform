@@ -3,18 +3,22 @@
 **Feature**: Per-Gram Audience Tags via CSV `audience` Column
 **Status**: Draft (extends `specs/001-pptx-dita-migration/contracts/csv-schema.md`)
 
-This contract defines the new 17th column on the intermediate
+This contract defines the new 16th column on the intermediate
 CSV (`source.csv`) and the rules the extractor and generator both
-honour when writing and reading it.
+honour when writing and reading it. The position-16 numbering
+assumes the in-feature cleanup to `csv-schema.md` (drop the stale
+`analysis_docx_path` row that has never appeared in extractor
+output) has landed; pre-cleanup the column would naïvely be
+documented at position 17 even though the on-disk count is 16.
 
 ## 1. Column definition
 
 | # | Column | Type | Empty allowed? | Notes |
 |---|---|---|---|---|
-| 17 | `audience` | string | yes | space-separated DITA audience tokens, each token a single word with a leading hyphen (e.g. `-own`, `-other`, `-trainee`); empty means "show in every edition" |
+| 16 | `audience` | string | yes | space-separated DITA audience tokens, each token a single word with a leading hyphen (e.g. `-own`, `-other`, `-trainee`); empty means "show in every edition" |
 
 The column is appended at the right edge of the CSV (after
-`warnings`, position 16). The position is fixed — any further
+`warnings`, position 15). The position is fixed — any further
 columns added by future features MUST be appended after this one.
 
 ## 2. Canonical form
@@ -72,12 +76,12 @@ under DITA's audience semantics, which is not what this feature
 emits. The generator flags such tokens as an authoring error and
 fails the build.
 
-## 5. Backward compatibility (16-column legacy CSVs)
+## 5. Backward compatibility (15-column legacy CSVs)
 
-A CSV without the `audience` column (16 columns total) is accepted
-by the generator and treated as if every row had an empty 17th
-cell. The extractor always writes 17 columns; the generator
-preserves a 17th column on output if its input had one.
+A CSV without the `audience` column (15 columns total) is accepted
+by the generator and treated as if every row had an empty 16th
+cell. The extractor always writes 16 columns; the generator
+preserves a 16th column on output if its input had one.
 
 This means:
 
@@ -86,7 +90,7 @@ This means:
   build with every gram visible in every edition.
 - A post-feature-004 CSV can be fed to a pre-feature-004 generator
   (in the unlikely event of a roll-back) — the older generator will
-  see the 17th column as an unknown extra field and ignore it
+  see the 16th column as an unknown extra field and ignore it
   (Python's `csv.DictReader` accepts extra fields silently).
 
 ## 6. Extractor behaviour (PPTX → `audience`)

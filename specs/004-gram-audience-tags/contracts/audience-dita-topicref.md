@@ -76,7 +76,13 @@ sites in exactly the same shape.
 
 ## 4. DITAVAL profiles
 
-### 4.1 `dita/trainee.ditaval` (UNCHANGED)
+All three profiles are written by `generate_dita.py` into the dita
+staging tree (the function `write_trainee_ditaval` from feature 003
+is renamed to `write_ditaval_profiles` and emits all three siblings
+in one pass). None are committed source files. Path references
+below are relative to the dita staging output directory.
+
+### 4.1 `<dita-out>/trainee.ditaval` (UNCHANGED in shape)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -85,12 +91,13 @@ sites in exactly the same shape.
 </val>
 ```
 
-Carried over verbatim from feature 003. Not directly used by this
+Same `<prop>` rule as feature 003; now emitted alongside the two
+new profiles by `write_ditaval_profiles`. Not directly used by this
 feature's publisher invocations (its rule is composed into the two
-student-* profiles), but committed so the feature-003 contract
-still resolves on read.
+student-* profiles), but emitted so the feature-003 contract still
+resolves on read.
 
-### 4.2 `dita/student-own.ditaval` (NEW)
+### 4.2 `<dita-out>/student-own.ditaval` (NEW)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -104,7 +111,7 @@ Excludes every element whose `audience` attribute contains the
 `trainee` token OR the `own` token (DITA-OT treats multiple rules
 inside one `<val>` as logical OR).
 
-### 4.3 `dita/student-other.ditaval` (NEW)
+### 4.3 `<dita-out>/student-other.ditaval` (NEW)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -135,8 +142,12 @@ The publisher invokes DITA-OT once per (publication, edition) pair:
 | Edition | `--filter` argument |
 |---|---|
 | `instructor` | (omitted) |
-| `student-own` | `--filter=dita/student-own.ditaval` |
-| `student-other` | `--filter=dita/student-other.ditaval` |
+| `student-own` | `--filter=<dita-out>/student-own.ditaval` |
+| `student-other` | `--filter=<dita-out>/student-other.ditaval` |
+
+(`<dita-out>` is the dita staging tree populated by `generate_dita.py`,
+the same path the publisher already uses for `trainee.ditaval` in
+feature 003.)
 
 A publication that has 0 audience-tagged grams produces three
 identical-content output trees (the filter is a no-op when nothing

@@ -16,19 +16,24 @@ file) that travels between them.
 
 ### 1.1 Column position and header
 
-The CSV gains a 17th column appended after `warnings`. The full
+The CSV gains a 16th column appended after `warnings`. The full
 header row becomes:
 
 ```text
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings,audience
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings,audience
 ```
+
+(Feature 004 also drops the stale `analysis_docx_path` column from
+the csv-schema.md contract — it was documented at position 14 but
+has never appeared in extractor output. The actual baseline has 15
+columns; `audience` appends as the 16th.)
 
 ### 1.2 Cell semantics
 
 | Property | Value |
 |---|---|
 | Column name | `audience` |
-| Position | 17 (last; appended after `warnings`) |
+| Position | 16 (last; appended after `warnings`) |
 | Type | string |
 | Empty allowed? | yes (the default for every gram with no PPTX tag) |
 | Canonical form | hyphen-prefixed audience tokens, space-separated, no leading/trailing whitespace, single spaces between tokens |
@@ -48,11 +53,11 @@ When the assertion fails, the generator raises a named exception
 naming the publication, chapter, gram_id, and the conflicting values
 (SC-007).
 
-### 1.4 Backward compatibility (16-column legacy CSV)
+### 1.4 Backward compatibility (15-column legacy CSV)
 
 A CSV without the `audience` column reads as if every row had an
-empty 17th cell. The generator's column-count check accepts both 16
-and 17 columns; the writer always emits 17.
+empty 16th cell. The generator's column-count check accepts both 15
+and 16 columns; the writer always emits 16.
 
 ---
 
@@ -181,9 +186,14 @@ on topicrefs; the two namespaces do not overlap. A gram tagged
 
 ---
 
-## 4. DITAVAL profiles
+## 4. DITAVAL profiles (generator-emitted)
 
-### 4.1 `dita/student-own.ditaval` (NEW)
+All three DITAVAL files are emitted by `generate_dita.py` into its
+output directory (the dita staging tree) — none are committed
+source files. The function `write_trainee_ditaval` (feature 003) is
+renamed `write_ditaval_profiles` and writes all three in one pass.
+
+### 4.1 `<dita-out>/student-own.ditaval` (NEW)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -195,7 +205,7 @@ on topicrefs; the two namespaces do not overlap. A gram tagged
 
 Used by `publish_html.py` when rendering the `student-own` edition.
 
-### 4.2 `dita/student-other.ditaval` (NEW)
+### 4.2 `<dita-out>/student-other.ditaval` (NEW)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -207,12 +217,15 @@ Used by `publish_html.py` when rendering the `student-own` edition.
 
 Used by `publish_html.py` when rendering the `student-other` edition.
 
-### 4.3 `dita/trainee.ditaval` (UNCHANGED)
+### 4.3 `<dita-out>/trainee.ditaval` (UNCHANGED in shape)
 
-Carried over verbatim from feature 003. Not directly referenced by
-this feature's publisher invocations (the trainee rule is composed
-into the two student-* profiles above), but kept in place so the
-feature-003 contract still resolves on read.
+Same `<prop>` rule as feature 003 (excludes `audience='trainee'`).
+Now emitted alongside the two new profiles by
+`write_ditaval_profiles` rather than by a function dedicated to it.
+Not directly referenced by this feature's publisher invocations
+(the trainee rule is composed into the two student-* profiles
+above), but kept in place so the feature-003 contract still
+resolves on read.
 
 | Property | Value | Notes |
 |---|---|---|
@@ -232,7 +245,7 @@ A single named HTML rendering of every publication for one audience.
 |---|---|---|---|
 | `name` | `str` | hard-coded | `"instructor"`, `"student-own"`, or `"student-other"` |
 | `output_subdir` | `pathlib.Path` | derived from `name` | `html/instructor/`, `html/student-own/`, or `html/student-other/` |
-| `ditaval` | `pathlib.Path \| None` | hard-coded | `None` for instructor; `dita/student-own.ditaval` for student-own; `dita/student-other.ditaval` for student-other |
+| `ditaval` | `pathlib.Path \| None` | hard-coded | `None` for instructor; `<dita-out>/student-own.ditaval` for student-own; `<dita-out>/student-other.ditaval` for student-other (resolved against the dita staging tree at publish time) |
 | `description` | `str` | hard-coded | one-sentence audience description for the shared landing page |
 
 **Cardinality**: Exactly three editions per publish run, in the
@@ -243,7 +256,9 @@ landing page is byte-stable.
 
 - The instructor edition's `ditaval` MUST be `None`.
 - Each student-* edition's `ditaval` MUST point at an existing file
-  under `dita/`; if either is missing the publisher exits non-zero.
+  under the dita staging tree (written by
+  `write_ditaval_profiles`); if either is missing the publisher
+  exits non-zero.
 
 ### 5.2 `LandingPage` (in-memory, `publish_html.py`)
 
@@ -293,13 +308,18 @@ under `html/<edition>/`. (The two student editions differ in *which*
 grams survive — one excludes the `-own` gram, the other excludes the
 `-other` gram — but the surviving grams sit at the same paths.)
 
-### 6.2 `dita/` after `generate_dita.py` runs
+### 6.2 `dita/` staging tree after `generate_dita.py` runs
+
+All three DITAVAL profiles are emitted by `write_ditaval_profiles`
+into the same output directory as the ditamaps. The staging tree is
+fully reproduced from inputs on every run — none of these files are
+committed.
 
 ```text
-dita/
-├── trainee.ditaval                  # unchanged (feature 003)
-├── student-own.ditaval              # NEW
-├── student-other.ditaval            # NEW
+dita/                                # generator's output directory
+├── trainee.ditaval                  # emitted (rule unchanged from feature 003)
+├── student-own.ditaval              # NEW — emitted
+├── student-other.ditaval            # NEW — emitted
 ├── main.ditamap                     # MODIFIED (topicrefs may carry audience=…)
 ├── main/
 │   └── …                            # gram topics unchanged

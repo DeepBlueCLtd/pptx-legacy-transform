@@ -348,17 +348,24 @@ that no folder, ditamap, HTML page, or CSV row references the string
   `warnings` column at the right edge of the CSV, so the column
   order documented in
   `specs/001-pptx-dita-migration/contracts/csv-schema.md` for the
-  existing 16 columns is preserved unchanged. A 16-column CSV reads
-  back as if every row had an empty 17th `audience` cell.
+  existing 15 columns is preserved unchanged. A 15-column CSV reads
+  back as if every row had an empty 16th `audience` cell. (Feature
+  004 also drops the stale `analysis_docx_path` row from
+  csv-schema.md — it was documented at column 14 but never matched
+  the actual extractor output; without that cleanup the new column
+  would be numbered position 17 in the doc while the on-disk count
+  said 16.)
 - The author edits `source.csv` directly when broadening audience
   tagging across the corpus. The `audience` column is the *one*
   cell the author is encouraged to hand-edit; the other cells remain
   authored upstream in the PPTX and re-derived by the extractor.
-- The DITAVAL profiles for the three editions are committed to the
-  `dita/` tree (per feature 003's pattern for `trainee.ditaval`).
-  Feature 003's `dita/trainee.ditaval` is replaced (or extended) by
-  two new profiles: one excluding `-trainee -own`, one excluding
-  `-trainee -other`. The instructor edition uses no DITAVAL profile.
+- The DITAVAL profiles for the three editions are emitted by
+  `generate_dita.py` into the dita staging tree (per feature 003's
+  pattern for `trainee.ditaval`, which is also generator-emitted).
+  Feature 003's `trainee.ditaval` is now joined by two new
+  profiles emitted alongside it: one excluding `-trainee -own`,
+  one excluding `-trainee -other`. The instructor edition uses no
+  DITAVAL profile.
 - Audience-token vocabulary remains small and exclude-only. This
   feature introduces exactly two new tokens (`-own`, `-other`) on
   top of feature 003's `-trainee`. A larger taxonomy (per-cohort

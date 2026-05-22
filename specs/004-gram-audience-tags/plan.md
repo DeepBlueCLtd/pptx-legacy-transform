@@ -6,7 +6,7 @@
 ## Summary
 
 Carry per-gram exclude-audience tags (`-own`, `-other`, …) from the
-PPTX through a new 17th CSV column `audience` and out to an
+PPTX through a new 16th CSV column `audience` and out to an
 `audience="…"` attribute on the gram's topicref inside each ditamap.
 Replace feature 003's single student edition with two nation-specific
 student editions (`student-own` excluding `-trainee -own`,
@@ -17,11 +17,13 @@ the mock corpus generator — the per-gram tag is what makes the
 duplication unnecessary.
 
 No new Python dependencies. The CSV contract gains exactly one new
-column appended at the right edge (17th column, position after
-`warnings`). The DITA tree gains two new DITAVAL profiles; the
-feature-003 `trainee.ditaval` stays in place and is composed with the
-new ones, not replaced. The only edited Python files are
-`extract_to_csv.py`, `generate_dita.py`, `publish_html.py`, and
+column appended at the right edge (16th column, position after
+`warnings`). The DITA generator gains two new DITAVAL profiles
+(`student-own.ditaval`, `student-other.ditaval`) which it emits at
+build time alongside the existing `trainee.ditaval` — the publisher
+composes the trainee rule with each per-nation rule rather than
+referencing `trainee.ditaval` directly. The only edited Python files
+are `extract_to_csv.py`, `generate_dita.py`, `publish_html.py`, and
 `mock_pptx.py`.
 
 The MVP shape is User Story 1 (Week 3 produces equal-size
@@ -44,19 +46,31 @@ its built-in DITAVAL filtering mechanism (the `--filter=` CLI flag,
 same mechanism feature 003 introduced). No DITA-OT plugin or
 extension.
 
-**Storage**: Filesystem only. `source.csv` gains one column (17th).
-The `dita/` tree gains two new DITAVAL profiles next to the existing
-`trainee.ditaval`. The `html/` output tree's three top-level
-subdirectories change from `instructor/`+`student/` (feature 003) to
-`instructor/`+`student-own/`+`student-other/`.
+**Storage**: Filesystem only. `source.csv` gains one column (16th).
+The DITA generator emits two new DITAVAL profiles into its output
+directory alongside the existing `trainee.ditaval` (no new committed
+source files under `dita/` — all three profiles are build artefacts,
+matching feature 003's pattern). The `html/` output tree's three
+top-level subdirectories change from `instructor/`+`student/`
+(feature 003) to `instructor/`+`student-own/`+`student-other/`.
 
 **Testing**: `unittest` discovery via `python -m unittest discover
 tests/`. This feature extends `tests/test_extract_to_csv.py`
 (audience-suffix stripping into the new column),
 `tests/test_generate_dita.py` (topicref `audience=` attribute
-emission, gram-row consistency check), `tests/test_publish_html.py`
-(three-edition layout, Week 3 substitution semantics, idempotency).
-No new test modules.
+emission, gram-row consistency check, generator emits all three
+DITAVAL profiles), `tests/test_publish_html.py` (three-edition
+layout, Week 3 substitution semantics, idempotency), and
+`tests/test_mock_pptx.py` (delete `test_no_fr_variant_drops_fr_prefix`
+which now references a removed publication; add an assertion that
+the Week 3 PPTX carries the planted `[-own]` / `[-other]` markers).
+The browser-driven web tests are reshaped: `tests/web/student-edition.test.js`
+is rewritten as own/other variants (one block per edition, asserting
+each edition's index hides the expected gram), and
+`tests/web/instructor-edition.test.js`'s URL-parity check is updated
+to compare each student edition's surviving paths to the instructor
+edition (rather than the now-removed single student edition).
+No new Python test modules.
 
 **Target Platform**: Windows workstations (air-gapped analyst PCs
 after handover; internet-connected Windows VM during development).
@@ -67,11 +81,14 @@ editions are delivered as static HTML readable in any modern browser.
 no library packaging.
 
 **Performance Goals**: Three DITA-OT invocations per publication
-(instructor, student-own, student-other), run sequentially. Whole-
-corpus publish target stays well under five minutes on a developer
-workstation. The third edition adds roughly 30–50% to feature 003's
-publish time (the bottleneck is DITA-OT startup per ditamap, which
-scales linearly with edition count).
+(instructor, student-own, student-other), run sequentially —
+21 DITA-OT invocations total for the current 7-publication corpus
+(`main` + 6 progress tests after the No-FR removal). The bottleneck
+is DITA-OT startup per ditamap, which scales linearly with edition
+count, so the wall-clock target is approximately 50% over feature
+003's two-edition baseline (3 editions / 2 editions). No new per-
+invocation cost (the filter file is small; DITA-OT's own work
+dominates).
 
 **Constraints**: Idempotency parity with features 001 / 003
 (FR-014 / SC-004) — two consecutive publish runs over an unchanged
@@ -115,7 +132,7 @@ principles that features 001, 002, and 003 honour also hold here:
   DITAVAL profile was applied per edition (carried over from feature
   003's FR-011).
 - **Versioning / breaking changes**: The CSV column appendage is
-  forward-compatible (a 16-column legacy CSV reads as if the 17th
+  forward-compatible (a 15-column legacy CSV reads as if the 16th
   cell were empty on every row). The output tree's student
   subdirectory name changes — `html/student/` → `html/student-own/` +
   `html/student-other/`. This is documented as an edge case in the
@@ -125,9 +142,9 @@ principles that features 001, 002, and 003 honour also hold here:
 **Result**: PASS — no ratified gates, design adheres to the implicit
 principles above. Re-evaluated after Phase 1 (contracts, data model,
 quickstart written): still PASS, no new violations introduced. The
-Phase 1 surface area is two new tiny DITAVAL files, one new CSV
-column, four modified existing scripts, and test extensions in their
-already-paired modules.
+Phase 1 surface area is two new generator-emitted DITAVAL files,
+one new CSV column, four modified existing scripts, and test
+extensions in their already-paired modules.
 
 ## Project Structure
 
@@ -152,47 +169,67 @@ specs/004-gram-audience-tags/
 ### Source Code (repository root)
 
 ```text
-dita/
-├── trainee.ditaval              # unchanged (feature 003)
-├── student-own.ditaval          # NEW — excludes audience='trainee' AND audience='own'
-└── student-other.ditaval        # NEW — excludes audience='trainee' AND audience='other'
-
 extract_to_csv.py                # MODIFIED — strip trailing [xxx] groups from the
                                  #   gram-descriptor right-hand side, write into the
-                                 #   new `audience` column; write the 17th column
+                                 #   new `audience` column; write the 16th column
                                  #   header into every emitted CSV
 generate_dita.py                 # MODIFIED — read `audience` column with empty default,
                                  #   assert consistency across same-gram rows, emit
                                  #   `audience="…"` attribute on the topicref in
                                  #   `emit_main_ditamap` and `emit_test_ditamap`, log
-                                 #   per-publication tag counts
+                                 #   per-publication tag counts; rename
+                                 #   `write_trainee_ditaval` → `write_ditaval_profiles`
+                                 #   and emit three files (trainee, student-own,
+                                 #   student-other) next to the ditamaps
 publish_html.py                  # MODIFIED — replace single student edition with
                                  #   student-own + student-other, three DITA-OT runs
                                  #   per ditamap, html/instructor/ +
                                  #   html/student-own/ + html/student-other/ layout,
-                                 #   new three-link shared html/index.html
+                                 #   new three-link shared html/index.html; require
+                                 #   all three DITAVAL profiles to exist in the dita
+                                 #   staging tree (refuse to build otherwise)
 mock_pptx.py                     # MODIFIED — remove the No-FR publication entry,
                                  #   plant `[-own]` and `[-other]` markers on the last
                                  #   two grams of Week 3's second slide for a fixed seed
 
-source.csv                       # REGENERATED — adds 17th `audience` column;
+source.csv                       # REGENERATED — adds 16th `audience` column;
                                  #   No-FR rows removed; Week 3 rows for the two
                                  #   tagged grams carry `-own` / `-other` cells
 
 tests/
 ├── test_extract_to_csv.py       # EXTENDED — assert trailing-[xxx] stripping into
                                  #   the audience column, multi-bracket concatenation,
-                                 #   17th-column header emission
+                                 #   16th-column header emission
 ├── test_generate_dita.py        # EXTENDED — assert topicref `audience=` emission,
                                  #   per-gram consistency error, audience-tagged
-                                 #   topicrefs in both main and progress-test ditamaps
-└── test_publish_html.py         # EXTENDED — assert three-edition folder layout,
+                                 #   topicrefs in both main and progress-test ditamaps,
+                                 #   `write_ditaval_profiles` emits all three files
+├── test_publish_html.py         # EXTENDED — assert three-edition folder layout,
                                  #   Week 3 substitution count parity, idempotency
                                  #   across all three editions, "no fr" absence
+├── test_mock_pptx.py            # MODIFIED — delete
+                                 #   `test_no_fr_variant_drops_fr_prefix` (the
+                                 #   publication it tested is gone); add an
+                                 #   assertion that Week 3's penultimate and last
+                                 #   gram on slide 2 carry `[-other]` and `[-own]`
+└── web/
+    ├── student-edition.test.js  # REWRITTEN — split into student-own + student-other
+                                 #   variants; each block asserts its edition's
+                                 #   index hides exactly the expected Week 3 gram
+                                 #   and the other student edition's gram is visible
+    └── instructor-edition.test.js
+                                 # MODIFIED — URL-parity check now compares each
+                                 #   student edition's surviving paths to the
+                                 #   instructor edition (was: single student-vs-
+                                 #   instructor comparison)
 
 specs/001-pptx-dita-migration/contracts/csv-schema.md
-                                 # MODIFIED — add row for column 17 (`audience`),
-                                 #   note backward-compat behaviour for 16-column CSVs
+                                 # MODIFIED — drop the stale `analysis_docx_path`
+                                 #   row (column 14 — never present in extractor
+                                 #   output), renumber `wav_treatment`/`warnings`
+                                 #   to columns 14/15, and add a row for column 16
+                                 #   (`audience`) with backward-compat note for
+                                 #   15-column CSVs
 ```
 
 `introspect_pptx.py`, `publish_html.py`'s upstream contract for
@@ -204,11 +241,13 @@ resulting source-tree changes are committed together with the
 generator change.
 
 **Structure Decision**: Same flat repository root as features 001 /
-002 / 003 — four existing scripts edited, two new DITAVAL files added
-to the DITA source tree, no new directories at the project root. The
-three-edition shape lives entirely inside `publish_html.py`'s logic
-plus the output tree layout; the DITA source tree stays single-rooted
-(carried over from feature 003's FR-013).
+002 / 003 — four existing scripts edited, no new directories at the
+project root, and no new committed source files under `dita/` (the
+two new DITAVAL profiles are generator-emitted into the staging tree,
+same as `trainee.ditaval` already is). The three-edition shape lives
+entirely inside `publish_html.py`'s logic plus the output tree
+layout; the DITA source tree stays single-rooted (carried over from
+feature 003's FR-013).
 
 ## Complexity Tracking
 

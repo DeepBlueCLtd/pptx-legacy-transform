@@ -85,18 +85,24 @@ trailing brackets travel into `audience`.
 
 ## R2. CSV column placement and forward compatibility
 
-**Decision**: Append a 17th column named `audience` to the right of
+**Decision**: Append a 16th column named `audience` to the right of
 the existing `warnings` column. Update
 `specs/001-pptx-dita-migration/contracts/csv-schema.md` to document
-the new column. The generator's CSV reader treats a missing 17th
-column (a legacy 16-column CSV) as if every row had an empty 17th
-cell.
+the new column (and, in the same edit pass, drop the stale
+`analysis_docx_path` row that has never matched the actual extractor
+output — it was carried in the contract from an earlier design pass
+but never wired into `CSV_COLUMNS` in `extract_to_csv.py`). The
+generator's CSV reader treats a missing 16th column (a legacy
+15-column CSV) as if every row had an empty 16th cell.
 
 **Rationale**: Appending at the right edge is the minimum-impact
 change to the column order. Older CSVs (e.g. a hand-edited copy
-predating this feature) round-trip cleanly: read as 16 columns,
-write as 17 with empty audience cells. No flag-day migration, no
-versioning column.
+predating this feature) round-trip cleanly: read as 15 columns,
+write as 16 with empty audience cells. No flag-day migration, no
+versioning column. The `analysis_docx_path` cleanup is in-scope here
+because the new column's documented position only makes sense once
+the stale row is removed — otherwise the doc would claim `audience`
+sits at position 17 when the on-disk column count says 16.
 
 The DictReader/DictWriter pair already in use by the extractor and
 generator handles missing trailing keys gracefully when fed an
@@ -193,18 +199,22 @@ agree across the group.
 
 ## R5. DITAVAL profile composition for the three editions
 
-**Decision**: The `dita/` tree carries three DITAVAL profiles:
+**Decision**: The DITA generator emits three DITAVAL profiles into
+its output directory (next to the ditamaps) — none are committed
+source files. The function `generate_dita.write_trainee_ditaval` is
+renamed to `write_ditaval_profiles` and writes all three files in
+one pass:
 
-- `dita/trainee.ditaval` — unchanged from feature 003, excludes
-  `audience='trainee'`. Not directly used by the publisher in this
-  feature (its rule is composed into the two new files), but kept
-  in place so the feature-003 contract still resolves on read.
-- `dita/student-own.ditaval` (NEW) — excludes
-  `audience='trainee'` *and* `audience='own'`. Used to render
-  `html/student-own/`.
-- `dita/student-other.ditaval` (NEW) — excludes
-  `audience='trainee'` *and* `audience='other'`. Used to render
-  `html/student-other/`.
+- `trainee.ditaval` — excludes `audience='trainee'`. Unchanged in
+  shape from feature 003, but now emitted as one of three siblings
+  rather than the sole DITAVAL file. Kept in place so the feature-
+  003 contract still resolves on read; the publisher does not
+  reference it directly in this feature (the trainee rule is
+  composed into the two student profiles).
+- `student-own.ditaval` (NEW) — excludes `audience='trainee'` *and*
+  `audience='own'`. Used to render `html/student-own/`.
+- `student-other.ditaval` (NEW) — excludes `audience='trainee'`
+  *and* `audience='other'`. Used to render `html/student-other/`.
 
 Each new file is two `<prop>` lines:
 
@@ -234,9 +244,13 @@ without the negation sign.
 
 **Alternatives considered**:
 
-- *Generate the DITAVAL files at publish time from a Python list*.
-  Rejected — hides a content-shaped artefact in code (same reasoning
-  as feature 003's R10 for `trainee.ditaval`).
+- *Commit the DITAVAL files under `dita/` as source artefacts*.
+  Rejected — feature 003 already established that `trainee.ditaval`
+  is generator-emitted (see `generate_dita.write_trainee_ditaval`),
+  and committing the two new profiles would split the DITAVAL
+  population across two sources (one generated, two committed) for
+  no benefit. Generating all three from one function in the
+  generator keeps the audience contract single-sourced.
 - *One DITAVAL file with all three rules and per-edition `<revprop>`
   filtering*. Rejected — DITA-OT's `--filter` flag takes one file
   per build; we'd still need to emit three profiles or run three
@@ -414,17 +428,17 @@ audience = (row.get("audience") or "").strip()
 audience = " ".join(audience.split())   # normalise internal whitespace
 ```
 
-A row with no `audience` key (legacy 16-column CSV) yields `""`.
-The extractor's CSV writer (`csv.DictWriter`) emits the 17th column
+A row with no `audience` key (legacy 15-column CSV) yields `""`.
+The extractor's CSV writer (`csv.DictWriter`) emits the 16th column
 header on every produced CSV; the value on each row is the
 parsed-and-normalised audience string (or `""` if no tag was
 present in the descriptor).
 
-The `EXPECTED_COLUMNS` constant at the top of `extract_to_csv.py`
-(today: 16 entries) gains `"audience"` as its 17th entry, and the
-generator's column-count check is updated to accept both 16- and
-17-column CSVs (a 16-column CSV is treated as having an implicit
-empty 17th column).
+The `CSV_COLUMNS` constant at the top of `extract_to_csv.py`
+(today: 15 entries) gains `"audience"` as its 16th entry, and the
+generator's column-count check is updated to accept both 15- and
+16-column CSVs (a 15-column CSV is treated as having an implicit
+empty 16th column).
 
 **Rationale**: The whitespace normalisation handles the human-edit
 edge case (the spec explicitly calls out that re-runs over a
@@ -434,23 +448,23 @@ lever — older CSVs round-trip without manual migration.
 
 **Alternatives considered**:
 
-- *Require all CSVs to have 17 columns and emit a migration tool*.
+- *Require all CSVs to have 16 columns and emit a migration tool*.
   Rejected — over-engineering for a one-column change. The Python
   CSV libraries already handle missing trailing keys gracefully.
-- *Use a non-DictReader column-position reader and pin column 17
+- *Use a non-DictReader column-position reader and pin column 16
   explicitly*. Rejected — DictReader is what the existing code uses;
   a position-pinned reader would be inconsistent with the rest of
   the pipeline.
 
 ---
 
-## R11. Testing strategy — extend three existing test modules
+## R11. Testing strategy — extend four existing test modules + two web tests
 
 **Decision**:
 
 - `tests/test_extract_to_csv.py` gains assertions for:
   - The new `audience` column is emitted in every produced CSV
-    header (17 columns).
+    header (16 columns).
   - A descriptor of the form `"Gram 7: FR Vessel [-own]"` produces
     `vessel_name="FR Vessel"` and `audience="-own"` on every row of
     gram 7.
@@ -469,10 +483,14 @@ lever — older CSVs round-trip without manual migration.
   - Two CSV rows of the same gram with conflicting `audience` values
     raise a named exception (the exception message mentions the
     publication, chapter, and gram_id).
-  - The generator accepts a 16-column legacy CSV (no audience
+  - The generator accepts a 15-column legacy CSV (no audience
     column) and emits topicrefs with no audience attribute on any.
   - An unknown audience token (e.g. `-foo`) is emitted verbatim and
     a WARNING is logged.
+  - `write_ditaval_profiles` writes three files
+    (`trainee.ditaval`, `student-own.ditaval`, `student-other.ditaval`)
+    to the output directory and each has the expected `<prop>` rules
+    (see R5).
 
 - `tests/test_publish_html.py` gains assertions for:
   - After a publish run, the directories
@@ -490,16 +508,58 @@ lever — older CSVs round-trip without manual migration.
   - Idempotency: two consecutive publish runs against the same DITA
     source produce byte-identical files under `html/` across all
     three editions.
+  - The publisher refuses to build if any of the three required
+    DITAVAL profiles is missing from the staging tree (a previously-
+    trainee-only check, now generalised over the trio).
 
-No new test modules. No new fixture corpus — the existing mock
-corpus (with the changes from R7) is the fixture.
+- `tests/test_mock_pptx.py` changes:
+  - Delete `test_no_fr_variant_drops_fr_prefix` — its target
+    publication (`Instructor Progress Test 3 Grams No FR`) is
+    removed from `PUBLICATIONS` in this feature. The `no_fr` field
+    and the `"FR "` prefix logic remain in `mock_pptx.py` (per R7)
+    so future re-introduction is cheap, but the test currently
+    relies on a publication that does not exist.
+  - Add `test_week_3_carries_audience_markers`: build the mock
+    Week 3 PPTX with the fixed seed, parse its second grams slide,
+    assert the second-to-last gram's descriptor ends with `[-other]`
+    and the last gram's descriptor ends with `[-own]`.
 
-**Rationale**: The three affected scripts each already have a paired
-test module; extending those keeps the test suite's flat structure
-and matches the convention features 001 / 002 / 003 established.
+- `tests/web/student-edition.test.js` is REWRITTEN: the existing
+  single-edition block becomes two describe-blocks, one per nation:
+  - `describe("student-own edition", …)` — load
+    `html/student-own/progress-test-3/index.html`, assert the
+    `-own`-tagged gram is absent from the index links, assert the
+    `-other`-tagged gram is present.
+  - `describe("student-other edition", …)` — load
+    `html/student-other/progress-test-3/index.html`, symmetric
+    assertions.
+
+- `tests/web/instructor-edition.test.js` URL-parity test:
+  - Replace the single `for each surviving student path, assert
+    instructor has the same path` check with two passes (one for
+    each student edition).
+  - The instructor edition continues to assert it sees every gram
+    (the union of surviving paths across both student editions).
+
+No new Python test modules. No new fixture corpus — the existing
+mock corpus (with the changes from R7) is the fixture.
+
+**Rationale**: Each affected script already has a paired test
+module; extending those keeps the test suite's flat structure and
+matches the convention features 001 / 002 / 003 established. The
+web-test rewrite is mechanical (the existing
+`student-edition.test.js` and `instructor-edition.test.js` files
+both target a single student edition that no longer exists — they
+must be reshaped to match the new three-edition layout regardless
+of how the assertions evolve).
 
 **Alternatives considered**:
 
 - *Add a new `test_audience_column.py`*. Rejected — splits per-
   feature concerns across files in a way the existing module layout
   does not.
+- *Keep `tests/web/student-edition.test.js` as a single block that
+  iterates over the two student editions*. Rejected — the loop
+  obscures which assertions are nation-specific versus shared, and
+  the per-edition describe-blocks read more naturally in the
+  Jest/Vitest output.
