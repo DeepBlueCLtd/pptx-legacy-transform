@@ -99,24 +99,27 @@ def extract_run_hyperlink(run) -> tuple[str | None, str]:
 
 
 def extract_shape_hyperlink(shape) -> tuple[str | None, str]:
-    """Return ``(target, "shape-level")`` or ``(None, "")`` for a shape click action."""
+    """Return ``(target, "shape-level")`` or ``(None, "")`` for a shape click action.
+
+    Searches every descendant ``p:cNvPr`` so the lookup works regardless
+    of the shape's outer XML wrapper — ``p:sp`` (autoshape/textbox),
+    ``p:pic`` (picture), ``p:cxnSp`` (connector), or ``p:graphicFrame``
+    (chart/table/etc.). Pictures with shape-level clicks were
+    previously invisible to this walker.
+    """
     try:
-        nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
-        if nv_sp_pr is None:
-            return (None, "")
-        c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
-        if c_nv_pr is None:
-            return (None, "")
-        hlink = c_nv_pr.find(qn("a:hlinkClick"))
-        if hlink is None:
-            return (None, "")
-        rel_id = hlink.get(qn("r:id"))
-        if not rel_id:
-            return (None, "")
-        target = shape.part.rels[rel_id].target_ref
-        if not target:
-            return (None, "")
-        return (target, "shape-level")
+        for c_nv_pr in shape._element.iter(qn("p:cNvPr")):
+            hlink = c_nv_pr.find(qn("a:hlinkClick"))
+            if hlink is None:
+                continue
+            rel_id = hlink.get(qn("r:id"))
+            if not rel_id:
+                continue
+            target = shape.part.rels[rel_id].target_ref
+            if not target:
+                continue
+            return (target, "shape-level")
+        return (None, "")
     except Exception:
         return (None, "")
 

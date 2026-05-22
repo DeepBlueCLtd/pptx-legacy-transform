@@ -247,25 +247,26 @@ class GramPlaceholder:
 def _shape_level_hyperlink(shape) -> str | None:
     """Return the shape-level hyperlink target, or None.
 
-    Walks the lxml element so we don't depend on python-pptx exposing a
-    high-level accessor (it doesn't, for shape-level clicks).
+    Walks the lxml element directly so we don't depend on python-pptx
+    exposing a high-level accessor (it doesn't, for shape-level clicks).
+    Searches every descendant ``p:cNvPr`` so the lookup works regardless
+    of the shape's outer XML wrapper — ``p:sp`` (autoshape/textbox),
+    ``p:pic`` (picture), ``p:cxnSp`` (connector), or
+    ``p:graphicFrame`` (chart/table/etc.). The actual ``a:hlinkClick``
+    always sits under ``cNvPr`` regardless of wrapper.
     """
-    nv_sp_pr = shape._element.find(qn("p:nvSpPr"))
-    if nv_sp_pr is None:
-        return None
-    c_nv_pr = nv_sp_pr.find(qn("p:cNvPr"))
-    if c_nv_pr is None:
-        return None
-    hlink = c_nv_pr.find(qn("a:hlinkClick"))
-    if hlink is None:
-        return None
-    rel_id = hlink.get(qn("r:id"))
-    if not rel_id:
-        return None
-    try:
-        return shape.part.rels[rel_id].target_ref
-    except KeyError:
-        return None
+    for c_nv_pr in shape._element.iter(qn("p:cNvPr")):
+        hlink = c_nv_pr.find(qn("a:hlinkClick"))
+        if hlink is None:
+            continue
+        rel_id = hlink.get(qn("r:id"))
+        if not rel_id:
+            continue
+        try:
+            return shape.part.rels[rel_id].target_ref
+        except KeyError:
+            continue
+    return None
 
 
 def _run_hyperlinks_in_shape(shape) -> list[tuple[str, str]]:
@@ -390,26 +391,40 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             continue
         headers.append((shape, href))
 
-    # 2) Identify candidate Lofar boxes (text frame with at least one .glc run).
-    # Every Lofar text-run hyperlink in the audited corpus targets a .glc;
-    # anything else is anomalous and surfaced rather than silently kept.
+    # 2) Identify candidate Lofar shapes — shapes whose hyperlink targets
+    #    a .glc. Two authoring styles both occur in the legacy corpus:
+    #      (a) text-bearing shapes (autoshape/textbox) with the .glc
+    #          hyperlink on a text *run* — the common case;
+    #      (b) picture shapes with the .glc hyperlink at the shape level
+    #          — used for at least one gram per slide in some decks
+    #          (e.g. the gram whose analysis sheet is "V III .doc").
     candidates: list[tuple[object, list[tuple[str, str]]]] = []
     header_ids = {id(s) for s, _ in headers}
     for shape in leaves:
         if id(shape) in header_ids:
             continue
-        pairs = _run_hyperlinks_in_shape(shape)
-        if not pairs:
-            continue
         keep: list[tuple[str, str]] = []
-        for t, h in pairs:
-            if h.lower().endswith(".glc"):
-                keep.append((t, h))
+        # (a) text-run .glc hyperlinks
+        for text, href in _run_hyperlinks_in_shape(shape):
+            if href.lower().endswith(".glc"):
+                keep.append((text, href))
             else:
                 LOGGER.warning(
                     "Lofar text run hyperlinks to a non-.glc target (%r); "
-                    "expected .glc — row dropped", h,
+                    "expected .glc — row dropped", href,
                 )
+        # (b) shape-level .glc hyperlink (picture-style). Skip vestigial
+        # absolute file:/// URIs the same way the header step does.
+        shape_href = _shape_level_hyperlink(shape)
+        if (
+            shape_href
+            and shape_href.lower().endswith(".glc")
+            and not shape_href.lower().startswith("file:///")
+        ):
+            display = ""
+            if getattr(shape, "has_text_frame", False):
+                display = (shape.text_frame.text or "").strip()
+            keep.append((display, shape_href))
         if keep:
             candidates.append((shape, keep))
 
