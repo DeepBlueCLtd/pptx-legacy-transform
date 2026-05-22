@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -265,15 +264,9 @@ def render_per_gram(
             lines.append(f"-- Slide {slide_num} (no grams — framing or anomalous) --")
             continue
         lines.append(f"-- Slide {slide_num} ({len(grams)} grams) --")
-        # Sort grams by the leading integer of gram_id so "2" precedes
-        # "10" (lexicographic would reverse them), falling back to
-        # vessel name when ids are missing or equal.
-        def _sort_key(g):
-            m = re.match(r"\d+", g.gram_id or "")
-            num = int(m.group(0)) if m else float("inf")
-            return (num, _collapse_ws(g.vessel_name).lower())
-        grams_sorted = sorted(grams, key=_sort_key)
-        for idx, g in enumerate(grams_sorted, start=1):
+        # Grams already arrive sorted by gram_id from extract_grams_from_slide;
+        # CSV and report agree on order.
+        for idx, g in enumerate(grams, start=1):
             title_bits = [g.gram_id or "(no id)"]
             if g.vessel_name:
                 title_bits.append(_collapse_ws(g.vessel_name))

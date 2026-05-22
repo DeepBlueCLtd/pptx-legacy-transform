@@ -708,6 +708,16 @@ def extract_grams_from_slide(
             png_href=analysis_href,
             glc_links=glc_links,
         ))
+
+    # Sort by leading-integer gram_id so "2" precedes "10" (lexicographic
+    # would reverse them). Falls back to vessel name when ids are
+    # missing or equal. Determines both CSV row order and the report's
+    # per-gram listing — single source of truth for ordering.
+    def _gram_sort_key(g: GramPlaceholder) -> tuple[float, str]:
+        m = re.match(r"\d+", g.gram_id or "")
+        num = float(m.group(0)) if m else float("inf")
+        return (num, (g.vessel_name or "").lower())
+    grams.sort(key=_gram_sort_key)
     return grams
 
 
