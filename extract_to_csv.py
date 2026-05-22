@@ -32,7 +32,7 @@ from pptx.oxml.ns import qn
 
 
 CSV_COLUMNS: tuple[str, ...] = (
-    "publication", "chapter", "target_doc", "gram_id", "vessel_name", "topic_type",
+    "publication", "chapter", "target_doc", "target_chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
     "time_end", "freq_end", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
 )
@@ -830,6 +830,7 @@ def gram_to_rows(
             "publication": publication,
             "chapter": chapter or "",
             "target_doc": target_doc,
+        "target_chapter": chapter or "",
             "gram_id": gram.gram_id,
             "vessel_name": gram.vessel_name,
             "topic_type": "glc",
@@ -858,6 +859,7 @@ def gram_to_rows(
         "publication": publication,
         "chapter": chapter or "",
         "target_doc": target_doc,
+        "target_chapter": chapter or "",
         "gram_id": gram.gram_id,
         "vessel_name": gram.vessel_name,
         "topic_type": "analysis",
