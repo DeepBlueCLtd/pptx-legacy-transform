@@ -45,11 +45,12 @@ DEFAULT_TEST_PATTERN: str = "progress test"
 FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
 
 # A gram header's shape-level hyperlink must target one of these
-# extensions. The audited legacy corpora use ``analysis sheet.doc`` or
-# the newer ``*ANALYSIS.png`` variant; ``.docx`` is included for forward
-# compatibility with re-authored decks. A ``.glc`` target on a
-# shape-level link is treated as an authoring residue, not a header.
-ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png")
+# extensions. The audited legacy corpora use ``analysis sheet.doc``,
+# the newer ``*ANALYSIS.png`` variant, or a JPG export; ``.docx`` is
+# included for forward compatibility with re-authored decks. A ``.glc``
+# target on a shape-level link is treated as an authoring residue,
+# not a header.
+ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", ".jpeg")
 
 LOGGER = logging.getLogger(__name__)
 
