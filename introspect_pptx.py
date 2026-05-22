@@ -37,6 +37,7 @@ from pptx.oxml.ns import qn
 
 from extract_to_csv import (
     GramPlaceholder,
+    _slide_diagram_hyperlinks,
     extract_grams_from_slide,
     is_framing_slide,
 )
@@ -360,6 +361,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     for i, slide in enumerate(prs.slides, start=1):
         total_slides = i
         all_records.extend(collect_shape_records(slide, slide_number=i))
+        # Synthesize records for SmartArt-embedded hyperlinks so the
+        # raw dump (Section 4) shows them alongside slide-level links.
+        for j, (_text, href) in enumerate(_slide_diagram_hyperlinks(slide)):
+            all_records.append(ShapeRecord(
+                slide_number=i,
+                index=10_000 + j,
+                name="<smartart-diagram>",
+                shape_type="diagram-node",
+                left_in=0.0, top_in=0.0, width_in=0.0, height_in=0.0,
+                text="",
+                shape_hyperlink=href,
+                runs=[],
+            ))
         if is_framing_slide(slide):
             framing_slides.append(i)
             grams_by_slide[i] = []

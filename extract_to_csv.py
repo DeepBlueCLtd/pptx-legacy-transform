@@ -326,6 +326,63 @@ def _iter_leaf_shapes(shapes):
             yield shape
 
 
+def _slide_diagram_hyperlinks(slide) -> list[tuple[str, str]]:
+    """Return ``(display_text, href)`` for every external hyperlink
+    reachable from a SmartArt diagram on ``slide``.
+
+    SmartArt nodes can carry click hyperlinks stored in the diagram's
+    own relationships (``ppt/diagrams/_rels/data1.xml.rels``,
+    ``drawing1.xml.rels``, …), invisible to python-pptx's slide-level
+    shape walks. Walks from the slide's part through any diagram
+    relationships and recurses one level to cover both data1 and
+    drawing1 hyperlink sets. Targets are deduplicated by URI.
+
+    ``display_text`` is left empty — the SmartArt data tree carries
+    per-node text we could correlate, but the folder-key gram match
+    doesn't need it. Add the parse if/when downstream needs labels.
+    """
+    pairs: list[tuple[str, str]] = []
+    seen_targets: set[str] = set()
+    visited: set[int] = set()
+
+    def _is_diagram_part(part) -> bool:
+        try:
+            return "/diagrams/" in str(part.partname).lower()
+        except Exception:
+            return False
+
+    def _walk(part) -> None:
+        if id(part) in visited:
+            return
+        visited.add(id(part))
+        for rel in part.rels.values():
+            if rel.is_external:
+                if rel.reltype.endswith("/hyperlink"):
+                    target = rel.target_ref
+                    if target and target not in seen_targets:
+                        seen_targets.add(target)
+                        pairs.append(("", target))
+                continue
+            try:
+                target_part = rel.target_part
+            except Exception:
+                continue
+            if _is_diagram_part(target_part):
+                _walk(target_part)
+
+    for rel in slide.part.rels.values():
+        if rel.is_external:
+            continue
+        try:
+            target_part = rel.target_part
+        except Exception:
+            continue
+        if _is_diagram_part(target_part):
+            _walk(target_part)
+
+    return pairs
+
+
 def is_framing_slide(slide) -> bool:
     """Return True for welcome / exit slides that should be skipped.
 
@@ -427,6 +484,24 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             keep.append((display, shape_href))
         if keep:
             candidates.append((shape, keep))
+
+    # 2b) SmartArt-embedded .glc hyperlinks. Pulled from the diagram's
+    #     own .rels files (``ppt/diagrams/_rels/...``) rather than the
+    #     slide's, so they're invisible to the per-shape walk above.
+    #     At least one gram per slide in the audited corpus is
+    #     authored as SmartArt (e.g. the gram whose analysis sheet is
+    #     "V III .doc"). Attached to the candidates list as a synthetic
+    #     entry (no associated shape) — the folder-key pairing in
+    #     step 3 doesn't reference the shape.
+    diagram_keep: list[tuple[str, str]] = []
+    for text, href in _slide_diagram_hyperlinks(slide):
+        if not href.lower().endswith(".glc"):
+            continue
+        if href.lower().startswith("file:///"):
+            continue
+        diagram_keep.append((text, href))
+    if diagram_keep:
+        candidates.append((None, diagram_keep))
 
     # 3) Match each .glc to its gram header by shared parent folder on
     #    disk (e.g. both targets live under ``.../Gram001/``). This is
