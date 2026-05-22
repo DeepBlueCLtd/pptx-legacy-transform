@@ -28,35 +28,58 @@ class IntrospectTests(unittest.TestCase):
         TMP.mkdir(parents=True, exist_ok=True)
         corpus = conftest_helpers.make_mock_corpus(TMP / "introspect_mock")
         cls.pptx = conftest_helpers.first_pptx(corpus)
-        cls.report_path = TMP / "introspect_report.txt"
-        rc = introspect_pptx.main(["--input", str(cls.pptx), "--out", str(cls.report_path)])
+        cls.default_path = TMP / "introspect_report_default.txt"
+        cls.verbose_path = TMP / "introspect_report_verbose.txt"
+        rc = introspect_pptx.main(["--input", str(cls.pptx), "--out", str(cls.default_path)])
         assert rc == 0
-        cls.report = cls.report_path.read_text(encoding="utf-8")
+        cls.default_report = cls.default_path.read_text(encoding="utf-8")
+        rc = introspect_pptx.main(
+            ["--input", str(cls.pptx), "--out", str(cls.verbose_path), "--verbose"]
+        )
+        assert rc == 0
+        cls.verbose_report = cls.verbose_path.read_text(encoding="utf-8")
 
     def test_summary_lists_extensions_seen_in_corpus(self) -> None:
         # The Week deck links to .glc, .docx/.png (analysis), and rarely .wav.
-        self.assertIn(".glc:", self.report)
+        self.assertIn(".glc:", self.default_report)
         # At least one of the analysis-sheet extensions must appear.
-        self.assertTrue(".png:" in self.report or ".docx:" in self.report,
+        self.assertTrue(".png:" in self.default_report or ".docx:" in self.default_report,
                         "Expected analysis-sheet extension in summary")
-        self.assertIn("Shape-level hyperlinks:", self.report)
-        self.assertIn("Text-run hyperlinks:", self.report)
+        # New shape-hyperlink split (live vs vestigial) appears in summary.
+        self.assertIn("Shape-level hyperlinks (live):", self.default_report)
+        self.assertIn("Shape-level hyperlinks (vestigial absolute file:///):",
+                      self.default_report)
+        self.assertIn("Text-run hyperlinks:", self.default_report)
+        # Gram-aware counts.
+        self.assertIn("Total grams extracted:", self.default_report)
 
-    def test_per_slide_section_records_position_and_text(self) -> None:
-        section_2 = self.report.split("=== Section 2: Per-slide ===", 1)[1]
-        section_2 = section_2.split("=== Section 3:", 1)[0]
-        self.assertIn("name=", section_2)
-        self.assertIn("type=", section_2)
-        self.assertIn("pos=(", section_2)
-        self.assertIn("hyperlink=", section_2)
+    def test_default_per_gram_section_lists_grams(self) -> None:
+        section_2 = self.default_report.split("=== Section 2: Per-gram ===", 1)[1]
+        # No verbose sections in default mode.
+        self.assertNotIn("=== Section 3:", section_2)
+        self.assertIn("analysis:", section_2)
+        self.assertIn("glc[", section_2)
 
-    def test_hyperlink_targets_section_groups_by_extension(self) -> None:
-        section_3 = self.report.split("=== Section 3: Hyperlink targets ===", 1)[1]
-        self.assertIn("-- .glc --", section_3)
+    def test_default_mode_omits_verbose_sections(self) -> None:
+        self.assertNotIn("=== Section 3: Per-slide", self.default_report)
+        self.assertNotIn("=== Section 4: Hyperlink targets", self.default_report)
+
+    def test_verbose_per_shape_section_records_position_and_text(self) -> None:
+        section_3 = self.verbose_report.split("=== Section 3: Per-slide (verbose) ===", 1)[1]
+        section_3 = section_3.split("=== Section 4:", 1)[0]
+        self.assertIn("name=", section_3)
+        self.assertIn("type=", section_3)
+        self.assertIn("pos=(", section_3)
+        self.assertIn("hyperlink=", section_3)
+
+    def test_verbose_hyperlink_targets_section_groups_by_extension(self) -> None:
+        section_4 = self.verbose_report.split(
+            "=== Section 4: Hyperlink targets (verbose, raw) ===", 1)[1]
+        self.assertIn("-- .glc --", section_4)
         # At least one of the two analysis-sheet extensions must be present.
-        self.assertTrue("-- .png --" in section_3 or "-- .docx --" in section_3)
+        self.assertTrue("-- .png --" in section_4 or "-- .docx --" in section_4)
 
-    def test_slides_filter_restricts_per_slide_section(self) -> None:
+    def test_slides_filter_restricts_per_gram_section(self) -> None:
         path = TMP / "introspect_filtered.txt"
         rc = introspect_pptx.main([
             "--input", str(self.pptx),
@@ -65,10 +88,25 @@ class IntrospectTests(unittest.TestCase):
         ])
         self.assertEqual(rc, 0)
         section_2 = path.read_text(encoding="utf-8").split(
-            "=== Section 2: Per-slide ===", 1)[1].split("=== Section 3:", 1)[0]
+            "=== Section 2: Per-gram ===", 1)[1]
         self.assertIn("Slide 1", section_2)
         # If the deck has more than one slide, slide 2 should be filtered out.
         self.assertNotIn("Slide 2", section_2)
+
+    def test_slides_filter_also_restricts_verbose_sections(self) -> None:
+        path = TMP / "introspect_filtered_verbose.txt"
+        rc = introspect_pptx.main([
+            "--input", str(self.pptx),
+            "--out", str(path),
+            "--slides", "1",
+            "--verbose",
+        ])
+        self.assertEqual(rc, 0)
+        section_3 = path.read_text(encoding="utf-8").split(
+            "=== Section 3: Per-slide (verbose) ===", 1)[1].split(
+            "=== Section 4:", 1)[0]
+        self.assertIn("Slide 1", section_3)
+        self.assertNotIn("Slide 2", section_3)
 
     def test_unexpected_shape_count_is_flagged(self) -> None:
         from pptx import Presentation
