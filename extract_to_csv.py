@@ -347,6 +347,13 @@ def extract_grams_from_slide(slide, slide_num: int) -> list[GramPlaceholder]:
             continue
         if not shape.has_text_frame:
             continue
+        # Skip vestigial overlay shapes whose shape-level hyperlinks point
+        # at absolute file:/// URIs from a long-gone authoring path. The
+        # live header buttons use paths relative to the PPTX; the dead
+        # overlay (e.g. Group 197/Rectangle children) is left over from
+        # earlier authoring iterations and never resolves.
+        if href.lower().startswith("file:///"):
+            continue
         headers.append((shape, href))
 
     # 2) Identify candidate Lofar boxes (text frame with at least one .glc run).
@@ -431,6 +438,9 @@ def _split_descriptor(descriptor: str) -> tuple[str, str]:
     per csv-schema.md so authors can renumber with a bare number when
     refactoring content between chapters.
     """
+    # Collapse runs of whitespace (legacy decks pad gram titles with
+    # multi-space sequences to force in-shape line breaks).
+    descriptor = " ".join(descriptor.split())
     if not descriptor:
         return ("", "")
     left, sep, right = descriptor.partition(":")
