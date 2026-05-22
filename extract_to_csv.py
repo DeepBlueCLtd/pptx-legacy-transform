@@ -275,19 +275,35 @@ def _shape_level_hyperlink(shape) -> str | None:
 def _run_hyperlinks_in_shape(shape) -> list[tuple[str, str]]:
     """Return a list of ``(visible_text, href)`` per hyperlinked text run.
 
-    Only runs whose ``a:hlinkClick`` resolves to an external relationship
-    target are returned. Plain runs without hyperlinks are skipped.
+    When a paragraph contains exactly one hyperlinked run the whole
+    paragraph's combined text is returned as ``visible_text`` — legacy
+    decks frequently split a single label across multiple runs
+    (e.g. ``"Lofar"`` carries the hyperlink, a sibling run carries
+    ``" 2"``), and the user-visible label is the paragraph total.
+
+    When a paragraph carries multiple hyperlinks (the multi-channel
+    "Lofar box" pattern), each link keeps its own run-text as label.
     """
     pairs: list[tuple[str, str]] = []
     if not shape.has_text_frame:
         return pairs
     for paragraph in shape.text_frame.paragraphs:
+        link_runs: list[tuple[object, str]] = []
         for run in paragraph.runs:
             try:
                 href = run.hyperlink.address
             except Exception:
                 href = None
             if href:
+                link_runs.append((run, href))
+        if not link_runs:
+            continue
+        if len(link_runs) == 1:
+            para_text = "".join(r.text or "" for r in paragraph.runs)
+            _, href = link_runs[0]
+            pairs.append((para_text, href))
+        else:
+            for run, href in link_runs:
                 pairs.append((run.text or "", href))
     return pairs
 
