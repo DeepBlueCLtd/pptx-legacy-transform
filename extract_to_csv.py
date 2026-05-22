@@ -38,6 +38,7 @@ CSV_COLUMNS: tuple[str, ...] = (
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
+DEFAULT_FINAL_PATTERN: str = "final assessment"
 
 # Prefixes that identify the welcome / exit framing slides emitted by
 # ``mock_pptx.py``. These slides carry no gram content and must not
@@ -221,14 +222,26 @@ def classify_publication(
     pptx: Path,
     test_pattern: str,
     allocated: dict[str, int],
+    final_pattern: str = "",
+    final_allocated: dict[str, int] | None = None,
 ) -> tuple[str, str | None, str | None]:
     """Return ``(publication, chapter, chapter_slug)`` per R2/R3.
 
     Progress-test PPTXs are detected by case-insensitive substring match
     against the filename. Test numbering is allocated stably in the order
     callers request previously-unseen test PPTXs.
+
+    Final-assessment PPTXs (matched against ``final_pattern`` when
+    non-empty and a separate ``final_allocated`` map is supplied) get
+    their own ``final-assessment-N`` publication prefix. The final
+    pattern is checked first so a filename containing both phrases
+    routes to the final-assessment bucket.
     """
     name = pptx.name.lower()
+    if final_pattern and final_allocated is not None and final_pattern.lower() in name:
+        if pptx.stem not in final_allocated:
+            final_allocated[pptx.stem] = len(final_allocated) + 1
+        return (f"final-assessment-{final_allocated[pptx.stem]}", None, None)
     if test_pattern.lower() in name:
         if pptx.stem not in allocated:
             allocated[pptx.stem] = len(allocated) + 1
@@ -868,6 +881,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--input-root", required=True, type=Path, dest="input_root")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--test-pattern", default=DEFAULT_TEST_PATTERN, dest="test_pattern")
+    parser.add_argument("--final-pattern", default=DEFAULT_FINAL_PATTERN, dest="final_pattern")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("extract.log"))
@@ -880,12 +894,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     pptx_count = 0
     warning_counter: Counter[str] = Counter()
     allocated: dict[str, int] = {}
+    final_allocated: dict[str, int] = {}
 
     try:
         for pptx in walk_pptxs(args.input_root):
             pptx_count += 1
             LOGGER.info("Processing PPTX %s", pptx)
-            publication, chapter, chapter_slug = classify_publication(pptx, args.test_pattern, allocated)
+            publication, chapter, chapter_slug = classify_publication(
+                pptx, args.test_pattern, allocated,
+                args.final_pattern, final_allocated,
+            )
             try:
                 prs = Presentation(pptx)
             except Exception as exc:
