@@ -263,10 +263,23 @@ def render_per_gram(
         if not grams:
             lines.append(f"-- Slide {slide_num} (no grams — framing or anomalous) --")
             continue
-        lines.append(f"-- Slide {slide_num} ({len(grams)} grams) --")
+        # Hide grams that resolved no .glc links — typically the
+        # "student" half of mixed student/instructor decks, where the
+        # gram header exists but its lofar links don't resolve. Counted
+        # in the slide header so the omission stays visible.
+        with_links = [g for g in grams if g.glc_links]
+        hidden = len(grams) - len(with_links)
+        if not with_links:
+            lines.append(
+                f"-- Slide {slide_num} (no grams with lofars; "
+                f"{hidden} header-only gram(s) hidden) --"
+            )
+            continue
+        suffix = f"; {hidden} header-only hidden" if hidden else ""
+        lines.append(f"-- Slide {slide_num} ({len(with_links)} grams{suffix}) --")
         # Grams already arrive sorted by gram_id from extract_grams_from_slide;
         # CSV and report agree on order.
-        for idx, g in enumerate(grams, start=1):
+        for idx, g in enumerate(with_links, start=1):
             title_bits = [g.gram_id or "(no id)"]
             if g.vessel_name:
                 title_bits.append(_collapse_ws(g.vessel_name))
