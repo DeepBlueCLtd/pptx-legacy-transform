@@ -32,7 +32,7 @@ from pptx.oxml.ns import qn
 
 
 CSV_COLUMNS: tuple[str, ...] = (
-    "publication", "chapter", "gram_id", "vessel_name", "topic_type",
+    "publication", "chapter", "target_doc", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
     "time_end", "freq_end", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
 )
@@ -791,6 +791,7 @@ def gram_to_rows(
     chapter_slug: str | None,
     content_root: Path,
     source_dir: Path,
+    target_doc: str = "",
 ) -> list[dict]:
     """Expand one gram into N+1 CSV rows (N GLC links + 1 analysis row)."""
     rows: list[dict] = []
@@ -828,6 +829,7 @@ def gram_to_rows(
         rows.append({
             "publication": publication,
             "chapter": chapter or "",
+            "target_doc": target_doc,
             "gram_id": gram.gram_id,
             "vessel_name": gram.vessel_name,
             "topic_type": "glc",
@@ -855,6 +857,7 @@ def gram_to_rows(
     rows.append({
         "publication": publication,
         "chapter": chapter or "",
+        "target_doc": target_doc,
         "gram_id": gram.gram_id,
         "vessel_name": gram.vessel_name,
         "topic_type": "analysis",
@@ -941,6 +944,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     gram_rows = gram_to_rows(
                         gram, publication, chapter, chapter_slug,
                         args.input_root, source_dir=pptx.parent,
+                        target_doc=pptx.name,
                     )
                     rows.extend(gram_rows)
                     for r in gram_rows:
