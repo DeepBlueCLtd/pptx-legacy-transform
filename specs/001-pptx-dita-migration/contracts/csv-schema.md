@@ -32,9 +32,10 @@ generator never re-reads PPTX or GLC files.
 | 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 13 | `png_path` | string | yes | path of the asset to copy next to the topic, resolved relative to `--image-root`. For GLC rows it is the file named by the `.glc`'s inner `<data_source><filename>` element — a `.png` (~82% of grams) or `.jpg` for a pre-rendered spectrogram, or a `.wav` (~18%) when the `.glc` configures the on-PC viewer to render live from audio. The downstream generator dispatches on the extension (see `dita-topic-schema.md` §1.2/§1.3): image extensions embed inline; `.wav` triggers the GLC-viewer-link branch which copies the `.glc` + `.wav` pair side-by-side. For analysis rows it is the gram folder's `Analysis.png` after FR-023 normalisation. May be empty when the asset is missing or the renderer failed. |
-| 14 | `analysis_docx_path` | string | yes (non-analysis rows; analysis rows when renderer failed) | resolved relative to `--image-root`; populated for analysis rows from the gram folder's `Analysis Sheet.docx` after FR-023 normalisation. Carried for the author's review trail; the generator does not consume it. |
-| 15 | `wav_treatment` | enum | yes | **Deprecated.** Originally collected an author decision (`screenshot` / `gaps-lite` / `TBD`) for rows whose GLC referenced a `.wav`. The current contract dispatches purely on `png_path`'s extension (`dita-topic-schema.md` §1) so no author decision is required; the column is retained only so older CSVs round-trip cleanly. The extractor leaves it empty and the generator ignores it. |
-| 16 | `warnings` | string | yes | comma-joined, free-form |
+| 14 | `file_size` | string | yes | decimal byte count of the file at `png_path`, captured during extraction (`Path.stat().st_size`). Populated whenever `png_path` resolves to an on-disk file (both GLC and analysis rows). Empty when `png_path` is empty or unresolvable. Surfaces duplicate assets across publications during human review — two rows pointing at byte-identical files share a `file_size`, regardless of any naming drift. The generator does not consume it; the author uses it to spot duplicate grams before signing off the CSV (delete the duplicate rows, or clear `topic_filename` to mark "do not process"). |
+| 15 | `analysis_docx_path` | string | yes (non-analysis rows; analysis rows when renderer failed) | resolved relative to `--image-root`; populated for analysis rows from the gram folder's `Analysis Sheet.docx` after FR-023 normalisation. Carried for the author's review trail; the generator does not consume it. |
+| 16 | `wav_treatment` | enum | yes | **Deprecated.** Originally collected an author decision (`screenshot` / `gaps-lite` / `TBD`) for rows whose GLC referenced a `.wav`. The current contract dispatches purely on `png_path`'s extension (`dita-topic-schema.md` §1) so no author decision is required; the column is retained only so older CSVs round-trip cleanly. The extractor leaves it empty and the generator ignores it. |
+| 17 | `warnings` | string | yes | comma-joined, free-form |
 
 ## Row identity
 
@@ -102,10 +103,10 @@ preserved; the writer never normalises numerics.
 ### Single-gram, two GLC links, one analysis PNG
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,12,Nordik Jockey,glc,1,gram_12.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,,,
-main,Nordic Fishing Vessels,12,Nordik Jockey,glc,2,gram_12.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,,,
-main,Nordic Fishing Vessels,12,Nordik Jockey,analysis,1,gram_12.dita,,,,,,Gram 12/Analysis.png,Gram 12/Analysis Sheet.docx,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,file_size,analysis_docx_path,wav_treatment,warnings
+main,Nordic Fishing Vessels,12,Nordik Jockey,glc,1,gram_12.dita,LOFAR 1,supporting/gram12/config_1.glc,supporting/gram12/config_1.glc,271,400,images/gram12.png,18432,,,
+main,Nordic Fishing Vessels,12,Nordik Jockey,glc,2,gram_12.dita,LOFAR 2,supporting/gram12/config_2.glc,supporting/gram12/config_2.glc,180,400,images/gram12.png,18432,,,
+main,Nordic Fishing Vessels,12,Nordik Jockey,analysis,1,gram_12.dita,,,,,,Gram 12/Analysis.png,9216,Gram 12/Analysis Sheet.docx,,
 ```
 
 All three rows share `topic_filename=gram_12.dita`; the generator merges
@@ -115,9 +116,9 @@ GramFrame tables.
 ### Progress-test gram with a missing GLC
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-progress-test-1,,3,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,"GLC not found"
-progress-test-1,,3,,analysis,1,gram_03.dita,,,,,,Gram 03/Analysis.png,Gram 03/Analysis Sheet.docx,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,file_size,analysis_docx_path,wav_treatment,warnings
+progress-test-1,,3,,glc,1,gram_03.dita,LOFAR 1,supporting/gram03/config.glc,supporting/gram03/config.glc,,,images/gram03.png,,,,"GLC not found"
+progress-test-1,,3,,analysis,1,gram_03.dita,,,,,,Gram 03/Analysis.png,9216,Gram 03/Analysis Sheet.docx,,
 ```
 
 ### GLC whose inner `data_source/filename` is `.wav` — GLC-viewer link
@@ -130,13 +131,13 @@ extension and emits a §1.3 GLC-viewer link block, copying both
 the `.glc` and the `.wav` next to the topic.
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Arctic Survey,5,Arctic Surveyor,glc,1,gram_05.dita,Lofar 1,supporting/gram05/config_1.glc,supporting/gram05/config_1.glc,180,400,supporting/gram05/audio_clip.wav,,,
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,file_size,analysis_docx_path,wav_treatment,warnings
+main,Arctic Survey,5,Arctic Surveyor,glc,1,gram_05.dita,Lofar 1,supporting/gram05/config_1.glc,supporting/gram05/config_1.glc,180,400,supporting/gram05/audio_clip.wav,808,,,
 ```
 
 ### Analysis row whose docx→png render failed
 
 ```csv
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,analysis_docx_path,wav_treatment,warnings
-main,Nordic Fishing Vessels,17,,analysis,1,gram_17.dita,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,file_size,analysis_docx_path,wav_treatment,warnings
+main,Nordic Fishing Vessels,17,,analysis,1,gram_17.dita,,,,,,,,Gram 17/Analysis Sheet.docx,,"analysis renderer failed: docx→png"
 ```
