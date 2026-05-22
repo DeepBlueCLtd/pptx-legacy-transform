@@ -6,7 +6,7 @@
 ## Summary
 
 Carry per-gram exclude-audience tags (`-own`, `-other`, …) from the
-PPTX through a new 16th CSV column `audience` and out to an
+PPTX through a new 17th CSV column `audience` and out to an
 `audience="…"` attribute on the gram's topicref inside each ditamap.
 Replace feature 003's single student edition with two nation-specific
 student editions (`student-own` excluding `-trainee -own`,
@@ -17,7 +17,7 @@ the mock corpus generator — the per-gram tag is what makes the
 duplication unnecessary.
 
 No new Python dependencies. The CSV contract gains exactly one new
-column appended at the right edge (16th column, position after
+column appended at the right edge (17th column, position after
 `warnings`). The DITA generator gains two new DITAVAL profiles
 (`student-own.ditaval`, `student-other.ditaval`) which it emits at
 build time alongside the existing `trainee.ditaval` — the publisher
@@ -46,7 +46,7 @@ its built-in DITAVAL filtering mechanism (the `--filter=` CLI flag,
 same mechanism feature 003 introduced). No DITA-OT plugin or
 extension.
 
-**Storage**: Filesystem only. `source.csv` gains one column (16th).
+**Storage**: Filesystem only. `source.csv` gains one column (17th).
 The DITA generator emits two new DITAVAL profiles into its output
 directory alongside the existing `trainee.ditaval` (no new committed
 source files under `dita/` — all three profiles are build artefacts,
@@ -132,7 +132,7 @@ principles that features 001, 002, and 003 honour also hold here:
   DITAVAL profile was applied per edition (carried over from feature
   003's FR-011).
 - **Versioning / breaking changes**: The CSV column appendage is
-  forward-compatible (a 15-column legacy CSV reads as if the 16th
+  forward-compatible (a 16-column legacy CSV reads as if the 17th
   cell were empty on every row). The output tree's student
   subdirectory name changes — `html/student/` → `html/student-own/` +
   `html/student-other/`. This is documented as an edge case in the
@@ -171,7 +171,7 @@ specs/004-gram-audience-tags/
 ```text
 extract_to_csv.py                # MODIFIED — strip trailing [xxx] groups from the
                                  #   gram-descriptor right-hand side, write into the
-                                 #   new `audience` column; write the 16th column
+                                 #   new `audience` column; write the 17th column
                                  #   header into every emitted CSV
 generate_dita.py                 # MODIFIED — read `audience` column with empty default,
                                  #   assert consistency across same-gram rows, emit
@@ -192,14 +192,14 @@ mock_pptx.py                     # MODIFIED — remove the No-FR publication ent
                                  #   plant `[-own]` and `[-other]` markers on the last
                                  #   two grams of Week 3's second slide for a fixed seed
 
-source.csv                       # REGENERATED — adds 16th `audience` column;
+source.csv                       # REGENERATED — adds 17th `audience` column;
                                  #   No-FR rows removed; Week 3 rows for the two
                                  #   tagged grams carry `-own` / `-other` cells
 
 tests/
 ├── test_extract_to_csv.py       # EXTENDED — assert trailing-[xxx] stripping into
                                  #   the audience column, multi-bracket concatenation,
-                                 #   16th-column header emission
+                                 #   17th-column header emission
 ├── test_generate_dita.py        # EXTENDED — assert topicref `audience=` emission,
                                  #   per-gram consistency error, audience-tagged
                                  #   topicrefs in both main and progress-test ditamaps,
@@ -225,11 +225,13 @@ tests/
 
 specs/001-pptx-dita-migration/contracts/csv-schema.md
                                  # MODIFIED — drop the stale `analysis_docx_path`
-                                 #   row (column 14 — never present in extractor
-                                 #   output), renumber `wav_treatment`/`warnings`
-                                 #   to columns 14/15, and add a row for column 16
-                                 #   (`audience`) with backward-compat note for
-                                 #   15-column CSVs
+                                 #   row (never present in extractor output;
+                                 #   reintroduced upstream by an unrelated main
+                                 #   merge that also added `file_size`), keep
+                                 #   `file_size` at column 14 and `wav_treatment`
+                                 #   /`warnings` at 15/16, and add a row for
+                                 #   column 17 (`audience`) with backward-compat
+                                 #   note for 16-column CSVs
 ```
 
 `introspect_pptx.py`, `publish_html.py`'s upstream contract for

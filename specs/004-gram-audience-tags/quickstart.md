@@ -55,7 +55,7 @@ Verify the new `audience` column landed on every row:
 
 ```bash
 head -1 source.csv | tr ',' '\n' | nl
-# Expect line 16: audience
+# Expect line 17: audience
 ```
 
 Verify the Week 3 tagged grams carry the values:

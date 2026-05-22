@@ -34,7 +34,7 @@ from typing import Iterable
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
+    "time_end", "freq_end", "png_path", "file_size", "wav_treatment", "warnings",
 )
 
 LOGGER = logging.getLogger(__name__)

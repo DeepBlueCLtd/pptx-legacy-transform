@@ -85,24 +85,25 @@ trailing brackets travel into `audience`.
 
 ## R2. CSV column placement and forward compatibility
 
-**Decision**: Append a 16th column named `audience` to the right of
+**Decision**: Append a 17th column named `audience` to the right of
 the existing `warnings` column. Update
 `specs/001-pptx-dita-migration/contracts/csv-schema.md` to document
 the new column (and, in the same edit pass, drop the stale
 `analysis_docx_path` row that has never matched the actual extractor
 output — it was carried in the contract from an earlier design pass
 but never wired into `CSV_COLUMNS` in `extract_to_csv.py`). The
-generator's CSV reader treats a missing 16th column (a legacy
-15-column CSV) as if every row had an empty 16th cell.
+generator's CSV reader treats a missing 17th column (a legacy
+16-column CSV) as if every row had an empty 17th cell.
 
 **Rationale**: Appending at the right edge is the minimum-impact
 change to the column order. Older CSVs (e.g. a hand-edited copy
-predating this feature) round-trip cleanly: read as 15 columns,
-write as 16 with empty audience cells. No flag-day migration, no
+predating this feature) round-trip cleanly: read as 16 columns,
+write as 17 with empty audience cells. No flag-day migration, no
 versioning column. The `analysis_docx_path` cleanup is in-scope here
 because the new column's documented position only makes sense once
 the stale row is removed — otherwise the doc would claim `audience`
-sits at position 17 when the on-disk column count says 16.
+sits at position 18 when the on-disk column count says 17 (16 real
+columns + audience).
 
 The DictReader/DictWriter pair already in use by the extractor and
 generator handles missing trailing keys gracefully when fed an
@@ -428,17 +429,17 @@ audience = (row.get("audience") or "").strip()
 audience = " ".join(audience.split())   # normalise internal whitespace
 ```
 
-A row with no `audience` key (legacy 15-column CSV) yields `""`.
-The extractor's CSV writer (`csv.DictWriter`) emits the 16th column
+A row with no `audience` key (legacy 16-column CSV) yields `""`.
+The extractor's CSV writer (`csv.DictWriter`) emits the 17th column
 header on every produced CSV; the value on each row is the
 parsed-and-normalised audience string (or `""` if no tag was
 present in the descriptor).
 
 The `CSV_COLUMNS` constant at the top of `extract_to_csv.py`
-(today: 15 entries) gains `"audience"` as its 16th entry, and the
-generator's column-count check is updated to accept both 15- and
-16-column CSVs (a 15-column CSV is treated as having an implicit
-empty 16th column).
+(today: 16 entries, after main's `file_size` addition) gains
+`"audience"` as its 17th entry, and the generator's column-count
+check is updated to accept both 16- and 17-column CSVs (a 16-column
+CSV is treated as having an implicit empty 17th column).
 
 **Rationale**: The whitespace normalisation handles the human-edit
 edge case (the spec explicitly calls out that re-runs over a
@@ -448,10 +449,10 @@ lever — older CSVs round-trip without manual migration.
 
 **Alternatives considered**:
 
-- *Require all CSVs to have 16 columns and emit a migration tool*.
+- *Require all CSVs to have 17 columns and emit a migration tool*.
   Rejected — over-engineering for a one-column change. The Python
   CSV libraries already handle missing trailing keys gracefully.
-- *Use a non-DictReader column-position reader and pin column 16
+- *Use a non-DictReader column-position reader and pin column 17
   explicitly*. Rejected — DictReader is what the existing code uses;
   a position-pinned reader would be inconsistent with the rest of
   the pipeline.
@@ -464,7 +465,7 @@ lever — older CSVs round-trip without manual migration.
 
 - `tests/test_extract_to_csv.py` gains assertions for:
   - The new `audience` column is emitted in every produced CSV
-    header (16 columns).
+    header (17 columns).
   - A descriptor of the form `"Gram 7: FR Vessel [-own]"` produces
     `vessel_name="FR Vessel"` and `audience="-own"` on every row of
     gram 7.
@@ -483,7 +484,7 @@ lever — older CSVs round-trip without manual migration.
   - Two CSV rows of the same gram with conflicting `audience` values
     raise a named exception (the exception message mentions the
     publication, chapter, and gram_id).
-  - The generator accepts a 15-column legacy CSV (no audience
+  - The generator accepts a 16-column legacy CSV (no audience
     column) and emits topicrefs with no audience attribute on any.
   - An unknown audience token (e.g. `-foo`) is emitted verbatim and
     a WARNING is logged.

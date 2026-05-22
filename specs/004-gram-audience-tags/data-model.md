@@ -16,24 +16,24 @@ file) that travels between them.
 
 ### 1.1 Column position and header
 
-The CSV gains a 16th column appended after `warnings`. The full
+The CSV gains a 17th column appended after `warnings`. The full
 header row becomes:
 
 ```text
-publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,wav_treatment,warnings,audience
+publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,file_size,wav_treatment,warnings,audience
 ```
 
 (Feature 004 also drops the stale `analysis_docx_path` column from
-the csv-schema.md contract — it was documented at position 14 but
-has never appeared in extractor output. The actual baseline has 15
-columns; `audience` appends as the 16th.)
+the csv-schema.md contract — it was documented but never appeared in
+extractor output. After main's unrelated `file_size` addition the
+real baseline is 16 columns; `audience` appends as the 17th.)
 
 ### 1.2 Cell semantics
 
 | Property | Value |
 |---|---|
 | Column name | `audience` |
-| Position | 16 (last; appended after `warnings`) |
+| Position | 17 (last; appended after `warnings`) |
 | Type | string |
 | Empty allowed? | yes (the default for every gram with no PPTX tag) |
 | Canonical form | hyphen-prefixed audience tokens, space-separated, no leading/trailing whitespace, single spaces between tokens |
@@ -53,11 +53,11 @@ When the assertion fails, the generator raises a named exception
 naming the publication, chapter, gram_id, and the conflicting values
 (SC-007).
 
-### 1.4 Backward compatibility (15-column legacy CSV)
+### 1.4 Backward compatibility (16-column legacy CSV)
 
 A CSV without the `audience` column reads as if every row had an
-empty 16th cell. The generator's column-count check accepts both 15
-and 16 columns; the writer always emits 16.
+empty 17th cell. The generator's column-count check accepts both 16
+and 17 columns; the writer always emits 17.
 
 ---
 

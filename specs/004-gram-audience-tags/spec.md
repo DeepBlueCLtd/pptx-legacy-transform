@@ -348,13 +348,13 @@ that no folder, ditamap, HTML page, or CSV row references the string
   `warnings` column at the right edge of the CSV, so the column
   order documented in
   `specs/001-pptx-dita-migration/contracts/csv-schema.md` for the
-  existing 15 columns is preserved unchanged. A 15-column CSV reads
-  back as if every row had an empty 16th `audience` cell. (Feature
+  existing 16 columns is preserved unchanged. A 16-column CSV reads
+  back as if every row had an empty 17th `audience` cell. (Feature
   004 also drops the stale `analysis_docx_path` row from
-  csv-schema.md — it was documented at column 14 but never matched
-  the actual extractor output; without that cleanup the new column
-  would be numbered position 17 in the doc while the on-disk count
-  said 16.)
+  csv-schema.md — the row was documented but never matched the
+  actual extractor output; after main's unrelated `file_size`
+  addition the doc and code agree at 16 real columns once the stale
+  row is removed.)
 - The author edits `source.csv` directly when broadening audience
   tagging across the corpus. The `audience` column is the *one*
   cell the author is encouraged to hand-edit; the other cells remain
