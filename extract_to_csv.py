@@ -605,6 +605,19 @@ def extract_grams_from_slide(
                 )
                 continue
             hdr_entry = folder_to_header.get(key)
+            if hdr_entry is None and len(key) > 1 and key.endswith("a"):
+                # Legacy authoring pattern: gram's .glc files live in a
+                # sibling folder named with a trailing 'a' suffix
+                # (e.g. analysis sheet in "Gram_11/" but .glc in
+                # "Gram_11a/"). Try the trimmed key as a fallback so
+                # the gram still groups correctly.
+                fallback = key[:-1]
+                hdr_entry = folder_to_header.get(fallback)
+                if hdr_entry is not None:
+                    LOGGER.info(
+                        "Slide %d: .glc %r folder %r matched header %r via "
+                        "trailing-'a' fallback", slide_num, glc_href, key, fallback,
+                    )
             if hdr_entry is None:
                 LOGGER.warning(
                     "Slide %d: .glc %r names folder %r but no matching header on this slide",
