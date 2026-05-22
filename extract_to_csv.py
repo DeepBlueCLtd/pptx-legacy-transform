@@ -192,8 +192,15 @@ def resolve_asset_path(href: str, content_root: Path, source_dir: Path | None) -
 
 
 def walk_pptxs(input_root: Path) -> Iterator[Path]:
-    """Yield every ``.pptx`` under ``input_root`` in deterministic sorted order."""
-    yield from sorted(input_root.rglob("*.pptx"))
+    """Yield every ``.pptx`` under ``input_root`` in deterministic sorted order.
+
+    Skips Office lock files (``~$Foo.pptx``) which Word/PowerPoint
+    create alongside any open document and which are not real content.
+    """
+    for path in sorted(input_root.rglob("*.pptx")):
+        if path.name.startswith("~$"):
+            continue
+        yield path
 
 
 # -----------------------------------------------------------------------------
