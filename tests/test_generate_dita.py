@@ -604,12 +604,16 @@ class CsvRefactoringSupportTests(unittest.TestCase):
             shutil.rmtree(self.tmp)
         self.tmp.mkdir(parents=True)
 
-    def _write_csv(self, rows: list[list[str]]) -> Path:
+    def _write_csv(self, rows: list[dict]) -> Path:
         csv_path = self.tmp / "source.csv"
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
-            writer = csv.writer(fh, lineterminator="\r\n")
-            writer.writerow(list(generate_dita.CSV_COLUMNS))
-            writer.writerows(rows)
+            writer = csv.DictWriter(
+                fh, fieldnames=list(generate_dita.CSV_COLUMNS),
+                lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL,
+            )
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({col: row.get(col, "") for col in generate_dita.CSV_COLUMNS})
         return csv_path
 
     def test_normalise_gram_id_canonicalises_to_plain_integer(self) -> None:
@@ -630,12 +634,17 @@ class CsvRefactoringSupportTests(unittest.TestCase):
     def test_read_csv_normalises_gram_id_column(self) -> None:
         """Mixed integer/legacy forms in the same gram still group as one."""
         csv_path = self._write_csv([
-            ["main", "Week 2 Grams", "12", "FR Foo", "glc", "1",
-             "gram_12.dita", "LOFAR 1", "supporting/gram12/c.glc",
-             "supporting/gram12/c.glc", "271", "400", "images/gram12.png", "", ""],
-            ["main", "Week 2 Grams", "Gram 12", "FR Foo", "analysis", "1",
-             "gram_12.dita", "", "", "", "", "", "images/gram12_analysis.png",
-             "", ""],
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "12",
+             "vessel_name": "FR Foo", "topic_type": "glc", "sequence": "1",
+             "topic_filename": "gram_12.dita", "display_text": "LOFAR 1",
+             "link_href": "supporting/gram12/c.glc",
+             "glc_path": "supporting/gram12/c.glc",
+             "time_end": "271", "freq_end": "400",
+             "png_path": "images/gram12.png"},
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 12",
+             "vessel_name": "FR Foo", "topic_type": "analysis", "sequence": "1",
+             "topic_filename": "gram_12.dita",
+             "png_path": "images/gram12_analysis.png"},
         ])
         rows = generate_dita.read_csv(csv_path)
         self.assertEqual([r["gram_id"] for r in rows], ["12", "12"])
@@ -644,13 +653,19 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         """A CSV authored with bare integers emits to the same paths as
         the legacy ``"Gram NN"`` form would."""
         csv_path = self._write_csv([
-            ["main", "Nordic Fishing Vessels", "12", "Nordik Jockey", "glc",
-             "1", "gram_12.dita", "LOFAR 1", "supporting/gram12/config_1.glc",
-             "supporting/gram12/config_1.glc", "271", "400",
-             "images/gram12.png", "", ""],
-            ["main", "Nordic Fishing Vessels", "12", "Nordik Jockey", "analysis",
-             "1", "gram_12.dita", "", "", "", "", "",
-             "images/gram12_analysis.png", "", ""],
+            {"publication": "main", "chapter": "Nordic Fishing Vessels",
+             "gram_id": "12", "vessel_name": "Nordik Jockey",
+             "topic_type": "glc", "sequence": "1", "topic_filename": "gram_12.dita",
+             "display_text": "LOFAR 1",
+             "link_href": "supporting/gram12/config_1.glc",
+             "glc_path": "supporting/gram12/config_1.glc",
+             "time_end": "271", "freq_end": "400",
+             "png_path": "images/gram12.png"},
+            {"publication": "main", "chapter": "Nordic Fishing Vessels",
+             "gram_id": "12", "vessel_name": "Nordik Jockey",
+             "topic_type": "analysis", "sequence": "1",
+             "topic_filename": "gram_12.dita",
+             "png_path": "images/gram12_analysis.png"},
         ])
         rc = generate_dita.main([
             "--csv", str(csv_path),
@@ -695,23 +710,30 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ]
         self.assertEqual(generate_dita.check_row_identity(rows), [])
 
-    def test_main_aborts_with_duplicate_row_identity(self) -> None:
-        """Running the generator against a CSV with a collision exits
-        non-zero and writes nothing — refactoring mistakes never reach
-        DITA-OT."""
+    def test_main_auto_suffixes_grams_colliding_on_id(self) -> None:
+        """Two grams with the same `gram_id` in the same target bucket
+        but distinct `vessel_name` get letter suffixes (gram-05a,
+        gram-05b) rather than silently merging or aborting the run."""
         csv_path = self._write_csv([
-            # Original Week 2 / Gram 05
-            ["main", "Week 2 Grams", "5", "Vessel A", "glc", "1",
-             "gram_05.dita", "LOFAR 1", "supporting/a/c.glc",
-             "supporting/a/c.glc", "180", "400", "images/a.png", "", ""],
-            ["main", "Week 2 Grams", "5", "Vessel A", "analysis", "1",
-             "gram_05.dita", "", "", "", "", "", "images/a_an.png", "", ""],
-            # Moved-from-Pub10 Gram 05 — author forgot to renumber
-            ["main", "Week 2 Grams", "Gram 05", "Vessel B", "glc", "1",
-             "gram_05.dita", "LOFAR 1", "supporting/b/c.glc",
-             "supporting/b/c.glc", "271", "400", "images/b.png", "", ""],
-            ["main", "Week 2 Grams", "Gram 05", "Vessel B", "analysis", "1",
-             "gram_05.dita", "", "", "", "", "", "images/b_an.png", "", ""],
+            # Original Week 2 / Gram 5
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
+             "vessel_name": "Vessel A", "topic_type": "glc", "sequence": "1",
+             "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
+             "link_href": "supporting/a/c.glc", "glc_path": "supporting/a/c.glc",
+             "time_end": "180", "freq_end": "400", "png_path": "images/a.png"},
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
+             "vessel_name": "Vessel A", "topic_type": "analysis", "sequence": "1",
+             "topic_filename": "gram_05.dita", "png_path": "images/a_an.png"},
+            # Moved-from-Pub10 Gram 05 — author left the gram_id alone
+            # because the new auto-suffix is documented to handle it.
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
+             "vessel_name": "Vessel B", "topic_type": "glc", "sequence": "1",
+             "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
+             "link_href": "supporting/b/c.glc", "glc_path": "supporting/b/c.glc",
+             "time_end": "271", "freq_end": "400", "png_path": "images/b.png"},
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
+             "vessel_name": "Vessel B", "topic_type": "analysis", "sequence": "1",
+             "topic_filename": "gram_05.dita", "png_path": "images/b_an.png"},
         ])
         out_dir = self.tmp / "out"
         rc = generate_dita.main([
@@ -719,11 +741,12 @@ class CsvRefactoringSupportTests(unittest.TestCase):
             "--out", str(out_dir),
             "--image-root", str(FIXTURES),
         ])
-        self.assertEqual(rc, 1, "generator must reject the duplicate")
-        # Nothing under the chapter should have been written.
+        self.assertEqual(rc, 0, "generator must auto-suffix the colliding grams")
         chapter_dir = out_dir / "main" / "week-2-grams"
-        self.assertFalse(chapter_dir.exists(),
-                         "generator must abort before emitting topics")
+        self.assertTrue((chapter_dir / "gram-05a" / "gram_05a.dita").is_file(),
+                        "first colliding gram should land at gram-05a")
+        self.assertTrue((chapter_dir / "gram-05b" / "gram_05b.dita").is_file(),
+                        "second colliding gram should land at gram-05b")
 
 
 if __name__ == "__main__":
