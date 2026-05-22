@@ -147,11 +147,14 @@ def resolve_glc_path(href: str, content_root: Path, source_dir: Path | None = No
     """Resolve a GLC href against the per-gram or per-ten-grams layout (FR-006).
 
     Returns ``None`` and logs a WARNING when the file cannot be found.
+    Hrefs in PowerPoint relationships are URL-encoded (``%20`` for space,
+    etc.); the filesystem lookup needs the decoded form.
     """
     if not href:
         LOGGER.warning("GLC not found: empty href")
         return None
-    rel = Path(href.replace("\\", "/"))
+    decoded = urllib.parse.unquote(href)
+    rel = Path(decoded.replace("\\", "/"))
     candidates: list[Path] = []
     if source_dir is not None:
         candidates.append((source_dir / rel).resolve(strict=False))
