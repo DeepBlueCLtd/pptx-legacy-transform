@@ -999,4 +999,11 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    rc = main()
+    # Preserve CLI exit codes when invoked as a script, but stay silent
+    # when invoked from an interactive REPL via runpy.run_path —
+    # ``sys.exit`` would otherwise kill the interpreter and break the
+    # up-arrow iteration loop. ``sys.ps1`` is only defined in
+    # interactive sessions.
+    if rc and not hasattr(sys, "ps1"):
+        sys.exit(rc)
