@@ -62,6 +62,39 @@ from WinPython's pre-trusted installs, not the user-folder install.
 Because the target uses a REPL (not `python script.py`), iteration
 needs different ergonomics. Patterns we settled on:
 
+### 2.0 Setting the working directory in a fresh REPL window
+
+The WinPython Start-menu shortcut drops you into the REPL with the
+working directory set to the **interpreter install dir**
+(`C:\developer\winpython`), *not* the source tree. So a bare
+`exec(open("scripts\run.py").read())` fails with `FileNotFoundError`
+until you either pass a long absolute path or change directory first.
+
+Inspect where you are / what you're running:
+```python
+import os, sys
+os.getcwd()        # current working dir (defaults to the WinPython install dir)
+sys.executable     # full path to the python.exe actually running
+```
+
+Change to the source tree once, then use short relative paths for the
+rest of the session:
+```python
+import os
+os.chdir(r"C:\path\to\pptx-legacy-transform")   # raw string: backslashes not escaped
+os.getcwd()                                       # confirm it took
+exec(open(r"scripts\run.py").read())              # now relative paths work
+```
+
+Notes:
+- Use a raw string (`r"..."`) or forward slashes (`"C:/path/..."`) so
+  backslashes aren't interpreted as escape sequences.
+- Do the `os.chdir(...)` manually rather than baking it into `run.py`
+  — hard-coding it inside the wrapper defeats the point of relative
+  paths and ties the script to one machine's layout.
+
+### 2.1 Re-running after edits
+
 - **`runpy.run_path(path, run_name="__main__")`** re-reads the file
   from disk each call, so VS Code edits land immediately on
   ↑+Enter. No `importlib.reload` dance.
