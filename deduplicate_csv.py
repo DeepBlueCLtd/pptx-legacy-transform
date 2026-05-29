@@ -28,14 +28,18 @@ import argparse
 import csv
 import hashlib
 import logging
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
-# The optional right-edge column this script populates. Kept in lockstep
+# The optional right-edge columns this script populates. Kept in lockstep
 # with ``generate_dita.OPTIONAL_CSV_COLUMNS``.
 MASTER_PNG_PATH = "master_png_path"
+# The renumbered gram number (feature 007). Empty means "unchanged — use
+# ``gram_id``"; ``gram_id`` itself is never mutated.
+TARGET_GRAM_ID = "target_gram_id"
 
 # Default candidacy cut-off: strictly greater than 10 MiB (FR-003). The
 # mebibyte reading of the user's "10Mb" cut-off; overridable via CLI.
@@ -210,6 +214,96 @@ def deduplicate(
 
 
 # -----------------------------------------------------------------------------
+# Gram renumbering (feature 007) — resolve within-week gram-number collisions
+# -----------------------------------------------------------------------------
+
+_DIGITS_RE = re.compile(r"\d+")
+
+
+def _effective_chapter(row: dict) -> str:
+    """``target_chapter`` when set, else the immutable source ``chapter``."""
+    return (row.get("target_chapter", "") or "").strip() or row.get("chapter", "")
+
+
+def _effective_doc(row: dict) -> str:
+    return (row.get("target_doc", "") or "").strip()
+
+
+def _gram_number(gram_id: str) -> int | None:
+    """Return the leading integer of ``gram_id`` (e.g. ``"Gram 05"`` → 5)."""
+    match = _DIGITS_RE.search(gram_id or "")
+    return int(match.group()) if match else None
+
+
+def renumber_grams(rows: list[dict]) -> int:
+    """Populate ``target_gram_id`` to give each gram a unique within-week number.
+
+    The four-week ``main`` IA (feature 007) folds several source decks into one
+    week folder, so two distinct grams can claim the same number (e.g. a native
+    ``Week 2 / Gram 5`` and a Pub10 gram reassigned to Week 2). Within each
+    ``(publication, effective_chapter, effective_doc)`` bucket this walks the
+    distinct grams in ``(source chapter, first-row order)`` order; the first
+    claimant of a number keeps it and any later gram whose number is already
+    taken is reassigned to one greater than the bucket's current maximum,
+    recorded in ``target_gram_id``. ``gram_id`` is never mutated.
+
+    Idempotent: every row's ``target_gram_id`` is cleared first and recomputed
+    from ``gram_id`` each run, so re-running over the same inputs yields a
+    byte-identical CSV. Returns the count of renumbered grams.
+    """
+    # Reset so a CSV that already carries the column recomputes cleanly.
+    for row in rows:
+        row[TARGET_GRAM_ID] = ""
+
+    # Bucket rows, recording each row's original index for stable ordering and
+    # so we can write the assignment back to every row of a gram.
+    buckets: dict[tuple, list[int]] = defaultdict(list)
+    for idx, row in enumerate(rows):
+        bucket = (row.get("publication", ""), _effective_chapter(row), _effective_doc(row))
+        buckets[bucket].append(idx)
+
+    renumbered = 0
+    for bucket in sorted(buckets):
+        indices = buckets[bucket]
+        # Distinct grams within the bucket: unique (chapter, gram_id, vessel),
+        # remembering the first row index so we can order and assign to all rows.
+        gram_rows: dict[tuple, list[int]] = {}
+        gram_first: dict[tuple, int] = {}
+        for idx in indices:
+            row = rows[idx]
+            ident = (
+                row.get("chapter", ""), row.get("gram_id", ""),
+                row.get("vessel_name", ""),
+            )
+            if ident not in gram_rows:
+                gram_rows[ident] = []
+                gram_first[ident] = idx
+            gram_rows[ident].append(idx)
+
+        ordered = sorted(gram_rows, key=lambda ident: (ident[0], gram_first[ident]))
+        used: set[int] = set()
+        for ident in ordered:
+            number = _gram_number(ident[1])
+            if number is None:
+                continue  # no numeric gram_id — nothing to renumber against
+            if number in used:
+                new_number = max(used) + 1
+                for idx in gram_rows[ident]:
+                    rows[idx][TARGET_GRAM_ID] = str(new_number)
+                LOGGER.info(
+                    "gram renumbered: chapter=%s gram_id=%s -> %d",
+                    _effective_chapter(rows[gram_first[ident]]), ident[1], new_number,
+                )
+                used.add(new_number)
+                renumbered += 1
+            else:
+                used.add(number)
+
+    LOGGER.info("Renumber summary: grams_renumbered=%d", renumbered)
+    return renumbered
+
+
+# -----------------------------------------------------------------------------
 # Orchestration
 # -----------------------------------------------------------------------------
 
@@ -242,9 +336,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("Failed to read CSV: %s", exc)
         return 1
 
-    if MASTER_PNG_PATH not in fieldnames:
-        fieldnames = fieldnames + [MASTER_PNG_PATH]
+    for column in (MASTER_PNG_PATH, TARGET_GRAM_ID):
+        if column not in fieldnames:
+            fieldnames = fieldnames + [column]
 
+    renumber_grams(rows)
     deduplicate(rows, args.image_root, args.threshold_bytes)
 
     try:

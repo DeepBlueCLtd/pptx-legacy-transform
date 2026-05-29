@@ -218,6 +218,27 @@ def slugify(text: str) -> str:
     return slug
 
 
+# A ``main`` deck's folder title encodes the teaching week (feature 007).
+# "Instructor Week 1 Grams", "Week 01", "Week1" all yield the bare integer
+# week number, leading zeros stripped, matched case-insensitively.
+_WEEK_TOKEN_RE = re.compile(r"\bweek\s*0*(\d+)\b", re.IGNORECASE)
+
+
+def week_chapter_number(chapter_title: str | None) -> str:
+    """Return the bare-integer week number in ``chapter_title``, or ``""``.
+
+    Used to populate the editable ``target_chapter`` column for ``main`` decks
+    so the four week folders (``Week 1`` … ``Week 4``) replace the old
+    per-document slicing (feature 007, FR-001). A title with no week token
+    (e.g. ``Instructor Pub10_Ed22B_Updated``) returns ``""`` so an analyst can
+    assign the week by hand (FR-002).
+    """
+    if not chapter_title:
+        return ""
+    match = _WEEK_TOKEN_RE.search(chapter_title)
+    return match.group(1) if match else ""
+
+
 def classify_publication(
     pptx: Path,
     test_pattern: str,
@@ -792,8 +813,14 @@ def gram_to_rows(
     content_root: Path,
     source_dir: Path,
     target_doc: str = "",
+    target_chapter: str = "",
 ) -> list[dict]:
-    """Expand one gram into N+1 CSV rows (N GLC links + 1 analysis row)."""
+    """Expand one gram into N+1 CSV rows (N GLC links + 1 analysis row).
+
+    ``target_chapter`` is the editable routing target — for ``main`` decks this
+    is the bare-integer week number (feature 007); empty falls back to the
+    immutable source ``chapter`` downstream.
+    """
     rows: list[dict] = []
     gram_num = _gram_num_from_id(gram.gram_id)
 
@@ -830,7 +857,7 @@ def gram_to_rows(
             "publication": publication,
             "chapter": chapter or "",
             "target_doc": target_doc,
-        "target_chapter": chapter or "",
+        "target_chapter": target_chapter,
             "gram_id": gram.gram_id,
             "vessel_name": gram.vessel_name,
             "topic_type": "glc",
@@ -859,7 +886,7 @@ def gram_to_rows(
         "publication": publication,
         "chapter": chapter or "",
         "target_doc": target_doc,
-        "target_chapter": chapter or "",
+        "target_chapter": target_chapter,
         "gram_id": gram.gram_id,
         "vessel_name": gram.vessel_name,
         "topic_type": "analysis",
@@ -942,11 +969,23 @@ def main(argv: Iterable[str] | None = None) -> int:
                     content_root=args.input_root,
                     source_dir=pptx.parent,
                 )
+                # Feature 007: ``main`` is organised into four week folders, so
+                # the editable target chapter is the bare-integer week number
+                # parsed from the deck title, and there is no per-document
+                # folder segment (target_doc empty). Non-main publications keep
+                # their existing per-document layout.
+                if publication == "main":
+                    target_chapter = week_chapter_number(chapter)
+                    target_doc = ""
+                else:
+                    target_chapter = ""
+                    target_doc = pptx.name
                 for gram in grams:
                     gram_rows = gram_to_rows(
                         gram, publication, chapter, chapter_slug,
                         args.input_root, source_dir=pptx.parent,
-                        target_doc=pptx.name,
+                        target_doc=target_doc,
+                        target_chapter=target_chapter,
                     )
                     rows.extend(gram_rows)
                     for r in gram_rows:

@@ -53,6 +53,21 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(chapter2, "Nordic Fishing Vessels")
         self.assertEqual(slug2, "nordic-fishing-vessels")
 
+    def test_week_chapter_number_parses_week_token(self) -> None:
+        """Feature 007: a "Week N" deck title yields the bare-integer week."""
+        self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 1 Grams"), "1")
+        self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 4 Grams_Updated"), "4")
+        self.assertEqual(extract_to_csv.week_chapter_number("Week 03"), "3")  # leading zero stripped
+        self.assertEqual(extract_to_csv.week_chapter_number("Week2"), "2")  # no space
+        self.assertEqual(extract_to_csv.week_chapter_number("WEEK 2 grams"), "2")  # case-insensitive
+
+    def test_week_chapter_number_blank_for_non_week_titles(self) -> None:
+        """A deck with no week token (Pub10) leaves target_chapter for the analyst."""
+        self.assertEqual(extract_to_csv.week_chapter_number("Instructor Pub10_Ed22B_Updated"), "")
+        self.assertEqual(extract_to_csv.week_chapter_number("Nordic Fishing Vessels"), "")
+        self.assertEqual(extract_to_csv.week_chapter_number(""), "")
+        self.assertEqual(extract_to_csv.week_chapter_number(None), "")
+
 
 class CsvWriteReadTests(unittest.TestCase):
 
