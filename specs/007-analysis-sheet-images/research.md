@@ -38,6 +38,27 @@ tool, never a Python dependency.
   adds a second external tool for a marginal quality gain on a single landscape
   page. The configurable command leaves the door open if legibility proves
   insufficient.
+- *A Python-wheel renderer (no external tool).* The maintainer has cleared
+  pulling additional Python wheels across the air-gap **if justified**, so this
+  was evaluated explicitly. Finding: **no free/open-source Python wheel renders
+  legacy binary `.doc` to a faithful page image** — rendering a Word document
+  needs a Word *layout* engine, and the open-source ones are external
+  (LibreOffice) or browser-based, not wheels. `python-docx` reads `.docx` only
+  and cannot render; `mammoth`/`pydocx` go to HTML and discard the eye-aligned
+  positioning (defeating FR-003); `weasyprint` renders HTML (not `.doc`) and
+  drags in non-wheel system libs on Windows. The **only** pure-wheel paths that
+  handle `.doc` rendering are the **commercial** engines (`Aspose.Words`,
+  `Spire.Doc`), which bundle their own layout engine. Those would make the
+  air-gap transfer a single wheel rather than an installer, but were rejected for
+  the MVP because (a) they carry a license cost / page-limited free tiers, and
+  (b) a heavyweight closed-source rendering engine the receiving team cannot
+  inspect, debug, or replace without the internet cuts against Principle I's
+  "debuggable after handover" more than an external LibreOffice install does.
+  **Decision (confirmed by the maintainer): stay on external LibreOffice.** A
+  commercial wheel remains a documented fallback if a single-artifact wheel
+  install is later judged worth the license. Free wheels such as `Pillow` (PNG
+  crop/DPI) or `pypdf` (page-count detection) are not load-bearing for the MVP
+  and are not pulled in.
 
 ## R2 — Determinism vs. a non-reproducible renderer (Principle V)
 
