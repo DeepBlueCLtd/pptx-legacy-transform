@@ -1,0 +1,9 @@
+﻿publication,chapter,gram_id,vessel_name,topic_type,sequence,topic_filename,display_text,link_href,glc_path,time_end,freq_end,png_path,file_size,wav_treatment,warnings
+main,Audio,20,Alpha,glc,1,gram_20.dita,Audio A,dedup/audio/master.glc,dedup/audio/master.glc,271,400,dedup/audio/master.wav,11000000,,
+main,Audio,21,Bravo,glc,1,gram_21.dita,Audio B,dedup/audio/dup1.glc,dedup/audio/dup1.glc,271,400,dedup/audio/dup1.wav,11000000,,
+main,Audio,22,Charlie,glc,1,gram_22.dita,Audio C,dedup/audio/dup2.glc,dedup/audio/dup2.glc,271,400,dedup/audio/dup2.wav,11000000,,
+main,Images,30,Delta,glc,1,gram_30.dita,Image A,,,271,400,dedup/img/shared.png,11000000,,
+main,Images,31,Echo,glc,1,gram_31.dita,Image B,,,271,400,dedup/img/shared_b.png,11000000,,
+main,Images,32,Foxtrot,glc,1,gram_32.dita,Image C,,,271,400,dedup/img/unique.png,11000000,,
+main,Images,33,Golf,glc,1,gram_33.dita,Small A,,,271,400,dedup/img/small_a.png,500000,,
+main,Images,34,Hotel,glc,1,gram_34.dita,Small B,,,271,400,dedup/img/small_b.png,500000,,

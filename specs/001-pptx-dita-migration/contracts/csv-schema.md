@@ -36,6 +36,18 @@ generator never re-reads PPTX or GLC files.
 | 15 | `wav_treatment` | enum | yes | **Deprecated.** Originally collected an author decision (`screenshot` / `gaps-lite` / `TBD`) for rows whose GLC referenced a `.wav`. The current contract dispatches purely on `png_path`'s extension (`dita-topic-schema.md` §1) so no author decision is required; the column is retained only so older CSVs round-trip cleanly. The extractor leaves it empty and the generator ignores it. |
 | 16 | `warnings` | string | yes | comma-joined, free-form |
 
+### Optional, additive columns (appended at the right edge)
+
+Later features append optional columns after column 16. They are **never**
+added to the strict required-column set, so a 16-column legacy CSV stays
+valid and produces byte-identical output; a reader takes an empty default
+for any absent optional column.
+
+| Column | Added by | Written by | Read by | Meaning |
+|---|---|---|---|---|
+| `target_doc`, `target_chapter`, `target_ext` | refactor flow | extractor / author | `generate_dita.py` | refactoring-planning hints (deck/chapter relocation) |
+| `master_png_path` | feature 006 (large-asset dedup) | `deduplicate_csv.py` only (the extractor does **not** emit it) | `generate_dita.py` via `row.get("master_png_path", "")` | **Empty** → the row is not redirected. **Non-empty** → the value is the `png_path` of the **master row** (first occurrence of a duplicated large asset) this row's lofar must link to instead of copying its own asset. Only rows whose `file_size` is strictly greater than the threshold (default 10 MiB) are eligible. A non-empty value that the generator cannot resolve is treated as non-redirected and logged as a WARNING. See `specs/006-large-asset-deduplication/contracts/csv-master-png-path.md`. |
+
 ## Row identity
 
 The unique key per row is the tuple
