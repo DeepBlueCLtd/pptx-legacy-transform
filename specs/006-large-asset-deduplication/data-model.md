@@ -42,15 +42,18 @@ The provenance record. Emitted **only** on a redirected lofar.
   <title>…display text…</title>
   <!-- image case: GramFrame gram-config table, OR audio case: <p><xref …/></p> -->
   …
-  <data name="original-asset-path" value="supporting/gram-07/Lofar 1 I.wav"/>
+  <data name="original-asset-path" value="supporting/gram-07/Lofar 1 I.glc"/>
 </section>
 ```
+
+(Image lofars carry the original image path, e.g. `…/Lofar 1 ABC.png`; the
+audio example above carries the `.glc` link-target path, **not** the `.wav`.)
 
 | Aspect | Value |
 |---|---|
 | Element | `<data>` (standard DITA metadata domain; no specialisation) |
 | `@name` | exactly `original-asset-path` |
-| `@value` | the **redirected row's own `png_path`** (where the file should sit locally) |
+| `@value` | the original local path of the **link target** — the row's `png_path` for an image lofar, the row's `glc_path` for an audio lofar (never the `.wav`); the `.wav` is restored by adjacency on rehydration |
 | Placement | child of the redirected lofar `<section>`, emitted last (after title + table/`<p>`) |
 | Cardinality | exactly one per redirected lofar; **absent** on non-redirected lofars |
 | Role | (a) sole flag that the lofar was redirected (FR-007); (b) the anchor for reversal (FR-008) |
@@ -116,8 +119,9 @@ generate_dita.py index pass:  master row.png_path ──► MasterTarget(topic_d
    │
    ▼ emit pass (redirected row)
 DITA lofar <section>:  href → ../master/<link_basename>
-                       + <data name="original-asset-path" value="row.png_path"/>
+                       + <data name="original-asset-path" value="<link target: row.png_path | row.glc_path>"/>
    │
    ▼ rehydrate_dita.py (inverse)
-DITA lofar <section>:  href → ./<local slug from data value>   (+ master copied back; <data> removed)
+DITA lofar <section>:  href → ./<local slug from data value>   (+ master link target copied back,
+                       audio .wav restored by adjacency; <data> removed)
 ```

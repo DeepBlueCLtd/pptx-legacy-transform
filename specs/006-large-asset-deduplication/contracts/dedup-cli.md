@@ -61,12 +61,15 @@ python rehydrate_dita.py --dita dita/ [--gram gram-12] [--dry-run]
 | `--dry-run` | no | off | report what would change without writing |
 
 **Behaviour** — for each lofar `<section>` with
-`<data name="original-asset-path" value="P">`:
+`<data name="original-asset-path" value="P">` (P is the original local path of
+the **link target**: the image for an image lofar, the `.glc` for an audio
+lofar — never the `.wav`):
 1. Resolve the master file from the lofar's `<image>`/`<xref>` href (relative to
    the topic folder).
 2. Recompute the local slug from `basename(P)` (`slugify_asset_name`) and copy
-   the master into this gram's folder under that slug. For an audio pair, also
-   copy the master `.glc`'s adjacent `.wav`.
+   the master link target into this gram's folder under that slug. For an audio
+   pair (P is the `.glc`), also copy the master `.glc`'s adjacent `.wav` back
+   under the `.wav`'s own slug (restored by adjacency).
 3. Rewrite the href to the local copy and remove the `<data>` element.
 
 A lofar without the `<data>` element is left untouched (idempotent; no-op on an
