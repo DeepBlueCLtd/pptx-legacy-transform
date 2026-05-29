@@ -54,6 +54,21 @@ OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
 # redirected (deduplicated) lofar and anchors its reversal (feature 006).
 ORIGINAL_ASSET_PATH = "original-asset-path"
 
+# XML declaration + OASIS DOCTYPE preambles emitted at the head of every
+# generated topic and ditamap. Oxygen identifies a file as DITA by its
+# DOCTYPE public ID; without these its DITA Maps Manager rejects a bare
+# ``<map>`` ("This file does not appear to be a DITA map") and Author
+# will not recognise a bare ``<topic>``. The same constants are mirrored
+# in ``publish_html.py`` for DITA-OT's benefit.
+TOPIC_DOCTYPE = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">\n'
+)
+MAP_DOCTYPE = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<!DOCTYPE map PUBLIC "-//OASIS//DTD DITA Map//EN" "map.dtd">\n'
+)
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -546,8 +561,15 @@ def _pretty_indent(elem: ET.Element, level: int = 0, indent: str = "  ") -> None
     children[-1].tail = closing_pad
 
 
-def _serialise(root: ET.Element) -> str:
-    """Serialise ``root`` to a UTF-8 XML string with LF endings, no preamble.
+def _serialise(root: ET.Element, doctype: str = "") -> str:
+    """Serialise ``root`` to a UTF-8 XML string with LF endings.
+
+    ``doctype`` is an optional preamble (XML declaration + ``<!DOCTYPE>``)
+    prepended verbatim — see ``TOPIC_DOCTYPE`` / ``MAP_DOCTYPE``. Oxygen's
+    DITA Maps Manager (and Author) classifies a file as DITA by its DOCTYPE
+    public ID; without it a bare ``<map>``/``<topic>`` is rejected with
+    "This file does not appear to be a DITA map". The preamble is therefore
+    emitted into the source tree rather than only injected at publish time.
 
     Output is pretty-printed for human review while preserving mixed-content
     elements (titles, paragraphs with inline phrases) byte-for-byte.
@@ -556,7 +578,7 @@ def _serialise(root: ET.Element) -> str:
     body = ET.tostring(root, encoding="unicode")
     # ElementTree uses self-closing for empty elements; that matches the
     # contract examples (e.g. <image .../>, <link .../>).
-    return f"{body}\n"
+    return f"{doctype}{body}\n"
 
 
 def _append_provenance_data(section: ET.Element, original_path: str) -> None:
@@ -837,7 +859,7 @@ def emit_gram_topic(
     # the historical ``<related-links>`` pointed at a ``gram-index.dita``
     # that was never generated, producing a 404 in every gram page.
 
-    _write_text(topic_path, _serialise(topic))
+    _write_text(topic_path, _serialise(topic, TOPIC_DOCTYPE))
     return [topic_path] + written, skipped, redirected
 
 
@@ -967,7 +989,7 @@ def emit_main_ditamap(
             href = f"main/{slug}/{prefix}{gram_dir}/{topic_file}"
             ET.SubElement(topichead, "topicref", {"href": href})
 
-    _write_text(map_path, _serialise(root))
+    _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
 
@@ -1011,7 +1033,7 @@ def emit_test_ditamap(
         prefix = f"{doc_slug}/" if doc_slug else ""
         href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
         ET.SubElement(root, "topicref", {"href": href})
-    _write_text(map_path, _serialise(root))
+    _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
 
