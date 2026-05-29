@@ -98,6 +98,20 @@ EDITIONS: tuple[Edition, ...] = (
 )
 
 
+def _with_doctype(body: str, doctype: str) -> str:
+    """Return ``body`` prefixed with ``doctype`` unless it already carries one.
+
+    ``generate_dita.py`` now emits the OASIS XML declaration + DOCTYPE into
+    the source tree (so Oxygen recognises topics and maps). DITA-OT needs the
+    same preamble, but prepending a second copy would yield two ``<?xml?>``
+    lines and invalid XML — so inject only when the source lacks it. This
+    keeps staging correct for both current and older DOCTYPE-less trees.
+    """
+    if body.lstrip().startswith("<?xml"):
+        return body
+    return doctype + body
+
+
 def stage(src: Path, dst: Path) -> None:
     """Copy ``src`` to ``dst``, add DOCTYPEs, and tuck each ditamap inside
     its publication folder with hrefs rewritten relative to it.
@@ -124,7 +138,7 @@ def stage(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
     for path in dst.rglob("*.dita"):
         body = path.read_text(encoding="utf-8")
-        _write_text(path, TOPIC_DOCTYPE + body)
+        _write_text(path, _with_doctype(body, TOPIC_DOCTYPE))
     for path in sorted(dst.glob("*.ditamap")):
         stem = path.stem
         body = path.read_text(encoding="utf-8")
@@ -132,7 +146,7 @@ def stage(src: Path, dst: Path) -> None:
         new_dir = dst / stem
         new_dir.mkdir(parents=True, exist_ok=True)
         new_path = new_dir / path.name
-        _write_text(new_path, MAP_DOCTYPE + body)
+        _write_text(new_path, _with_doctype(body, MAP_DOCTYPE))
         path.unlink()
 
 

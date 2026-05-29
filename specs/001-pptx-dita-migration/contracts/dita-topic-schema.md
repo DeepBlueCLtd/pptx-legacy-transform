@@ -11,9 +11,15 @@ All output files are:
 - UTF-8 encoded, no BOM
 - LF line endings (`"\n"`) — the publishing toolchain on Linux build
   machines is happier with LF than CRLF
-- No XML declaration (matches existing pub-9/pub-10 convention)
-- No DOCTYPE declaration (validation against the DITA DTD happens in
-  Oxygen at publish time)
+- An XML declaration (`<?xml version="1.0" encoding="UTF-8"?>`) followed by
+  the OASIS DOCTYPE for the root type — `topic.dtd` for topics, `map.dtd`
+  for ditamaps. Oxygen identifies a file as DITA by its DOCTYPE public ID;
+  without it the DITA Maps Manager rejects a bare `<map>` ("This file does
+  not appear to be a DITA map") and Author will not recognise a bare
+  `<topic>`. (Earlier revisions omitted both, on the assumption that Oxygen
+  only needed them at validation time — that proved wrong for authoring,
+  so the preamble is now emitted into the source tree. `publish_html.py`
+  still tolerates DOCTYPE-less inputs by injecting them only when absent.)
 
 ## 1. `gram_NN.dita` — single gram topic
 
@@ -364,10 +370,10 @@ target — Oxygen remains the production publishing path (FR-021).
 
 `publish_html.py` operates on `{out}` non-destructively:
 
-1. Stages a copy of `{out}` under `.dita-build/` and prepends the OASIS
-   DITA Topic and Map DOCTYPE declarations (the source DITA omits
-   DOCTYPEs per §0; Oxygen handles validation at publish time, but
-   DITA-OT requires them to classify elements). Ditamaps already sit
+1. Stages a copy of `{out}` under `.dita-build/`. The source DITA already
+   carries the OASIS Topic/Map DOCTYPE declarations per §0, so staging
+   injects them only if absent (tolerating older DOCTYPE-less trees);
+   DITA-OT requires them to classify elements. Ditamaps already sit
    at the root of `{out}` with forward-only hrefs into their sibling
    content folders, so no path rewriting or promotion step is needed.
 2. Invokes DITA-OT once per staged ditamap with

@@ -40,7 +40,8 @@ from typing import Iterable
 
 import generate_dita
 from generate_dita import (
-    ORIGINAL_ASSET_PATH, _serialise, _write_text, slugify_asset_name,
+    ORIGINAL_ASSET_PATH, TOPIC_DOCTYPE, _serialise, _write_text,
+    slugify_asset_name,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -170,7 +171,10 @@ def rehydrate_topic(topic_path: Path, *, dry_run: bool) -> int:
             topic_path.name, restored, data.get("value", ""),
         )
     if count and not dry_run:
-        _write_text(topic_path, _serialise(root))
+        # Re-emit the OASIS preamble that ``ET.parse`` drops, so the
+        # rehydrated topic stays byte-identical to a freshly generated one
+        # and remains recognisable to Oxygen.
+        _write_text(topic_path, _serialise(root, TOPIC_DOCTYPE))
     return count
 
 
