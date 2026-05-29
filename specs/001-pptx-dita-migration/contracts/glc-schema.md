@@ -49,7 +49,7 @@ on it:
 
 | Extension | Semantics | Downstream rendering |
 |---|---|---|
-| `.png` / `.jpg` | Pre-rendered spectrogram screenshot living next to the `.glc` | Embedded inline as `<image>` in a gram-config table (§1.2) |
+| `.png` / `.jpg` / `.gif` | Pre-rendered spectrogram screenshot living next to the `.glc` | Embedded inline as `<image>` in a gram-config table (§1.2) |
 | `.wav` | Raw audio; the on-PC GLC viewer renders the spectrogram live from it | The `.glc` is copied alongside its `.wav` and linked from the gram topic via `<xref href="*.glc">` (§1.3) so the viewer can open both |
 | anything else | Anomalous; not observed in the audited corpus | Row skipped, recorded in `skipped.txt` |
 

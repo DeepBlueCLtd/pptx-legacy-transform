@@ -520,7 +520,7 @@ def build_master_index(
             if not glc:
                 continue
             link_basename = slugify_asset_name(Path(glc).name)
-        elif asset_suffix in (".png", ".jpg", ".jpeg"):
+        elif asset_suffix in (".png", ".jpg", ".jpeg", ".gif"):
             link_basename = slugify_asset_name(Path(png).name)
         else:
             continue
@@ -714,7 +714,7 @@ def emit_gram_topic(
        order. The block shape is chosen by the extension of the asset
        named inside the ``.glc`` (carried through as ``png_path``):
 
-       - ``.png`` / ``.jpg`` → GramFrame ``gram-config`` table
+       - ``.png`` / ``.jpg`` / ``.gif`` → GramFrame ``gram-config`` table
          embedding the image (`dita-topic-schema.md` §1.2). This is
          the shape `gramframe.bundle.js` recognises.
        - ``.wav`` → an ``<xref>`` linking to the ``.glc`` itself
@@ -784,7 +784,7 @@ def emit_gram_topic(
         png_path = row.get("png_path", "") or ""
         asset_suffix = Path(png_path).suffix.lower()
 
-        if asset_suffix in (".png", ".jpg", ".jpeg"):
+        if asset_suffix in (".png", ".jpg", ".jpeg", ".gif"):
             master = _resolve_redirect(row)
             if master is not None:
                 # Redirected: link to the master copy, copy nothing locally,

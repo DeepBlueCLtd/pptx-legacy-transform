@@ -15,7 +15,7 @@ toolchain (Oxygen) renders in both an instructor profile and a
 trainee profile. Each gram has a title with vessel name, a hyperlinked
 analysis sheet, and one or more `Lofar`-labelled hyperlinks that
 **always** point to a `.glc` configuration file. The `.glc` in turn
-references a sibling asset: usually a `.png` / `.jpg` (~82%,
+references a sibling asset: usually a `.png` / `.jpg` / `.gif` (~82%,
 pre-rendered spectrogram), occasionally a `.wav` (~18%, raw audio
 rendered live by the on-PC GLC viewer). The generator dispatches on
 the inner asset extension: image assets are embedded inline, audio
@@ -165,7 +165,7 @@ Reviewers should not edit the identity columns
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
 | 11 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
 | 12 | `freq_end` | yes | From GLC `bandwidth`; numeric string. |
-| 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
+| 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg`/`.gif` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
 | 14 | `wav_treatment` | yes | Deprecated; left blank. Retained only for CSV round-trip compatibility. |
 | 15 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
 
@@ -265,7 +265,7 @@ canonical air-gapped test surface.
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | `GLC missing bottom_crop` / `bandwidth` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `freq_end` directly or accept the empty defaults. |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
-| Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
+| Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 
 ## Publishing to HTML (optional)
 
