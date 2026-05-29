@@ -64,6 +64,8 @@ rebuilds remain predictable.
 | `introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
 | `generate_dita.py` | Consume the signed-off CSV and emit DITA topics, copied assets, and ditamaps (Story 1, MVP). |
+| `deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006). |
+| `rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
 | `run_pipeline.bat` | Windows orchestrator: extract → manual review → generate (Story 6). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
@@ -166,6 +168,13 @@ Reviewers should not edit the identity columns
 | 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
 | 14 | `wav_treatment` | yes | Deprecated; left blank. Retained only for CSV round-trip compatibility. |
 | 15 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
+
+Optional, additive columns are appended at the right edge and read with an
+empty default, so a CSV without them behaves exactly as before:
+
+| Column | Written by | Notes |
+|---|---|---|
+| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
 
 ### Editing the CSV in Excel — what can go wrong
 

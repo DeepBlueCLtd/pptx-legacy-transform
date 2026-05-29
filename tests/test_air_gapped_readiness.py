@@ -32,6 +32,8 @@ SCRIPTS = (
     "extract_to_csv.py",
     "generate_dita.py",
     "publish_html.py",
+    "deduplicate_csv.py",
+    "rehydrate_dita.py",
 )
 
 

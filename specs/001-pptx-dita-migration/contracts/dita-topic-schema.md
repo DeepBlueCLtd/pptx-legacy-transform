@@ -152,6 +152,36 @@ already lives inside the GLC for the viewer to consume directly.
 the PPTX run (e.g. `"Lofar 1"`), distinct from `link_href` which is
 the raw URI from the PPTX hyperlink.
 
+### 1.4 Redirected lofar — `<data>` provenance (feature 006)
+
+When a `topic_type="glc"` row carries a resolvable `master_png_path`
+(see `csv-schema.md` → optional columns), its lofar is **redirected**:
+the asset is **not** copied into this gram's folder. The §1.2/§1.3
+block is emitted unchanged except that (1) the `<image>`/`<xref>` href
+is a topic-relative `../` path to the single master copy in the master
+gram's folder, and (2) a provenance element is appended as the **last**
+child of the lofar `<section>`:
+
+```xml
+<data name="original-asset-path" value="{link target's original local path}"/>
+```
+
+- `@value` is the original local path of the **link target** — the row's
+  `png_path` for an image lofar, its `glc_path` for an audio lofar (never
+  the `.wav`). For audio the redirected `<xref>` targets the master `.glc`,
+  and the large `.wav` stays adjacent to that master `.glc`.
+- `<data>` is part of the standard DITA metadata domain (DTD-valid, no
+  specialisation), survives DITA-OT, and is suppressed from default trainee
+  XHTML. Its **presence alone** flags the lofar as redirected — no separate
+  `@outputclass` token.
+- The element plus the master href are a complete inverse transform:
+  `rehydrate_dita.py` copies the master link target (and, for a pair, its
+  adjacent `.wav`) back under the local slug recomputed from `basename(@value)`,
+  re-localises the href, and removes the `<data>` element — yielding a topic
+  indistinguishable from a never-deduplicated one. See
+  `specs/006-large-asset-deduplication/contracts/dita-provenance-data.md`.
+- Absent on non-redirected lofars (the inert-by-default case).
+
 ## 2. Skipped rows
 
 A `topic_type="glc"` row contributes no block to its gram topic when

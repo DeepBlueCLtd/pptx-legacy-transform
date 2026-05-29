@@ -40,9 +40,19 @@ CSV_COLUMNS: tuple[str, ...] = (
 # Optional refactoring-planning columns the extractor now writes. Their
 # presence is not required (old CSVs still validate) but when present
 # they steer DITA generation per spec 005-style refactor flow.
+#
+# ``master_png_path`` (feature 006) is read with an empty default and is
+# never added to the strict ``CSV_COLUMNS`` required-set, so a CSV without
+# it (the current 16-column ``source.csv`` or any legacy CSV) stays valid
+# and produces byte-identical output — the deduplication feature is inert
+# by default (FR-010, SC-005).
 OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
-    "target_doc", "target_chapter", "target_ext",
+    "target_doc", "target_chapter", "target_ext", "master_png_path",
 )
+
+# The ``@name`` of the DITA ``<data>`` provenance element that flags a
+# redirected (deduplicated) lofar and anchors its reversal (feature 006).
+ORIGINAL_ASSET_PATH = "original-asset-path"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -213,6 +223,22 @@ def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
         import os
         rel_str = os.path.relpath(target, topic_dir.resolve(strict=False))
         return Path(rel_str).as_posix()
+
+
+def _relpath_posix(target: Path, start_dir: Path) -> str:
+    """Return ``target`` as a POSIX path relative to ``start_dir`` (may use ``..``).
+
+    Mirrors the ``os.path.relpath`` branch of ``resolve_image_href`` but for
+    two *output* locations: the file a redirected lofar links to (in the
+    master gram's folder) and the redirected gram's own folder. Used by the
+    deduplication redirect branch (feature 006) so a redirected href is the
+    same kind of ``../``-bearing relative path the generator already emits.
+    """
+    import os
+    rel_str = os.path.relpath(
+        target.resolve(strict=False), start_dir.resolve(strict=False),
+    )
+    return Path(rel_str).as_posix()
 
 
 def copy_asset(
@@ -436,6 +462,60 @@ def _topic_dir_for_row(out_dir: Path, row: dict, suffix: str = "") -> Path:
 
 
 # -----------------------------------------------------------------------------
+# Large-asset deduplication: master index (feature 006)
+# -----------------------------------------------------------------------------
+
+@dataclass
+class MasterTarget:
+    """Where a redirected lofar links to: the master gram's copy.
+
+    ``topic_dir`` is the master gram's output folder; ``link_basename`` is
+    the slugified filename of the asset a redirector links to within it —
+    the image for an image lofar, the ``.glc`` for an audio lofar (the link
+    target of the ``.glc``/``.wav`` pair, FR-009). See data-model.md Entity 3.
+    """
+
+    topic_dir: Path
+    link_basename: str
+
+
+def build_master_index(
+    rows: list[dict], out_dir: Path, suffixes: dict[tuple, str],
+) -> dict[str, MasterTarget]:
+    """Map every non-redirected asset-owning row's ``png_path`` → ``MasterTarget``.
+
+    The **index pass** (feature 006, R4): a redirected row carries the
+    master row's ``png_path`` in ``master_png_path``; this index lets the
+    emit pass resolve that key to the master's output location and link
+    filename. Only non-redirected rows (empty ``master_png_path``) are
+    recorded — they are the masters. Rows without a usable asset extension
+    are skipped. Building this is pure in-memory work over already-loaded
+    rows and emits nothing, so it is inert when no row redirects (FR-010).
+    """
+    index: dict[str, MasterTarget] = {}
+    for row in rows:
+        if (row.get("master_png_path", "") or "").strip():
+            continue  # redirected row — never itself a master
+        png = row.get("png_path", "") or ""
+        if not png:
+            continue
+        asset_suffix = Path(png).suffix.lower()
+        if asset_suffix == ".wav":
+            glc = row.get("glc_path", "") or ""
+            if not glc:
+                continue
+            link_basename = slugify_asset_name(Path(glc).name)
+        elif asset_suffix in (".png", ".jpg", ".jpeg"):
+            link_basename = slugify_asset_name(Path(png).name)
+        else:
+            continue
+        suffix = _suffix_for_row(row, suffixes)
+        topic_dir = _topic_dir_for_row(out_dir, row, suffix)
+        index[png] = MasterTarget(topic_dir, link_basename)
+    return index
+
+
+# -----------------------------------------------------------------------------
 # XML emission
 # -----------------------------------------------------------------------------
 
@@ -479,10 +559,27 @@ def _serialise(root: ET.Element) -> str:
     return f"{body}\n"
 
 
+def _append_provenance_data(section: ET.Element, original_path: str) -> None:
+    """Append the redirected-lofar provenance ``<data>`` element (feature 006).
+
+    Emitted as the **last** child of a redirected lofar ``<section>``:
+    ``<data name="original-asset-path" value="…"/>``. Its presence alone
+    flags the lofar as redirected (FR-007) and anchors reversal (FR-008);
+    ``<data>`` is part of the standard DITA metadata domain (DTD-valid, no
+    specialisation) and is suppressed from default trainee XHTML (FR-006).
+    ``value`` is the original local path of the **link target** — the row's
+    ``png_path`` for an image lofar, its ``glc_path`` for an audio lofar
+    (never the ``.wav``).
+    """
+    ET.SubElement(section, "data", {
+        "name": ORIGINAL_ASSET_PATH, "value": original_path,
+    })
+
+
 def _append_gramframe_table(
     parent: ET.Element, image_href: str, time_end: str, freq_end: str,
     display_text: str = "",
-) -> None:
+) -> ET.Element:
     """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
 
     The HTML produced by DITA-OT carries ``class="gram-config"`` on the
@@ -521,6 +618,7 @@ def _append_gramframe_table(
         r = ET.SubElement(tbody, "row")
         ET.SubElement(r, "entry").text = label
         ET.SubElement(r, "entry").text = value
+    return section
 
 
 def _append_analysis_section(
@@ -555,7 +653,7 @@ def _append_analysis_section(
 
 def _append_glc_viewer_link(
     parent: ET.Element, glc_href: str, display_text: str,
-) -> None:
+) -> ET.Element:
     """Append a GLC-viewer link block (§1.3) to the gram body.
 
     Emitted instead of a GramFrame table when the GLC's inner
@@ -577,12 +675,13 @@ def _append_glc_viewer_link(
         "href": glc_href, "format": "glc", "scope": "local",
     })
     xref.text = display_text or glc_href
+    return section
 
 
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
-    suffix: str = "",
-) -> tuple[list[Path], list[dict]]:
+    suffix: str = "", master_index: dict[str, MasterTarget] | None = None,
+) -> tuple[list[Path], list[dict], int]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
     The body contains, in order:
@@ -626,6 +725,29 @@ def emit_gram_topic(
 
     written: list[Path] = []
     skipped: list[dict] = []
+    index = master_index or {}
+    redirected = 0
+
+    def _resolve_redirect(r: dict) -> MasterTarget | None:
+        """Return the master this row redirects to, or ``None``.
+
+        A row is redirected iff ``master_png_path`` is non-empty *and*
+        resolves in the master index. A non-empty-but-unresolvable target
+        (missing/blank master) is logged as a WARNING and treated as
+        non-redirected so the asset is copied locally instead (FR-014).
+        """
+        key = (r.get("master_png_path", "") or "").strip()
+        if not key:
+            return None
+        target = index.get(key)
+        if target is None:
+            LOGGER.warning(
+                "Redirect target not resolvable for %s/%s/%s seq=%s: "
+                "master_png_path=%r not found; copying asset locally instead.",
+                r["publication"], r["gram_id"], r["topic_type"],
+                r["sequence"], key,
+            )
+        return target
 
     if analysis_rows:
         analysis_row = analysis_rows[0]
@@ -641,6 +763,19 @@ def emit_gram_topic(
         asset_suffix = Path(png_path).suffix.lower()
 
         if asset_suffix in (".png", ".jpg", ".jpeg"):
+            master = _resolve_redirect(row)
+            if master is not None:
+                # Redirected: link to the master copy, copy nothing locally,
+                # and record the original local path for reversal (feature 006).
+                href = _relpath_posix(master.topic_dir / master.link_basename, topic_dir)
+                section = _append_gramframe_table(
+                    body, href,
+                    row.get("time_end", ""), row.get("freq_end", ""),
+                    row.get("display_text", ""),
+                )
+                _append_provenance_data(section, png_path)
+                redirected += 1
+                continue
             image_href, copied = copy_asset(png_path, image_root, topic_dir)
             if copied is not None:
                 written.append(copied)
@@ -661,6 +796,21 @@ def emit_gram_topic(
                     row["sequence"], reason,
                 )
                 skipped.append(_skip_record(row, reason))
+                continue
+            master = _resolve_redirect(row)
+            if master is not None:
+                # Redirected audio pair: link to the master ``.glc`` (FR-009);
+                # neither ``.glc`` nor ``.wav`` is copied — the large ``.wav``
+                # stays adjacent to the master ``.glc``. Record the ``.glc``
+                # link-target path (not the ``.wav``) for an exact inverse.
+                glc_href = _relpath_posix(
+                    master.topic_dir / master.link_basename, topic_dir,
+                )
+                section = _append_glc_viewer_link(
+                    body, glc_href, row.get("display_text", ""),
+                )
+                _append_provenance_data(section, glc_path)
+                redirected += 1
                 continue
             glc_href, glc_copied = copy_asset(glc_path, image_root, topic_dir)
             wav_href, wav_copied = copy_asset(png_path, image_root, topic_dir)
@@ -688,7 +838,7 @@ def emit_gram_topic(
     # that was never generated, producing a 404 in every gram page.
 
     _write_text(topic_path, _serialise(topic))
-    return [topic_path] + written, skipped
+    return [topic_path] + written, skipped, redirected
 
 
 # -----------------------------------------------------------------------------
@@ -955,17 +1105,23 @@ def main(argv: Iterable[str] | None = None) -> int:
     written: list[Path] = []
     skipped: list[dict] = []
     errors = 0
+    redirected_total = 0
     suffixes = _compute_gram_suffixes(rows)
+    # Index pass (feature 006): map each master row's png_path to its output
+    # location so redirected rows can link to it. Inert when no row redirects.
+    master_index = build_master_index(rows, args.out, suffixes)
     for key, gram_rows in _gram_groups(rows).items():
         try:
             suffix = suffixes.get(key, "")
-            paths, skips = emit_gram_topic(
+            paths, skips, redirected = emit_gram_topic(
                 gram_rows, args.out, args.image_root, suffix=suffix,
+                master_index=master_index,
             )
             for path in paths:
                 written.append(path)
                 LOGGER.info("Wrote %s", path)
             skipped.extend(skips)
+            redirected_total += redirected
         except Exception as exc:
             errors += 1
             LOGGER.error("Failed to emit gram %s: %s", key, exc)
@@ -992,8 +1148,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.info("Wrote skipped report %s", skipped_path)
 
     LOGGER.info(
-        "Generation summary: files=%d ditamaps=%d skipped=%d errors=%d",
-        len(written), len(ditamap_paths), len(skipped), errors,
+        "Generation summary: files=%d ditamaps=%d skipped=%d redirected=%d errors=%d",
+        len(written), len(ditamap_paths), len(skipped), redirected_total, errors,
     )
     return 0 if errors == 0 else 1
 
