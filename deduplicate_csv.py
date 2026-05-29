@@ -37,7 +37,7 @@ from typing import Iterable
 # The optional right-edge columns this script populates. Kept in lockstep
 # with ``generate_dita.OPTIONAL_CSV_COLUMNS``.
 MASTER_PNG_PATH = "master_png_path"
-# The renumbered gram number (feature 007). Empty means "unchanged — use
+# The renumbered gram number (feature 008). Empty means "unchanged — use
 # ``gram_id``"; ``gram_id`` itself is never mutated.
 TARGET_GRAM_ID = "target_gram_id"
 
@@ -214,7 +214,7 @@ def deduplicate(
 
 
 # -----------------------------------------------------------------------------
-# Gram renumbering (feature 007) — resolve within-week gram-number collisions
+# Gram renumbering (feature 008) — resolve within-week gram-number collisions
 # -----------------------------------------------------------------------------
 
 _DIGITS_RE = re.compile(r"\d+")
@@ -238,7 +238,7 @@ def _gram_number(gram_id: str) -> int | None:
 def renumber_grams(rows: list[dict]) -> int:
     """Populate ``target_gram_id`` to give each gram a unique within-week number.
 
-    The four-week ``main`` IA (feature 007) folds several source decks into one
+    The four-week ``main`` IA (feature 008) folds several source decks into one
     week folder, so two distinct grams can claim the same number (e.g. a native
     ``Week 2 / Gram 5`` and a Pub10 gram reassigned to Week 2). Within each
     ``(publication, effective_chapter, effective_doc)`` bucket this walks the

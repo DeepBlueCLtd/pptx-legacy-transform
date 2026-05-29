@@ -47,7 +47,7 @@ Dependency-ordered. `[P]` = parallelisable with siblings.
 - [x] T030 Update `specs/001-pptx-dita-migration/contracts/csv-schema.md`
       (optional `target_gram_id`; `target_chapter` week-int meaning).
 - [x] T031 Update `README.md` (pipeline ordering, new column, week IA) and
-      `CLAUDE.md` (feature 007 note).
+      `CLAUDE.md` (feature 008 note).
 
 ## Phase 5 — Verify
 

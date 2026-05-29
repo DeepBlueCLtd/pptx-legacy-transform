@@ -747,7 +747,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ]
         self.assertEqual(generate_dita.check_row_identity(rows), [])
 
-    # The two distinct Week 2 grams that both claim number 5 (feature 007).
+    # The two distinct Week 2 grams that both claim number 5 (feature 008).
     _COLLIDING_GRAMS = [
         # Native Week 2 / Gram 5
         {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
@@ -772,7 +772,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
     def test_main_aborts_on_unrenumbered_collision(self) -> None:
         """Two distinct grams sharing a week + number with no renumbering
         applied must abort the run (the safety net that replaces the old
-        letter-suffix auto-disambiguation), not silently merge (feature 007)."""
+        letter-suffix auto-disambiguation), not silently merge (feature 008)."""
         csv_path = self._write_csv(self._COLLIDING_GRAMS)
         out_dir = self.tmp / "out"
         rc = generate_dita.main([
@@ -787,7 +787,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
     def test_renumbering_resolves_collision_into_unique_folders(self) -> None:
         """Running the dedupe renumber step assigns the later gram a fresh
         number (max+1), so the two grams land at distinct gram-NN folders with
-        no letter suffix (feature 007)."""
+        no letter suffix (feature 008)."""
         rows = [dict(r) for r in self._COLLIDING_GRAMS]
         renumbered = deduplicate_csv.renumber_grams(rows)
         self.assertEqual(renumbered, 1, "exactly the second gram is renumbered")
@@ -817,7 +817,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
                          "letter-suffix folders must no longer be produced")
 
     def test_bare_integer_target_chapter_expands_to_week(self) -> None:
-        """Feature 007: target_chapter="2" lands under main/week-2/ and the
+        """Feature 008: target_chapter="2" lands under main/week-2/ and the
         main ditamap heads the chapter "Week 2"."""
         cols = list(generate_dita.CSV_COLUMNS) + ["target_chapter"]
         csv_path = self.tmp / "weeks.csv"

@@ -176,7 +176,7 @@ def check_row_identity(rows: list[dict]) -> list[str]:
         # The key is the path the gram lands at: publication + effective
         # chapter + effective doc + effective gram number + topic_type +
         # sequence. Two rows sharing it mean two distinct grams resolve to
-        # the same week + number without renumbering (feature 007) — the
+        # the same week + number without renumbering (feature 008) — the
         # generator would otherwise silently merge them into one topic.
         key = (
             row.get("publication", ""), _effective_chapter(row),
@@ -327,7 +327,7 @@ def _topic_id(gram_id: str) -> str:
 def _effective_gram_id(row: dict) -> str:
     """The gram number the row lands at: ``target_gram_id`` else ``gram_id``.
 
-    Feature 007: when several source decks fold into one week folder, the
+    Feature 008: when several source decks fold into one week folder, the
     dedupe step renumbers colliding grams into the optional ``target_gram_id``
     column. The generator derives every per-gram name (folder, topic filename,
     topic id, ``Gram NN`` title) from this effective value so a renumbered gram
@@ -375,7 +375,7 @@ def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
     chapter at the same path below their edition segment (FR-014,
     FR-016).
 
-    A bare-integer chapter ``N`` (feature 007's four-week ``main`` IA) expands
+    A bare-integer chapter ``N`` (feature 008's four-week ``main`` IA) expands
     to display ``Week N`` and slug ``week-N`` — the editable ``target_chapter``
     holds the terse week number, expanded only at emit time.
 
@@ -838,7 +838,7 @@ def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple, list[dict]]":
 
     A "gram" is the rows sharing ``(publication, effective_chapter,
     effective_doc, effective_gram_number)`` — the path the gram lands at.
-    After the dedupe step renumbers within-week collisions (feature 007),
+    After the dedupe step renumbers within-week collisions (feature 008),
     distinct grams carry distinct effective numbers, so each forms its own
     group. Any *un-renumbered* collision is caught by ``check_row_identity``
     (which aborts before grouping), so two distinct grams never merge here.
@@ -912,7 +912,7 @@ def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
 def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter.
 
-    Chapters are grouped by the *effective* chapter (feature 007: the week
+    Chapters are grouped by the *effective* chapter (feature 008: the week
     number a row lands in, ``target_chapter`` else ``chapter``), so the map's
     ``<topichead>`` per week (``Week 1`` … ``Week 4``) matches the on-disk
     ``main/week-N/`` tree, and topic hrefs use the effective gram number.

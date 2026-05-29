@@ -218,7 +218,7 @@ def slugify(text: str) -> str:
     return slug
 
 
-# A ``main`` deck's folder title encodes the teaching week (feature 007).
+# A ``main`` deck's folder title encodes the teaching week (feature 008).
 # "Instructor Week 1 Grams", "Week 01", "Week1" all yield the bare integer
 # week number, leading zeros stripped, matched case-insensitively.
 _WEEK_TOKEN_RE = re.compile(r"\bweek\s*0*(\d+)\b", re.IGNORECASE)
@@ -229,7 +229,7 @@ def week_chapter_number(chapter_title: str | None) -> str:
 
     Used to populate the editable ``target_chapter`` column for ``main`` decks
     so the four week folders (``Week 1`` … ``Week 4``) replace the old
-    per-document slicing (feature 007, FR-001). A title with no week token
+    per-document slicing (feature 008, FR-001). A title with no week token
     (e.g. ``Instructor Pub10_Ed22B_Updated``) returns ``""`` so an analyst can
     assign the week by hand (FR-002).
     """
@@ -818,7 +818,7 @@ def gram_to_rows(
     """Expand one gram into N+1 CSV rows (N GLC links + 1 analysis row).
 
     ``target_chapter`` is the editable routing target — for ``main`` decks this
-    is the bare-integer week number (feature 007); empty falls back to the
+    is the bare-integer week number (feature 008); empty falls back to the
     immutable source ``chapter`` downstream.
     """
     rows: list[dict] = []
@@ -969,7 +969,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     content_root=args.input_root,
                     source_dir=pptx.parent,
                 )
-                # Feature 007: ``main`` is organised into four week folders, so
+                # Feature 008: ``main`` is organised into four week folders, so
                 # the editable target chapter is the bare-integer week number
                 # parsed from the deck title, and there is no per-document
                 # folder segment (target_doc empty). Non-main publications keep

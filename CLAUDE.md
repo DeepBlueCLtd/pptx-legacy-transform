@@ -88,7 +88,7 @@ CSVs read forward-compatibly (a 16-column legacy CSV reads as if the 17th cell
 were empty). Full column reference and the Excel "Save As" pitfalls are in
 `README.md`.
 
-### Week-based `main` IA and renumbering (feature 007)
+### Week-based `main` IA and renumbering (feature 008)
 
 `main` is organised into **four week folders**, not one chapter per source deck.
 Extraction parses a `Week N` token from a `main` deck's folder title and writes
@@ -167,5 +167,5 @@ relevant feature's `spec.md` and `plan.md` first — the contracts under
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-[specs/007-week-based-ia/plan.md](specs/007-week-based-ia/plan.md)
+[specs/008-week-based-ia/plan.md](specs/008-week-based-ia/plan.md)
 <!-- SPECKIT END -->

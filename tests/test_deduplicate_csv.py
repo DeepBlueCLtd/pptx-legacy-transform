@@ -122,7 +122,7 @@ class DeduplicateCsvTests(unittest.TestCase):
         out1 = self._run("once.csv")
         # The post-processor's optional columns are appended at the right edge,
         # in lockstep with generate_dita.OPTIONAL_CSV_COLUMNS: master_png_path
-        # (feature 006) then target_gram_id (feature 007).
+        # (feature 006) then target_gram_id (feature 008).
         fieldnames, _ = _read(out1)
         self.assertEqual(fieldnames[-2:], ["master_png_path", "target_gram_id"])
         # File-level contract: BOM + CRLF preserved.
@@ -146,7 +146,7 @@ class DeduplicateCsvTests(unittest.TestCase):
 
 
 class RenumberGramsTests(unittest.TestCase):
-    """Within-week gram-number renumbering (feature 007)."""
+    """Within-week gram-number renumbering (feature 008)."""
 
     @staticmethod
     def _gram(chapter, gram_id, vessel, target_chapter=""):

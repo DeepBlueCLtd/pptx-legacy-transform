@@ -54,7 +54,7 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(slug2, "nordic-fishing-vessels")
 
     def test_week_chapter_number_parses_week_token(self) -> None:
-        """Feature 007: a "Week N" deck title yields the bare-integer week."""
+        """Feature 008: a "Week N" deck title yields the bare-integer week."""
         self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 1 Grams"), "1")
         self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 4 Grams_Updated"), "4")
         self.assertEqual(extract_to_csv.week_chapter_number("Week 03"), "3")  # leading zero stripped

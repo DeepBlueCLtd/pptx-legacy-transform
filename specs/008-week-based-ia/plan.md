@@ -1,7 +1,7 @@
 # Implementation Plan: Week-Based Information Architecture for `main`
 
 **Branch**: `claude/fervent-goldberg-9M4pc` (developed on the existing working branch; no separate feature branch) | **Date**: 2026-05-29 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/007-week-based-ia/spec.md`
+**Input**: Feature specification from `/specs/008-week-based-ia/spec.md`
 
 ## Summary
 
@@ -96,7 +96,7 @@ DTD changes, net reduction in generator complexity.
 ### Documentation (this feature)
 
 ```text
-specs/007-week-based-ia/
+specs/008-week-based-ia/
 ├── plan.md                       # This file
 ├── spec.md                       # Feature specification
 ├── research.md                   # Decisions: week token, renumber order, suffix removal, fail-fast
