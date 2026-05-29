@@ -39,6 +39,17 @@ MAP_DOCTYPE = (
 LOGGER = logging.getLogger("publish_html")
 
 
+def _write_text(path: Path, text: str) -> None:
+    """Write ``text`` with LF endings, working on Python 3.9.
+
+    ``Path.write_text`` only grew a ``newline`` parameter in 3.10; the
+    air-gapped target runs WinPython 3.9, so force LF via ``open`` to
+    preserve the byte-identical-output contract.
+    """
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
 # -----------------------------------------------------------------------------
 # Editions — spec 003
 # -----------------------------------------------------------------------------
@@ -113,7 +124,7 @@ def stage(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
     for path in dst.rglob("*.dita"):
         body = path.read_text(encoding="utf-8")
-        path.write_text(TOPIC_DOCTYPE + body, encoding="utf-8", newline="\n")
+        _write_text(path, TOPIC_DOCTYPE + body)
     for path in sorted(dst.glob("*.ditamap")):
         stem = path.stem
         body = path.read_text(encoding="utf-8")
@@ -121,7 +132,7 @@ def stage(src: Path, dst: Path) -> None:
         new_dir = dst / stem
         new_dir.mkdir(parents=True, exist_ok=True)
         new_path = new_dir / path.name
-        new_path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
+        _write_text(new_path, MAP_DOCTYPE + body)
         path.unlink()
 
 
@@ -306,7 +317,7 @@ def prettify_tree(root: Path) -> int:
     count = 0
     for path in root.rglob("*.html"):
         original = path.read_text(encoding="utf-8")
-        path.write_text(prettify_html(original), encoding="utf-8", newline="\n")
+        _write_text(path, prettify_html(original))
         count += 1
     return count
 
@@ -388,7 +399,7 @@ def inject_gramframe_plugin(
             re.escape(_GRAMFRAME_HEAD_CLOSE), tag, body, count=1,
         )
         if replaced:
-            path.write_text(new_body, encoding="utf-8", newline="\n")
+            _write_text(path, new_body)
             count += 1
     return count
 
@@ -526,7 +537,7 @@ def inject_operator_console_theme(
             changed = True
 
         if changed:
-            path.write_text(body, encoding="utf-8", newline="\n")
+            _write_text(path, body)
             count += 1
     return count
 
@@ -582,7 +593,7 @@ def scrub_nondeterministic_metadata(root: Path) -> int:
         original = path.read_text(encoding="utf-8")
         scrubbed = _DITAOT_DATE_META_RE.sub("", original)
         if scrubbed != original:
-            path.write_text(scrubbed, encoding="utf-8", newline="\n")
+            _write_text(path, scrubbed)
         count += 1
     return count
 
@@ -681,7 +692,8 @@ def write_edition_index(
     edition_name = edition.name.title()
     out_subdir.mkdir(parents=True, exist_ok=True)
     index_path = out_subdir / "index.html"
-    index_path.write_text(
+    _write_text(
+        index_path,
         '<!DOCTYPE html>\n'
         '<html lang="en">\n'
         '  <head>\n'
@@ -698,8 +710,6 @@ def write_edition_index(
         '    </main>\n'
         '  </body>\n'
         '</html>\n',
-        encoding="utf-8",
-        newline="\n",
     )
     return index_path
 
@@ -727,7 +737,8 @@ def write_shared_landing(
     )
     out_root.mkdir(parents=True, exist_ok=True)
     index_path = out_root / "index.html"
-    index_path.write_text(
+    _write_text(
+        index_path,
         '<!DOCTYPE html>\n'
         '<html lang="en">\n'
         '  <head>\n'
@@ -744,8 +755,6 @@ def write_shared_landing(
         '    </main>\n'
         '  </body>\n'
         '</html>\n',
-        encoding="utf-8",
-        newline="\n",
     )
     return index_path
 

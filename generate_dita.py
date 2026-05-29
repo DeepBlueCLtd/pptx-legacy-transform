@@ -47,6 +47,17 @@ OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
 LOGGER = logging.getLogger(__name__)
 
 
+def _write_text(path: Path, text: str) -> None:
+    """Write ``text`` with LF endings, working on Python 3.9.
+
+    ``Path.write_text`` only grew a ``newline`` parameter in 3.10; the
+    air-gapped target runs WinPython 3.9, so force LF via ``open`` to
+    preserve the byte-identical-output contract.
+    """
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
 def setup_logging(log_path: Path) -> None:
     """Configure dual stdout + per-stage-file logging."""
     root = logging.getLogger()
@@ -676,7 +687,7 @@ def emit_gram_topic(
     # the historical ``<related-links>`` pointed at a ``gram-index.dita``
     # that was never generated, producing a 404 in every gram page.
 
-    topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
+    _write_text(topic_path, _serialise(topic))
     return [topic_path] + written, skipped
 
 
@@ -806,7 +817,7 @@ def emit_main_ditamap(
             href = f"main/{slug}/{prefix}{gram_dir}/{topic_file}"
             ET.SubElement(topichead, "topicref", {"href": href})
 
-    map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
+    _write_text(map_path, _serialise(root))
     return map_path
 
 
@@ -850,7 +861,7 @@ def emit_test_ditamap(
         prefix = f"{doc_slug}/" if doc_slug else ""
         href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
         ET.SubElement(root, "topicref", {"href": href})
-    map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
+    _write_text(map_path, _serialise(root))
     return map_path
 
 
@@ -874,7 +885,7 @@ def write_trainee_ditaval(out_dir: Path) -> Path:
     exist next to the ditamaps and refuses to build otherwise.
     """
     path = out_dir / "trainee.ditaval"
-    path.write_text(TRAINEE_DITAVAL, encoding="utf-8", newline="\n")
+    _write_text(path, TRAINEE_DITAVAL)
     return path
 
 
@@ -882,7 +893,7 @@ def write_manifest(out_dir: Path, files: list[Path]) -> Path:
     """Write ``manifest.txt`` listing every produced file (sorted)."""
     manifest_path = out_dir / "manifest.txt"
     rels = sorted(p.relative_to(out_dir).as_posix() for p in files)
-    manifest_path.write_text("\n".join(rels) + "\n", encoding="utf-8", newline="\n")
+    _write_text(manifest_path, "\n".join(rels) + "\n")
     return manifest_path
 
 
@@ -898,7 +909,7 @@ def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
             f'gram_id="{s["gram_id"]}" topic_type={s["topic_type"]} '
             f'sequence={s["sequence"]} reason="{s["reason"]}"'
         )
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    _write_text(path, "\n".join(lines) + "\n")
     return path
 
 
