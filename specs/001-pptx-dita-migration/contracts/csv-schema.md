@@ -45,8 +45,9 @@ for any absent optional column.
 
 | Column | Added by | Written by | Read by | Meaning |
 |---|---|---|---|---|
-| `target_doc`, `target_chapter`, `target_ext` | refactor flow | extractor / author | `generate_dita.py` | refactoring-planning hints (deck/chapter relocation) |
+| `target_doc`, `target_chapter`, `target_ext` | refactor flow | extractor / author | `generate_dita.py` | refactoring-planning hints (deck/chapter relocation). **Feature 008**: for `main`, `target_chapter` now holds the bare-integer **week** (`1`…`4`), set automatically from a `Week N` deck title or by an analyst for Pub10 grams; the generator expands a bare integer to navtitle `Week N` / slug `week-N`. `target_doc` is left empty for `main` (no per-document folder segment). |
 | `master_png_path` | feature 006 (large-asset dedup) | `deduplicate_csv.py` only (the extractor does **not** emit it) | `generate_dita.py` via `row.get("master_png_path", "")` | **Empty** → the row is not redirected. **Non-empty** → the value is the `png_path` of the **master row** (first occurrence of a duplicated large asset) this row's lofar must link to instead of copying its own asset. Only rows whose `file_size` is strictly greater than the threshold (default 10 MiB) are eligible. A non-empty value that the generator cannot resolve is treated as non-redirected and logged as a WARNING. See `specs/006-large-asset-deduplication/contracts/csv-master-png-path.md`. |
+| `target_gram_id` | feature 008 (week IA renumbering) | `deduplicate_csv.py` only (the extractor does **not** emit it) | `generate_dita.py` via `row.get("target_gram_id", "")` | **Empty** → use `gram_id` unchanged. **Non-empty** → the renumbered gram number this gram lands at, assigned when several decks fold into one week folder and two grams claim the same number. `gram_id` is never mutated. The generator derives every per-gram name (`gram-NN/`, `gram_NN.dita`, `id`, `Gram NN` title) from this **effective** number. See `specs/008-week-based-ia/contracts/csv-target-gram-id.md`. |
 
 ## Row identity
 
