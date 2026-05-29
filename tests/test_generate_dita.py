@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import generate_dita  # noqa: E402
+import deduplicate_csv  # noqa: E402
 
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
@@ -746,43 +747,109 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ]
         self.assertEqual(generate_dita.check_row_identity(rows), [])
 
-    def test_main_auto_suffixes_grams_colliding_on_id(self) -> None:
-        """Two grams with the same `gram_id` in the same target bucket
-        but distinct `vessel_name` get letter suffixes (gram-05a,
-        gram-05b) rather than silently merging or aborting the run."""
-        csv_path = self._write_csv([
-            # Original Week 2 / Gram 5
-            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
-             "vessel_name": "Vessel A", "topic_type": "glc", "sequence": "1",
-             "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
-             "link_href": "supporting/a/c.glc", "glc_path": "supporting/a/c.glc",
-             "time_end": "180", "freq_end": "400", "png_path": "images/a.png"},
-            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
-             "vessel_name": "Vessel A", "topic_type": "analysis", "sequence": "1",
-             "topic_filename": "gram_05.dita", "png_path": "images/a_an.png"},
-            # Moved-from-Pub10 Gram 05 — author left the gram_id alone
-            # because the new auto-suffix is documented to handle it.
-            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
-             "vessel_name": "Vessel B", "topic_type": "glc", "sequence": "1",
-             "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
-             "link_href": "supporting/b/c.glc", "glc_path": "supporting/b/c.glc",
-             "time_end": "271", "freq_end": "400", "png_path": "images/b.png"},
-            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
-             "vessel_name": "Vessel B", "topic_type": "analysis", "sequence": "1",
-             "topic_filename": "gram_05.dita", "png_path": "images/b_an.png"},
-        ])
+    # The two distinct Week 2 grams that both claim number 5 (feature 008).
+    _COLLIDING_GRAMS = [
+        # Native Week 2 / Gram 5
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
+         "vessel_name": "Vessel A", "topic_type": "glc", "sequence": "1",
+         "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
+         "link_href": "supporting/a/c.glc", "glc_path": "supporting/a/c.glc",
+         "time_end": "180", "freq_end": "400", "png_path": "images/a.png"},
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
+         "vessel_name": "Vessel A", "topic_type": "analysis", "sequence": "1",
+         "topic_filename": "gram_05.dita", "png_path": "images/a_an.png"},
+        # A Pub10 gram reassigned to Week 2 that also claims number 5.
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
+         "vessel_name": "Vessel B", "topic_type": "glc", "sequence": "1",
+         "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
+         "link_href": "supporting/b/c.glc", "glc_path": "supporting/b/c.glc",
+         "time_end": "271", "freq_end": "400", "png_path": "images/b.png"},
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
+         "vessel_name": "Vessel B", "topic_type": "analysis", "sequence": "1",
+         "topic_filename": "gram_05.dita", "png_path": "images/b_an.png"},
+    ]
+
+    def test_main_aborts_on_unrenumbered_collision(self) -> None:
+        """Two distinct grams sharing a week + number with no renumbering
+        applied must abort the run (the safety net that replaces the old
+        letter-suffix auto-disambiguation), not silently merge (feature 008)."""
+        csv_path = self._write_csv(self._COLLIDING_GRAMS)
         out_dir = self.tmp / "out"
         rc = generate_dita.main([
             "--csv", str(csv_path),
             "--out", str(out_dir),
             "--image-root", str(FIXTURES),
         ])
-        self.assertEqual(rc, 0, "generator must auto-suffix the colliding grams")
+        self.assertEqual(rc, 1, "generator must abort on an un-renumbered collision")
+        self.assertFalse((out_dir / "main" / "week-2-grams").exists(),
+                         "no topic should be written when the run aborts")
+
+    def test_renumbering_resolves_collision_into_unique_folders(self) -> None:
+        """Running the dedupe renumber step assigns the later gram a fresh
+        number (max+1), so the two grams land at distinct gram-NN folders with
+        no letter suffix (feature 008)."""
+        rows = [dict(r) for r in self._COLLIDING_GRAMS]
+        renumbered = deduplicate_csv.renumber_grams(rows)
+        self.assertEqual(renumbered, 1, "exactly the second gram is renumbered")
+
+        cols = list(generate_dita.CSV_COLUMNS) + ["target_gram_id"]
+        csv_path = self.tmp / "renumbered.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=cols,
+                                    lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({c: row.get(c, "") for c in cols})
+
+        out_dir = self.tmp / "out"
+        rc = generate_dita.main([
+            "--csv", str(csv_path),
+            "--out", str(out_dir),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0, "generator must accept the renumbered CSV")
         chapter_dir = out_dir / "main" / "week-2-grams"
-        self.assertTrue((chapter_dir / "gram-05a" / "gram_05a.dita").is_file(),
-                        "first colliding gram should land at gram-05a")
-        self.assertTrue((chapter_dir / "gram-05b" / "gram_05b.dita").is_file(),
-                        "second colliding gram should land at gram-05b")
+        self.assertTrue((chapter_dir / "gram-05" / "gram_05.dita").is_file(),
+                        "native gram keeps number 5")
+        self.assertTrue((chapter_dir / "gram-06" / "gram_06.dita").is_file(),
+                        "renumbered gram lands at max+1 = 6, no letter suffix")
+        self.assertFalse((chapter_dir / "gram-05a").exists(),
+                         "letter-suffix folders must no longer be produced")
+
+    def test_bare_integer_target_chapter_expands_to_week(self) -> None:
+        """Feature 008: target_chapter="2" lands under main/week-2/ and the
+        main ditamap heads the chapter "Week 2"."""
+        cols = list(generate_dita.CSV_COLUMNS) + ["target_chapter"]
+        csv_path = self.tmp / "weeks.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=cols,
+                                    lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+            writer.writeheader()
+            for row in [
+                {"publication": "main", "chapter": "Instructor Pub10_Ed22B_Updated",
+                 "target_chapter": "2", "gram_id": "7", "vessel_name": "Nordik",
+                 "topic_type": "glc", "sequence": "1", "topic_filename": "gram_07.dita",
+                 "display_text": "LOFAR 1", "link_href": "supporting/g/c.glc",
+                 "glc_path": "supporting/g/c.glc", "time_end": "271", "freq_end": "400",
+                 "png_path": "images/g.png"},
+                {"publication": "main", "chapter": "Instructor Pub10_Ed22B_Updated",
+                 "target_chapter": "2", "gram_id": "7", "vessel_name": "Nordik",
+                 "topic_type": "analysis", "sequence": "1", "topic_filename": "gram_07.dita",
+                 "png_path": "images/g_an.png"},
+            ]:
+                writer.writerow({c: row.get(c, "") for c in cols})
+
+        out_dir = self.tmp / "out"
+        rc = generate_dita.main([
+            "--csv", str(csv_path), "--out", str(out_dir),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertTrue((out_dir / "main" / "week-2" / "gram-07" / "gram_07.dita").is_file(),
+                        "bare-integer chapter must slug to week-2, not pub10")
+        ditamap = (out_dir / "main.ditamap").read_text(encoding="utf-8")
+        self.assertIn("<navtitle>Week 2</navtitle>", ditamap)
+        self.assertIn("main/week-2/gram-07/gram_07.dita", ditamap)
 
 
 class DedupGenerateDitaTests(unittest.TestCase):

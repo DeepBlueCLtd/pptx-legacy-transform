@@ -64,7 +64,7 @@ rebuilds remain predictable.
 | `introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
 | `generate_dita.py` | Consume the signed-off CSV and emit DITA topics, copied assets, and ditamaps (Story 1, MVP). |
-| `deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006). |
+| `deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
 | `rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
 | `run_pipeline.bat` | Windows orchestrator: extract → manual review → generate (Story 6). |
@@ -128,6 +128,11 @@ A more detailed walkthrough lives in
    per gram** at `dita/<publication>/<chapter>/gram-NN/gram_NN.dita`
    (the N+1 CSV rows for the gram are merged — Analysis Sheet
    section first, then one section per Lofar in `sequence` order).
+   For `main`, the chapter is the **week** (feature 008): a bare-integer
+   `target_chapter` of `1`…`4` becomes `dita/main/week-N/`, headed
+   `Week N`, and the per-gram `NN` is the effective gram number
+   (`target_gram_id` when the dedupe step renumbered a collision, else
+   `gram_id`).
    Every referenced asset (PNG, WAV, analysis sheet) is copied beside
    the topic with a stable per-section name (`analysis.png`,
    `lofar-1.png`, `lofar-2-i.png`, ...) so each `href` in the topic
@@ -174,7 +179,9 @@ empty default, so a CSV without them behaves exactly as before:
 
 | Column | Written by | Notes |
 |---|---|---|
+| `target_chapter` | extractor / author | **Feature 008:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; left empty by extraction for decks with no week token (Pub10), where an **analyst** types the week number per the agreed table. The generator expands a bare integer to heading `Week N` and folder `main/week-N/`. Empty falls back to the source `chapter`. |
 | `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `target_gram_id` | `deduplicate_csv.py` | **Feature 008:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number assigned when several decks fold into one week folder and two grams claim the same number — the later gram (by source-chapter alphabetical, then row order) is bumped to one past the week's current maximum. `gram_id` is never mutated; the generated folder/file/title use this effective number. Produced by the same `deduplicate_csv.py` run as `master_png_path`. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong
 

@@ -88,6 +88,26 @@ CSVs read forward-compatibly (a 16-column legacy CSV reads as if the 17th cell
 were empty). Full column reference and the Excel "Save As" pitfalls are in
 `README.md`.
 
+### Week-based `main` IA and renumbering (feature 008)
+
+`main` is organised into **four week folders**, not one chapter per source deck.
+Extraction parses a `Week N` token from a `main` deck's folder title and writes
+the bare integer into the editable `target_chapter` column (immutable `chapter`
+keeps the full title); `target_doc` is left empty so a week's grams share one
+folder. Decks with no week token (Pub10) get a blank `target_chapter` for an
+**analyst** to fill in. The generator expands a bare-integer effective chapter
+to navtitle `Week N` / slug `week-N` (in `_normalise_chapter`).
+
+Because several decks now share a week, two grams can claim the same number.
+`deduplicate_csv.py` **renumbers** the collision: per `(publication, effective
+chapter, effective doc)` bucket it walks distinct grams in `(source chapter,
+row-order)` order and bumps a taken number to `max+1`, recording it in the
+additive `target_gram_id` column (empty = use `gram_id`; `gram_id` is never
+mutated). The generator derives every per-gram name from the **effective gram
+number** (`target_gram_id or gram_id`). The old letter-suffix auto-disambiguation
+is **gone**: an un-renumbered within-week collision is a **fail-fast** error in
+`check_row_identity` instructing the operator to run the dedupe step.
+
 ### Audiences and editions (feature 004)
 
 Per-gram exclude-audience tags ride a 17th CSV `audience` column → an

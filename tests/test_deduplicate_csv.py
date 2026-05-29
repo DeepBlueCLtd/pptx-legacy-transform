@@ -120,9 +120,11 @@ class DeduplicateCsvTests(unittest.TestCase):
     # -- T034: round-trip fidelity + idempotency ----------------------------
     def test_csv_roundtrip_and_idempotent(self) -> None:
         out1 = self._run("once.csv")
-        # master_png_path appended at the right edge.
+        # The post-processor's optional columns are appended at the right edge,
+        # in lockstep with generate_dita.OPTIONAL_CSV_COLUMNS: master_png_path
+        # (feature 006) then target_gram_id (feature 008).
         fieldnames, _ = _read(out1)
-        self.assertEqual(fieldnames[-1], "master_png_path")
+        self.assertEqual(fieldnames[-2:], ["master_png_path", "target_gram_id"])
         # File-level contract: BOM + CRLF preserved.
         raw = out1.read_bytes()
         self.assertTrue(raw.startswith(b"\xef\xbb\xbf"), "utf-8-sig BOM preserved")
@@ -141,6 +143,103 @@ class DeduplicateCsvTests(unittest.TestCase):
         self.assertEqual(deduplicate_csv.main(
             ["--csv", str(out1), "--image-root", str(FIXTURES), "--out", str(out3)]), 0)
         self.assertEqual(out1.read_bytes(), out3.read_bytes())
+
+
+class RenumberGramsTests(unittest.TestCase):
+    """Within-week gram-number renumbering (feature 008)."""
+
+    @staticmethod
+    def _gram(chapter, gram_id, vessel, target_chapter=""):
+        """Two rows (analysis + one glc) sharing one gram's identity."""
+        base = {
+            "publication": "main", "chapter": chapter, "gram_id": gram_id,
+            "vessel_name": vessel, "target_chapter": target_chapter,
+            "target_doc": "",
+        }
+        return [
+            {**base, "topic_type": "glc", "sequence": "1"},
+            {**base, "topic_type": "analysis", "sequence": "1"},
+        ]
+
+    def _target(self, rows):
+        """The target_gram_id assigned to each distinct gram, first row wins."""
+        out = {}
+        for r in rows:
+            key = (r["chapter"], r["gram_id"], r["vessel_name"])
+            out.setdefault(key, r["target_gram_id"])
+        return out
+
+    def test_collision_bumps_to_max_plus_one(self) -> None:
+        # A week (target_chapter=2) with native grams 1,2,5 and a Pub10 gram
+        # also claiming 5. Source chapter "A native" sorts before "B pub10",
+        # so the native grams keep their numbers and Pub10 is bumped to 6.
+        rows = (
+            self._gram("A native", "1", "V1", "2")
+            + self._gram("A native", "2", "V2", "2")
+            + self._gram("A native", "5", "V5", "2")
+            + self._gram("B pub10", "5", "VP", "2")
+        )
+        count = deduplicate_csv.renumber_grams(rows)
+        self.assertEqual(count, 1)
+        targets = self._target(rows)
+        self.assertEqual(targets[("A native", "5", "V5")], "")  # native keeps 5
+        self.assertEqual(targets[("B pub10", "5", "VP")], "6")  # bumped past max(5)
+        # Non-colliding native grams are untouched.
+        self.assertEqual(targets[("A native", "1", "V1")], "")
+        self.assertEqual(targets[("A native", "2", "V2")], "")
+
+    def test_order_is_alphabetical_by_source_chapter(self) -> None:
+        # Same number 3 in two decks; the alphabetically-earlier chapter keeps
+        # it regardless of CSV row order (the Pub10 deck is listed first here).
+        rows = (
+            self._gram("Z pub10", "3", "VP", "1")
+            + self._gram("A week", "3", "VW", "1")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        targets = self._target(rows)
+        self.assertEqual(targets[("A week", "3", "VW")], "")   # earlier chapter keeps 3
+        self.assertEqual(targets[("Z pub10", "3", "VP")], "4")  # later chapter bumped
+
+    def test_successive_collisions_step_the_maximum(self) -> None:
+        rows = (
+            self._gram("A", "1", "Va", "1")
+            + self._gram("B", "1", "Vb", "1")
+            + self._gram("C", "1", "Vc", "1")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        targets = self._target(rows)
+        self.assertEqual(targets[("A", "1", "Va")], "")    # keeps 1
+        self.assertEqual(targets[("B", "1", "Vb")], "2")   # max(1)+1
+        self.assertEqual(targets[("C", "1", "Vc")], "3")   # max(2)+1
+
+    def test_same_number_different_weeks_does_not_collide(self) -> None:
+        rows = (
+            self._gram("A week1", "5", "V1", "1")
+            + self._gram("A week2", "5", "V2", "2")
+        )
+        count = deduplicate_csv.renumber_grams(rows)
+        self.assertEqual(count, 0, "numbering is unique per week, not globally")
+        self.assertTrue(all(r["target_gram_id"] == "" for r in rows))
+
+    def test_inert_when_no_collision(self) -> None:
+        rows = (
+            self._gram("A", "1", "Va", "1")
+            + self._gram("A", "2", "Vb", "1")
+        )
+        count = deduplicate_csv.renumber_grams(rows)
+        self.assertEqual(count, 0)
+        self.assertTrue(all(r["target_gram_id"] == "" for r in rows))
+
+    def test_idempotent_recompute(self) -> None:
+        rows = (
+            self._gram("A native", "5", "V5", "2")
+            + self._gram("B pub10", "5", "VP", "2")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        first = [r["target_gram_id"] for r in rows]
+        # Re-running over the already-renumbered rows recomputes from gram_id.
+        deduplicate_csv.renumber_grams(rows)
+        self.assertEqual([r["target_gram_id"] for r in rows], first)
 
 
 if __name__ == "__main__":

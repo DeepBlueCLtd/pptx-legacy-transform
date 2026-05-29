@@ -48,6 +48,7 @@ CSV_COLUMNS: tuple[str, ...] = (
 # by default (FR-010, SC-005).
 OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
     "target_doc", "target_chapter", "target_ext", "master_png_path",
+    "target_gram_id",
 )
 
 # The ``@name`` of the DITA ``<data>`` provenance element that flags a
@@ -169,33 +170,36 @@ def check_row_identity(rows: list[dict]) -> list[str]:
     each duplicate tuple is reported as the anchor, so the author can
     decide which side to renumber.
     """
-    first_seen: dict[tuple, int] = {}
+    first_seen: dict[tuple, tuple[int, dict]] = {}
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
-        # Identity now includes effective_chapter + effective_doc + the
-        # gram's source chapter + vessel name so the same gram_id can
-        # coexist across decks / chapters or across distinct grams within
-        # a single (chapter, deck) bucket — the collision check fires
-        # only when two rows are truly indistinguishable.
+        # The key is the path the gram lands at: publication + effective
+        # chapter + effective doc + effective gram number + topic_type +
+        # sequence. Two rows sharing it mean two distinct grams resolve to
+        # the same week + number without renumbering (feature 008) — the
+        # generator would otherwise silently merge them into one topic.
         key = (
             row.get("publication", ""), _effective_chapter(row),
-            _effective_doc(row), row.get("gram_id", ""),
-            row.get("chapter", ""), row.get("vessel_name", ""),
+            _effective_doc(row), _gram_num(_effective_gram_id(row)),
             row.get("topic_type", ""), row.get("sequence", ""),
         )
         if key in first_seen:
+            anchor_line, anchor = first_seen[key]
             errors.append(
-                f"Duplicate row identity at CSV line {line_no} "
-                f"(first seen at line {first_seen[key]}): "
-                f"publication={key[0]!r} target_chapter={key[1]!r} "
-                f"target_doc={key[2]!r} gram_id={key[3]!r} "
-                f"chapter={key[4]!r} vessel_name={key[5]!r} "
-                f"topic_type={key[6]!r} sequence={key[7]!r}. "
-                f"Two source rows are indistinguishable on every field — "
-                f"renumber one or amend vessel_name to disambiguate."
+                f"Duplicate gram slot at CSV line {line_no} "
+                f"(first seen at line {anchor_line}): "
+                f"publication={key[0]!r} effective_chapter={key[1]!r} "
+                f"effective_doc={key[2]!r} gram_number={key[3]!r} "
+                f"topic_type={key[4]!r} sequence={key[5]!r}. "
+                f"Two distinct grams "
+                f"(gram_id={anchor.get('gram_id', '')!r} from chapter="
+                f"{anchor.get('chapter', '')!r} vs gram_id="
+                f"{row.get('gram_id', '')!r} from chapter="
+                f"{row.get('chapter', '')!r}) resolve to the same week + "
+                f"number — run deduplicate_csv.py to renumber the collision."
             )
         else:
-            first_seen[key] = line_no
+            first_seen[key] = (line_no, row)
     return errors
 
 
@@ -305,24 +309,31 @@ def _gram_num(gram_id: str) -> str:
     return f"{int(digits[0]):02d}"
 
 
-def _gram_folder_name(gram_id: str, suffix: str = "") -> str:
-    """Return the per-gram folder name, e.g. ``"gram-01"`` or ``"gram-01a"``.
-
-    ``suffix`` disambiguates two grams that legitimately share a
-    ``gram_id`` within the same ``(target_chapter, target_doc)`` bucket
-    after a CSV-driven refactor (computed by ``_compute_gram_suffixes``).
-    """
-    return f"gram-{_gram_num(gram_id)}{suffix}"
+def _gram_folder_name(gram_id: str) -> str:
+    """Return the per-gram folder name, e.g. ``"gram-01"``."""
+    return f"gram-{_gram_num(gram_id)}"
 
 
-def _topic_filename(gram_id: str, suffix: str = "") -> str:
+def _topic_filename(gram_id: str) -> str:
     """Return the per-gram topic filename, e.g. ``"gram_01.dita"``."""
-    return f"gram_{_gram_num(gram_id)}{suffix}.dita"
+    return f"gram_{_gram_num(gram_id)}.dita"
 
 
-def _topic_id(gram_id: str, suffix: str = "") -> str:
+def _topic_id(gram_id: str) -> str:
     """Return the topic ``id`` attribute, e.g. ``"gram_01"``."""
-    return f"gram_{_gram_num(gram_id)}{suffix}"
+    return f"gram_{_gram_num(gram_id)}"
+
+
+def _effective_gram_id(row: dict) -> str:
+    """The gram number the row lands at: ``target_gram_id`` else ``gram_id``.
+
+    Feature 008: when several source decks fold into one week folder, the
+    dedupe step renumbers colliding grams into the optional ``target_gram_id``
+    column. The generator derives every per-gram name (folder, topic filename,
+    topic id, ``Gram NN`` title) from this effective value so a renumbered gram
+    gets a clean, unique path; ``gram_id`` is preserved as provenance.
+    """
+    return (row.get("target_gram_id", "") or "").strip() or row.get("gram_id", "")
 
 
 def _effective_chapter(row: dict) -> str:
@@ -346,69 +357,8 @@ def _doc_slug(target_doc: str) -> str:
     return slugify(Path(target_doc).stem)
 
 
-def _compute_gram_suffixes(rows: list[dict]) -> dict[tuple, str]:
-    """Detect gram_id collisions and assign letter suffixes.
-
-    After a CSV refactor a single ``(publication, target_chapter,
-    target_doc, gram_id)`` bucket may end up containing two distinct
-    grams (e.g. a Week 1 Gram 5 and a Week 2 Gram 5 both moved into the
-    same target deck without renumbering). Two grams are treated as
-    distinct when they differ on ``(chapter, vessel_name)`` — the
-    source chapter the gram came from plus its vessel label.
-
-    Returns a mapping ``{(publication, effective_chapter, effective_doc,
-    gram_id, chapter, vessel_name): suffix}`` where ``suffix`` is ``""``
-    for grams that don't collide and ``"a"``, ``"b"``, … (first-seen
-    order) for those that do.
-    """
-    # First pass: identities seen per bucket, in first-seen order.
-    identities_by_bucket: dict[tuple, list[tuple]] = {}
-    for row in rows:
-        bucket = (
-            row.get("publication", ""),
-            _effective_chapter(row),
-            _effective_doc(row),
-            row.get("gram_id", ""),
-        )
-        identity = (row.get("chapter", ""), row.get("vessel_name", ""))
-        ids = identities_by_bucket.setdefault(bucket, [])
-        if identity not in ids:
-            ids.append(identity)
-    # Second pass: assign a suffix only when a bucket carries >1 identity.
-    suffixes: dict[tuple, str] = {}
-    for bucket, ids in identities_by_bucket.items():
-        if len(ids) <= 1:
-            for ident in ids:
-                suffixes[bucket + ident] = ""
-        else:
-            for n, ident in enumerate(ids):
-                # 'a', 'b', …, 'z', then 'aa' once we'd run out — letter
-                # blocks of 26 are plenty for any plausible CSV.
-                suffix = ""
-                idx = n
-                while True:
-                    suffix = chr(ord("a") + (idx % 26)) + suffix
-                    idx = idx // 26 - 1
-                    if idx < 0:
-                        break
-                suffixes[bucket + ident] = suffix
-    return suffixes
-
-
-def _suffix_for_row(row: dict, suffixes: dict[tuple, str]) -> str:
-    """Lookup helper paired with ``_compute_gram_suffixes``."""
-    key = (
-        row.get("publication", ""),
-        _effective_chapter(row),
-        _effective_doc(row),
-        row.get("gram_id", ""),
-        row.get("chapter", ""),
-        row.get("vessel_name", ""),
-    )
-    return suffixes.get(key, "")
-
-
 _INSTRUCTOR_PREFIX_RE = re.compile(r"^(Instructor )", re.IGNORECASE)
+_WEEK_NUMBER_RE = re.compile(r"^\d+$")
 
 
 def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
@@ -425,17 +375,26 @@ def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
     chapter at the same path below their edition segment (FR-014,
     FR-016).
 
+    A bare-integer chapter ``N`` (feature 008's four-week ``main`` IA) expands
+    to display ``Week N`` and slug ``week-N`` — the editable ``target_chapter``
+    holds the terse week number, expanded only at emit time.
+
     Examples:
 
     >>> _normalise_chapter("Instructor Week 1 Grams")
     ('Instructor ', 'Week 1 Grams', 'week-1-grams')
     >>> _normalise_chapter("Instructor Pub10_Ed22B_Updated")
     ('Instructor ', 'Pub10_Ed22B_Updated', 'pub10-ed22b-updated')
+    >>> _normalise_chapter("2")
+    (None, 'Week 2', 'week-2')
     >>> _normalise_chapter("Plain Chapter Without Prefix")
     (None, 'Plain Chapter Without Prefix', 'plain-chapter-without-prefix')
     >>> _normalise_chapter("")
     (None, '', '')
     """
+    if _WEEK_NUMBER_RE.match(raw):
+        week = str(int(raw))  # strip any leading zeros
+        return None, f"Week {week}", f"week-{week}"
     match = _INSTRUCTOR_PREFIX_RE.match(raw)
     if match is None:
         return None, raw, slugify(raw)
@@ -464,16 +423,16 @@ def _publication_root(out_dir: Path, row: dict) -> Path:
     return root
 
 
-def _topic_dir_for_row(out_dir: Path, row: dict, suffix: str = "") -> Path:
+def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
     """Return the directory the topic + its asset live in.
 
     Each gram gets its own sub-directory so the original asset filenames
     can be preserved (slugified) without colliding across grams in the
-    same chapter. ``suffix`` is the collision-disambiguation letter
-    computed by ``_compute_gram_suffixes`` (empty when the gram doesn't
-    collide).
+    same chapter. The folder is named from the *effective* gram number
+    (``target_gram_id`` else ``gram_id``), so a renumbered gram (feature
+    007) lands at its clean, unique ``gram-NN`` path.
     """
-    return _publication_root(out_dir, row) / _gram_folder_name(row["gram_id"], suffix)
+    return _publication_root(out_dir, row) / _gram_folder_name(_effective_gram_id(row))
 
 
 # -----------------------------------------------------------------------------
@@ -495,7 +454,7 @@ class MasterTarget:
 
 
 def build_master_index(
-    rows: list[dict], out_dir: Path, suffixes: dict[tuple, str],
+    rows: list[dict], out_dir: Path,
 ) -> dict[str, MasterTarget]:
     """Map every non-redirected asset-owning row's ``png_path`` → ``MasterTarget``.
 
@@ -524,8 +483,7 @@ def build_master_index(
             link_basename = slugify_asset_name(Path(png).name)
         else:
             continue
-        suffix = _suffix_for_row(row, suffixes)
-        topic_dir = _topic_dir_for_row(out_dir, row, suffix)
+        topic_dir = _topic_dir_for_row(out_dir, row)
         index[png] = MasterTarget(topic_dir, link_basename)
     return index
 
@@ -702,7 +660,7 @@ def _append_glc_viewer_link(
 
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
-    suffix: str = "", master_index: dict[str, MasterTarget] | None = None,
+    master_index: dict[str, MasterTarget] | None = None,
 ) -> tuple[list[Path], list[dict], int]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
@@ -730,14 +688,15 @@ def emit_gram_topic(
     glc_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
 
     first = analysis_rows[0] if analysis_rows else glc_rows[0]
-    gram_num = _gram_num(first["gram_id"])
-    topic_dir = _topic_dir_for_row(out_dir, first, suffix)
+    eff_gram_id = _effective_gram_id(first)
+    gram_num = _gram_num(eff_gram_id)
+    topic_dir = _topic_dir_for_row(out_dir, first)
     topic_dir.mkdir(parents=True, exist_ok=True)
-    topic_path = topic_dir / _topic_filename(first["gram_id"], suffix)
+    topic_path = topic_dir / _topic_filename(eff_gram_id)
 
-    topic = ET.Element("topic", {"id": _topic_id(first["gram_id"], suffix)})
+    topic = ET.Element("topic", {"id": _topic_id(eff_gram_id)})
     title = ET.SubElement(topic, "title")
-    title.text = f"Gram {gram_num}{suffix}"
+    title.text = f"Gram {gram_num}"
     if first.get("vessel_name"):
         ph = ET.SubElement(title, "ph", {
             "audience": "-trainee", "outputclass": "vessel-name",
@@ -878,11 +837,11 @@ def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple, list[dict]]":
     """Group rows into grams, preserving CSV order.
 
     A "gram" is the rows sharing ``(publication, effective_chapter,
-    effective_doc, gram_id, chapter, vessel_name)`` — the same tuple
-    used by the suffix map. Including ``chapter`` and ``vessel_name``
-    keeps two distinct grams with the same ``gram_id`` (e.g. moved into
-    the same target chapter without renumbering) as separate groups
-    rather than silently merged.
+    effective_doc, effective_gram_number)`` — the path the gram lands at.
+    After the dedupe step renumbers within-week collisions (feature 008),
+    distinct grams carry distinct effective numbers, so each forms its own
+    group. Any *un-renumbered* collision is caught by ``check_row_identity``
+    (which aborts before grouping), so two distinct grams never merge here.
     """
     groups: OrderedDict[tuple, list[dict]] = OrderedDict()
     for row in rows:
@@ -890,9 +849,7 @@ def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple, list[dict]]":
             row.get("publication", ""),
             _effective_chapter(row),
             _effective_doc(row),
-            row.get("gram_id", ""),
-            row.get("chapter", ""),
-            row.get("vessel_name", ""),
+            _gram_num(_effective_gram_id(row)),
         )
         groups.setdefault(key, []).append(row)
     return groups
@@ -952,10 +909,14 @@ def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
         ph.tail = display_remainder
 
 
-def emit_main_ditamap(
-    rows: list[dict], out_dir: Path, suffixes: dict[tuple, str] | None = None,
-) -> Path:
-    """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter."""
+def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
+    """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter.
+
+    Chapters are grouped by the *effective* chapter (feature 008: the week
+    number a row lands in, ``target_chapter`` else ``chapter``), so the map's
+    ``<topichead>`` per week (``Week 1`` … ``Week 4``) matches the on-disk
+    ``main/week-N/`` tree, and topic hrefs use the effective gram number.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / "main.ditamap"
 
@@ -963,12 +924,11 @@ def emit_main_ditamap(
     for row in rows:
         if row["publication"] != "main":
             continue
-        chapter_title = row.get("chapter", "") or ""
-        _, _, slug = _normalise_chapter(chapter_title)
-        key = slug
-        if key not in chapters:
-            chapters[key] = (chapter_title, [])
-        chapters[key][1].append(row)
+        eff_chapter = _effective_chapter(row)
+        _, _, slug = _normalise_chapter(eff_chapter)
+        if slug not in chapters:
+            chapters[slug] = (eff_chapter, [])
+        chapters[slug][1].append(row)
 
     root = ET.Element("map")
     _append_map_title(root, "Main")
@@ -977,14 +937,13 @@ def emit_main_ditamap(
         _append_chapter_navtitle(topichead, title)
         seen: set[str] = set()
         for row in chapter_rows:
-            sfx = _suffix_for_row(row, suffixes) if suffixes else ""
             doc_slug = _doc_slug(_effective_doc(row))
-            gram_dir = _gram_folder_name(row["gram_id"], sfx)
+            gram_dir = _gram_folder_name(_effective_gram_id(row))
             uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
             if uniq in seen:
                 continue
             seen.add(uniq)
-            topic_file = _topic_filename(row["gram_id"], sfx)
+            topic_file = _topic_filename(_effective_gram_id(row))
             prefix = f"{doc_slug}/" if doc_slug else ""
             href = f"main/{slug}/{prefix}{gram_dir}/{topic_file}"
             ET.SubElement(topichead, "topicref", {"href": href})
@@ -1011,7 +970,6 @@ def _flat_publication_title(publication: str) -> str:
 
 def emit_test_ditamap(
     publication: str, rows: list[dict], out_dir: Path,
-    suffixes: dict[tuple, str] | None = None,
 ) -> Path:
     """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1022,14 +980,13 @@ def emit_test_ditamap(
     for row in rows:
         if row["publication"] != publication:
             continue
-        sfx = _suffix_for_row(row, suffixes) if suffixes else ""
         doc_slug = _doc_slug(_effective_doc(row))
-        gram_dir = _gram_folder_name(row["gram_id"], sfx)
+        gram_dir = _gram_folder_name(_effective_gram_id(row))
         uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
         if uniq in seen:
             continue
         seen.add(uniq)
-        topic_file = _topic_filename(row["gram_id"], sfx)
+        topic_file = _topic_filename(_effective_gram_id(row))
         prefix = f"{doc_slug}/" if doc_slug else ""
         href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
         ET.SubElement(root, "topicref", {"href": href})
@@ -1128,15 +1085,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     skipped: list[dict] = []
     errors = 0
     redirected_total = 0
-    suffixes = _compute_gram_suffixes(rows)
     # Index pass (feature 006): map each master row's png_path to its output
     # location so redirected rows can link to it. Inert when no row redirects.
-    master_index = build_master_index(rows, args.out, suffixes)
+    master_index = build_master_index(rows, args.out)
     for key, gram_rows in _gram_groups(rows).items():
         try:
-            suffix = suffixes.get(key, "")
             paths, skips, redirected = emit_gram_topic(
-                gram_rows, args.out, args.image_root, suffix=suffix,
+                gram_rows, args.out, args.image_root,
                 master_index=master_index,
             )
             for path in paths:
@@ -1151,11 +1106,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     publications = sorted({r["publication"] for r in rows})
     ditamap_paths: list[Path] = []
     if any(r["publication"] == "main" for r in rows):
-        ditamap_paths.append(emit_main_ditamap(rows, args.out, suffixes))
+        ditamap_paths.append(emit_main_ditamap(rows, args.out))
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
         if pub != "main":
-            path = emit_test_ditamap(pub, rows, args.out, suffixes)
+            path = emit_test_ditamap(pub, rows, args.out)
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
 
