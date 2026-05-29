@@ -38,7 +38,11 @@ from typing import Iterable
 MASTER_PNG_PATH = "master_png_path"
 
 # Default candidacy cut-off: strictly greater than 10 MiB (FR-003). The
-# mebibyte reading of the user's "10Mb" cut-off; overridable via CLI.
+# mebibyte reading of the user's "10Mb" cut-off; overridable via CLI. This
+# threshold alone excludes the assets we must never dedupe: the ``.doc``/
+# ``.docx`` analysis sheets in the audited corpus top out at ~55 KB, so they
+# can never become candidates (and unrelated Word files that merely share a
+# size are likewise far below the bar).
 DEFAULT_THRESHOLD_BYTES = 10 * 1024 * 1024
 
 LOGGER = logging.getLogger(__name__)
@@ -162,7 +166,9 @@ def deduplicate(
     for row in rows:
         row[MASTER_PNG_PATH] = ""
 
-    # 1) Candidate filter + size pre-grouping.
+    # 1) Candidate filter + size pre-grouping. Only assets strictly over the
+    #    threshold are eligible; this alone keeps the small (~55 KB) .doc/.docx
+    #    analysis sheets out of contention.
     by_size: dict[int, list[dict]] = defaultdict(list)
     for row in rows:
         size = _parse_size(row)

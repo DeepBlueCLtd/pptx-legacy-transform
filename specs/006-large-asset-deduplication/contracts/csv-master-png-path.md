@@ -27,7 +27,9 @@ additive column that carries large-asset deduplication redirects.
 1. **Candidate filter** — a row is eligible only if `int(file_size)` exists and
    is **strictly greater than** the threshold (`--threshold-bytes`, default
    `10 * 1024 * 1024` = 10,485,760). At-or-below-threshold rows are never
-   redirected, even if duplicated (FR-003).
+   redirected, even if duplicated (FR-003). This threshold alone keeps the
+   small (~55 KB) `.doc`/`.docx` analysis sheets out of contention, so unrelated
+   Word files that merely share a `file_size` are never grouped.
 2. **Grouping** — candidates are grouped by **content identity**: `file_size`
    pre-filter, confirmed by `sha256` of `image_root / png_path`. A group with a
    single member (unique large asset) is left untouched.

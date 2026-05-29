@@ -174,7 +174,7 @@ empty default, so a CSV without them behaves exactly as before:
 
 | Column | Written by | Notes |
 |---|---|---|
-| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected — which excludes the small (~55 KB) `.doc`/`.docx` analysis sheets. Run `python deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
 
 ### Editing the CSV in Excel — what can go wrong
 
