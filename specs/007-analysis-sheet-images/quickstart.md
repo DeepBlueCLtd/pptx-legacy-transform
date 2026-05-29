@@ -29,9 +29,17 @@ python normalise_analysis_sheets.py --content-root path/to/content
 ```
 
 **Verify (SC-001, SC-005)**: the end-of-run summary reports `sheets_seen`,
-`rendered`, `skipped_has_png`, `render_failed`, `missing`. Every `.doc`/`.docx`
-sheet now has a same-stem `.png` sibling, except any reported under
-`render_failed`. `normalise.log` records one line per sheet.
+`rendered`, `skipped_has_png`, `render_failed`, `multipage_warned`,
+`docx_wrapped`, `tidy_skipped`. Every `*analysis*.doc`/`.docx` document now has a
+same-stem `.png` sibling (margin-trimmed when Pillow is present), except any
+reported under `render_failed`; every analysis sheet that was png-only now also
+has a `.docx` (FR-018). `normalise.log` records one line per document. (Unrelated
+Word docs sharing the chapter folder are left untouched — only files matching
+`*analysis*` are rendered.)
+
+> The trim/DPI step (FR-017) uses Pillow if installed and silently falls back to
+> the full-page render otherwise (`tidy_skipped` counts those); the reverse
+> `.docx` wrap (FR-018) uses the stdlib only.
 
 **Verify idempotency (SC-004)**: run the same command again — every sheet is
 `skipped_has_png`, nothing is written, no PNG mtime changes.

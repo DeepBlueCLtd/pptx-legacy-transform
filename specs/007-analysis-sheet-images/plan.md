@@ -11,13 +11,17 @@ analysis sheet's single landscape page to a PNG ahead of time, instead of
 leaving a click-to-open link that launches MS Word mid-lesson.
 
 The mechanism is a new **prep-time, single-purpose script**
-`normalise_analysis_sheets.py` that walks the content tree and, for every
-analysis sheet authored as a Word document (legacy binary `.doc` *or* `.docx`),
-renders a sibling PNG (`analysis table.doc` → `analysis table.png`) via an
-external, configurable renderer (LibreOffice headless by default). It is
-**render-once and idempotent**: a sheet that already has its PNG is skipped, so
-the produced image becomes a committed source asset and the renderer never runs
-inside a re-runnable generate/publish loop.
+`normalise_analysis_sheets.py` that scans the content tree for analysis
+documents — selected by the corpus naming convention **`*analysis*` + `.doc`/
+`.docx`** (analysis sheets sit in the **chapter folder alongside PPT source data
+and other Word files**, so it must not render every Word doc it finds; see
+research R7) — and for each renders a sibling PNG (`aaa_analysis.doc` →
+`aaa_analysis.png`) via an external, configurable renderer (LibreOffice headless
+by default). It renders the first page and **detects multi-page documents**,
+warning rather than silently truncating (research R3). It is **render-once and
+idempotent**: a sheet that already has its PNG is skipped, so the produced image
+becomes a committed source asset and the renderer never runs inside a re-runnable
+generate/publish loop.
 
 Because the renderer produces a same-stem sibling, the only code change in the
 pipeline proper is a **small tweak to `extract_to_csv.py`**: when an analysis
@@ -39,9 +43,11 @@ extractor already share with the rest of the pipeline.
 existing pipeline tests exercise the new path), `run_pipeline.bat` (insert the
 normalise stage before extract), `README.md` (renderer prerequisites). New tests
 `tests/test_normalise_analysis_sheets.py` and extensions to
-`tests/test_extract_to_csv.py`. `generate_dita.py`, `publish_html.py`,
-`introspect_pptx.py`, `deduplicate_csv.py`, and `rehydrate_dita.py` are **not**
-modified.
+`tests/test_extract_to_csv.py`, plus updates to two existing tests the changes
+break: `tests/test_run_pipeline_bat.py` (new stage order) and
+`tests/test_mock_pptx.py` (3-way `{doc,docx,png}` analysis mix). `generate_dita.py`,
+`publish_html.py`, `introspect_pptx.py`, `deduplicate_csv.py`, and
+`rehydrate_dita.py` are **not** modified.
 
 ## Technical Context
 
@@ -50,19 +56,27 @@ throughout, string-evaluated modern type hints), per the air-gapped WinPython
 3.9.4.0 floor carried from feature 001. Watch the 3.9 gotchas already documented
 (`Path.write_text` has no `newline` kwarg).
 
-**Primary Dependencies**: `python-pptx` (extractor only — the new script imports
-**stdlib only**: `argparse`, `logging`, `subprocess`, `pathlib`, `sys`). **No
-new runtime Python dependency.** The Word→PNG renderer is an *external tool*
-(LibreOffice headless `soffice`), invoked via `subprocess` — not a Python
-package, not bundled, installed by the maintainer, exactly as DITA-OT is treated
-(feature 001 FR-021). Tests stub it at the `--renderer-cmd` boundary and never
-require LibreOffice.
+**Primary Dependencies**: `python-pptx` (extractor only). The new script's
+**runtime-critical** path is **stdlib only** (`argparse`, `logging`,
+`subprocess`, `pathlib`, `sys`, plus `zipfile`+`xml.etree` for the reverse
+`.docx` wrap, reusing `mock_pptx.emit_docx`'s approach). Two **prep-only** tools
+sit behind graceful fallbacks: (1) the Word→PNG renderer — an *external tool*
+(LibreOffice headless `soffice`) invoked via `subprocess`, like DITA-OT (feature
+001 FR-021); (2) **Pillow**, a *defensively-imported* library for margin-trim +
+DPI normalisation (FR-017) — `try: import PIL` and fall back to the untrimmed
+render when absent. **Neither is added to the pipeline runtime path
+(`extract`/`generate`/`publish`) nor required by the test suite** (FR-012):
+tests stub the renderer at `--renderer-cmd` and run the crop path only when
+Pillow happens to be present (asserting the fallback otherwise), so the canonical
+suite stays stdlib-only and LibreOffice/Pillow-free.
 
-**Storage**: Filesystem only. The renderer writes one sibling `.png` per Word
-analysis sheet into the gram folder it already lives in (no new directory). The
-signed-off CSV is **unchanged in shape** — no new column. The analysis row's
-existing `png_path` simply points at the rendered `.png` instead of the `.doc`/
-`.docx` (and `target_ext`/`file_size` follow). The DITA tree is unchanged.
+**Storage**: Filesystem only. The step writes, beside each analysis document in
+its chapter folder (no new directory): a same-stem `.png` (rendered, trimmed) for
+every `*analysis*.doc/.docx`, and a same-stem `.docx` for any analysis sheet that
+exists only as a `.png` (the reverse wrap, FR-018). The signed-off CSV is
+**unchanged in shape** — no new column. The analysis row's existing `png_path`
+simply points at the rendered `.png` instead of the `.doc`/`.docx` (and
+`target_ext`/`file_size` follow). The DITA tree is unchanged.
 
 **Testing**: `python -m unittest discover tests/` (stdlib `unittest`). New module
 `tests/test_normalise_analysis_sheets.py` constructs temp gram folders and stubs
@@ -107,13 +121,19 @@ inline path at all.
 
 Checked against `.specify/memory/constitution.md` v1.0.0:
 
-- **I. Air-Gapped, Self-Sufficient Operation** — PASS. **No new runtime Python
-  dependency**: the new script is stdlib-only and the Word→PNG renderer is an
-  external, installed-by-the-user, documented-in-README tool (like DITA-OT),
-  never invoked at pipeline runtime by the re-runnable stages. Tests stay
-  stdlib-only by stubbing the renderer at `--renderer-cmd`. Python 3.9 floor
-  respected. The script writes a `normalise.log` DEBUG file alongside console
-  output, per the dual-logging rule.
+- **I. Air-Gapped, Self-Sufficient Operation** — PASS (with a deliberate,
+  contained prep-time exception). The pipeline's **runtime** path keeps exactly
+  one third-party dependency (`python-pptx`); the new script's runtime-critical
+  code is stdlib-only (incl. the reverse `.docx` wrap via `zipfile`+`xml.etree`).
+  Two prep-only tools sit behind graceful fallbacks and are never on the runtime
+  path or in tests: the external LibreOffice renderer (like DITA-OT), and
+  **Pillow** for margin-trim/DPI (FR-017), defensively imported with a full-page
+  fallback when absent. This is the maintainer's explicit, justified call to
+  allow a prep-time wheel; the constitution's "one dependency" rule binds the
+  *runtime* and the rule that *tests* stay stdlib-only — both upheld. The crop
+  test runs under `skipUnless(PIL present)` and the fallback is asserted
+  unconditionally, so the canonical suite needs neither tool. Python 3.9 floor
+  respected; `normalise.log` honours dual-logging.
 - **II. Single-Purpose Scripts, Minimal Surface** — PASS. One new tiny script
   for the one new responsibility (render Word → PNG); the only other change is
   the smallest possible tweak to an existing stage (a sibling-redirect in the
@@ -131,19 +151,24 @@ Checked against `.specify/memory/constitution.md` v1.0.0:
   value and never a fatal abort. The CSV review boundary is preserved.
 - **V. Deterministic, Idempotent Output** — PASS (with the renderer caveat
   handled by design). The renderer's PNG bytes are not byte-reproducible across
-  versions, so they are produced **once** and committed as source; downstream
-  copy is the existing deterministic `copy2`. The normaliser is a no-op on an
-  already-rendered tree. See research R2.
+  versions, so they (and the trimmed result) are produced **once** and committed
+  as source; downstream copy is the existing deterministic `copy2`. The reverse
+  `.docx` wrap reuses `emit_docx`'s fixed-timestamp `zipfile` writer, so it is
+  byte-stable. The normaliser is a no-op on an already-rendered/already-wrapped
+  tree. See research R2, R9.
 - **VI. Honest Limitations** — PASS. The single-landscape-page assumption and the
   first-page-only render behaviour are documented as a known limitation in the
   README and research R3 rather than hidden; the renderer-not-bundled fact is
   stated openly.
 
 **Result**: PASS — no gate violations. Re-evaluated after Phase 1 (contracts,
-data-model, quickstart written): still PASS. The total Phase 1 surface is one
-new stdlib script, one small extractor redirect, a mock-corpus addition, a batch
-wiring line, a README section, and paired tests — no dependency, no output-shape
-change.
+data-model, quickstart written): still PASS. The total Phase 1 surface is one new
+script (stdlib runtime path; two defensively-isolated prep tools), one small
+extractor redirect, a mock-corpus addition, a batch wiring line, a README
+section, and paired tests — no *runtime* dependency, no CSV/DITA output-shape
+change. The single deliberate judgement call (a prep-time Pillow wheel for
+FR-017) is contained behind a graceful fallback and excluded from runtime and
+tests, per the maintainer's decision.
 
 ## Project Structure
 
@@ -167,21 +192,36 @@ specs/007-analysis-sheet-images/
 
 ```text
 normalise_analysis_sheets.py        # NEW (stdlib only) — prep-time, render-once normaliser.
-                                    #   iter_analysis_sheets(content_root): yield every .doc/.docx whose
-                                    #     role/name marks it an analysis sheet (case-insensitive, same
-                                    #     whitelist the extractor uses), deterministic sorted order.
+                                    #   iter_analysis_sheets(content_root): yield every file matching
+                                    #     *analysis* (case-insensitive) with a .doc/.docx extension, anywhere
+                                    #     under the tree (analysis docs share the chapter folder with PPT
+                                    #     source data + other Word docs, so match by name, NOT "every Word
+                                    #     doc"); deterministic sorted order. (research R7)
                                     #   needs_render(doc): True iff no same-stem .png sibling exists.
                                     #   render_doc_to_png(doc, png_out, renderer_cmd): subprocess to
                                     #     `soffice --headless --convert-to png --outdir <tmp> <doc>` (or the
                                     #     configured equivalent), then move the result to the same-stem
                                     #     sibling. Returns True on success; logs WARNING + returns False on
                                     #     renderer-unavailable or non-zero exit. NEVER raises.
-                                    #   main(): walk, classify, render-or-skip, accumulate per-sheet
-                                    #     INFO/WARNING, write normalise.log + an end-of-run summary
-                                    #     (sheets_seen, rendered, already_png_skipped, render_failures).
+                                    #   page_count(doc, renderer_cmd): companion `--convert-to pdf` + stdlib
+                                    #     PDF /Count read; >1 → WARN (page-1 image still produced), never
+                                    #     silently truncate. (research R3)
+                                    #   tidy_image(png): defensively `import PIL`; if present, trim page
+                                    #     margins (bounding-box of non-white) + normalise DPI in place; if
+                                    #     absent, leave the full-page render and log INFO once. NEVER raises.
+                                    #     (FR-017, research R8)
+                                    #   wrap_png_in_docx(png, docx_out): stdlib zipfile+xml.etree (reuse
+                                    #     mock_pptx.emit_docx pattern, fixed timestamp) embedding the png
+                                    #     full-page; only for a sheet that has a .png but no .docx. Returns
+                                    #     False on filesystem error; NEVER raises. (FR-018, research R9)
+                                    #   main(): scan, classify, render-or-skip, multi-page check, tidy,
+                                    #     reverse-wrap, accumulate per-doc INFO/WARNING, write normalise.log +
+                                    #     an end-of-run summary (sheets_seen, rendered, skipped_has_png,
+                                    #     render_failed, multipage_warned, docx_wrapped, tidy_skipped).
                                     #     --dry-run logs intent without touching disk. Exit 0 incl.
                                     #     render-failure-with-warnings; 1 only on unhandled error.
-                                    #   (FR-001, FR-002, FR-003, FR-006, FR-007, FR-008, FR-011, FR-013, FR-014)
+                                    #   (FR-001, FR-002, FR-003, FR-006, FR-007, FR-008, FR-011, FR-013,
+                                    #    FR-014, FR-015, FR-016, FR-017, FR-018)
 
 extract_to_csv.py                   # MODIFIED — analysis-row builder (~L851-877): after resolving the
                                     #   analysis hyperlink, if its suffix is .doc/.docx, redirect png_path
@@ -203,24 +243,37 @@ run_pipeline.bat                    # MODIFIED — insert a new first stage befo
                                     #   extract resolves analysis-row png_path. New order: normalise →
                                     #   extract → pause → generate. (FR-006)
 
-README.md                           # MODIFIED — add a "Renderer prerequisites (LibreOffice headless)"
-                                    #   section: acquisition, install on dev + air-gapped PC, air-gap
-                                    #   transfer, the --renderer-cmd override, the not-bundled / not-a-Python-
-                                    #   dependency note, and the single-landscape-page / first-page-only
-                                    #   limitation. (FR-013, Principle VI)
+README.md                           # MODIFIED — add a "Renderer prerequisites" section: LibreOffice
+                                    #   headless acquisition/install/air-gap transfer + --renderer-cmd
+                                    #   override; the OPTIONAL Pillow prep-time wheel for margin-trim/DPI
+                                    #   (FR-017) with its graceful-fallback note; both not-bundled /
+                                    #   not-runtime-dependencies; and the single-landscape-page /
+                                    #   first-page-only-with-warning behaviour. (FR-013, FR-017, Principle VI)
 
 tests/
-├── test_normalise_analysis_sheets.py   # NEW (stdlib) — doc-only folder → png produced (renderer stubbed
-│                                        #   via --renderer-cmd writing the PNG template); docx-only →
+├── test_normalise_analysis_sheets.py   # NEW (stdlib) — *analysis*.doc → png produced (renderer stubbed
+│                                        #   via --renderer-cmd writing the PNG template); *analysis*.docx →
 │                                        #   png produced; png-already-present → no re-render, INFO, mtime
 │                                        #   preserved (idempotency); renderer-exits-1 → WARNING + run
-│                                        #   exits 0 + summary records the failure; missing sheet → WARNING;
-│                                        #   --dry-run touches nothing.
+│                                        #   exits 0 + summary records the failure; --dry-run touches
+│                                        #   nothing; MULTI-PAGE source → page-1 png + WARNING (not silent);
+│                                        #   NON-analysis Word doc in the same folder (e.g. source_data.doc)
+│                                        #   is NOT rendered (the selection-rule guard, research R7);
+│                                        #   png-only sheet → minimal valid .docx wrapper produced + is
+│                                        #   zip-openable/parseable + idempotent (FR-018); tidy_image
+│                                        #   fallback path asserted when PIL is absent, crop asserted only
+│                                        #   when PIL is importable (skipUnless) (FR-017).
 ├── test_extract_to_csv.py               # EXTENDED — .doc/.docx analysis hyperlink with sibling .png →
 │                                        #   row png_path is the .png, embedded-inline downstream; sibling
 │                                        #   .png absent → png_path still the .png path + "not rendered"
 │                                        #   warning (dangling image, not an xref); CSV round-trip + column
 │                                        #   count unchanged.
+├── test_run_pipeline_bat.py             # UPDATED — assert the new stage order normalise → extract →
+│                                        #   pause → generate (the inserted normalise stage breaks the
+│                                        #   existing order assertion).
+├── test_mock_pptx.py                    # UPDATED — the analysis-sheet-mix assertion becomes 3-way
+│                                        #   {doc, docx, png} (adding the doc kind breaks the old
+│                                        #   docx/(docx+png) ratio check).
 └── (existing test_generate_dita.py)     # UNCHANGED — already asserts .png analysis → inline <image>;
                                          #   this feature only changes which path lands in png_path.
 
@@ -241,9 +294,9 @@ and `rehydrate_dita.py` are unchanged.
 **Structure Decision**: Same flat repository root as features 001–006 — one new
 top-level `verb_noun.py` script (`normalise_analysis_sheets.py`) for the new
 responsibility, plus the minimum tweak to the existing extractor. The rendered
-PNG lives **in the gram folder beside its source Word document** (no new output
-directory); the extractor points the analysis row at it, and the unchanged
-generator embeds it inline. This deliberately diverges from feature 001's
+PNG (and the reverse `.docx` wrapper) live **beside the analysis document in its
+chapter folder** (no new output directory); the extractor points the analysis
+row at the `.png`, and the unchanged generator embeds it inline. This deliberately diverges from feature 001's
 sketched FR-023 (which assumed a canonical `Analysis.png` and a new
 `analysis_docx_path` column): the same-stem sibling needs neither a canonical
 name nor a CSV-shape change, which is the smaller surface (Principle II).

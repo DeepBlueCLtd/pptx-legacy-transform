@@ -36,10 +36,20 @@
   installed-by-the-user prerequisite, consistent with how spec 001 treats
   DITA-OT and the FR-023 renderer); functional requirements stay
   implementation-agnostic.
-- Two scope points are recorded as informed-guess assumptions rather than
-  [NEEDS CLARIFICATION] markers, flagged for the author to confirm during
-  `/speckit-clarify`:
-  1. Whether the reverse PNG→`.docx` wrapping from FR-023 is still required
-     (currently scoped **out**).
-  2. The exact real-corpus analysis-sheet filename conventions (pending a
-     real-deck introspection report).
+- Scope points resolved during `/speckit.review` (maintainer decisions, folded
+  into the spec rather than deferred):
+  1. **Reverse PNG→`.docx` wrapping** — now **in scope** (FR-018); both forms
+     are guaranteed.
+  2. **Multi-page sources** — **detect & warn** (FR-016); page 1 rendered, never
+     silently truncated. Full multi-page rendering remains out of scope.
+  3. **Margin-trim + DPI** — now **in scope** (FR-017) via a defensively-imported
+     Pillow with a full-page fallback.
+  4. **Analysis-sheet selection** — by `*analysis*` name pattern + `.doc`/`.docx`
+     (FR-015); analysis docs share the chapter folder with other Word files.
+- Remaining informed-guess assumption: the exact real-corpus filename convention
+  is taken to be `*analysis*` (e.g. `aaa_analysis.doc`); confirm against a
+  real-deck introspection report before implementation.
+- FR-017 is the one deliberate dependency judgement (a prep-time Pillow wheel);
+  the constitution's hard limits — one *runtime* dependency, stdlib-only *tests* —
+  remain satisfied because it is prep-only, fallback-guarded, and excluded from
+  the runtime path and the test suite.

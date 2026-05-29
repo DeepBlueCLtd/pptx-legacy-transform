@@ -83,28 +83,42 @@ source asset — the determinism contract is on *copying*, not on *re-rendering*
 
 ## R3 — Page scope: single landscape page, and multi-page behaviour
 
-**Decision**: Render the **first page** only and document the
-single-landscape-page expectation as a known limitation (Principle VI). Do not
-build automatic multi-page detection in the MVP.
+**Decision (revised after `/speckit.review`)**: Render the **first page** as the
+analysis image **and actively detect multi-page documents**, logging a WARNING
+and flagging the affected CSV row when a sheet has more than one page. Do **not**
+silently truncate.
 
-**Rationale**: The user states the analysis sheets are, without exception, a
-single landscape page with one table. `soffice --convert-to png` already yields
-the first page. Reliable page-count detection would need either PDF
-intermediate parsing or a document-model dependency — disproportionate to a
-"without exception single page" corpus and against YAGNI (Principle II). Being
-honest about the boundary (README + this note) is the constitution-aligned
-response rather than silent best-effort.
+**Why revised**: the original plan downgraded this to a documented-only
+limitation, but the review identified it as the one **silent-partial-output**
+risk — a stray multi-page sheet would lose pages 2+ with no signal, which the
+constitution's no-silent-failures posture (Principle IV) forbids. The maintainer
+chose detect-and-warn.
 
-**Open refinement (flagged for `/speckit-clarify`)**: the spec's edge case asks
-for a *warning* on multi-page documents. Detecting that without a new dependency
-is not free; the MVP downgrades it to a documented limitation. If the corpus
-turns out to contain multi-page sheets, revisit (e.g. render via PDF and count
-pages) — captured here rather than silently dropped.
+**Approach (no new Python dependency, no new external tool)**: reuse the same
+LibreOffice renderer for a companion `--convert-to pdf` of the sheet and read the
+page count from the produced PDF with a tolerant **stdlib** scan (e.g. the
+`/Count` in the page-tree root, which LibreOffice writes in cleartext). Render
+the page-1 PNG as before. If the count is `> 1`, log a WARNING and mark the
+sheet's `NormaliseResult` so the extractor surfaces it in the row `warnings`. If
+the count genuinely cannot be determined, emit a softer "page count
+undetermined" WARNING rather than staying silent (Principle VI honesty).
+
+**Rationale**: the corpus is single-page "without exception", so the warning
+should almost never fire — its value is catching the exception that breaks the
+assumption, cheaply, with tools already required. Full multi-page → multi-image
+rendering is **out of scope** for this feature (the warning is the safety net);
+if a real multi-page sheet ever appears, the warning makes it visible and the
+behaviour can be extended then.
+
+**Alternatives considered**: *PNG-count detection* (rejected — `soffice
+--convert-to png` emits only page 1 for Writer docs, so the count is always 1);
+*a PDF-parsing wheel like `pypdf`* (rejected — the cleartext `/Count` scan is
+enough for a warning and avoids a dependency, consistent with R1).
 
 ## R4 — Naming and how the rendered PNG reaches the topic
 
-**Decision**: Render to a **same-stem sibling** in the gram folder
-(`analysis table.doc` → `analysis table.png`). The extractor redirects a `.doc`/
+**Decision**: Render to a **same-stem sibling** beside the source document
+(`aaa_analysis.doc` → `aaa_analysis.png`). The extractor redirects a `.doc`/
 `.docx` analysis hyperlink to that sibling `.png`; the unchanged generator then
 embeds it inline.
 
@@ -154,3 +168,93 @@ the renderer — so no valid binary `.doc` and no LibreOffice install are needed
 exercising classify → render-or-skip → summarise and the failure paths
 (stub exits 1). The full-pipeline tests get a deterministic `.doc`-sourced gram
 via the `mock_pptx.py` "doc" variant, which ships the rendered sibling alongside.
+
+## R7 — On-disk layout and how the normaliser selects analysis sheets
+
+**Decision (added after `/speckit.review`, from maintainer input on the real
+corpus)**: The normaliser selects analysis documents by **filename pattern**
+(`*analysis*`, case-insensitive) **plus** the `.doc`/`.docx` extension, scanning
+the content tree. It does **not** render every Word document it finds.
+
+**Why**: the real corpus does **not** put each analysis sheet in its own gram
+folder. Analysis documents live in the **chapter folder alongside other files**,
+including **PPT source data and other Word documents**. Two consequences:
+
+1. A "render every `.doc`/`.docx` under the root" rule (a tempting simplification
+   when the script can't see slide hyperlinks) is **wrong** — it would convert
+   unrelated source documents. Selection therefore keys on the analysis naming
+   convention the corpus already follows (`aaa_analysis.doc`), matching by
+   `*analysis*` substring. This is Principle IV (never act on the wrong file)
+   and Principle II (smallest correct rule).
+2. The earlier per-gram-folder framing in `data-model.md`/`plan.md` was
+   inaccurate; the normaliser scans for `*analysis*.{doc,docx}` files anywhere
+   under the content root and renders a sibling `.png` for each.
+
+**Missing-sheet detection stays with the extractor**: because the normaliser
+selects only files that exist, it cannot meaningfully report a gram with *no*
+analysis sheet. That gap is already detected and warned by the extractor
+("missing analysis PNG hyperlink"), so the normaliser drops the `"missing"`
+outcome to avoid duplicating that responsibility (DRY).
+
+**Alternatives considered**: *Drive selection from PPTX hyperlinks* (open each
+deck, follow shape-level links) — rejected: it would pull `python-pptx` and
+extraction logic into the prep stage, coupling two stages and enlarging the
+surface for no benefit, since the name convention is sufficient. *A configurable
+`--name-glob`* — deferred; the fixed `*analysis*` rule is adequate for the known
+corpus and can be parameterised later if a deck deviates.
+
+## R8 — Tidy inline image: margin-trim + DPI (FR-017)
+
+**Decision (added after `/speckit.review`, maintainer chose to fold in)**: After
+rendering, trim the page margins (whitespace) and normalise resolution so the
+inline image is tight and crisp, using **Pillow** — but import it **defensively**
+and fall back to the untrimmed full-page render (with an INFO line) when it is
+absent. Never fail because of it.
+
+**Why a dependency is acceptable here**: `soffice --convert-to png` renders the
+whole landscape page, leaving margin whitespace at LibreOffice's default DPI, so
+the raw inline image is loose and soft. The maintainer has cleared a *prep-time*
+wheel where justified (see R1). The constitution's hard limits are the **one
+runtime dependency** and **stdlib-only tests** — both preserved because Pillow is
+imported only inside the prep-time normaliser, behind `try/except ImportError`,
+and the crop test runs under `unittest.skipUnless(PIL importable)` while the
+fallback path is asserted unconditionally.
+
+**Approach**: `tidy_image(png)` — open the PNG, compute the bounding box of
+non-white content (`ImageChops.difference` against a white background →
+`getbbox()`), crop to it with a small fixed margin, set the DPI on save. In place,
+deterministic for a given input. On any `ImportError`/processing error: log once,
+leave the full-page PNG untouched (FR-017 graceful degradation).
+
+**Alternatives considered**: *ImageMagick `convert -trim` (external tool)* —
+rejected: a third external binary to install/transfer for the air-gap when a
+single wheel does it in-process. *No crop (page-as-is)* — rejected by the
+maintainer; the loose margins/soft DPI were the specific complaint. *Stdlib-only
+PNG cropping* — rejected: parsing/recompressing PNG pixels by hand is far more
+code and risk than a guarded Pillow import.
+
+## R9 — Reverse wrap: guarantee a `.docx` form too (FR-018)
+
+**Decision (added after `/speckit.review`, maintainer chose to fold in)**: For an
+analysis sheet that exists only as a `.png` (no Word source), emit a minimal
+full-page `.docx` embedding that image, so every sheet has **both** an image and
+a Word form. This is the bidirectional half of feature 001's FR-023, now in
+scope.
+
+**Why no new dependency**: the repo already authors a valid `.docx` with the
+standard library — `mock_pptx.emit_docx` (line 313) builds the OOXML zip via
+`zipfile` + `xml.etree`. `wrap_png_in_docx` reuses that exact pattern (including
+the **fixed `date_time`** on each `ZipInfo`), so the output is byte-stable and
+idempotent (Principle V) with zero dependency cost.
+
+**Idempotency**: skip when a same-stem `.docx` already exists (mirrors the
+PNG-skip rule). The `.docx` is a committed source asset like the `.png`.
+
+**Scope note**: the `.docx` wrapper is for downstream consumers that need a Word
+form; it is **not** what the DITA topic embeds (the topic still embeds the inline
+`.png`). So this adds no generator/DITA-shape change — purely an extra committed
+file beside the sheet.
+
+**Alternatives considered**: *Leave it out (forward-only)* — was the original
+plan; the maintainer reversed it to guarantee both forms. *python-docx* —
+rejected: a dependency for something the stdlib `emit_docx` pattern already does.

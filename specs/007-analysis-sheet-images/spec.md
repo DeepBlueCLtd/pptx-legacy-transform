@@ -193,43 +193,80 @@ flagged in the CSV, and the un-affected grams are produced normally.
   alongside console output, consistent with the other pipeline stages'
   dual-logging convention, as the primary debugging surface on the
   air-gapped network.
-- **FR-012**: The step MUST be runnable on the air-gapped Windows target
-  using only tooling the maintainer installs by hand and the project's
-  single runtime Python dependency; it MUST NOT add a new runtime Python
-  dependency, and the project's tests MUST remain standard-library only.
+- **FR-012**: The step MUST NOT add a third-party dependency to the
+  pipeline's **runtime** path, and the project's **tests** MUST remain
+  standard-library only. The prep-time normalisation step MAY use
+  maintainer-installed prep tooling (the Word→image renderer of FR-013,
+  and the image-processing capability of FR-017); any such tooling MUST
+  be imported/invoked only by this prep step, MUST degrade gracefully
+  when absent, and MUST NOT be required by the runtime stages
+  (`extract_to_csv.py`, `generate_dita.py`, `publish_html.py`) or by the
+  test suite.
 - **FR-013**: The renderer used to convert Word documents to images MUST
   be configurable (so an equivalent command can be substituted) and its
   acquisition, install, and air-gap-transfer instructions MUST be
   documented for the maintainer.
-- **FR-014**: The step MUST emit an end-of-run summary (e.g. folders
-  visited, documents rendered, already-present PNGs skipped, render
-  failures, missing analysis sheets) so the maintainer can confirm the
+- **FR-014**: The step MUST emit an end-of-run summary (e.g. documents
+  seen, documents rendered, already-present PNGs skipped, render
+  failures, multi-page warnings) so the maintainer can confirm the
   outcome at a glance.
+- **FR-015**: The step MUST select analysis documents by the corpus
+  naming convention (filename containing `analysis`, case-insensitive)
+  combined with a `.doc`/`.docx` extension. Analysis documents share the
+  chapter folder with PPT source data and other Word documents, so the
+  step MUST NOT render every Word document it encounters — only those
+  matching the analysis-sheet naming convention.
+- **FR-016**: The step MUST render the document's first page as the
+  analysis image AND MUST detect when a source document has more than one
+  page; on a multi-page source it MUST still produce the first-page image
+  but MUST log a WARNING and flag the affected gram (so the row is
+  surfaced in the review CSV) — a multi-page sheet MUST NOT be silently
+  truncated.
+- **FR-017**: The step MUST produce a tidy inline image: it MUST trim the
+  surrounding page margins (whitespace) and normalise the output
+  resolution so the analysis table displays cleanly inline at a
+  legibility comparable to the existing pre-rendered analysis PNGs. This
+  post-processing MUST degrade gracefully — if the image-processing
+  capability is unavailable on the host, the step MUST fall back to the
+  untrimmed full-page render (logging that it did so) rather than fail.
+- **FR-018**: The pipeline MUST guarantee that every analysis sheet
+  exists in **both** forms — an image (`.png`) for inline display and a
+  Word document (`.docx`) — so a downstream consumer that needs the Word
+  form always finds one. Where only an image exists, the step MUST
+  produce a minimal `.docx` that embeds that image full-page; where only
+  a Word document exists, the rendered `.png` (FR-001) already satisfies
+  the image side. This reverse wrapping MUST use the project's existing
+  standard-library document-authoring approach (no new dependency) and
+  MUST be deterministic (idempotent, byte-stable across runs).
 
 ### Key Entities *(include if feature involves data)*
 
-- **Analysis Sheet**: The per-gram-folder artefact describing a single
-  gram's analysis — a single landscape page. On disk it originates as a
-  legacy `.doc`, a `.docx`, or a pre-existing `.png`. Exactly one exists
-  per gram folder, irrespective of how many slide instances reference
-  that gram.
-- **Analysis Image**: The PNG rendering of an Analysis Sheet's page.
-  Once produced it is a committed source asset, copied beside the gram's
-  topic by the downstream generator and embedded inline.
-- **Gram Folder**: The on-disk folder for one gram, containing its
-  assets including the analysis sheet. The unit the normalisation step
-  iterates over (once per folder, not once per slide reference).
+- **Analysis Sheet**: The artefact describing a single gram's analysis —
+  a single landscape page. It lives in the chapter folder alongside other
+  files (PPT source data, unrelated Word documents) and follows the
+  `*analysis*` naming convention. On disk it originates as a legacy
+  `.doc`, a `.docx`, or a pre-existing `.png`. After normalisation it
+  exists in both an image and a Word form (FR-018).
+- **Analysis Image**: The PNG rendering of an Analysis Sheet's first
+  page, margin-trimmed and resolution-normalised (FR-017). Once produced
+  it is a committed source asset, copied beside the gram's topic by the
+  downstream generator and embedded inline.
+- **Chapter Folder**: The on-disk folder holding a chapter's files,
+  including analysis documents mixed with other content. The normalisation
+  step scans it for analysis documents by name pattern (FR-015), not by
+  rendering every file present.
 - **Review CSV Row**: The technical-author hand-off record for a gram;
-  carries the analysis image path and any render-failure warning so
-  failures are visible without reading the logs.
+  carries the analysis image path and any render-failure / multi-page
+  warning so issues are visible without reading the logs.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of gram folders whose analysis sheet is a `.doc` or
-  `.docx` end up with an analysis PNG available for inline embedding,
-  except those explicitly flagged as render failures.
+- **SC-001**: 100% of analysis documents (`*analysis*.doc`/`.docx`) end
+  up with an analysis PNG available for inline embedding, except those
+  explicitly flagged as render failures; and 100% of analysis sheets end
+  up with both an image and a `.docx` form (FR-018).
 - **SC-002**: Across a representative corpus, the proportion of grams
   whose analysis table opens instantly inline (rather than via a Word
   launch) rises from today's PNG-only subset to effectively all grams
@@ -243,23 +280,32 @@ flagged in the CSV, and the un-affected grams are produced normally.
   still completes successfully, produces every other gram's output, and
   lets the maintainer identify 100% of the failures from the logs and
   the review CSV without further investigation.
-- **SC-006**: A maintainer can identify which gram folders failed to
-  render in under one minute by reading the end-of-run summary.
+- **SC-006**: A maintainer can identify which analysis documents failed
+  to render, or spanned more than one page, in under one minute by
+  reading the end-of-run summary.
 
 ## Assumptions
 
-- **Scope is the PNG outcome.** This feature guarantees that every
-  analysis sheet is available as a PNG for inline embedding. Spec 001's
-  FR-023 also described producing a minimal `.docx` wrapper when only a
-  PNG exists (so a Word form always exists too); that reverse direction
-  is treated as the existing FR-023 behaviour and is **out of scope** for
-  this feature's delta, which is about getting an image from `.doc`/
-  `.docx`. (Flag for review if the `.docx`-always-present guarantee is
-  still required.)
+- **Both forms are guaranteed.** This feature guarantees every analysis
+  sheet is available as a PNG for inline embedding **and** as a `.docx`
+  (FR-018) — the bidirectional shape from spec 001's FR-023, now in
+  scope. The image side is the headline (it solves the Word-launch
+  delay); the `.docx` side is the reverse wrapper for any sheet that
+  exists only as an image.
 - **The source is one landscape page with one visually-laid-out table**,
   per the user's "without exception" observation. Multi-page documents
-  are handled as an edge case (first page rendered, warning logged)
-  rather than a primary flow.
+  are handled by rendering the first page **and** warning + flagging the
+  gram (FR-016) — never silently truncated. Full multi-page → multi-image
+  rendering is not built (the corpus is single-page); the warning exists
+  to catch any exception to that.
+- **The image post-processing capability (margin-trim + DPI, FR-017) may
+  rely on a second prep-time library.** The project's hard rule is one
+  *runtime* dependency and standard-library *tests*; this capability is
+  used only by the prep-time normalisation step, is imported defensively
+  (the step falls back to the untrimmed full-page render and logs when it
+  is unavailable), and is never imported on the pipeline's runtime path
+  or by the test suite. It is documented as an installed-by-the-maintainer
+  prerequisite like the renderer, not bundled.
 - **A renderer that converts Word documents (both `.doc` and `.docx`) to
   a page image is available** on both the development machine and the
   air-gapped target, installed by the maintainer and documented in the

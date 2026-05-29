@@ -6,23 +6,26 @@ DITA element, no new output directory. It adds one transient in-memory record
 field carries for Word-sourced analysis rows. The entities below describe those
 states and transitions.
 
-## 1. `AnalysisSheetSource` *(on-disk, per gram folder — conceptual)*
+## 1. `AnalysisSheetSource` *(on-disk — conceptual)*
 
-The analysis artefact a gram folder carries on disk. One per gram folder.
+An analysis document found on disk. Analysis sheets live in the **chapter
+folder alongside other files** (PPT source data, unrelated Word docs), and follow
+the corpus naming convention `*analysis*` (e.g. `aaa_analysis.doc`). The
+normaliser selects them by that **name pattern + `.doc`/`.docx` extension** — not
+by folder position and not "every Word doc in the folder" (see research R7).
 
 | Field | Type | Source | Notes |
 |---|---|---|---|
-| `gram_folder` | `pathlib.Path` | filesystem | the folder the sheet lives in |
-| `source_path` | `pathlib.Path` | filesystem | the authored sheet: `*.doc`, `*.docx`, `*.png`, or `*.jpg/.jpeg` |
-| `source_kind` | `str` | derived from suffix | `"doc"`, `"docx"`, or `"image"` |
-| `rendered_png` | `pathlib.Path \| None` | derived | for `doc`/`docx`: the same-stem `.png` sibling (`source_path.with_suffix(".png")`); `None`/N-A for an image source |
+| `source_path` | `pathlib.Path` | filesystem | a `*analysis*.doc` / `*analysis*.docx` document (a `.png`/`.jpg` analysis export needs no rendering and is handled directly by the extractor) |
+| `source_kind` | `str` | derived from suffix | `"doc"` or `"docx"` |
+| `rendered_png` | `pathlib.Path \| None` | derived | the same-stem `.png` sibling (`source_path.with_suffix(".png")`) |
 
 **State** (what exists on disk for a Word-sourced sheet):
 
 ```
-authored .doc/.docx, no sibling .png      → NEEDS_RENDER
-authored .doc/.docx, sibling .png present → RENDERED (committed source asset)
-authored .png/.jpg                        → IMAGE (no rendering needed)
+*analysis*.doc/.docx, no sibling .png      → NEEDS_RENDER
+*analysis*.doc/.docx, sibling .png present → RENDERED (committed source asset)
+analysis .png/.jpg (no Word source)        → IMAGE (no rendering needed)
 ```
 
 ## 2. `NormaliseResult` *(transient, per analysis sheet — produced by the normaliser)*
@@ -31,30 +34,47 @@ Not persisted; drives logging and the end-of-run summary only.
 
 | Field | Type | Values | Notes |
 |---|---|---|---|
-| `source_path` | `pathlib.Path` | — | the sheet processed |
-| `outcome` | `str` | `"rendered"`, `"skipped_has_png"`, `"render_failed"`, `"missing"` | one per sheet visited |
-| `warning` | `str \| None` | — | populated for `render_failed`/`missing`; surfaces in `normalise.log` |
+| `source_path` | `pathlib.Path` | — | the analysis document processed |
+| `outcome` | `str` | `"rendered"`, `"skipped_has_png"`, `"render_failed"` | one per document visited |
+| `multipage` | `bool` | — | `True` when the source has >1 page (page 1 still rendered; WARNING) |
+| `tidied` | `bool` | — | `True` when margin-trim/DPI applied; `False` when the image library was absent and the full-page render was kept (FR-017) |
+| `docx_wrapped` | `bool` | — | `True` when a reverse `.docx` wrapper was produced for a png-only sheet (FR-018) |
+| `warning` | `str \| None` | — | populated for `render_failed` and `multipage`; surfaces in `normalise.log` |
 
-**State transitions** (per sheet):
+**State transitions** (per document):
 
 ```
-NEEDS_RENDER + renderer ok      → outcome=rendered        (writes sibling .png; INFO)
-NEEDS_RENDER + renderer fails   → outcome=render_failed   (no .png; WARNING; run continues, exit 0)
-NEEDS_RENDER + renderer absent  → outcome=render_failed   (no .png; WARNING; run continues, exit 0)
-RENDERED (png already present)  → outcome=skipped_has_png (no re-render; mtime preserved; INFO)
-no sheet at all in folder       → outcome=missing         (WARNING; run continues, exit 0)
+NEEDS_RENDER + renderer ok          → outcome=rendered        (writes sibling .png; INFO)
+NEEDS_RENDER + renderer ok + >1page → outcome=rendered        (page-1 .png; multipage=True; WARNING)
+NEEDS_RENDER + renderer fails       → outcome=render_failed   (no .png; WARNING; run continues, exit 0)
+NEEDS_RENDER + renderer absent      → outcome=render_failed   (no .png; WARNING; run continues, exit 0)
+RENDERED (png already present)      → outcome=skipped_has_png (no re-render; mtime preserved; INFO)
 ```
+
+A document **with no analysis sheet at all** is *not* a normaliser state — the
+normaliser only visits files that match `*analysis*.{doc,docx}`. Missing-sheet
+detection lives in the extractor (`"missing analysis PNG hyperlink"`), avoiding a
+duplicated responsibility (research R7, DRY).
 
 **End-of-run summary** (logged + printed, per FR-014): `sheets_seen`,
-`rendered`, `skipped_has_png`, `render_failed`, `missing`.
+`rendered`, `skipped_has_png`, `render_failed`, `multipage_warned`,
+`docx_wrapped`, `tidy_skipped`.
 
 **Validation / invariants**:
-- The normaliser **never raises** on a renderer problem; it records a result and
-  moves on (Principle IV).
-- `outcome=rendered` is the **only** state that writes to disk. `skipped_has_png`
-  must not touch the existing `.png` (idempotency / determinism, R2).
-- Re-running over a tree of all-`RENDERED`/`IMAGE` sheets yields all
-  `skipped_has_png`/(n-a) and zero disk writes.
+- The normaliser **never raises** on a renderer problem, an absent image library,
+  or a wrap failure; it records a result and moves on (Principle IV).
+- Disk writes happen for `rendered` (the `.png`, trimmed in place) and for a
+  reverse `.docx` wrap. `skipped_has_png` must not touch the existing `.png`
+  (idempotency / determinism, R2); a sheet that already has its `.docx` is not
+  re-wrapped (R9).
+- A multi-page source is **never silently truncated**: page 1 is rendered *and* a
+  WARNING is emitted (research R3).
+- Margin-trim/DPI (FR-017) degrades gracefully: absent image library → full-page
+  render kept, `tidied=False`, INFO logged, never a failure (research R8).
+- The reverse `.docx` wrap reuses the fixed-timestamp `emit_docx` writer, so it
+  is byte-stable (research R9).
+- Re-running over a tree of all-`RENDERED`/`IMAGE` sheets (each with its `.docx`)
+  yields all `skipped_has_png`/(n-a) and zero disk writes.
 
 ## 3. CSV analysis row — `png_path` semantics (existing field, refined value)
 
