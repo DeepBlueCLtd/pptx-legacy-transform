@@ -41,7 +41,7 @@ by the extension of the asset named by the GLC's inner
 
 | GLC inner filename ends in | Block shape | Asset copied into gram folder |
 |---|---|---|
-| `.png` / `.jpg` | §1.2 GramFrame table embedding the image | The image file |
+| `.png` / `.jpg` / `.gif` | §1.2 GramFrame table embedding the image | The image file |
 | `.wav` | §1.3 GLC-viewer link | Both the `.glc` and the referenced `.wav` |
 | anything else | row skipped (§2) | none |
 

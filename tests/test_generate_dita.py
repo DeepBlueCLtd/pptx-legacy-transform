@@ -403,7 +403,7 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_glc_row_with_unsupported_extension_is_skipped(self) -> None:
         """The dispatch must reject any extension that is neither image
-        (.png/.jpg/.jpeg) nor .wav — including plausible-looking ones
+        (.png/.jpg/.jpeg/.gif) nor .wav — including plausible-looking ones
         like .bmp or .pdf — and record the skip with the offending
         extension in the reason so the technical author can triage."""
         csv_path = TMP / f"{self._testMethodName}.csv"
@@ -434,6 +434,42 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIn('gram_id="8"', skipped)
         self.assertIn(".bmp", skipped,
                       "the skip reason should name the rejected extension")
+
+    def test_glc_row_with_gif_asset_embeds_gramframe_image(self) -> None:
+        """A pre-rendered spectrogram named in the GLC may be a ``.gif``
+        (some legacy decks use them). It must dispatch to the inline
+        GramFrame table exactly like ``.png``/``.jpg`` — not be skipped —
+        and the case of the source suffix (``.GIF``) must not matter."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 09", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_09.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram09/config.glc",
+            "glc_path": "supporting/gram09/config.glc",
+            "png_path": "supporting/gram09/spectrogram.GIF",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "arctic-survey" / "gram-09" / "gram_09.dita"
+        self.assertTrue(topic.is_file())
+        root = ET.parse(topic).getroot()
+        image = root.find(".//table[@outputclass='gram-config']//image")
+        self.assertIsNotNone(image, "a .gif Lofar must embed a GramFrame image")
+        self.assertEqual(image.get("href"), "spectrogram.gif",
+                         "the copied asset href is the slugified, lower-cased name")
+        skipped = self.out / "skipped.txt"
+        if skipped.is_file():
+            self.assertNotIn("spectrogram", skipped.read_text(encoding="utf-8"),
+                             "a .gif Lofar must not be skipped")
 
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)
