@@ -15,17 +15,23 @@ A redirected row no longer copies its asset into its own gram folder; instead
 its lofar links to the master copy that already lives in the *first
 occurrence's* gram folder (a relative `../…` href), and the lofar's
 `<section>` carries a `<data name="original-asset-path" value="…"/>` element
-recording where the file was meant to sit locally. That element alone marks
-the lofar as redirected and — together with the master href — contains
+recording the original local path of the **link target** — the image for an
+image lofar, the `.glc` for an audio lofar (not the `.wav`). That element alone
+marks the lofar as redirected and — together with the master href — contains
 everything a new reverse script (`rehydrate_dita.py`) needs to copy the master
 back into the gram folder, re-localise the link, and delete the `<data>`
-element, with no reference to the original extraction inputs.
+element, with no reference to the original extraction inputs. Recording the
+link target's path (rather than the `.wav`'s) makes the re-localised href an
+exact inverse, so a rehydrated topic matches a never-deduplicated one (SC-004).
 
 The feature is **inert by default**: a CSV with no `master_png_path` column (or
 an all-empty one) produces byte-for-byte identical output to today (FR-010,
 SC-005). For the `.glc`/`.wav` audio pair the dedup unit is the pair: the
-redirected `<xref>` targets the master `.glc`, and the large `.wav` stays
-adjacent to that master `.glc` (FR-009).
+redirected `<xref>` targets the master `.glc`, the `<data value>` records the
+original `.glc` path (the link target), and the large `.wav` stays adjacent to
+that master `.glc`. On rehydration the `.glc` is restored from the recorded
+path and the `.wav` is restored by adjacency (copied from beside the master
+`.glc`), keeping the pair consistent (FR-009).
 
 The MVP is User Story 1 (redirect duplicates, write the master once). User
 Story 2 (understand/reverse via `rehydrate_dita.py`) and User Story 3 (opt-in
@@ -64,8 +70,11 @@ new `tests/test_rehydrate_dita.py` (inverse-transform restores a
 never-deduplicated topic; `.glc`/`.wav` restored together; no-op on un-redirected
 lofars), and extensions to `tests/test_generate_dita.py` (redirected href points
 to master, `<data>` emission, master written once, inert when column absent,
-idempotency). HTML assertion (`tests/web/`) that a deduplicated asset is
-referenced once.
+idempotency). HTML assertion (`tests/web/`) on a **2-publication fixture** that
+a redirected **cross-map/cross-publication** href resolves and renders/plays in
+the built HTML (not just a source-tree grep) and the master is referenced once —
+this fixture is the early DITA-OT spike that de-risks global masters (FR-011,
+SC-002) and gates the publish_html.py fallback.
 
 **Target Platform**: Windows analyst workstations (air-gapped after handover);
 Linux/macOS for development except `run_pipeline.bat`. Output is static HTML and
@@ -75,8 +84,11 @@ a DITA source tree.
 no library packaging.
 
 **Performance Goals**: `deduplicate_csv.py` hashes only candidate rows whose
-`file_size` exceeds the threshold (a small minority — the large `.wav`s), so it
-reads at most each large file once. The export adds one in-memory index pass
+`file_size` exceeds the threshold (a small minority — the large `.wav`s), and
+then only those falling in a **size-collision group of ≥2**: a >threshold file
+with a unique `file_size` cannot have a byte-identical twin, so it is never
+hashed (never read). This bounds large-file reads to genuine duplicate
+candidates. The export adds one in-memory index pass
 over the already-loaded rows (O(rows)); no extra disk I/O versus today, and it
 *reduces* bytes written (the headline win). Re-export stays idempotent.
 
@@ -150,7 +162,9 @@ specs/006-large-asset-deduplication/
 
 ```text
 deduplicate_csv.py                  # NEW — post-process the signed-off CSV: detect >threshold
-                                    #   duplicate assets by (file_size pre-filter + sha256 confirm),
+                                    #   duplicate assets by grouping candidates on file_size and sha256-
+                                    #   confirming ONLY within size-collision groups of >=2 (a unique-size
+                                    #   file is never hashed — it cannot have a byte-identical twin),
                                     #   nominate the first occurrence (deterministic order) as master,
                                     #   append the optional `master_png_path` column and point the
                                     #   remaining occurrences at the master's png_path. Preserves the
@@ -159,25 +173,38 @@ deduplicate_csv.py                  # NEW — post-process the signed-off CSV: d
 
 rehydrate_dita.py                   # NEW — reverse a deduplicated DITA tree: find lofar <section>s
                                     #   carrying <data name="original-asset-path">, copy the master
-                                    #   asset (and, for a pair, its adjacent .wav) back into the gram
-                                    #   folder under the local slug recomputed from the original path,
-                                    #   rewrite the lofar href to the local copy, and remove the <data>
-                                    #   element. No-op on lofars without the record. (FR-008, FR-012, US2)
+                                    #   link target back into the gram folder under the local slug
+                                    #   recomputed from the recorded path, rewrite the lofar href to that
+                                    #   local copy, and remove the <data> element. For an audio pair the
+                                    #   recorded path is the .glc; its adjacent master .wav is restored by
+                                    #   adjacency (copied from beside the master .glc) so the pair stays
+                                    #   consistent. No-op on lofars without the record. (FR-008, FR-012, US2)
 
 generate_dita.py                    # MODIFIED — read `master_png_path` via row.get(..., "") (optional;
                                     #   never added to the strict required-column set). Two-pass emit:
                                     #   (1) build a master index mapping a master row's png_path → its
                                     #   output location + link href; (2) for redirected rows, skip the
                                     #   local copy, compute the relative href to the master copy, and
-                                    #   append <data name="original-asset-path" value="{row png_path}"/>
-                                    #   to the lofar <section>. For .wav rows the link targets the master
-                                    #   .glc. Blank/invalid master → treat as non-redirected + WARN.
+                                    #   append <data name="original-asset-path" value="{link-target's
+                                    #   original local path}"/> to the lofar <section> — the image path for
+                                    #   image lofars, the .glc path for audio lofars (NOT the .wav). For
+                                    #   audio rows the link targets the master .glc and the master .wav
+                                    #   stays adjacent to it. Blank/invalid master → treat as
+                                    #   non-redirected + WARN.
                                     #   (FR-004, FR-005, FR-006, FR-007, FR-009, FR-010, FR-013, FR-014)
 
-publish_html.py                     # VERIFIED — DITA-OT derives <img>/links from the DITA hrefs, which
-                                    #   now point at the single master via ../ paths; confirm cross-folder
-                                    #   hrefs carry through and the master file is emitted once (FR-011).
-                                    #   Only edited if DITA-OT mishandles cross-folder hrefs (see research R3).
+publish_html.py                     # VERIFIED (via early spike) — DITA-OT derives <img>/links from the
+                                    #   DITA hrefs, which now point at the single master via ../ paths.
+                                    #   Masters are GLOBAL (one physical copy across the whole DITA set,
+                                    #   incl. across publications), maximising SC-001. Because each
+                                    #   publication builds as a SEPARATE ditamap, a redirected href can
+                                    #   point OUTSIDE its own map (../../main/...); an early spike (see
+                                    #   research R3, below) renders a 2-publication fixture through DITA-OT
+                                    #   to confirm such cross-map/cross-publication hrefs resolve and the
+                                    #   master is emitted once (FR-011). FALLBACK if the spike fails:
+                                    #   publish_html.py stages shared masters per-map (copy the master into
+                                    #   each consuming map's tree at publish time) — the DITA source set
+                                    #   stays single-copy; only the HTML build duplicates as needed.
 
 tests/
 ├── test_deduplicate_csv.py         # NEW — threshold (strictly > , at/below never redirected),
@@ -189,7 +216,9 @@ tests/
 │                                   #   master binary written exactly once, <data> emitted on redirected
 │                                   #   lofar only, inert/byte-identical when column absent, idempotency
 └── web/
-    └── (existing edition tests)    # EXTENDED — assert a deduplicated asset is referenced once in HTML
+    └── (existing edition tests)    # EXTENDED — 2-publication fixture rendered through DITA-OT: a
+                                    #   redirected cross-map/cross-publication href resolves and
+                                    #   renders/plays, and the master is referenced once (the early spike)
 
 specs/001-pptx-dita-migration/contracts/csv-schema.md
                                     # MODIFIED — add a row documenting the optional, right-edge
