@@ -274,8 +274,22 @@ maintainer transfers the installers across the air-gap manually:
 2. Verify checksums against the project's vendor records.
 3. Transfer to the air-gapped target via the approved removable-media
    procedure.
-4. Unzip DITA-OT to a stable location (e.g. `C:\dita-ot-4.2.4`) and
-   confirm `bin\dita.bat --version` runs.
+4. Unzip DITA-OT to a stable location (e.g. `C:\dita-ot-4.2.4`).
+
+`publish_html.py` launches the JVM directly (it reproduces the command
+line `bin\dita.bat` would issue) rather than shelling out to the
+wrapper script. This is deliberate: on a locked-down Windows network
+the extension-less `bin/dita` is not a valid Win32 executable, and the
+`bin\dita.bat` wrapper is blocked by AppLocker / Software Restriction
+group policy. Driving `java.exe` directly sidesteps both. Consequences:
+
+- **A Java runtime (JDK 17+) must be installed and on `PATH`** (or
+  reachable via `JAVA_HOME` / `JAVACMD`). DITA-OT is pure Java and
+  cannot render without it. Confirm with `java -version`.
+- If group policy also blocks `java.exe`, no script change helps —
+  request a whitelist entry, or run the publish step on a VM / build
+  host where Java is permitted, then copy the static `html/` tree
+  across (the preview is read-only).
 
 Render the generated tree:
 

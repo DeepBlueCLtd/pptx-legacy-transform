@@ -275,6 +275,29 @@ class DitaOtCommandTests(unittest.TestCase):
         self.assertIn("--filter=/staged/trainee.ditaval", argv)
         self.assertIn("--output=/html/student/main", argv)
 
+    def test_invokes_java_directly_not_the_blocked_wrapper(self):
+        # The air-gapped Windows target cannot run bin/dita (extension-less
+        # shell script -> "%1 is not a valid Win32 application") nor
+        # bin/dita.bat (blocked by AppLocker/SRP group policy). The command
+        # must drive java.exe directly, mirroring the launcher internals.
+        argv = _dita_ot_command(
+            dita_ot=Path("/opt/dita-ot"),
+            ditamap=Path("/staged/main.ditamap"),
+            target=Path("/html/instructor/main"),
+            ditaval=None,
+        )
+        self.assertTrue(
+            Path(argv[0]).name in ("java", "java.exe"),
+            f"argv[0] must be the java launcher, got {argv[0]!r}",
+        )
+        self.assertFalse(
+            any(arg.endswith(("bin/dita", "bin\\dita", "dita.bat")) for arg in argv),
+            "must not invoke the group-policy-blocked DITA-OT wrapper script",
+        )
+        self.assertIn("org.apache.tools.ant.launch.Launcher", argv)
+        self.assertIn("-main", argv)
+        self.assertIn("org.dita.dost.invoker.Main", argv)
+
 
 class PublishDualEditionTests(unittest.TestCase):
     """``publish()`` runs DITA-OT twice per ditamap — once per edition."""
@@ -858,8 +881,9 @@ class PublisherIdempotencyTests(unittest.TestCase):
                 )
 
             fake_dita_ot = tmp / "dita-ot"
-            (fake_dita_ot / "bin").mkdir(parents=True)
-            (fake_dita_ot / "bin" / "dita").write_text("#!/bin/sh\n")
+            (fake_dita_ot / "lib").mkdir(parents=True)
+            (fake_dita_ot / "lib" / "ant-launcher.jar").write_text("")
+            (fake_dita_ot / "build.xml").write_text("<project/>")
 
             def run_once(variant: str) -> Path:
                 out = tmp / variant / "html"

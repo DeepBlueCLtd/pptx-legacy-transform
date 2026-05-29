@@ -759,6 +759,23 @@ def write_shared_landing(
     return index_path
 
 
+def _java_executable() -> str:
+    """Locate the ``java`` launcher the way DITA-OT's own scripts do.
+
+    Mirrors ``bin/dita`` / ``bin/dita.bat``: honour ``$JAVACMD`` first,
+    then ``$JAVA_HOME/bin/java[.exe]``, finally a bare ``java`` resolved
+    on ``PATH``. Returned as ``argv[0]`` for ``subprocess``.
+    """
+    javacmd = os.environ.get("JAVACMD")
+    if javacmd:
+        return javacmd
+    exe = "java.exe" if os.name == "nt" else "java"
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home:
+        return str(Path(java_home) / "bin" / exe)
+    return exe
+
+
 def _dita_ot_command(
     dita_ot: Path,
     ditamap: Path,
@@ -767,11 +784,39 @@ def _dita_ot_command(
 ) -> list[str]:
     """Build the argv for one DITA-OT invocation.
 
+    Invokes the JVM **directly** rather than going through DITA-OT's
+    ``bin/dita`` wrapper. The wrapper is unusable on the air-gapped
+    Windows target for two reasons:
+
+    - ``bin/dita`` is an extension-less POSIX shell script; handing it
+      to Windows ``CreateProcess`` (what ``subprocess`` calls) fails with
+      "%1 is not a valid Win32 application".
+    - ``bin/dita.bat`` is a batch script, and the target's AppLocker /
+      Software Restriction group policy blocks script execution
+      ("This program is blocked by group policy").
+
+    ``java.exe`` is an ordinary whitelisted binary, so reproducing the
+    launcher's own command line here sidesteps both problems and behaves
+    identically on POSIX dev machines. The argv mirrors DITA-OT 4.2.4's
+    ``bin/dita(.bat)``: bootstrap the Ant launcher off
+    ``lib/ant-launcher.jar`` + ``config``, then defer to
+    ``org.dita.dost.invoker.Main`` via ``build.xml``.
+
     Extracted so ``tests/test_publish_html.py`` can assert on the
     command shape without invoking the Java toolchain.
     """
+    classpath = os.pathsep.join((
+        str(dita_ot / "lib" / "ant-launcher.jar"),
+        str(dita_ot / "config"),
+    ))
     argv = [
-        str(dita_ot / "bin" / "dita"),
+        _java_executable(),
+        "-Djava.awt.headless=true",
+        "-Dsun.io.useCanonCaches=true",
+        "-classpath", classpath,
+        f"-Dant.home={dita_ot}",
+        f"-Ddita.dir={dita_ot}",
+        "org.apache.tools.ant.launch.Launcher",
         f"--input={ditamap}",
         "--format=html5",
         f"--output={target}",
@@ -779,6 +824,10 @@ def _dita_ot_command(
     ]
     if ditaval is not None:
         argv.append(f"--filter={ditaval}")
+    argv += [
+        "-buildfile", str(dita_ot / "build.xml"),
+        "-main", "org.dita.dost.invoker.Main",
+    ]
     return argv
 
 
@@ -861,8 +910,18 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    if not (args.dita_ot / "bin" / "dita").exists():
-        print(f"DITA-OT not found at {args.dita_ot}", file=sys.stderr)
+    # We invoke the JVM directly (see ``_dita_ot_command``), so the
+    # artifacts that must exist are the Ant launcher jar and build.xml,
+    # not the ``bin/dita`` wrapper script.
+    launcher_jar = args.dita_ot / "lib" / "ant-launcher.jar"
+    build_xml = args.dita_ot / "build.xml"
+    missing = [p for p in (launcher_jar, build_xml) if not p.is_file()]
+    if missing:
+        print(
+            f"DITA-OT not found at {args.dita_ot} "
+            f"(missing: {', '.join(str(p) for p in missing)})",
+            file=sys.stderr,
+        )
         return 1
 
     print(f"[stage] {args.dita} -> {args.staged}")
