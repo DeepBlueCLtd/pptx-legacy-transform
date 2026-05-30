@@ -24,19 +24,28 @@ class RunPipelineBatTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.text = (REPO_ROOT / "run_pipeline.bat").read_text(encoding="utf-8")
 
-    def test_batch_file_invokes_extract_then_generate(self) -> None:
+    def test_batch_file_invokes_normalise_extract_then_generate(self) -> None:
+        # Feature 007 inserts a normalise stage before extract. New order:
+        # normalise -> extract -> pause -> generate.
+        normalise_idx = self.text.find("normalise_analysis_sheets.py")
         extract_idx = self.text.find("extract_to_csv.py")
         pause_idx = self.text.find("pause")
         generate_idx = self.text.find("generate_dita.py")
+        self.assertGreater(normalise_idx, -1)
         self.assertGreater(extract_idx, -1)
         self.assertGreater(pause_idx, -1)
         self.assertGreater(generate_idx, -1)
+        self.assertLess(normalise_idx, extract_idx)
         self.assertLess(extract_idx, pause_idx)
         self.assertLess(pause_idx, generate_idx)
-        # errorlevel guard appears after each Python invocation.
+        # errorlevel guard appears after each Python invocation (now 3 stages).
         guards = re.findall(r"if\s+errorlevel\s+1\s+goto\s+error", self.text, re.IGNORECASE)
-        self.assertGreaterEqual(len(guards), 2,
-                                "must guard both extract and generate with errorlevel checks")
+        self.assertGreaterEqual(len(guards), 3,
+                                "must guard normalise, extract and generate with "
+                                "errorlevel checks")
+
+    def test_batch_forwards_input_root_to_normalise(self) -> None:
+        self.assertRegex(self.text, r"--content-root\s+%1")
 
     def test_batch_forwards_input_root_argument(self) -> None:
         # %1 must reach both --input-root (extractor) and --image-root (generator).

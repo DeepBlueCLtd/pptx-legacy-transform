@@ -25,6 +25,15 @@ STDLIB_NAMES: set[str] = set(sys.stdlib_module_names) | {
 
 ALLOWED_THIRD_PARTY: set[str] = {"pptx", "lxml"}
 
+# Deliberate, contained prep-time imports permitted in a single script only
+# (never on the pipeline runtime path, never in the test suite at import
+# time). ``normalise_analysis_sheets.py`` imports Pillow defensively for the
+# optional margin-trim/DPI step (feature 007 FR-017), behind a graceful
+# full-page fallback when absent. See specs/007 plan Constitution Check.
+PREP_TIME_ALLOWED: dict[str, set[str]] = {
+    "normalise_analysis_sheets.py": {"PIL"},
+}
+
 
 SCRIPTS = (
     "mock_pptx.py",
@@ -34,6 +43,7 @@ SCRIPTS = (
     "publish_html.py",
     "deduplicate_csv.py",
     "rehydrate_dita.py",
+    "normalise_analysis_sheets.py",
 )
 
 
@@ -71,6 +81,8 @@ class AirGappedReadinessTests(unittest.TestCase):
                 if mod in STDLIB_NAMES:
                     continue
                 if mod in ALLOWED_THIRD_PARTY:
+                    continue
+                if mod in PREP_TIME_ALLOWED.get(path.name, set()):
                     continue
                 # In-tree modules: scripts at root and the test package.
                 in_tree_scripts = {Path(s).stem for s in SCRIPTS}
