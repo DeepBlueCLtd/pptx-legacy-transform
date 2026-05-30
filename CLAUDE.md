@@ -167,5 +167,5 @@ relevant feature's `spec.md` and `plan.md` first — the contracts under
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-[specs/008-week-based-ia/plan.md](specs/008-week-based-ia/plan.md)
+[specs/007-analysis-sheet-images/plan.md](specs/007-analysis-sheet-images/plan.md)
 <!-- SPECKIT END -->
