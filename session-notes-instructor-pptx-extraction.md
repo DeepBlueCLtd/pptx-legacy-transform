@@ -55,6 +55,54 @@ wheelhouse should only ship `python-pptx` itself; every binary
 dependency (`lxml`, `Pillow`, `XlsxWriter`, etc.) should be sourced
 from WinPython's pre-trusted installs, not the user-folder install.
 
+### 1.4 Target folder layout
+
+The repo lays out every script at the project root next to `dita/`,
+`html/`, `source/`, etc. On the air-gapped target the maintainer
+keeps the **repo scripts under a `scripts/` subfolder** and uses the
+project root as a working area for the REPL wrappers and the
+intermediate CSV. Concretely:
+
+```
+<project root>          ← REPL wrappers (run.py, extract.py, write.py),
+                          extract.csv, generate.log, …
+├── reports/            ← introspection reports
+├── scripts/            ← repo .py files (generate_dita.py,
+│   │                     extract_to_csv.py, publish_html.py,
+│   │                     introspect_pptx.py, mock_pptx.py)
+│   ├── __pycache__/
+│   ├── pylib/          ← `pip --target` install of python-pptx (§1.1)
+│   ├── tests/
+│   ├── vendor/
+│   └── wheels/         ← air-gap wheelhouse
+├── source/             ← source PPTX corpus + linked assets
+├── dita/               ← generated DITA tree (write.py output)
+└── html/               ← DITA-OT publish output
+```
+
+The wrappers (`run.py`, `extract.py`, `write.py`) call into the
+scripts under `scripts/` via `runpy.run_path(r"scripts\write.py", …)`
+after prepending `scripts\pylib` to `sys.path`. The wrappers stay
+outside the repo tree so dropping in updated repo files (downloaded
+from the GitHub `main` branch across the air-gap) is a flat
+overwrite of `scripts/<name>.py` — no merge into hand-edited files.
+
+Consequences worth knowing:
+- After overwriting `scripts/<name>.py`, delete the matching entry
+  under `scripts/__pycache__/` so a stale `.pyc` doesn't shadow the
+  new source. The in-process cache-bust
+  (`sys.modules.pop("generate_dita", None)`, §2.1) handles the
+  running REPL; the on-disk cache does not.
+- Always pass `--out`, `--image-root`, `--dita`, etc. as **absolute
+  paths** (or paths rooted at the project root after the §2.0
+  `os.chdir`) — never as `Path("dita")`-style cwd-relative defaults.
+  The repo scripts are written for "scripts at root" but on the
+  target they're one folder down, so a cwd-relative default would
+  resolve under `scripts/` and not the actual `dita/` at root.
+- The wheelhouse + `pylib` live **inside** `scripts/` so the
+  `sys.path` prepend in each wrapper is a stable
+  `os.path.join("scripts", "pylib")` relative to the project root.
+
 ---
 
 ## 2. REPL iteration workflow
