@@ -4,8 +4,8 @@ A defensive five-stage pipeline that migrates legacy AAAC PowerPoint
 instructor presentations into DITA XML publications matching the
 existing pub-9/pub-10 structure. The pipeline is built to remain
 debuggable on an air-gapped network without internet or AI
-assistance: tiny scripts, one third-party dependency, dual-output
-logging, and a `unittest`-based test suite.
+assistance: tiny scripts, a minimal and individually justified set of
+dependencies, dual-output logging, and a `unittest`-based test suite.
 
 ## Project context
 
@@ -37,9 +37,13 @@ for the implementation plan.
 
 ### Air-gapped install
 
-`python-pptx` is the only third-party runtime dependency. To install it
-on a host with no internet access, build a wheelhouse on a
-development VM that does have internet access, then copy it across.
+`python-pptx` is the runtime baseline dependency — kept deliberately
+minimal, though not capped at one (see the constitution, Principle I:
+each dependency is weighed against air-gap transfer effort and fragility,
+and prep-time/optional tools like the LibreOffice renderer and the
+optional Pillow trim live off the runtime path). To install on a host
+with no internet access, build a wheelhouse on a development VM that does
+have internet access, then copy it across.
 
 On the development VM:
 

@@ -1,10 +1,9 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: (unratified template) → 1.0.0
-Rationale: First concrete ratification. The prior file was the unmodified
-Spec Kit placeholder template (no principles defined), so this is an initial
-adoption, not an amendment — versioned 1.0.0.
+Version change: 1.0.0 → 1.1.0 (amendment; see "Amendment 1.1.0" below).
+1.0.0 was the first concrete ratification, replacing the unmodified Spec Kit
+placeholder template (initial adoption, not an amendment).
 
 Principles defined (6):
   I.   Air-Gapped, Self-Sufficient Operation
@@ -29,7 +28,22 @@ Templates reviewed for consistency:
      testing/observability tasks; no change required.
   ✅ CLAUDE.md / README.md — runtime guidance consistent with these principles.
 
-Deferred TODOs: none. Ratification date set to first concrete adoption (today).
+Amendment 1.1.0 (2026-05-30):
+  - Principle I — replaced the "exactly one runtime dependency" bullet with a
+    "minimal and individually justified" dependency policy (transfer cost +
+    fragility weighed per dependency; prefer offline-clean pure-Python wheels;
+    prefer prep-time/non-runtime confinement and graceful degradation). The
+    stdlib-only test contract is retained verbatim.
+  - Bump rationale: MINOR. The dependency rule is relaxed, not removed — no
+    principle is removed and no previously compliant artifact becomes
+    non-compliant (Principle I and the stdlib-only test contract stand), so
+    this is a material expansion of guidance, not a backward-incompatible
+    redefinition.
+  - Consistency: CLAUDE.md "One runtime dependency" invariant and README's
+    "only third-party runtime dependency" line updated to match.
+
+Deferred TODOs: none. Ratification date set to first concrete adoption
+(2026-05-29).
 -->
 
 # PPTX Legacy Transform Constitution
@@ -47,9 +61,19 @@ The delivered pipeline MUST run and be debuggable on an air-gapped Windows PC
 with **no internet access and no AI assistance**. This is the constraint from
 which the others follow.
 
-- Exactly **one** third-party runtime dependency (`python-pptx`), pinned with
-  `~=` for predictable wheelhouse rebuilds. Adding any runtime dependency is
-  rejected by default and requires explicit justification in the introducing PR.
+- Third-party runtime dependencies are kept **minimal and individually
+  justified** — there is **no fixed cap**, but each dependency is a real cost:
+  effort for the maintainer to transfer it across the air-gap, and a potential
+  source of fragility on a machine no one can patch from the internet. A
+  dependency is therefore added only when its value clearly outweighs that cost.
+  The runtime baseline today is a single dependency (`python-pptx`, pinned with
+  `~=` for predictable wheelhouse rebuilds). Any addition MUST, in the
+  introducing PR, weigh its value against the transfer-and-fragility cost;
+  prefer a pure-Python wheel that installs cleanly offline; and, where possible,
+  confine it to a **prep-time / non-runtime path** and **degrade gracefully**
+  when it is absent (e.g. a defensively-imported library with a working
+  fallback), so the air-gapped runtime path stays as small and robust as
+  possible.
 - The test suite uses the **standard library only** — no third-party test
   framework on the air-gapped runtime path. (The developer-time Jest layer is
   explicitly outside this contract and never required to validate the pipeline.)
@@ -177,4 +201,4 @@ deviation. Unjustified complexity is grounds for rejection.
 humans) provide day-to-day guidance and MUST remain consistent with this
 constitution.
 
-**Version**: 1.0.0 | **Ratified**: 2026-05-29 | **Last Amended**: 2026-05-29
+**Version**: 1.1.0 | **Ratified**: 2026-05-29 | **Last Amended**: 2026-05-30

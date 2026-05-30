@@ -124,9 +124,13 @@ across a gram's rows is enforced fail-fast in the generator.
   output, *including copied binary assets*. Two consecutive publish runs over an
   unchanged source yield byte-identical HTML in every edition. Do not introduce
   timestamps, hash-seeded ordering, or nondeterministic iteration.
-- **One runtime dependency.** Only `python-pptx` (pinned `~= 1.0`). Tests use
-  the **standard library only**. Do not add runtime or test dependencies without
-  a deliberate decision — the target is an air-gapped wheelhouse install.
+- **Minimal, justified dependencies.** The runtime baseline is `python-pptx`
+  (pinned `~= 1.0`) — there is no fixed cap, but each added dependency must earn
+  its place against the cost of air-gap transfer and added fragility, and should
+  prefer a prep-time/optional, gracefully-degrading use over the runtime path
+  (as Pillow's defensively-imported trim step does). Tests use the **standard
+  library only**. Adding a dependency is a deliberate, PR-justified decision —
+  the target is an air-gapped wheelhouse install.
 - **Python 3.9 floor.** The air-gapped target is WinPython 3.9.4.0. Use
   `from __future__ import annotations` (type hints evaluate as strings); avoid
   3.10+ syntax and stdlib APIs. Watch for 3.9 gotchas (e.g. `Path.write_text`
