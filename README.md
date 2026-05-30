@@ -4,8 +4,8 @@ A defensive five-stage pipeline that migrates legacy AAAC PowerPoint
 instructor presentations into DITA XML publications matching the
 existing pub-9/pub-10 structure. The pipeline is built to remain
 debuggable on an air-gapped network without internet or AI
-assistance: tiny scripts, one third-party dependency, dual-output
-logging, and a `unittest`-based test suite.
+assistance: tiny scripts, a minimal and individually justified set of
+dependencies, dual-output logging, and a `unittest`-based test suite.
 
 ## Project context
 
@@ -37,9 +37,13 @@ for the implementation plan.
 
 ### Air-gapped install
 
-`python-pptx` is the only third-party runtime dependency. To install it
-on a host with no internet access, build a wheelhouse on a
-development VM that does have internet access, then copy it across.
+`python-pptx` is the runtime baseline dependency — kept deliberately
+minimal, though not capped at one (see the constitution, Principle I:
+each dependency is weighed against air-gap transfer effort and fragility,
+and prep-time/optional tools like the LibreOffice renderer and the
+optional Pillow trim live off the runtime path). To install on a host
+with no internet access, build a wheelhouse on a development VM that does
+have internet access, then copy it across.
 
 On the development VM:
 
@@ -56,10 +60,53 @@ pip install --no-index --find-links wheels/ python-pptx
 `requirements.txt` pins the version with `~=` compatibility so wheelhouse
 rebuilds remain predictable.
 
+### Renderer prerequisites (analysis sheets)
+
+Feature 007 adds a **prep-time** stage, `normalise_analysis_sheets.py`,
+that renders each Word analysis sheet (`*analysis*.doc` / `.docx`) to a
+same-stem `.png` sibling so the generator embeds the analysis table
+**inline** instead of leaving a click-to-open link that launches MS Word
+mid-lesson. Like DITA-OT, the renderer is an **external tool, not bundled
+and not a Python runtime dependency**, and is only needed when a Word
+analysis sheet has no rendered `.png` yet.
+
+- **LibreOffice headless (`soffice`)** is the default renderer. On a
+  development VM with internet, install LibreOffice normally; for the
+  air-gapped PC, download the LibreOffice installer on a connected host
+  and transfer it across the air-gap (the same posture as DITA-OT). The
+  normaliser invokes `soffice --headless --convert-to png …` once per
+  un-rendered sheet.
+- Override the command with `--renderer-cmd` to point at a specific
+  `soffice` path or an equivalent converter (e.g. MS Word COM automation
+  on a Windows site). Quote a path that contains spaces, e.g.
+  `--renderer-cmd "C:\Program Files\LibreOffice\program\soffice.exe"`.
+- **Pillow is an *optional* prep-time wheel** used only to trim page
+  margins and normalise DPI on the rendered PNG (FR-017). It is imported
+  defensively: when Pillow is absent the normaliser keeps the full-page
+  render and logs an INFO line — it never fails and is never required by
+  the test suite. To use it, add it to the prep-time wheelhouse
+  (`pip download Pillow -d wheels/`); it is **not** installed on the
+  pipeline runtime path.
+
+The rendered PNG (and, for a PNG-only sheet, a reverse-wrapped `.docx`,
+FR-018) is a **committed source asset**: the normaliser is idempotent
+(it skips any sheet that already has its sibling `.png`), so the renderer
+never runs inside the re-runnable generate/publish loop and re-runs are
+byte-identical. The normaliser renders the **first page** and **detects
+multi-page sources** — it still produces the page-1 image but logs a
+WARNING (and flags the row) rather than silently truncating; the corpus
+is single-landscape-page, so the warning is a safety net for the
+exception. A render failure or an unavailable renderer is a WARNING that
+defers (the run continues, exit 0) and surfaces in `normalise.log`, the
+end-of-run summary, and the analysis row's `warnings` column — the image
+then dangles as an intended local `<image>` href, resolved by dropping
+the PNG in and re-running.
+
 ## Folder structure
 
 | Path | Role |
 |---|---|
+| `normalise_analysis_sheets.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
@@ -67,7 +114,7 @@ rebuilds remain predictable.
 | `deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
 | `rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
-| `run_pipeline.bat` | Windows orchestrator: extract → manual review → generate (Story 6). |
+| `run_pipeline.bat` | Windows orchestrator: normalise → extract → manual review → generate (Story 6, feature 007). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |

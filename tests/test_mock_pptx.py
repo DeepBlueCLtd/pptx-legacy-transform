@@ -139,9 +139,12 @@ class CorpusShapeTests(unittest.TestCase):
                     self.assertTrue(h.endswith(".glc"),
                                     f"unexpected Lofar target: {h}")
 
-    def test_analysis_sheet_mix_includes_both_docx_and_png(self) -> None:
-        # Aggregated across the whole corpus.
-        kinds = {"docx": 0, "png": 0}
+    def test_analysis_sheet_mix_includes_doc_docx_and_png(self) -> None:
+        # Aggregated across the whole corpus. Feature 007 adds the legacy
+        # ``.doc`` kind, so the analysis-sheet mix is now 3-way
+        # {doc, docx, png}. Order matters: check .docx before .doc so the
+        # ``.docx`` suffix is not swallowed by an ``.doc`` substring test.
+        kinds = {"doc": 0, "docx": 0, "png": 0}
         for pub in mock_pptx.PUBLICATIONS:
             prs = Presentation(self.corpus / pub.name / f"{pub.name}.pptx")
             for slide in prs.slides:
@@ -149,16 +152,22 @@ class CorpusShapeTests(unittest.TestCase):
                     href = _shape_hyperlink(shape)
                     if href is None:
                         continue
-                    if href.lower().endswith(".docx"):
+                    low = href.lower()
+                    if low.endswith(".docx"):
                         kinds["docx"] += 1
-                    elif href.lower().endswith(".png"):
+                    elif low.endswith(".doc"):
+                        kinds["doc"] += 1
+                    elif low.endswith(".png"):
                         kinds["png"] += 1
+        self.assertGreater(kinds["doc"], 0, "expected at least one legacy .doc sheet")
         self.assertGreater(kinds["docx"], 0)
         self.assertGreater(kinds["png"], 0)
-        # Aim is roughly 50/50; allow a wide tolerance.
-        ratio = kinds["docx"] / (kinds["docx"] + kinds["png"])
-        self.assertGreater(ratio, 0.3)
-        self.assertLess(ratio, 0.7)
+        # Aim is a roughly even three-way split; allow a wide tolerance.
+        total = kinds["doc"] + kinds["docx"] + kinds["png"]
+        for kind in ("doc", "docx", "png"):
+            ratio = kinds[kind] / total
+            self.assertGreater(ratio, 0.15, f"{kind} under-represented: {kinds}")
+            self.assertLess(ratio, 0.55, f"{kind} over-represented: {kinds}")
 
     def test_welcome_and_exit_slides_bracket_each_publication(self) -> None:
         for pub in mock_pptx.PUBLICATIONS:

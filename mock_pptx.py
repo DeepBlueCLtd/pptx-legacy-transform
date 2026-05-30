@@ -327,6 +327,21 @@ def emit_docx(path: Path, *, title: str) -> None:
             zf.writestr(info, content)
 
 
+def emit_doc(path: Path, *, title: str) -> None:
+    """Write deterministic placeholder bytes for a legacy ``.doc`` sheet.
+
+    The mock is not a renderer and nothing downstream parses the ``.doc``
+    (``normalise_analysis_sheets.py`` only hands it to LibreOffice), so a
+    fixed, byte-stable placeholder is sufficient for the test corpus. The
+    rendered sibling ``.png`` is emitted alongside by ``_emit_analysis_sheet``
+    so the full pipeline exercises the doc -> inline-image path without
+    LibreOffice (feature 007 T013).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    placeholder = f"[legacy .doc analysis sheet placeholder] {title}\n"
+    path.write_bytes(placeholder.encode("utf-8"))
+
+
 def _escape_xml(text: str) -> str:
     return (
         text.replace("&", "&amp;")
@@ -346,7 +361,7 @@ class GramSpec:
     folder_path: Path        # absolute folder path on disk
     descriptor: str          # "Gram N: <instructor detail>"
     rel_analysis: str        # relative href from PPTX to Analysis Sheet
-    analysis_kind: str       # "docx" or "png"
+    analysis_kind: str       # "doc", "docx", or "png"
     lofars: list["LofarSpec"]
 
 
@@ -503,6 +518,12 @@ def _emit_analysis_sheet(
     if kind == "docx":
         name = "Analysis Sheet.docx"
         emit_docx(gram_folder / name, title=title)
+    elif kind == "doc":
+        name = "Analysis Sheet.doc"
+        emit_doc(gram_folder / name, title=title)
+        # Ship the rendered sibling .png (same stem) so the doc -> inline-image
+        # path runs end to end without LibreOffice (feature 007 T013).
+        emit_analysis_sheet_image(gram_folder / "Analysis Sheet.png")
     else:
         name = "Analysis.png"
         emit_analysis_sheet_image(gram_folder / name)
@@ -537,7 +558,7 @@ def build_gram_specs(pub: Publication, files_dir: Path, rng: random.Random) -> l
         files_dir_name = files_dir.name
         rel_folder_from_pptx = f"{files_dir_name}/{rel_folder}"
 
-        analysis_kind = rng.choice(("docx", "png"))
+        analysis_kind = rng.choice(("doc", "docx", "png"))
         rel_analysis = _emit_analysis_sheet(
             folder_path, rel_folder_from_pptx, analysis_kind, title=descriptor)
         lofars = _build_lofars(folder_path, rel_folder_from_pptx, rng)

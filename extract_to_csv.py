@@ -882,6 +882,19 @@ def gram_to_rows(
         analysis_png_resolved = ""
     else:
         analysis_png_resolved = resolve_asset_path(analysis_png, content_root, source_dir)
+        # Feature 007: an analysis sheet authored as a Word document
+        # (.doc/.docx) is rendered to a same-stem .png sibling by
+        # normalise_analysis_sheets.py ahead of extraction. Redirect the
+        # analysis row's png_path to that sibling so the unchanged generator
+        # embeds it inline (FR-004). When the rendered .png is absent (the
+        # normaliser hasn't run, or its render failed) keep the intended
+        # .png href so the image dangles -- never a Word <xref> -- and record
+        # a warning the author sees in Excel (FR-009/FR-010).
+        if Path(analysis_png_resolved).suffix.lower() in (".doc", ".docx"):
+            analysis_png_resolved = str(
+                PurePosixPath(analysis_png_resolved).with_suffix(".png"))
+            if not (content_root / analysis_png_resolved).is_file():
+                analysis_warnings.append("analysis image not rendered")
     rows.append({
         "publication": publication,
         "chapter": chapter or "",

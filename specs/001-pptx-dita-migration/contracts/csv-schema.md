@@ -31,7 +31,7 @@ generator never re-reads PPTX or GLC files.
 | 10 | `glc_path` | string | yes (analysis rows; empty for non-GLC links) | resolved `.glc` path relative to source folder. Equals `link_href` for the normal case; empty only when `link_href` is non-`.glc` (anomaly). |
 | 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
 | 12 | `freq_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
-| 13 | `png_path` | string | yes | path of the asset to copy next to the topic, resolved relative to `--image-root`. For GLC rows it is the file named by the `.glc`'s inner `<data_source><filename>` element — a `.png` (~82% of grams) or `.jpg` for a pre-rendered spectrogram, or a `.wav` (~18%) when the `.glc` configures the on-PC viewer to render live from audio. The downstream generator dispatches on the extension (see `dita-topic-schema.md` §1.2/§1.3): image extensions embed inline; `.wav` triggers the GLC-viewer-link branch which copies the `.glc` + `.wav` pair side-by-side. For analysis rows it is the gram folder's `Analysis.png` after FR-023 normalisation. May be empty when the asset is missing or the renderer failed. |
+| 13 | `png_path` | string | yes | path of the asset to copy next to the topic, resolved relative to `--image-root`. For GLC rows it is the file named by the `.glc`'s inner `<data_source><filename>` element — a `.png` (~82% of grams) or `.jpg` for a pre-rendered spectrogram, or a `.wav` (~18%) when the `.glc` configures the on-PC viewer to render live from audio. The downstream generator dispatches on the extension (see `dita-topic-schema.md` §1.2/§1.3): image extensions embed inline; `.wav` triggers the GLC-viewer-link branch which copies the `.glc` + `.wav` pair side-by-side. For analysis rows it is the rendered analysis image: a `.png`/`.jpg` exported directly, or — for a Word-authored sheet (`.doc`/`.docx`) — the **same-stem `.png` sibling** produced by `normalise_analysis_sheets.py` (feature 007; the extractor redirects the Word href to it). May be empty when the asset is missing; when a Word sheet's render is absent the value stays the intended `.png` href (so the image dangles) and `warnings` carries `"analysis image not rendered"`. The FR-023 `analysis_docx_path` column was never implemented and is not introduced. |
 | 14 | `file_size` | string | yes | decimal byte count of the file at `png_path`, captured during extraction (`Path.stat().st_size`). Populated whenever `png_path` resolves to an on-disk file (both GLC and analysis rows). Empty when `png_path` is empty or unresolvable. Surfaces duplicate assets across publications during human review — two rows pointing at byte-identical files share a `file_size`, regardless of any naming drift. The generator does not consume it; the author uses it to spot duplicate grams before signing off the CSV (delete the duplicate rows, or clear `topic_filename` to mark "do not process"). |
 | 15 | `wav_treatment` | enum | yes | **Deprecated.** Originally collected an author decision (`screenshot` / `gaps-lite` / `TBD`) for rows whose GLC referenced a `.wav`. The current contract dispatches purely on `png_path`'s extension (`dita-topic-schema.md` §1) so no author decision is required; the column is retained only so older CSVs round-trip cleanly. The extractor leaves it empty and the generator ignores it. |
 | 16 | `warnings` | string | yes | comma-joined, free-form |
@@ -91,11 +91,21 @@ holds a gram with the same `gram_id` without renumbering one of them.
 5. Warnings accumulate in column order: GLC parse warnings first, then
    path-resolution warnings, then shape warnings, then
    analysis-sheet-normalisation warnings (from FR-023).
-6. Analysis rows carry `png_path` after FR-023 normalisation runs over
-   the gram folder. The column may be empty when the renderer was
-   unavailable or failed; the `warnings` column records which direction
-   failed (`"analysis renderer failed: docx→png"` or
-   `"analysis renderer failed: png→docx"`).
+6. Analysis rows carry `png_path` as a `.png` for the inline image.
+   **Feature 007 supersedes the FR-023 sketch below.** When the analysis
+   hyperlink targets a Word document (`.doc`/`.docx`), the extractor
+   redirects `png_path` to the **same-stem `.png` sibling** that
+   `normalise_analysis_sheets.py` renders ahead of extraction (e.g.
+   `Analysis Sheet.doc` → `Analysis Sheet.png`); `target_ext`/`file_size`
+   follow the `.png`. When that rendered `.png` is absent (the normaliser
+   has not run, or its render failed), `png_path` keeps the intended
+   `.png` href so the generator dangles an `<image>` — never a Word
+   `<xref>` — and the `warnings` column carries `"analysis image not
+   rendered"`. The **`analysis_docx_path` column sketched for FR-023 was
+   never implemented** and is **not** introduced by feature 007: the
+   same-stem sibling needs no new column. (The historical FR-023 strings
+   `"analysis renderer failed: docx→png"` / `"png→docx"` were likewise
+   never emitted.)
 
 ## Round-trip invariant
 

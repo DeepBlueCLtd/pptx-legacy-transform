@@ -161,10 +161,58 @@ the output tree is deleted before writing on each run.
 
 ---
 
+## `normalise_analysis_sheets.py`
+
+**Purpose** (feature 007): Prep-time, render-once normaliser. Walk a
+content tree and render every Word analysis sheet (`*analysis*.doc` /
+`.docx`) to a same-stem `.png` sibling so the downstream pipeline embeds
+the analysis table inline. Authoritative schema:
+`specs/007-analysis-sheet-images/contracts/normalise-cli.md`.
+
+```text
+python normalise_analysis_sheets.py --content-root DIR
+                                    [--renderer-cmd CMD] [--dry-run]
+```
+
+| Flag | Required | Type | Description |
+|---|---|---|---|
+| `--content-root` | yes | path | Root of the content tree to walk for analysis sheets |
+| `--renderer-cmd` | no | string | Renderer executable/command (default `soffice`); a test stub or an equivalent converter may be substituted. Quote paths containing spaces |
+| `--dry-run` | no | flag | Log what would be rendered/wrapped/skipped without writing any file |
+
+**Side effects**:
+
+- For each `*analysis*.{doc,docx}` lacking a same-stem `.png`, shells out
+  to `<renderer> --headless --convert-to png …` and writes the rendered
+  sibling `.png` (margin-trimmed/DPI-normalised when the optional Pillow
+  wheel is present, full-page otherwise).
+- For each `*analysis*.png` lacking a same-stem `.docx`, writes a minimal
+  reverse-wrapped `.docx` (stdlib `zipfile`, fixed timestamp; FR-018).
+- Writes `normalise.log` at the repo root (DEBUG to file, INFO/WARNING to
+  console) and an end-of-run summary line (`sheets_seen`, `rendered`,
+  `skipped_has_png`, `render_failed`, `multipage_warned`, `docx_wrapped`,
+  `tidy_skipped`).
+
+**Idempotency**: a sheet that already has its sibling `.png` (and `.docx`)
+is skipped; the rendered assets are committed source, so re-runs write
+nothing and the renderer never runs inside the generate/publish loop.
+
+**Exit codes**: `0` on success — **including** runs with render failures,
+an unavailable renderer, or multi-page sources (these are WARNINGs,
+surfaced in the summary, never fatal). `1` on an unhandled error (e.g.
+`--content-root` does not exist). `2` on a usage error.
+
+**Guarantees**: never raises on a renderer problem, a missing image
+library, or a wrap failure; no new *runtime* Python dependency (the
+LibreOffice renderer and the optional Pillow library are prep-only, both
+behind graceful fallbacks); no CSV or DITA shape change.
+
+---
+
 ## `run_pipeline.bat`
 
-**Purpose** (Story 6): Windows orchestrator for Stages 2 + 4 with a
-manual review pause.
+**Purpose** (Story 6, feature 007): Windows orchestrator for Stages 1 + 2
++ 4 with a manual review pause.
 
 ```text
 run_pipeline.bat <input-root>
@@ -172,19 +220,20 @@ run_pipeline.bat <input-root>
 
 | Position | Required | Type | Description |
 |---|---|---|---|
-| `%1` | yes | path | Content root (forwarded to `extract_to_csv.py --input-root` and `generate_dita.py --image-root`) |
+| `%1` | yes | path | Content root (forwarded to `normalise_analysis_sheets.py --content-root`, `extract_to_csv.py --input-root`, and `generate_dita.py --image-root`) |
 
-**Side effects**: Runs `extract_to_csv.py`, pauses for the technical
-author to inspect `extracted.csv`, then runs `generate_dita.py`.
+**Side effects**: Runs `normalise_analysis_sheets.py`, then
+`extract_to_csv.py`, pauses for the technical author to inspect
+`extracted.csv`, then runs `generate_dita.py`.
 
-**Exit codes**: `0` on success; `1` if either Python stage exits
-non-zero. `errorlevel 1` is the contract that downstream automation
-relies on.
+**Exit codes**: `0` on success; `1` if any Python stage exits non-zero.
+`errorlevel 1` is the contract that downstream automation relies on, and
+guards all three stages.
 
 **Operator UX**: Stage banners between runs (`=== PPTX to DITA
-Migration Pipeline ===`, `[Stage 2] ...`, `[Stage 4] ...`); a `pause >
-nul` between extraction and generation so the operator can `start
-extracted.csv` in another window before continuing.
+Migration Pipeline ===`, `[Stage 1] ...`, `[Stage 2] ...`, `[Stage 4]
+...`); a `pause > nul` between extraction and generation so the operator
+can `start extracted.csv` in another window before continuing.
 
 ---
 

@@ -209,6 +209,61 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(wav_row["wav_treatment"], "")
         self.assertIn("GLC not found", wav_row["warnings"])
 
+    def test_analysis_doc_redirects_to_sibling_png(self) -> None:
+        # Feature 007 (T009): a .doc/.docx analysis hyperlink with a rendered
+        # sibling .png present -> the analysis row points at the .png inline,
+        # target_ext is .png, and no warning is recorded.
+        (self.tmp / "analysis_sheet.doc").write_bytes(b"placeholder doc")
+        png = self.tmp / "analysis_sheet.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="analysis_sheet.doc")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(analysis["topic_type"], "analysis")
+        self.assertTrue(analysis["png_path"].endswith(".png"))
+        self.assertEqual(analysis["target_ext"], ".png")
+        self.assertEqual(analysis["warnings"], "")
+        self.assertNotEqual(analysis["file_size"], "")
+
+    def test_analysis_docx_redirects_to_sibling_png(self) -> None:
+        # As above but a .docx hyperlink (FR-004 covers both Word forms).
+        (self.tmp / "analysis_sheet.docx").write_bytes(b"placeholder docx")
+        png = self.tmp / "analysis_sheet.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="analysis_sheet.docx")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertTrue(analysis["png_path"].endswith(".png"))
+        self.assertEqual(analysis["target_ext"], ".png")
+        self.assertEqual(analysis["warnings"], "")
+
+    def test_analysis_doc_without_png_records_warning(self) -> None:
+        # Feature 007 (T017): a .doc analysis hyperlink whose sibling .png is
+        # absent -> png_path is still the intended .png (so the generator
+        # dangles an <image>, not a Word <xref>) and the row carries the
+        # "analysis image not rendered" warning (FR-009/FR-010).
+        (self.tmp / "analysis_sheet.doc").write_bytes(b"placeholder doc")
+        gram = _gram(png="analysis_sheet.doc")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertTrue(analysis["png_path"].endswith(".png"),
+                        "png_path keeps the intended .png href even when absent")
+        self.assertEqual(analysis["target_ext"], ".png")
+        self.assertIn("analysis image not rendered", analysis["warnings"])
+        self.assertEqual(analysis["file_size"], "")
+
 
 class GroupingAgainstMockCorpusTests(unittest.TestCase):
     """T105 — exercise the real grouping logic against a small mock corpus.
