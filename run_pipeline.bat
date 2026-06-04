@@ -2,11 +2,17 @@
 setlocal
 
 if "%~1"=="" (
-    echo Usage: run_pipeline.bat ^<input-root^>
+    echo Usage: run_pipeline.bat ^<input-root^> [--stub-wav]
+    echo   --stub-wav: copy %~dp0stock.wav in place of every real .wav
+    echo               ^(testing aid for cross-system DITA transit^)
     exit /b 2
 )
 
+set STUB_ARG=
+if /i "%~2"=="--stub-wav" set STUB_ARG=--stub-wav "%~dp0stock.wav"
+
 echo === PPTX to DITA Migration Pipeline ===
+if defined STUB_ARG echo ^(stub-wav mode: real .wav files will be replaced with stock.wav^)
 
 echo [Stage 1] Normalising Word analysis sheets to PNG ...
 python normalise_analysis_sheets.py --content-root %1
@@ -21,7 +27,7 @@ echo Review extracted.csv now. Press any key to continue with DITA generation.
 pause > nul
 
 echo [Stage 4] Generating DITA into dita\ ...
-python generate_dita.py --csv extracted.csv --out dita\ --image-root %1
+python generate_dita.py --csv extracted.csv --out dita\ --image-root %1 %STUB_ARG%
 if errorlevel 1 goto error
 
 goto end
