@@ -127,6 +127,72 @@ Wrapper scripts created:
   pptx zip for a needle string, useful when python-pptx can't find a
   hyperlink that's visibly on the slide.
 
+### 2.2 Wrapper-at-root + `scripts/` layout on the target
+
+The target install **does not run the canonical scripts directly**. Layout:
+
+```
+ROOT/                     (c:\users\<u>\documents\git\aaac)
+├── extract.py            ← wrapper; runs scripts\extract_to_csv.py
+├── introspect.py         ← wrapper; runs scripts\introspect_pptx.py
+├── dedupe.py             ← wrapper; runs scripts\deduplicate_csv.py
+├── write.py              ← wrapper; runs scripts\generate_dita.py
+├── publish.py            ← wrapper; runs scripts\publish_html.py
+├── stock.wav             ← committed silent stub for --stub-wav (§ below)
+├── source\               ← real PPTX corpus
+├── reports\              ← per-run output (extract.csv, logs)
+└── scripts\
+    ├── pylib\            ← `pip install --target` lives here (§1.1)
+    ├── extract_to_csv.py
+    ├── generate_dita.py
+    ├── …                 ← the canonical scripts, unmodified
+```
+
+Each wrapper follows the same boilerplate:
+
+```python
+import os, sys, runpy
+from pathlib import Path
+
+ROOT    = Path(r"c:\users\<u>\documents\git\aaac")
+PYLIB   = ROOT / "scripts" / "pylib"
+SCRIPTS = ROOT / "scripts"
+SOURCE  = ROOT / "source"
+
+for p in (PYLIB, SCRIPTS):                   # pylib for python-pptx (§1.1),
+    if str(p) not in sys.path:               # scripts so canonical modules
+        sys.path.insert(0, str(p))           # import each other
+
+for mod in ("extract_to_csv", "introspect_pptx", "generate_dita"):
+    sys.modules.pop(mod, None)               # bust cross-script caches (§2.1)
+
+WRITE = SCRIPTS / "generate_dita.py"
+sys.argv = [str(WRITE), "--csv", "extract.dedupe.csv", "--out", "dita",
+            "--image-root", str(SOURCE), "--clean"]
+runpy.run_path(str(WRITE), run_name="__main__")
+```
+
+Key points when working with this layout:
+
+- **`run_pipeline.bat` is not used on target.** Each stage is invoked by
+  `exec(open(r"<root>\write.py").read())` from the REPL (or its sibling
+  wrappers), which is why §2.1's REPL ergonomics matter.
+- **`stock.wav` at `ROOT`** is the committed silent stub used by
+  `generate_dita.py --stub-wav` to slim the DITA tree for cross-system
+  transit. Wrappers pass it through via
+  `sys.argv += ["--stub-wav", str(ROOT / "stock.wav")]`, gated by a
+  module-level `STUB_WAV = True` so the toggle is one edit, not a CLI
+  flag the REPL doesn't pass.
+- **Passing new flags to a canonical script** = appending to
+  `sys.argv` in the wrapper. The canonical scripts under `scripts\`
+  are not edited per-target — the wrapper is the only place that knows
+  about target-specific paths, toggles, and convenience defaults.
+- **Don't bake `os.chdir(ROOT)` into the wrappers** (§2.0). Do it once
+  manually in the REPL; the wrappers should be cwd-independent so they
+  work whether invoked from REPL, from another script, or from a
+  fresh interpreter.
+
+
 ---
 
 ## 3. Corpus-drift findings, in order discovered
