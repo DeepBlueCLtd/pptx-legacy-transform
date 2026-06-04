@@ -72,6 +72,11 @@ MAP_DOCTYPE = (
 
 LOGGER = logging.getLogger(__name__)
 
+# Optional testing aid: when set via ``--stub-wav``, every .wav copy in
+# ``copy_asset`` is sourced from this path instead of the real file.
+# Keeps the DITA tree slim for transit during cross-network testing.
+_STUB_WAV_PATH: "Path | None" = None
+
 
 def _write_text(path: Path, text: str) -> None:
     """Write ``text`` with LF endings, working on Python 3.9.
@@ -283,6 +288,13 @@ def copy_asset(
     source = image_root / src_relpath
     target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
+    # Testing aid: when --stub-wav is set, every .wav copy is sourced from
+    # the stub file but keeps its slugified per-gram filename so the
+    # paired .glc's internal `data_source/filename` reference still
+    # resolves at publish time. Keeps gramframe functional with a silent
+    # stub and slims the DITA tree for transit between systems.
+    if _STUB_WAV_PATH is not None and source.suffix.lower() == ".wav":
+        source = _STUB_WAV_PATH
     if source.is_file():
         topic_dir.mkdir(parents=True, exist_ok=True)
         # ``copy2`` preserves the source mtime so two consecutive generator
@@ -1052,9 +1064,24 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
     parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--stub-wav", type=Path, dest="stub_wav", default=None,
+        help="Testing aid: copy this file in place of every .wav asset "
+             "(keeps slugified per-gram filenames so paired .glc references "
+             "still resolve). Slims the DITA tree for cross-system transit.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("generate.log"))
+
+    global _STUB_WAV_PATH
+    if args.stub_wav is not None:
+        if not args.stub_wav.is_file():
+            LOGGER.error("--stub-wav file does not exist: %s", args.stub_wav)
+            return 1
+        _STUB_WAV_PATH = args.stub_wav.resolve()
+        LOGGER.info("Using stub WAV for every .wav copy: %s", _STUB_WAV_PATH)
+    else:
+        _STUB_WAV_PATH = None
 
     if not args.csv_path.is_file():
         LOGGER.error("CSV does not exist: %s", args.csv_path)
