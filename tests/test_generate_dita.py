@@ -22,14 +22,18 @@ TMP = REPO_ROOT / "tests" / "_tmp"
 
 
 def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
-         image_root: Path = FIXTURES, clean: bool = True) -> int:
+         image_root: Path = FIXTURES, clean: bool = True,
+         stub_wav: "Path | None" = None) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
-    return generate_dita.main([
+    argv = [
         "--csv", str(csv_path),
         "--out", str(out_dir),
         "--image-root", str(image_root),
-    ])
+    ]
+    if stub_wav is not None:
+        argv += ["--stub-wav", str(stub_wav)]
+    return generate_dita.main(argv)
 
 
 class GenerateDitaTests(unittest.TestCase):
@@ -401,6 +405,49 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(xref)
         self.assertEqual(xref.get("href"), "config.glc")
         self.assertEqual(xref.get("format"), "glc")
+
+    def test_stub_wav_substitutes_contents_keeps_slug(self) -> None:
+        """``--stub-wav`` swaps every .wav source with the stub file but keeps
+        the slugified per-gram filename so the paired .glc's internal
+        ``data_source/filename`` reference still resolves at publish time.
+        The .glc itself is copied verbatim — only the .wav is stubbed."""
+        glc_src = TMP / "stub_wav_src" / "supporting" / "gram08" / "config.glc"
+        wav_src = TMP / "stub_wav_src" / "supporting" / "gram08" / "audio_clip.wav"
+        stub_src = TMP / "stub.wav"
+        glc_src.parent.mkdir(parents=True, exist_ok=True)
+        glc_src.write_bytes(b"<GAPS_Lite_configuration/>")
+        wav_src.write_bytes(b"REAL-WAV-CONTENT")
+        stub_src.write_bytes(b"STUB-WAV-CONTENT")
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 08", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_08.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram08/config.glc",
+            "glc_path": "supporting/gram08/config.glc",
+            "png_path": "supporting/gram08/audio_clip.wav",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path, image_root=TMP / "stub_wav_src",
+             stub_wav=stub_src)
+        gram_dir = self.out / "main" / "arctic-survey" / "gram-08"
+        glc_copy = gram_dir / "config.glc"
+        wav_copy = gram_dir / "audio-clip.wav"
+        self.assertTrue(wav_copy.is_file())
+        # Slug preserved so the .glc's internal filename reference resolves.
+        self.assertEqual(wav_copy.name, "audio-clip.wav")
+        # Contents come from the stub, not the original.
+        self.assertEqual(wav_copy.read_bytes(), b"STUB-WAV-CONTENT")
+        # The .glc is copied verbatim — stubbing is wav-only.
+        self.assertEqual(glc_copy.read_bytes(), glc_src.read_bytes())
 
     def test_glc_row_with_unsupported_extension_is_skipped(self) -> None:
         """The dispatch must reject any extension that is neither image
