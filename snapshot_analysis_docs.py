@@ -1,4 +1,4 @@
-"""Normaliser (Feature 007): render Word analysis sheets to sibling PNGs.
+"""Snapshotter (Feature 007): render Word analysis sheets to sibling PNGs.
 
 Prep-time, render-once stage of the migration pipeline. Walks a content
 tree, selects every Word *analysis* sheet (``*analysis*`` + ``.doc``/
@@ -26,7 +26,7 @@ Design invariants (see specs/007-analysis-sheet-images/):
   the chapter folder with PPT source data and unrelated Word documents, so
   selection matches the ``*analysis*`` naming convention (research R7).
 
-Logging follows the project convention: dual stdout + ``normalise.log``,
+Logging follows the project convention: dual stdout + ``snapshot.log``,
 DEBUG to file, INFO/WARNING to console.
 """
 
@@ -81,7 +81,7 @@ def setup_logging(log_path: Path) -> None:
 # -----------------------------------------------------------------------------
 
 @dataclass
-class NormaliseResult:
+class SnapshotResult:
     """One record per analysis document visited. Not persisted."""
 
     source_path: Path
@@ -366,25 +366,25 @@ def wrap_png_in_docx(png: Path, docx_out: Path) -> bool:
 # -----------------------------------------------------------------------------
 
 def _process_sheet(
-    doc: Path, renderer_cmd: str, dry_run: bool) -> NormaliseResult:
+    doc: Path, renderer_cmd: str, dry_run: bool) -> SnapshotResult:
     """Classify and (unless --dry-run) render/tidy one analysis sheet."""
     png_out = doc.with_suffix(".png")
     if not needs_render(doc):
         LOGGER.info("skipped (PNG already present): %s", doc)
-        return NormaliseResult(source_path=doc, outcome="skipped_has_png")
+        return SnapshotResult(source_path=doc, outcome="skipped_has_png")
 
     if dry_run:
         LOGGER.info("would render: %s -> %s", doc, png_out)
-        return NormaliseResult(source_path=doc, outcome="rendered")
+        return SnapshotResult(source_path=doc, outcome="rendered")
 
     ok = render_doc_to_png(doc, png_out, renderer_cmd)
     if not ok:
-        return NormaliseResult(
+        return SnapshotResult(
             source_path=doc, outcome="render_failed",
             warning="analysis image not rendered")
 
     LOGGER.info("rendered: %s -> %s", doc, png_out)
-    result = NormaliseResult(source_path=doc, outcome="rendered")
+    result = SnapshotResult(source_path=doc, outcome="rendered")
 
     # Multi-page detection: keep the page-1 PNG, warn (never truncate silently).
     pages = page_count(doc, renderer_cmd)
@@ -401,9 +401,9 @@ def _process_sheet(
 
 
 def _reverse_wrap_png_only(
-    content_root: Path, dry_run: bool) -> list[NormaliseResult]:
+    content_root: Path, dry_run: bool) -> list[SnapshotResult]:
     """For every ``*analysis*.png`` with no same-stem ``.docx``, emit one."""
-    results: list[NormaliseResult] = []
+    results: list[SnapshotResult] = []
     for png in sorted(content_root.rglob("*")):
         if not png.is_file() or png.suffix.lower() != ".png":
             continue
@@ -414,17 +414,17 @@ def _reverse_wrap_png_only(
             continue
         if dry_run:
             LOGGER.info("would wrap PNG into .docx: %s -> %s", png, docx_out)
-            results.append(NormaliseResult(
+            results.append(SnapshotResult(
                 source_path=png, outcome="skipped_has_png", docx_wrapped=True))
             continue
         if wrap_png_in_docx(png, docx_out):
             LOGGER.info("wrapped PNG into .docx: %s -> %s", png, docx_out)
-            results.append(NormaliseResult(
+            results.append(SnapshotResult(
                 source_path=png, outcome="skipped_has_png", docx_wrapped=True))
     return results
 
 
-def _emit_summary(results: list[NormaliseResult]) -> None:
+def _emit_summary(results: list[SnapshotResult]) -> None:
     """Log + print the end-of-run summary (FR-014)."""
     sheets_seen = sum(1 for r in results if r.source_path.suffix.lower() in WORD_SUFFIXES)
     rendered = sum(1 for r in results if r.outcome == "rendered")
@@ -436,7 +436,7 @@ def _emit_summary(results: list[NormaliseResult]) -> None:
     docx_wrapped = sum(1 for r in results if r.docx_wrapped)
     tidy_skipped = sum(1 for r in results if r.outcome == "rendered" and not r.tidied)
     summary = (
-        "normalise summary: "
+        "snapshot summary: "
         f"sheets_seen={sheets_seen} rendered={rendered} "
         f"skipped_has_png={skipped} render_failed={render_failed} "
         f"multipage_warned={multipage_warned} docx_wrapped={docx_wrapped} "
@@ -446,9 +446,9 @@ def _emit_summary(results: list[NormaliseResult]) -> None:
     print(summary)
 
 
-def normalise(content_root: Path, renderer_cmd: str, dry_run: bool) -> list[NormaliseResult]:
+def snapshot(content_root: Path, renderer_cmd: str, dry_run: bool) -> list[SnapshotResult]:
     """Scan ``content_root``, render/skip each analysis sheet, reverse-wrap."""
-    results: list[NormaliseResult] = []
+    results: list[SnapshotResult] = []
     for doc in iter_analysis_sheets(content_root):
         results.append(_process_sheet(doc, renderer_cmd, dry_run))
     results.extend(_reverse_wrap_png_only(content_root, dry_run))
@@ -456,7 +456,7 @@ def normalise(content_root: Path, renderer_cmd: str, dry_run: bool) -> list[Norm
 
 
 def main(argv: list[str] | None = None) -> int:
-    setup_logging(Path("normalise.log"))
+    setup_logging(Path("snapshot.log"))
     parser = argparse.ArgumentParser(
         description="Render Word analysis sheets to sibling PNGs (prep-time).")
     parser.add_argument("--content-root", required=True, type=Path, dest="content_root")
@@ -473,12 +473,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     LOGGER.info(
-        "normalising analysis sheets under %s (renderer=%r%s)",
+        "snapshotting analysis sheets under %s (renderer=%r%s)",
         content_root, args.renderer_cmd, ", dry-run" if args.dry_run else "")
     try:
-        results = normalise(content_root, args.renderer_cmd, args.dry_run)
+        results = snapshot(content_root, args.renderer_cmd, args.dry_run)
     except OSError as exc:
-        LOGGER.error("normalise failed: %s", exc)
+        LOGGER.error("snapshot failed: %s", exc)
         return 1
     _emit_summary(results)
     return 0

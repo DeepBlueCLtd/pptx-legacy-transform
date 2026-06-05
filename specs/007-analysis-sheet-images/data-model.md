@@ -2,7 +2,7 @@
 
 This feature introduces **no new persisted schema** — no new CSV column, no new
 DITA element, no new output directory. It adds one transient in-memory record
-(the normaliser's per-sheet result) and changes *which value* an existing CSV
+(the snapshotter's per-sheet result) and changes *which value* an existing CSV
 field carries for Word-sourced analysis rows. The entities below describe those
 states and transitions.
 
@@ -11,7 +11,7 @@ states and transitions.
 An analysis document found on disk. Analysis sheets live in the **chapter
 folder alongside other files** (PPT source data, unrelated Word docs), and follow
 the corpus naming convention `*analysis*` (e.g. `aaa_analysis.doc`). The
-normaliser selects them by that **name pattern + `.doc`/`.docx` extension** — not
+snapshotter selects them by that **name pattern + `.doc`/`.docx` extension** — not
 by folder position and not "every Word doc in the folder" (see research R7).
 
 | Field | Type | Source | Notes |
@@ -28,7 +28,7 @@ by folder position and not "every Word doc in the folder" (see research R7).
 analysis .png/.jpg (no Word source)        → IMAGE (no rendering needed)
 ```
 
-## 2. `NormaliseResult` *(transient, per analysis sheet — produced by the normaliser)*
+## 2. `SnapshotResult` *(transient, per analysis sheet — produced by the snapshotter)*
 
 Not persisted; drives logging and the end-of-run summary only.
 
@@ -39,7 +39,7 @@ Not persisted; drives logging and the end-of-run summary only.
 | `multipage` | `bool` | — | `True` when the source has >1 page (page 1 still rendered; WARNING) |
 | `tidied` | `bool` | — | `True` when margin-trim/DPI applied; `False` when the image library was absent and the full-page render was kept (FR-017) |
 | `docx_wrapped` | `bool` | — | `True` when a reverse `.docx` wrapper was produced for a png-only sheet (FR-018) |
-| `warning` | `str \| None` | — | populated for `render_failed` and `multipage`; surfaces in `normalise.log` |
+| `warning` | `str \| None` | — | populated for `render_failed` and `multipage`; surfaces in `snapshot.log` |
 
 **State transitions** (per document):
 
@@ -51,8 +51,8 @@ NEEDS_RENDER + renderer absent      → outcome=render_failed   (no .png; WARNIN
 RENDERED (png already present)      → outcome=skipped_has_png (no re-render; mtime preserved; INFO)
 ```
 
-A document **with no analysis sheet at all** is *not* a normaliser state — the
-normaliser only visits files that match `*analysis*.{doc,docx}`. Missing-sheet
+A document **with no analysis sheet at all** is *not* a snapshotter state — the
+snapshotter only visits files that match `*analysis*.{doc,docx}`. Missing-sheet
 detection lives in the extractor (`"missing analysis PNG hyperlink"`), avoiding a
 duplicated responsibility (research R7, DRY).
 
@@ -61,7 +61,7 @@ duplicated responsibility (research R7, DRY).
 `docx_wrapped`, `tidy_skipped`.
 
 **Validation / invariants**:
-- The normaliser **never raises** on a renderer problem, an absent image library,
+- The snapshotter **never raises** on a renderer problem, an absent image library,
   or a wrap failure; it records a result and moves on (Principle IV).
 - Disk writes happen for `rendered` (the `.png`, trimmed in place) and for a
   reverse `.docx` wrap. `skipped_has_png` must not touch the existing `.png`
@@ -99,7 +99,7 @@ href — the intended local reference — per the missing-asset invariant (FR-01
 ## 4. Relationship to feature 001's FR-023 (historical)
 
 Feature 001 sketched an `AnalysisSheet` entity (`data-model.md §1.7`) and an
-`analysis_docx_path` CSV column produced by a bidirectional normaliser. **That
+`analysis_docx_path` CSV column produced by a bidirectional snapshotter. **That
 column was never implemented** (it is absent from `CSV_COLUMNS`). This feature
 implements the forward direction (Word → PNG) only, via the same-stem sibling
 and **without** introducing `analysis_docx_path` (research R4). The 001 contracts

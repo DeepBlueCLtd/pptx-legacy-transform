@@ -11,7 +11,7 @@ analysis sheet's single landscape page to a PNG ahead of time, instead of
 leaving a click-to-open link that launches MS Word mid-lesson.
 
 The mechanism is a new **prep-time, single-purpose script**
-`normalise_analysis_sheets.py` that scans the content tree for analysis
+`snapshot_analysis_docs.py` that scans the content tree for analysis
 documents — selected by the corpus naming convention **`*analysis*` + `.doc`/
 `.docx`** (analysis sheets sit in the **chapter folder alongside PPT source data
 and other Word files**, so it must not render every Word doc it finds; see
@@ -37,12 +37,12 @@ The MVP is User Story 1 + 2 together (an analysis sheet authored as `.doc` or
 never fatal) falls out of the warn-and-continue posture the script and the
 extractor already share with the rest of the pipeline.
 
-**Edited/added files**: new `normalise_analysis_sheets.py`; modified
+**Edited/added files**: new `snapshot_analysis_docs.py`; modified
 `extract_to_csv.py` (analysis-row `.doc`/`.docx` → sibling `.png` redirect),
 `mock_pptx.py` (emit a `.doc` analysis variant + its rendered sibling so the
 existing pipeline tests exercise the new path), `run_pipeline.bat` (insert the
-normalise stage before extract), `README.md` (renderer prerequisites). New tests
-`tests/test_normalise_analysis_sheets.py` and extensions to
+snapshot stage before extract), `README.md` (renderer prerequisites). New tests
+`tests/test_snapshot_analysis_docs.py` and extensions to
 `tests/test_extract_to_csv.py`, plus updates to two existing tests the changes
 break: `tests/test_run_pipeline_bat.py` (new stage order) and
 `tests/test_mock_pptx.py` (3-way `{doc,docx,png}` analysis mix). `generate_dita.py`,
@@ -79,7 +79,7 @@ simply points at the rendered `.png` instead of the `.doc`/`.docx` (and
 `target_ext`/`file_size` follow). The DITA tree is unchanged.
 
 **Testing**: `python -m unittest discover tests/` (stdlib `unittest`). New module
-`tests/test_normalise_analysis_sheets.py` constructs temp gram folders and stubs
+`tests/test_snapshot_analysis_docs.py` constructs temp gram folders and stubs
 the renderer via `--renderer-cmd` pointing at a tiny script that writes the
 project's existing PNG byte template — so the suite stays stdlib-only and
 LibreOffice-free. `tests/test_extract_to_csv.py` gains cases for the `.doc`/
@@ -95,7 +95,7 @@ runs on the maintainer's prep machine and/or the target PC, once.
 existing `verb_noun.py` convention; one modified pipeline stage; test
 extensions in paired modules.
 
-**Performance Goals**: The normaliser shells out to the renderer once per Word
+**Performance Goals**: The snapshotter shells out to the renderer once per Word
 analysis sheet that lacks a PNG (a one-time cost over ~15 decks / ~1,000 grams,
 and zero on re-runs because it is idempotent). It adds no work to the
 re-runnable generate/publish stages. Extraction gains one `Path.exists()` check
@@ -105,7 +105,7 @@ per analysis row.
 PNG as a **committed source asset**: the renderer's non-reproducible PNG bytes
 are produced once and then copied byte-for-byte by `generate_dita.py`'s existing
 `copy2` path, so two consecutive generate/publish runs over an unchanged tree
-stay byte-identical. The normaliser is idempotent (skip when the sibling PNG
+stay byte-identical. The snapshotter is idempotent (skip when the sibling PNG
 exists) so re-running it churns nothing. Missing-asset-dangles (the project
 invariant) is honoured: a render failure leaves the intended `.png` href in the
 topic, resolved later by dropping the PNG in and re-running — no XML churn.
@@ -133,7 +133,7 @@ Checked against `.specify/memory/constitution.md` v1.0.0:
   *runtime* and the rule that *tests* stay stdlib-only — both upheld. The crop
   test runs under `skipUnless(PIL present)` and the fallback is asserted
   unconditionally, so the canonical suite needs neither tool. Python 3.9 floor
-  respected; `normalise.log` honours dual-logging.
+  respected; `snapshot.log` honours dual-logging.
 - **II. Single-Purpose Scripts, Minimal Surface** — PASS. One new tiny script
   for the one new responsibility (render Word → PNG); the only other change is
   the smallest possible tweak to an existing stage (a sibling-redirect in the
@@ -141,12 +141,12 @@ Checked against `.specify/memory/constitution.md` v1.0.0:
   DITA-shape change, no framework. Reuses the existing `copy_asset`/inline-image
   path wholesale.
 - **III. Test-First Discipline** — PASS. New behaviour gets paired tests
-  (`test_normalise_analysis_sheets.py`, extended `test_extract_to_csv.py`)
+  (`test_snapshot_analysis_docs.py`, extended `test_extract_to_csv.py`)
   written before/with the source; the canonical `unittest` suite stays green and
   the quickstart is the executable acceptance check.
 - **IV. Human-in-the-Loop Authority** — PASS. The script never guesses: a render
   failure, a missing renderer, or a missing sheet is a **WARNING that defers**
-  (the run continues, the affected gram is surfaced in `normalise.log`, the end-
+  (the run continues, the affected gram is surfaced in `snapshot.log`, the end-
   of-run summary, and the analysis row's `warnings` column), never a fabricated
   value and never a fatal abort. The CSV review boundary is preserved.
 - **V. Deterministic, Idempotent Output** — PASS (with the renderer caveat
@@ -154,7 +154,7 @@ Checked against `.specify/memory/constitution.md` v1.0.0:
   versions, so they (and the trimmed result) are produced **once** and committed
   as source; downstream copy is the existing deterministic `copy2`. The reverse
   `.docx` wrap reuses `emit_docx`'s fixed-timestamp `zipfile` writer, so it is
-  byte-stable. The normaliser is a no-op on an already-rendered/already-wrapped
+  byte-stable. The snapshotter is a no-op on an already-rendered/already-wrapped
   tree. See research R2, R9.
 - **VI. Honest Limitations** — PASS. The single-landscape-page assumption and the
   first-page-only render behaviour are documented as a known limitation in the
@@ -182,7 +182,7 @@ specs/007-analysis-sheet-images/
 ├── data-model.md                   # Phase 1 — AnalysisSheet states, the doc→png redirect, summary record
 ├── quickstart.md                   # Phase 1 — end-to-end walkthrough (verifies SC-001…SC-006)
 ├── contracts/
-│   └── normalise-cli.md            # normalise_analysis_sheets.py CLI + renderer contract + exit codes
+│   └── snapshot-cli.md            # snapshot_analysis_docs.py CLI + renderer contract + exit codes
 ├── checklists/
 │   └── requirements.md             # Spec quality checklist (complete)
 └── tasks.md                        # Phase 2 output (created by /speckit-tasks — NOT here)
@@ -191,7 +191,7 @@ specs/007-analysis-sheet-images/
 ### Source Code (repository root)
 
 ```text
-normalise_analysis_sheets.py        # NEW (stdlib only) — prep-time, render-once normaliser.
+snapshot_analysis_docs.py        # NEW (stdlib only) — prep-time, render-once snapshotter.
                                     #   iter_analysis_sheets(content_root): yield every file matching
                                     #     *analysis* (case-insensitive) with a .doc/.docx extension, anywhere
                                     #     under the tree (analysis docs share the chapter folder with PPT
@@ -215,7 +215,7 @@ normalise_analysis_sheets.py        # NEW (stdlib only) — prep-time, render-on
                                     #     full-page; only for a sheet that has a .png but no .docx. Returns
                                     #     False on filesystem error; NEVER raises. (FR-018, research R9)
                                     #   main(): scan, classify, render-or-skip, multi-page check, tidy,
-                                    #     reverse-wrap, accumulate per-doc INFO/WARNING, write normalise.log +
+                                    #     reverse-wrap, accumulate per-doc INFO/WARNING, write snapshot.log +
                                     #     an end-of-run summary (sheets_seen, rendered, skipped_has_png,
                                     #     render_failed, multipage_warned, docx_wrapped, tidy_skipped).
                                     #     --dry-run logs intent without touching disk. Exit 0 incl.
@@ -238,9 +238,9 @@ mock_pptx.py                        # MODIFIED — extend the analysis-sheet mix
                                     #   without LibreOffice. (test corpus for US1/US2)
 
 run_pipeline.bat                    # MODIFIED — insert a new first stage before extraction:
-                                    #     python normalise_analysis_sheets.py --content-root %1
+                                    #     python snapshot_analysis_docs.py --content-root %1
                                     #   with `if errorlevel 1 goto error`, so the rendered PNGs exist when
-                                    #   extract resolves analysis-row png_path. New order: normalise →
+                                    #   extract resolves analysis-row png_path. New order: snapshot →
                                     #   extract → pause → generate. (FR-006)
 
 README.md                           # MODIFIED — add a "Renderer prerequisites" section: LibreOffice
@@ -251,7 +251,7 @@ README.md                           # MODIFIED — add a "Renderer prerequisites
                                     #   first-page-only-with-warning behaviour. (FR-013, FR-017, Principle VI)
 
 tests/
-├── test_normalise_analysis_sheets.py   # NEW (stdlib) — *analysis*.doc → png produced (renderer stubbed
+├── test_snapshot_analysis_docs.py   # NEW (stdlib) — *analysis*.doc → png produced (renderer stubbed
 │                                        #   via --renderer-cmd writing the PNG template); *analysis*.docx →
 │                                        #   png produced; png-already-present → no re-render, INFO, mtime
 │                                        #   preserved (idempotency); renderer-exits-1 → WARNING + run
@@ -268,8 +268,8 @@ tests/
 │                                        #   .png absent → png_path still the .png path + "not rendered"
 │                                        #   warning (dangling image, not an xref); CSV round-trip + column
 │                                        #   count unchanged.
-├── test_run_pipeline_bat.py             # UPDATED — assert the new stage order normalise → extract →
-│                                        #   pause → generate (the inserted normalise stage breaks the
+├── test_run_pipeline_bat.py             # UPDATED — assert the new stage order snapshot → extract →
+│                                        #   pause → generate (the inserted snapshot stage breaks the
 │                                        #   existing order assertion).
 ├── test_mock_pptx.py                    # UPDATED — the analysis-sheet-mix assertion becomes 3-way
 │                                        #   {doc, docx, png} (adding the doc kind breaks the old
@@ -280,19 +280,19 @@ tests/
 specs/001-pptx-dita-migration/contracts/csv-schema.md
                                     # MODIFIED — clarify (no column change) that for analysis rows whose
                                     #   source sheet is .doc/.docx, png_path carries the rendered sibling
-                                    #   .png produced by normalise_analysis_sheets.py (feature 007), and
+                                    #   .png produced by snapshot_analysis_docs.py (feature 007), and
                                     #   that the historical FR-023 `analysis_docx_path` column was never
                                     #   implemented and is not introduced here.
 specs/001-pptx-dita-migration/contracts/cli-contracts.md
-                                    # MODIFIED — add the normalise_analysis_sheets.py CLI stanza (mirrors
-                                    #   contracts/normalise-cli.md in this feature).
+                                    # MODIFIED — add the snapshot_analysis_docs.py CLI stanza (mirrors
+                                    #   contracts/snapshot-cli.md in this feature).
 ```
 
 `generate_dita.py`, `publish_html.py`, `introspect_pptx.py`, `deduplicate_csv.py`,
 and `rehydrate_dita.py` are unchanged.
 
 **Structure Decision**: Same flat repository root as features 001–006 — one new
-top-level `verb_noun.py` script (`normalise_analysis_sheets.py`) for the new
+top-level `verb_noun.py` script (`snapshot_analysis_docs.py`) for the new
 responsibility, plus the minimum tweak to the existing extractor. The rendered
 PNG (and the reverse `.docx` wrapper) live **beside the analysis document in its
 chapter folder** (no new output directory); the extractor points the analysis
