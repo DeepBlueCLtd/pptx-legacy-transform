@@ -1101,12 +1101,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     duplicates = check_row_identity(rows)
     if duplicates:
         for msg in duplicates:
-            LOGGER.error(msg)
-        LOGGER.error(
-            "Aborting before emission: %d duplicate row identit%s detected.",
+            LOGGER.warning(msg)
+        LOGGER.warning(
+            "Continuing despite %d duplicate row identit%s — affected grams "
+            "will be merged into one topic with partial content "
+            "(later row's analysis section drops, GLC sections interleave). "
+            "Run deduplicate_csv.py to renumber before final emission.",
             len(duplicates), "y" if len(duplicates) == 1 else "ies",
         )
-        return 1
 
     written: list[Path] = []
     skipped: list[dict] = []

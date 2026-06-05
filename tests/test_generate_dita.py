@@ -816,20 +816,29 @@ class CsvRefactoringSupportTests(unittest.TestCase):
          "topic_filename": "gram_05.dita", "png_path": "images/b_an.png"},
     ]
 
-    def test_main_aborts_on_unrenumbered_collision(self) -> None:
+    def test_main_warns_but_continues_on_unrenumbered_collision(self) -> None:
         """Two distinct grams sharing a week + number with no renumbering
-        applied must abort the run (the safety net that replaces the old
-        letter-suffix auto-disambiguation), not silently merge (feature 008)."""
+        applied must surface as a WARNING (one per collision) yet still emit,
+        so the iteration loop is fast: the operator sees the warning, runs
+        deduplicate_csv.py, and re-emits. The merge is lossy (later row's
+        analysis section drops, GLC sections interleave), which the
+        warning text spells out (feature 008 safety net, relaxed)."""
         csv_path = self._write_csv(self._COLLIDING_GRAMS)
         out_dir = self.tmp / "out"
-        rc = generate_dita.main([
-            "--csv", str(csv_path),
-            "--out", str(out_dir),
-            "--image-root", str(FIXTURES),
-        ])
-        self.assertEqual(rc, 1, "generator must abort on an un-renumbered collision")
-        self.assertFalse((out_dir / "main" / "week-2-grams").exists(),
-                         "no topic should be written when the run aborts")
+        with self.assertLogs(generate_dita.LOGGER, level="WARNING") as cm:
+            rc = generate_dita.main([
+                "--csv", str(csv_path),
+                "--out", str(out_dir),
+                "--image-root", str(FIXTURES),
+            ])
+        self.assertEqual(rc, 0, "generator must continue despite the collision")
+        self.assertTrue((out_dir / "main" / "week-2-grams").exists(),
+                        "the (merged) topic should still be written")
+        joined = "\n".join(cm.output)
+        self.assertIn("Duplicate gram slot", joined,
+                      "the per-collision warning must surface in logs")
+        self.assertIn("Continuing despite", joined,
+                      "the summary warning must surface in logs")
 
     def test_renumbering_resolves_collision_into_unique_folders(self) -> None:
         """Running the dedupe renumber step assigns the later gram a fresh
