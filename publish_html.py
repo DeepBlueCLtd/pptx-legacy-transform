@@ -773,6 +773,22 @@ def write_shared_landing(
     return index_path
 
 
+def _dita_launcher(dita_ot: Path) -> Path:
+    """Return the platform-appropriate DITA-OT launcher under ``dita_ot/bin``.
+
+    DITA-OT ships two launchers side by side: an extensionless POSIX
+    shell script (``bin/dita``) and a Windows batch wrapper
+    (``bin/dita.bat``). Handing the shell script to ``CreateProcess`` on
+    Windows fails with ``OSError: [WinError 193] %1 is not a valid Win32
+    application`` because it is not a PE binary — the ``.bat`` wrapper
+    must be used there instead. Selecting on ``os.name`` keeps one code
+    path working on both the POSIX dev host and the air-gapped WinPython
+    target.
+    """
+    name = "dita.bat" if os.name == "nt" else "dita"
+    return dita_ot / "bin" / name
+
+
 def _dita_ot_command(
     dita_ot: Path,
     ditamap: Path,
@@ -785,7 +801,7 @@ def _dita_ot_command(
     command shape without invoking the Java toolchain.
     """
     argv = [
-        str(dita_ot / "bin" / "dita"),
+        str(_dita_launcher(dita_ot)),
         f"--input={ditamap}",
         "--format=html5",
         f"--output={target}",
@@ -875,7 +891,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    if not (args.dita_ot / "bin" / "dita").exists():
+    if not _dita_launcher(args.dita_ot).exists():
         print(f"DITA-OT not found at {args.dita_ot}", file=sys.stderr)
         return 1
 

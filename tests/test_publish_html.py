@@ -23,6 +23,7 @@ from publish_html import (
     Edition,
     GRAMFRAME_BUNDLE_NAME,
     THEME_BUNDLE_NAME,
+    _dita_launcher,
     _dita_ot_command,
     inject_gramframe_plugin,
     inject_operator_console_theme,
@@ -274,6 +275,48 @@ class DitaOtCommandTests(unittest.TestCase):
         )
         self.assertIn("--filter=/staged/trainee.ditaval", argv)
         self.assertIn("--output=/html/student/main", argv)
+
+
+class DitaLauncherTests(unittest.TestCase):
+    """``_dita_launcher`` picks the right ``bin/`` entry point per platform.
+
+    On Windows the extensionless POSIX ``dita`` shell script makes
+    ``CreateProcess`` raise ``WinError 193`` (``%1 is not a valid Win32
+    application``); the ``dita.bat`` wrapper must be used instead.
+    """
+
+    def test_posix_uses_extensionless_launcher(self):
+        # Build Paths before patching os.name: pathlib picks its flavour
+        # at construction time, so constructing a Path while os.name=="nt"
+        # would raise NotImplementedError on a POSIX host. Joins inside
+        # _dita_launcher keep the already-chosen flavour.
+        dita_ot = Path("/opt/dita-ot")
+        with mock.patch.object(publish_html.os, "name", "posix"):
+            launcher = _dita_launcher(dita_ot)
+        self.assertEqual(launcher, Path("/opt/dita-ot/bin/dita"))
+
+    def test_windows_uses_bat_launcher(self):
+        dita_ot = Path("/opt/dita-ot")
+        with mock.patch.object(publish_html.os, "name", "nt"):
+            launcher = _dita_launcher(dita_ot)
+        self.assertEqual(launcher.name, "dita.bat")
+        self.assertEqual(launcher.parent.name, "bin")
+
+    def test_command_uses_windows_launcher_as_argv0(self):
+        dita_ot = Path("/opt/dita-ot")
+        ditamap = Path("/staged/main.ditamap")
+        target = Path("/html/instructor/main")
+        with mock.patch.object(publish_html.os, "name", "nt"):
+            argv = _dita_ot_command(
+                dita_ot=dita_ot,
+                ditamap=ditamap,
+                target=target,
+                ditaval=None,
+            )
+        self.assertTrue(
+            argv[0].endswith("dita.bat"),
+            f"on Windows argv[0] must be the .bat wrapper, got {argv[0]!r}",
+        )
 
 
 class PublishDualEditionTests(unittest.TestCase):
@@ -859,7 +902,10 @@ class PublisherIdempotencyTests(unittest.TestCase):
 
             fake_dita_ot = tmp / "dita-ot"
             (fake_dita_ot / "bin").mkdir(parents=True)
+            # DITA-OT ships both launchers; create both so main()'s
+            # existence check passes on POSIX (dita) and Windows (dita.bat).
             (fake_dita_ot / "bin" / "dita").write_text("#!/bin/sh\n")
+            (fake_dita_ot / "bin" / "dita.bat").write_text("@echo off\n")
 
             def run_once(variant: str) -> Path:
                 out = tmp / variant / "html"
