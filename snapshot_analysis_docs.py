@@ -446,12 +446,23 @@ def _emit_summary(results: list[SnapshotResult]) -> None:
     print(summary)
 
 
-def snapshot(content_root: Path, renderer_cmd: str, dry_run: bool) -> list[SnapshotResult]:
-    """Scan ``content_root``, render/skip each analysis sheet, reverse-wrap."""
+def snapshot(
+    content_root: Path, renderer_cmd: str, dry_run: bool,
+    reverse_wrap: bool = True,
+) -> list[SnapshotResult]:
+    """Scan ``content_root``, render/skip each analysis sheet, reverse-wrap.
+
+    ``reverse_wrap`` controls FR-018 (synthesise a ``.docx`` wrapper around
+    any ``*analysis*.png`` that has no same-stem ``.docx`` so editors get a
+    Word source). Default ``True`` preserves the original feature 007
+    contract; pass ``False`` (CLI ``--no-reverse-wrap``) when the corpus
+    is read-only-by-policy and synthesised ``.docx`` files would be noise.
+    """
     results: list[SnapshotResult] = []
     for doc in iter_analysis_sheets(content_root):
         results.append(_process_sheet(doc, renderer_cmd, dry_run))
-    results.extend(_reverse_wrap_png_only(content_root, dry_run))
+    if reverse_wrap:
+        results.extend(_reverse_wrap_png_only(content_root, dry_run))
     return results
 
 
@@ -462,6 +473,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--content-root", required=True, type=Path, dest="content_root")
     parser.add_argument("--renderer-cmd", default="soffice", dest="renderer_cmd")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
+    parser.add_argument(
+        "--no-reverse-wrap", action="store_false", dest="reverse_wrap",
+        help="Skip FR-018's reverse-wrap step (synthesising a .docx around "
+             "every PNG-only analysis sheet). Use when the source corpus "
+             "should not be mutated with new .docx files — only render "
+             ".doc/.docx -> .png siblings.")
     args = parser.parse_args(argv)
 
     content_root: Path = args.content_root
@@ -473,10 +490,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     LOGGER.info(
-        "snapshotting analysis sheets under %s (renderer=%r%s)",
-        content_root, args.renderer_cmd, ", dry-run" if args.dry_run else "")
+        "snapshotting analysis sheets under %s (renderer=%r%s%s)",
+        content_root, args.renderer_cmd,
+        ", dry-run" if args.dry_run else "",
+        "" if args.reverse_wrap else ", no-reverse-wrap")
     try:
-        results = snapshot(content_root, args.renderer_cmd, args.dry_run)
+        results = snapshot(
+            content_root, args.renderer_cmd, args.dry_run,
+            reverse_wrap=args.reverse_wrap,
+        )
     except OSError as exc:
         LOGGER.error("snapshot failed: %s", exc)
         return 1
