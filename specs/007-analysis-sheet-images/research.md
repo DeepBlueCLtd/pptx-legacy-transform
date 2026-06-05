@@ -63,7 +63,7 @@ tool, never a Python dependency.
 ## R2 — Determinism vs. a non-reproducible renderer (Principle V)
 
 **Decision**: Produce the PNG **once** and treat it as a **committed source
-asset**; the normaliser is **idempotent** (skips any sheet that already has its
+asset**; the snapshotter is **idempotent** (skips any sheet that already has its
 sibling `.png`). Downstream determinism is the existing `generate_dita.py`
 `copy2` byte-for-byte copy.
 
@@ -99,7 +99,7 @@ LibreOffice renderer for a companion `--convert-to pdf` of the sheet and read th
 page count from the produced PDF with a tolerant **stdlib** scan (e.g. the
 `/Count` in the page-tree root, which LibreOffice writes in cleartext). Render
 the page-1 PNG as before. If the count is `> 1`, log a WARNING and mark the
-sheet's `NormaliseResult` so the extractor surfaces it in the row `warnings`. If
+sheet's `SnapshotResult` so the extractor surfaces it in the row `warnings`. If
 the count genuinely cannot be determined, emit a softer "page count
 undetermined" WARNING rather than staying silent (Principle VI honesty).
 
@@ -144,8 +144,8 @@ embeds it inline.
 ## R5 — Failure posture (Principle IV)
 
 **Decision**: Renderer-unavailable, render-failure, corrupt/locked document, and
-missing-sheet are all **WARNINGs that defer**: the normaliser logs per-sheet,
-continues, and exits 0; the affected gram is surfaced in `normalise.log`, the
+missing-sheet are all **WARNINGs that defer**: the snapshotter logs per-sheet,
+continues, and exits 0; the affected gram is surfaced in `snapshot.log`, the
 end-of-run summary, and — because the rendered `.png` is then absent — the
 extractor records a warning in that analysis row's `warnings` column. The
 generator still emits the topic with the intended `.png` href (dangling), so
@@ -158,10 +158,10 @@ errors so `run_pipeline.bat`'s `errorlevel` check still catches real breakage.
 
 ## R6 — Keeping tests stdlib-only and LibreOffice-free (Principle I/III)
 
-**Decision**: Tests drive the normaliser with `--renderer-cmd` pointing at a tiny
+**Decision**: Tests drive the snapshotter with `--renderer-cmd` pointing at a tiny
 in-repo stub script that writes the project's **existing PNG byte template** (the
 one `mock_pptx.py` already uses). The `.doc`/`.docx` inputs in tests are
-placeholder files — the normaliser does not parse them, it only passes them to
+placeholder files — the snapshotter does not parse them, it only passes them to
 the renderer — so no valid binary `.doc` and no LibreOffice install are needed.
 
 **Rationale**: Preserves the air-gapped stdlib-only test contract while fully
@@ -169,10 +169,10 @@ exercising classify → render-or-skip → summarise and the failure paths
 (stub exits 1). The full-pipeline tests get a deterministic `.doc`-sourced gram
 via the `mock_pptx.py` "doc" variant, which ships the rendered sibling alongside.
 
-## R7 — On-disk layout and how the normaliser selects analysis sheets
+## R7 — On-disk layout and how the snapshotter selects analysis sheets
 
 **Decision (added after `/speckit.review`, from maintainer input on the real
-corpus)**: The normaliser selects analysis documents by **filename pattern**
+corpus)**: The snapshotter selects analysis documents by **filename pattern**
 (`*analysis*`, case-insensitive) **plus** the `.doc`/`.docx` extension, scanning
 the content tree. It does **not** render every Word document it finds.
 
@@ -187,13 +187,13 @@ including **PPT source data and other Word documents**. Two consequences:
    `*analysis*` substring. This is Principle IV (never act on the wrong file)
    and Principle II (smallest correct rule).
 2. The earlier per-gram-folder framing in `data-model.md`/`plan.md` was
-   inaccurate; the normaliser scans for `*analysis*.{doc,docx}` files anywhere
+   inaccurate; the snapshotter scans for `*analysis*.{doc,docx}` files anywhere
    under the content root and renders a sibling `.png` for each.
 
-**Missing-sheet detection stays with the extractor**: because the normaliser
+**Missing-sheet detection stays with the extractor**: because the snapshotter
 selects only files that exist, it cannot meaningfully report a gram with *no*
 analysis sheet. That gap is already detected and warned by the extractor
-("missing analysis PNG hyperlink"), so the normaliser drops the `"missing"`
+("missing analysis PNG hyperlink"), so the snapshotter drops the `"missing"`
 outcome to avoid duplicating that responsibility (DRY).
 
 **Alternatives considered**: *Drive selection from PPTX hyperlinks* (open each
@@ -216,7 +216,7 @@ whole landscape page, leaving margin whitespace at LibreOffice's default DPI, so
 the raw inline image is loose and soft. The maintainer has cleared a *prep-time*
 wheel where justified (see R1). The constitution's hard limits are the **one
 runtime dependency** and **stdlib-only tests** — both preserved because Pillow is
-imported only inside the prep-time normaliser, behind `try/except ImportError`,
+imported only inside the prep-time snapshotter, behind `try/except ImportError`,
 and the crop test runs under `unittest.skipUnless(PIL importable)` while the
 fallback path is asserted unconditionally.
 

@@ -587,6 +587,6 @@ produces the expected output tree on continue.
   is the default expectation; an equivalent that exposes a
   command-line `.docx → image` conversion is acceptable). The renderer
   binary is discoverable on PATH or via a configurable command. It is
-  used only by the FR-023 normalisation stage and never at runtime by
+  used only by the FR-023 snapshot stage and never at runtime by
   any other stage; like DITA-OT (FR-021) it is installed-by-the-user,
   documented in the README, and not bundled in the project delivery.

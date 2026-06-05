@@ -3,7 +3,7 @@
 **Feature Branch**: `007-analysis-sheet-images`
 **Created**: 2026-05-29
 **Status**: Draft
-**Input**: User description: "Render legacy analysis-sheet Word documents (.doc and .docx) to PNG images so the gram's analysis table is embedded inline in the DITA topic instead of forcing the instructor to open MS Word. The Word 'tables' are visually-aligned text blocks rather than real tables, so a logical parse would corrupt them — a page render is the robust representation. Use LibreOffice headless as a prep-time, render-once normalisation stage (the FR-023 idea already sketched in spec 001), extended to cover legacy binary .doc as well as .docx. The PNG becomes a committed source asset copied deterministically downstream; the renderer never runs inside a re-runnable loop. Air-gapped Windows target, one runtime Python dependency (python-pptx), stdlib-only tests."
+**Input**: User description: "Render legacy analysis-sheet Word documents (.doc and .docx) to PNG images so the gram's analysis table is embedded inline in the DITA topic instead of forcing the instructor to open MS Word. The Word 'tables' are visually-aligned text blocks rather than real tables, so a logical parse would corrupt them — a page render is the robust representation. Use LibreOffice headless as a prep-time, render-once snapshot stage (the FR-023 idea already sketched in spec 001), extended to cover legacy binary .doc as well as .docx. The PNG becomes a committed source asset copied deterministically downstream; the renderer never runs inside a re-runnable loop. Air-gapped Windows target, one runtime Python dependency (python-pptx), stdlib-only tests."
 
 ## Context & Motivation *(informative)*
 
@@ -24,7 +24,7 @@ therefore silently corrupt the alignment. Rendering the page to an
 image preserves exactly what the author laid out and exactly what the
 instructor expects to see.
 
-This feature realises and extends the analysis-sheet normalisation idea
+This feature realises and extends the analysis-sheet snapshotting idea
 already sketched as **FR-023** in `specs/001-pptx-dita-migration`
 (which covered `.docx` only). The extension is to also accept the
 **legacy binary `.doc`** format that the older decks use, and to make
@@ -74,17 +74,17 @@ step.
 in the older `.doc` decks. Covering only `.docx` would leave the
 original problem largely unsolved. This is co-equal P1 with Story 1.
 
-**Independent Test**: Point the normalisation stage at a content tree
+**Independent Test**: Point the snapshot stage at a content tree
 containing `.doc` analysis sheets and confirm a PNG is produced for each
 without any pre-conversion of the `.doc` files by hand.
 
 **Acceptance Scenarios**:
 
 1. **Given** a gram folder whose analysis sheet is a legacy binary
-   `.doc`, **When** the normalisation stage runs, **Then** a PNG of the
+   `.doc`, **When** the snapshot stage runs, **Then** a PNG of the
    document's landscape page is produced beside it.
 2. **Given** a gram folder whose analysis sheet is a `.docx`, **When**
-   the normalisation stage runs, **Then** a PNG is produced exactly as
+   the snapshot stage runs, **Then** a PNG is produced exactly as
    for the `.doc` case.
 3. **Given** a content tree mixing `.doc`, `.docx`, and pre-existing
    `.png` analysis sheets, **When** the stage runs, **Then** every gram
@@ -195,7 +195,7 @@ flagged in the CSV, and the un-affected grams are produced normally.
   air-gapped network.
 - **FR-012**: The step MUST NOT add a third-party dependency to the
   pipeline's **runtime** path, and the project's **tests** MUST remain
-  standard-library only. The prep-time normalisation step MAY use
+  standard-library only. The prep-time snapshot step MAY use
   maintainer-installed prep tooling (the Word→image renderer of FR-013,
   and the image-processing capability of FR-017); any such tooling MUST
   be imported/invoked only by this prep step, MUST degrade gracefully
@@ -245,14 +245,14 @@ flagged in the CSV, and the un-affected grams are produced normally.
   a single landscape page. It lives in the chapter folder alongside other
   files (PPT source data, unrelated Word documents) and follows the
   `*analysis*` naming convention. On disk it originates as a legacy
-  `.doc`, a `.docx`, or a pre-existing `.png`. After normalisation it
+  `.doc`, a `.docx`, or a pre-existing `.png`. After snapshotting it
   exists in both an image and a Word form (FR-018).
 - **Analysis Image**: The PNG rendering of an Analysis Sheet's first
   page, margin-trimmed and resolution-normalised (FR-017). Once produced
   it is a committed source asset, copied beside the gram's topic by the
   downstream generator and embedded inline.
 - **Chapter Folder**: The on-disk folder holding a chapter's files,
-  including analysis documents mixed with other content. The normalisation
+  including analysis documents mixed with other content. The snapshot
   step scans it for analysis documents by name pattern (FR-015), not by
   rendering every file present.
 - **Review CSV Row**: The technical-author hand-off record for a gram;
@@ -301,7 +301,7 @@ flagged in the CSV, and the un-affected grams are produced normally.
 - **The image post-processing capability (margin-trim + DPI, FR-017) may
   rely on a second prep-time library.** The project's hard rule is one
   *runtime* dependency and standard-library *tests*; this capability is
-  used only by the prep-time normalisation step, is imported defensively
+  used only by the prep-time snapshot step, is imported defensively
   (the step falls back to the untrimmed full-page render and logs when it
   is unavailable), and is never imported on the pipeline's runtime path
   or by the test suite. It is documented as an installed-by-the-maintainer
@@ -326,5 +326,5 @@ flagged in the CSV, and the un-affected grams are produced normally.
   conventions should be confirmed against an introspection report from a
   real instructor deck before final implementation.
 - **This feature builds on the unimplemented FR-023 stage**, not on a
-  shipped one; delivering this feature implements that normalisation
+  shipped one; delivering this feature implements that snapshot
   stage (extended to `.doc`) for the first time.

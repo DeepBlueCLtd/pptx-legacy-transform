@@ -1,4 +1,4 @@
-"""A LibreOffice-free renderer stub for the normaliser tests (research R6).
+"""A LibreOffice-free renderer stub for the snapshotter tests (research R6).
 
 Mimics ``soffice --headless --convert-to {png|pdf} --outdir <dir> <doc>``:
 
@@ -6,7 +6,7 @@ Mimics ``soffice --headless --convert-to {png|pdf} --outdir <dir> <doc>``:
   template, reused from ``mock_pptx.emit_png``) named ``<doc-stem>.png`` into
   ``--outdir``.
 - ``--convert-to pdf`` writes a minimal single-page PDF whose page tree carries
-  ``/Count N`` so the normaliser's stdlib page-count read works.
+  ``/Count N`` so the snapshotter's stdlib page-count read works.
 
 Behaviour is configurable via environment variables so one stub serves the
 success, failure, and multi-page test cases without LibreOffice:
@@ -35,7 +35,7 @@ def _write_min_pdf(path: Path, pages: int) -> None:
     """Write a minimal PDF whose page tree declares ``/Count <pages>``.
 
     Not a fully spec-conformant PDF -- just enough cleartext structure for the
-    normaliser's tolerant ``/Type /Pages /Count N`` scan to read the count.
+    snapshotter's tolerant ``/Type /Pages /Count N`` scan to read the count.
     """
     body = (
         "%PDF-1.4\n"

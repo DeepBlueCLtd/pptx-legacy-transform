@@ -21,10 +21,10 @@ The mock generator now emits a `{doc, docx, png}` mix of analysis sheets. For a
 `doc`-kind gram it writes both `analysis table.doc` and its rendered sibling
 `analysis table.png` (so the walkthrough is deterministic and LibreOffice-free).
 
-## 2. Normalise: render any un-rendered Word analysis sheet to PNG
+## 2. Snapshot: render any un-rendered Word analysis sheet to PNG
 
 ```bash
-python normalise_analysis_sheets.py --content-root path/to/content
+python snapshot_analysis_docs.py --content-root path/to/content
 # add --renderer-cmd /path/to/soffice on a real corpus; omit for the mock
 ```
 
@@ -33,7 +33,7 @@ python normalise_analysis_sheets.py --content-root path/to/content
 `docx_wrapped`, `tidy_skipped`. Every `*analysis*.doc`/`.docx` document now has a
 same-stem `.png` sibling (margin-trimmed when Pillow is present), except any
 reported under `render_failed`; every analysis sheet that was png-only now also
-has a `.docx` (FR-018). `normalise.log` records one line per document. (Unrelated
+has a `.docx` (FR-018). `snapshot.log` records one line per document. (Unrelated
 Word docs sharing the chapter folder are left untouched — only files matching
 `*analysis*` are rendered.)
 
@@ -89,7 +89,7 @@ second `publish_html.py` run over the unchanged tree yields byte-identical HTML.
 python -m unittest discover tests/
 ```
 
-**Verify**: `tests/test_normalise_analysis_sheets.py` (render/skip/fail/missing,
+**Verify**: `tests/test_snapshot_analysis_docs.py` (render/skip/fail/missing,
 idempotency, dry-run — renderer stubbed) and the extended
 `tests/test_extract_to_csv.py` (doc/docx → sibling-png redirect, warning on
 absent PNG, unchanged column count) are green, with the rest of the suite.

@@ -8,8 +8,8 @@ if "%~1"=="" (
 
 echo === PPTX to DITA Migration Pipeline ===
 
-echo [Stage 1] Normalising Word analysis sheets to PNG ...
-python normalise_analysis_sheets.py --content-root %1
+echo [Stage 1] Snapshotting Word analysis sheets to PNG ...
+python snapshot_analysis_docs.py --content-root %1
 if errorlevel 1 goto error
 
 echo [Stage 2] Extracting PPTX content into extracted.csv ...

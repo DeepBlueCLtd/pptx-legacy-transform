@@ -161,16 +161,16 @@ the output tree is deleted before writing on each run.
 
 ---
 
-## `normalise_analysis_sheets.py`
+## `snapshot_analysis_docs.py`
 
-**Purpose** (feature 007): Prep-time, render-once normaliser. Walk a
+**Purpose** (feature 007): Prep-time, render-once snapshotter. Walk a
 content tree and render every Word analysis sheet (`*analysis*.doc` /
 `.docx`) to a same-stem `.png` sibling so the downstream pipeline embeds
 the analysis table inline. Authoritative schema:
-`specs/007-analysis-sheet-images/contracts/normalise-cli.md`.
+`specs/007-analysis-sheet-images/contracts/snapshot-cli.md`.
 
 ```text
-python normalise_analysis_sheets.py --content-root DIR
+python snapshot_analysis_docs.py --content-root DIR
                                     [--renderer-cmd CMD] [--dry-run]
 ```
 
@@ -188,7 +188,7 @@ python normalise_analysis_sheets.py --content-root DIR
   wheel is present, full-page otherwise).
 - For each `*analysis*.png` lacking a same-stem `.docx`, writes a minimal
   reverse-wrapped `.docx` (stdlib `zipfile`, fixed timestamp; FR-018).
-- Writes `normalise.log` at the repo root (DEBUG to file, INFO/WARNING to
+- Writes `snapshot.log` at the repo root (DEBUG to file, INFO/WARNING to
   console) and an end-of-run summary line (`sheets_seen`, `rendered`,
   `skipped_has_png`, `render_failed`, `multipage_warned`, `docx_wrapped`,
   `tidy_skipped`).
@@ -220,9 +220,9 @@ run_pipeline.bat <input-root>
 
 | Position | Required | Type | Description |
 |---|---|---|---|
-| `%1` | yes | path | Content root (forwarded to `normalise_analysis_sheets.py --content-root`, `extract_to_csv.py --input-root`, and `generate_dita.py --image-root`) |
+| `%1` | yes | path | Content root (forwarded to `snapshot_analysis_docs.py --content-root`, `extract_to_csv.py --input-root`, and `generate_dita.py --image-root`) |
 
-**Side effects**: Runs `normalise_analysis_sheets.py`, then
+**Side effects**: Runs `snapshot_analysis_docs.py`, then
 `extract_to_csv.py`, pauses for the technical author to inspect
 `extracted.csv`, then runs `generate_dita.py`.
 

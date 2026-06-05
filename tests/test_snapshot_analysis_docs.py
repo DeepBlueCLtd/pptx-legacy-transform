@@ -1,9 +1,9 @@
-"""Tests for normalise_analysis_sheets.py (Feature 007).
+"""Tests for snapshot_analysis_docs.py (Feature 007).
 
 The renderer is stubbed via ``--renderer-cmd`` pointing at
 ``tests/fixtures/fake_renderer.py`` (research R6), so the suite stays
 stdlib-only and LibreOffice-free. The ``.doc``/``.docx`` inputs are
-placeholder bytes -- the normaliser never parses them, it only hands them
+placeholder bytes -- the snapshotter never parses them, it only hands them
 to the renderer.
 """
 
@@ -21,12 +21,12 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-import normalise_analysis_sheets as nas  # noqa: E402
+import snapshot_analysis_docs as nas  # noqa: E402
 
 FAKE_RENDERER = REPO_ROOT / "tests" / "fixtures" / "fake_renderer.py"
-TMP = REPO_ROOT / "tests" / "_tmp" / "normalise"
+TMP = REPO_ROOT / "tests" / "_tmp" / "snapshot"
 
-# A renderer command the normaliser can shlex-split back into argv. Quoting
+# A renderer command the snapshotter can shlex-split back into argv. Quoting
 # keeps spaces in the interpreter path (e.g. on Windows) intact.
 STUB_CMD = f"{shlex.quote(sys.executable)} {shlex.quote(str(FAKE_RENDERER))}"
 
@@ -39,7 +39,7 @@ def _pil_available() -> bool:
         return False
 
 
-class NormaliseTestBase(unittest.TestCase):
+class SnapshotTestBase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.root = TMP / self._testMethodName
@@ -63,7 +63,7 @@ class NormaliseTestBase(unittest.TestCase):
 # Phase 3: US1 & US2 -- doc/docx -> inline image
 # -----------------------------------------------------------------------------
 
-class RenderHappyPathTests(NormaliseTestBase):
+class RenderHappyPathTests(SnapshotTestBase):
 
     def test_doc_only_folder_produces_png(self) -> None:  # T005 (US1)
         doc = self._write_doc("aaa_analysis.doc")
@@ -84,7 +84,7 @@ class RenderHappyPathTests(NormaliseTestBase):
         png = doc.with_suffix(".png")
         png.write_bytes(b"existing png")
         before = png.stat().st_mtime_ns
-        results = nas.normalise(self.root, STUB_CMD, dry_run=False)
+        results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
         word_results = [r for r in results if r.source_path == doc]
         self.assertEqual(len(word_results), 1)
         self.assertEqual(word_results[0].outcome, "skipped_has_png")
@@ -112,13 +112,13 @@ class RenderHappyPathTests(NormaliseTestBase):
 # Phase 4: US3 -- failures visible, never fatal
 # -----------------------------------------------------------------------------
 
-class FailurePathTests(NormaliseTestBase):
+class FailurePathTests(SnapshotTestBase):
 
     def test_renderer_failure_is_warning_not_abort(self) -> None:  # T015 (US3)
         doc = self._write_doc("fff_analysis.doc")
         with mock.patch.dict(os.environ, {"FAKE_RENDERER_EXIT": "1"}):
             with self.assertLogs(nas.LOGGER, level="WARNING") as cm:
-                results = nas.normalise(self.root, STUB_CMD, dry_run=False)
+                results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
                 rc = self._run()
         self.assertEqual(rc, 0, "render failure must not abort the run")
         word_results = [r for r in results if r.source_path == doc]
@@ -135,7 +135,7 @@ class FailurePathTests(NormaliseTestBase):
         doc = self._write_doc("hhh_analysis.doc")
         with mock.patch.dict(os.environ, {"FAKE_RENDERER_PAGES": "2"}):
             with self.assertLogs(nas.LOGGER, level="WARNING") as cm:
-                results = nas.normalise(self.root, STUB_CMD, dry_run=False)
+                results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
         word_results = [r for r in results if r.source_path == doc]
         self.assertTrue(doc.with_suffix(".png").exists(),
                         "page-1 PNG must still be produced for a multi-page source")
@@ -156,7 +156,7 @@ class FailurePathTests(NormaliseTestBase):
 # Phase 5: tidy (margin-trim + DPI), defensively imported
 # -----------------------------------------------------------------------------
 
-class TidyTests(NormaliseTestBase):
+class TidyTests(SnapshotTestBase):
 
     def test_tidy_falls_back_without_pillow(self) -> None:  # T022
         doc = self._write_doc("jjj_analysis.doc")
@@ -170,7 +170,7 @@ class TidyTests(NormaliseTestBase):
 
         with mock.patch("builtins.__import__", side_effect=fake_import):
             with self.assertLogs(nas.LOGGER, level="INFO"):
-                results = nas.normalise(self.root, STUB_CMD, dry_run=False)
+                results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
         word_results = [r for r in results if r.source_path == doc]
         self.assertTrue(doc.with_suffix(".png").exists(),
                         "full-page PNG kept when Pillow is absent")
@@ -205,7 +205,7 @@ class TidyTests(NormaliseTestBase):
 # Phase 6: reverse PNG -> .docx wrap
 # -----------------------------------------------------------------------------
 
-class ReverseWrapTests(NormaliseTestBase):
+class ReverseWrapTests(SnapshotTestBase):
 
     def test_png_only_sheet_gets_docx_wrapper(self) -> None:  # T026
         import xml.etree.ElementTree as ET
@@ -213,7 +213,7 @@ class ReverseWrapTests(NormaliseTestBase):
 
         png = self.root / "eee_analysis.png"
         png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
-        results = nas.normalise(self.root, STUB_CMD, dry_run=False)
+        results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
         docx = png.with_suffix(".docx")
         self.assertTrue(docx.exists(), "a png-only analysis sheet must gain a .docx")
         wrap_results = [r for r in results if r.source_path == png]
@@ -226,11 +226,11 @@ class ReverseWrapTests(NormaliseTestBase):
     def test_reverse_wrap_is_idempotent(self) -> None:  # T027
         png = self.root / "fff_analysis.png"
         png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
-        nas.normalise(self.root, STUB_CMD, dry_run=False)
+        nas.snapshot(self.root, STUB_CMD, dry_run=False)
         docx = png.with_suffix(".docx")
         first = docx.read_bytes()
         mtime = docx.stat().st_mtime_ns
-        nas.normalise(self.root, STUB_CMD, dry_run=False)
+        nas.snapshot(self.root, STUB_CMD, dry_run=False)
         self.assertEqual(docx.read_bytes(), first, "reverse .docx must be byte-stable")
         self.assertEqual(docx.stat().st_mtime_ns, mtime, "no re-wrap when .docx exists")
 
@@ -239,7 +239,7 @@ class ReverseWrapTests(NormaliseTestBase):
 # Selection + classification units (Phase 2)
 # -----------------------------------------------------------------------------
 
-class SelectionTests(NormaliseTestBase):
+class SelectionTests(SnapshotTestBase):
 
     def test_iter_selects_only_analysis_word_docs(self) -> None:
         self._write_doc("aaa_analysis.doc")
@@ -257,7 +257,7 @@ class SelectionTests(NormaliseTestBase):
         self.assertFalse(nas.needs_render(doc))
 
 
-class IdempotencyTests(NormaliseTestBase):
+class IdempotencyTests(SnapshotTestBase):
 
     def test_second_run_writes_nothing(self) -> None:
         doc = self._write_doc("aaa_analysis.doc")
@@ -265,7 +265,7 @@ class IdempotencyTests(NormaliseTestBase):
         png = doc.with_suffix(".png")
         self.assertTrue(png.exists())
         mtime = png.stat().st_mtime_ns
-        results = nas.normalise(self.root, STUB_CMD, dry_run=False)
+        results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
         word_results = [r for r in results if r.source_path == doc]
         self.assertEqual(word_results[0].outcome, "skipped_has_png")
         self.assertEqual(png.stat().st_mtime_ns, mtime)

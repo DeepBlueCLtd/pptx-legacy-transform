@@ -331,7 +331,7 @@ def emit_doc(path: Path, *, title: str) -> None:
     """Write deterministic placeholder bytes for a legacy ``.doc`` sheet.
 
     The mock is not a renderer and nothing downstream parses the ``.doc``
-    (``normalise_analysis_sheets.py`` only hands it to LibreOffice), so a
+    (``snapshot_analysis_docs.py`` only hands it to LibreOffice), so a
     fixed, byte-stable placeholder is sufficient for the test corpus. The
     rendered sibling ``.png`` is emitted alongside by ``_emit_analysis_sheet``
     so the full pipeline exercises the doc -> inline-image path without

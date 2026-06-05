@@ -1,6 +1,6 @@
-# Contract: `normalise_analysis_sheets.py` CLI
+# Contract: `snapshot_analysis_docs.py` CLI
 
-Prep-time, render-once normalisation stage. Walks a content tree and renders
+Prep-time, render-once snapshot stage. Walks a content tree and renders
 every Word analysis sheet (`.doc` / `.docx`) to a same-stem `.png` sibling so
 the downstream pipeline embeds the analysis table inline. Authoritative schema
 for the script's command-line interface, behaviour, and exit codes.
@@ -8,7 +8,7 @@ for the script's command-line interface, behaviour, and exit codes.
 ## Invocation
 
 ```text
-python normalise_analysis_sheets.py --content-root <dir> [--renderer-cmd <cmd>] [--dry-run]
+python snapshot_analysis_docs.py --content-root <dir> [--renderer-cmd <cmd>] [--dry-run]
 ```
 
 | Flag | Required | Default | Meaning |
@@ -53,7 +53,7 @@ python normalise_analysis_sheets.py --content-root <dir> [--renderer-cmd <cmd>] 
 
 ## Logging
 
-- Writes a DEBUG log file `normalise.log` at the repository root **and** mirrors
+- Writes a DEBUG log file `snapshot.log` at the repository root **and** mirrors
   to console (dual-logging, per the project convention / Principle I).
 - One INFO line per sheet for `rendered` / `skipped_has_png`; one WARNING line
   per sheet for `render_failed` and for a multi-page sheet (`multipage_warned`).
