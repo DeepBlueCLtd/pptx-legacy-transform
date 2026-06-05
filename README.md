@@ -362,6 +362,29 @@ validation), and writes HTML5 under `html/<edition>/<ditamap-stem>/`
 per ditamap per edition. The staging directory is cleaned up after
 each run.
 
+#### Staging and output on a roomy disk (full-corpus runs)
+
+The staging copy under `.dita-build/` briefly holds a **full copy of
+every referenced image** — DITA-OT resolves the bare-filename image
+hrefs relative to each topic, so the assets must sit beside the staged
+topics. The `html/` output then holds another copy per edition
+(instructor **and** student). For the full corpus (~1,000 grams) these
+copies can overwhelm a small local disk.
+
+Both locations are configurable. Point `--staged` and `--out` at a
+roomy volume such as the provided folder-share:
+
+```bash
+python publish_html.py --dita-ot /path/to/dita-ot-4.2.4 \
+    --staged /mnt/share/dita-build --out /mnt/share/html
+# Windows: python publish_html.py --dita-ot C:\dita-ot-4.2.4 ^
+#              --staged D:\share\dita-build --out D:\share\html
+```
+
+`--staged` is a throwaway, deleted after each run; `--out` holds the
+deliverable HTML editions. Both default to the current directory
+(`.dita-build/` and `html/`) when the flags are omitted.
+
 ### Output layout (spec 003)
 
 Each publish run emits two parallel HTML editions plus a shared

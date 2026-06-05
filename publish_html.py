@@ -873,11 +873,44 @@ def publish(
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dita", default=Path("dita"), type=Path)
-    parser.add_argument("--out", default=Path("html"), type=Path)
-    parser.add_argument("--dita-ot", required=True, type=Path)
-    parser.add_argument("--staged", default=Path(".dita-build"), type=Path)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=(
+            "Disk usage: the staging copy (--staged) and each HTML edition "
+            "under --out both hold a full copy of every referenced image. "
+            "For the full corpus, point --staged and --out at a roomy volume "
+            "(e.g. the provided folder-share) so they do not fill the local "
+            "disk."
+        ),
+    )
+    parser.add_argument(
+        "--dita", default=Path("dita"), type=Path,
+        help="Source DITA tree to publish (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--out", default=Path("html"), type=Path,
+        help=(
+            "Directory for the rendered HTML editions (default: %(default)s). "
+            "Holds a full copy of every referenced image per edition "
+            "(instructor + student); point it at a roomy volume such as the "
+            "folder-share for full-corpus runs."
+        ),
+    )
+    parser.add_argument(
+        "--dita-ot", required=True, type=Path,
+        help="Path to a DITA-OT installation (must contain bin/dita).",
+    )
+    parser.add_argument(
+        "--staged", default=Path(".dita-build"), type=Path,
+        help=(
+            "Throwaway staging directory for the DOCTYPE-injected build copy "
+            "of the DITA tree (default: %(default)s, created in the current "
+            "directory). It briefly holds a full copy of every image, so for "
+            "the full corpus point it at a roomy volume such as the "
+            "folder-share to avoid filling the local disk. Removed after each "
+            "run."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.dita.is_dir():

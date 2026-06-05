@@ -370,7 +370,8 @@ target — Oxygen remains the production publishing path (FR-021).
 
 `publish_html.py` operates on `{out}` non-destructively:
 
-1. Stages a copy of `{out}` under `.dita-build/`. The source DITA already
+1. Stages a copy of `{out}` under the staging directory (`--staged`,
+   default `.dita-build/`). The source DITA already
    carries the OASIS Topic/Map DOCTYPE declarations per §0, so staging
    injects them only if absent (tolerating older DOCTYPE-less trees);
    DITA-OT requires them to classify elements. Ditamaps already sit
@@ -381,6 +382,11 @@ target — Oxygen remains the production publishing path (FR-021).
    `html/{ditamap-stem}/`.
 3. Removes the staging directory once publishing completes.
 
-The script's only inputs are `--dita` (default `dita/`), `--out`
-(default `html/`), and `--dita-ot` (path to a DITA-OT installation
-that the maintainer transfers across the air-gap per FR-021).
+The script's inputs are `--dita` (default `dita/`), `--out` (default
+`html/`), `--dita-ot` (path to a DITA-OT installation that the
+maintainer transfers across the air-gap per FR-021), and `--staged`
+(default `.dita-build/`, the throwaway staging directory from step 1).
+For full-corpus runs, `--staged` and `--out` can be pointed at a roomy
+volume (e.g. the provided folder-share) so the staging copy and
+per-edition HTML — each holding a full copy of every image — don't
+fill the local disk.
