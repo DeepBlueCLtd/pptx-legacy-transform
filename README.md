@@ -160,6 +160,14 @@ A more detailed walkthrough lives in
    The shape-grouping function (`extract_grams_from_slide`) is currently
    a documented stub; the rest of the infrastructure runs end-to-end.
 
+   For fast debug iteration on a single chapter, pass
+   `--only "<Chapter Folder Name>"`. The walk is scoped to that subdir
+   but the CSV's path schema stays corpus-root-relative, so
+   `deduplicate_csv.py` and `generate_dita.py` can keep `--image-root`
+   pointing at the corpus root without re-editing. **Don't be tempted
+   to narrow `--input-root` instead** — that changes the relpath schema
+   and breaks the downstream tools, one folder segment short.
+
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,

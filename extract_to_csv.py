@@ -192,15 +192,28 @@ def resolve_asset_path(href: str, content_root: Path, source_dir: Path | None) -
     return href.replace("\\", "/")
 
 
-def walk_pptxs(input_root: Path) -> Iterator[Path]:
+def walk_pptxs(input_root: Path, only_subdir: str | None = None) -> Iterator[Path]:
     """Yield every ``.pptx`` under ``input_root`` in deterministic sorted order.
 
     Skips Office lock files (``~$Foo.pptx``) which Word/PowerPoint
     create alongside any open document and which are not real content.
+
+    When ``only_subdir`` is set, restrict the walk to PPTXs whose path
+    (relative to ``input_root``) descends into a folder of that exact
+    name as its first segment. This lets the user scope an iteration to
+    one chapter for fast debug feedback while keeping ``input_root`` at
+    the corpus root, so the resulting CSV's relpaths stay corpus-root-
+    relative and dedupe/generate work against the same root unchanged.
+    Match is case-insensitive (corpus folder casing varies by author).
     """
+    needle = only_subdir.casefold() if only_subdir else None
     for path in sorted(input_root.rglob("*.pptx")):
         if path.name.startswith("~$"):
             continue
+        if needle is not None:
+            rel_parts = path.relative_to(input_root).parts
+            if not rel_parts or rel_parts[0].casefold() != needle:
+                continue
         yield path
 
 
@@ -946,6 +959,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--test-pattern", default=DEFAULT_TEST_PATTERN, dest="test_pattern")
     parser.add_argument("--final-pattern", default=DEFAULT_FINAL_PATTERN, dest="final_pattern")
+    parser.add_argument(
+        "--only", default=None, dest="only",
+        help="Scope the walk to PPTXs whose path under --input-root starts with "
+             "this exact folder name. The output CSV's path schema stays "
+             "corpus-root-relative, so dedupe/generate can keep --image-root at "
+             "--input-root unchanged. Useful for fast per-chapter debug "
+             "iteration without re-pointing the downstream wrappers.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("extract.log"))
@@ -961,7 +982,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     final_allocated: dict[str, int] = {}
 
     try:
-        for pptx in walk_pptxs(args.input_root):
+        for pptx in walk_pptxs(args.input_root, only_subdir=args.only):
             pptx_count += 1
             LOGGER.info("Processing PPTX %s", pptx)
             publication, chapter, chapter_slug = classify_publication(
@@ -1009,6 +1030,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("Shape grouping stub reached: %s", exc)
         # Still write whatever rows were collected before the stub fired.
         write_csv(rows, args.out)
+        return 1
+
+    if args.only is not None and pptx_count == 0:
+        LOGGER.warning(
+            "--only=%r matched no PPTXs under %s. Check the folder name "
+            "(case-insensitive match against the first path segment under "
+            "--input-root) and that the directory contains *.pptx files.",
+            args.only, args.input_root,
+        )
         return 1
 
     write_csv(rows, args.out)

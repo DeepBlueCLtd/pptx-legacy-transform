@@ -378,5 +378,73 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
         self.assertEqual(pubs, {"progress-test-1"}, f"unexpected publications: {pubs}")
 
 
+class OnlyChapterScopingTests(unittest.TestCase):
+    """``--only <subdir>`` keeps ``--input-root`` at the corpus root and
+    filters the walk to one chapter folder. Important: the CSV's path
+    schema must stay corpus-root-relative (i.e. every relpath begins with
+    the scoped chapter folder name), so dedupe/generate keep using the
+    same hardcoded ``--image-root`` and "just work" without re-pointing.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(TMP / "extract_only_corpus")
+
+    def _read(self, csv_path: Path) -> list[dict]:
+        with csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
+            return list(csv.DictReader(fh))
+
+    def test_only_scopes_walk_and_keeps_corpus_root_relative_paths(self) -> None:
+        out_csv = TMP / "extract_only_week1.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.corpus),
+            "--out", str(out_csv),
+            "--only", "Instructor Week 1 Grams",
+        ])
+        self.assertEqual(rc, 0)
+        rows = self._read(out_csv)
+        self.assertGreater(len(rows), 0, "expected non-empty CSV for scoped chapter")
+        for r in rows:
+            for col in ("glc_path", "png_path"):
+                value = r.get(col, "")
+                if not value:
+                    continue
+                self.assertTrue(
+                    value.startswith("Instructor Week 1 Grams/"),
+                    f"{col}={value!r} should start with the chapter folder so "
+                    "dedupe/generate can resolve it from --image-root=<corpus>",
+                )
+                self.assertNotIn(
+                    "Instructor Week 2 Grams", value,
+                    f"--only must not leak rows from outside the scoped folder ({col}={value!r})",
+                )
+
+    def test_only_case_insensitive_match(self) -> None:
+        out_csv = TMP / "extract_only_case.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.corpus),
+            "--out", str(out_csv),
+            "--only", "instructor week 1 grams",
+        ])
+        self.assertEqual(rc, 0)
+        rows = self._read(out_csv)
+        self.assertGreater(len(rows), 0)
+
+    def test_only_zero_match_fails_loudly(self) -> None:
+        out_csv = TMP / "extract_only_miss.csv"
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            rc = extract_to_csv.main([
+                "--input-root", str(self.corpus),
+                "--out", str(out_csv),
+                "--only", "No Such Chapter",
+            ])
+        self.assertEqual(rc, 1, "zero-match must fail-fast, not write an empty CSV")
+        self.assertFalse(out_csv.exists(), "no CSV should be written on zero-match")
+        joined = "\n".join(cm.output)
+        self.assertIn("No Such Chapter", joined)
+        self.assertIn("matched no PPTXs", joined)
+
+
 if __name__ == "__main__":
     unittest.main()
