@@ -381,9 +381,65 @@ python publish_html.py --dita-ot /path/to/dita-ot-4.2.4 \
 #              --staged D:\share\dita-build --out D:\share\html
 ```
 
-`--staged` is a throwaway, deleted after each run; `--out` holds the
-deliverable HTML editions. Both default to the current directory
-(`.dita-build/` and `html/`) when the flags are omitted.
+`--staged` is a throwaway, deleted after each run (pass `--keep-staged`
+to leave it in place when debugging a failed build — see below); `--out`
+holds the deliverable HTML editions. Both default to the current
+directory (`.dita-build/` and `html/`) when the flags are omitted.
+
+#### Map a drive — DITA-OT cannot read `\\server\share` (UNC) paths
+
+The "roomy volume" above must be reached through a **mapped drive
+letter**, not a raw UNC path. DITA-OT — both the `publish_html.py`
+preview and the Oxygen production transform — fails to resolve
+`\\server\share\…` inputs: it builds a malformed `file:/server/share/…`
+URI (dropping the `//server` authority) and aborts with
+
+```text
+[DOTX008E] The resource 'file:/10.159.0.118/Share/…/x.ditamap' cannot
+be loaded. … Unable to set input file to job configuration
+```
+
+even though the file is present and readable. (The give-away is the
+single slash after `file:` — a valid UNC URI is `file://server/share/…`.)
+
+Map the share to a drive letter first, in the **same, non-elevated**
+session you publish from:
+
+```bat
+net use Z: \\10.159.0.118\Share    REM /persistent:yes to keep it across reboots
+```
+
+Then use `Z:\…` paths everywhere — never `\\server\share\…`:
+
+- **`publish_html.py`** — pass drive-letter paths to every directory
+  flag: `--dita Z:\Out --staged Z:\dita-build --out Z:\html --dita-ot
+  Z:\dita-ot-4.4`.
+- **Oxygen (production publisher)** — open the map from `Z:\…`, then in
+  the transformation scenario's **Output** tab set the **base**,
+  **temporary**, and **output** directories to absolute drive-letter
+  paths (e.g. `Z:\dita-temp`, `Z:\html\…`). Duplicate the stock
+  scenario first — the built-ins are read-only.
+
+> **Privilege gotcha:** a drive mapped in an Administrator shell is
+> invisible to a non-Administrator publisher (and vice-versa). Map the
+> drive and launch the publisher — Python or Oxygen — at the same
+> privilege level, or the drive letter won't exist for the process and
+> you will hit the same "cannot be loaded" error.
+
+#### Debugging a failed build with `--keep-staged`
+
+`publish_html.py` deletes the staged build tree (`--staged`) at the end
+of every run, which erases the evidence exactly when a DITA-OT build
+fails. Pass `--keep-staged` to leave it in place so you can inspect
+what DITA-OT was actually handed — confirm the relocated
+`<stem>/<stem>.ditamap` exists and check its exact path:
+
+```bat
+python publish_html.py --dita-ot Z:\dita-ot-4.4 --staged Z:\dita-build --keep-staged
+```
+
+The tree is overwritten at the start of the next run, so a kept copy
+never goes stale; delete it by hand once you are done inspecting.
 
 ### Output layout (spec 003)
 
