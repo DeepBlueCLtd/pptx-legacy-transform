@@ -1012,6 +1012,78 @@ class StagedHrefsResolveTests(unittest.TestCase):
                     )
 
 
+class KeepStagedTests(unittest.TestCase):
+    """``--keep-staged`` leaves the staged build tree behind for inspection.
+
+    Default behaviour removes ``--staged`` after publishing; the flag is a
+    debugging affordance for the air-gapped target, where post-mortem
+    inspection of exactly what DITA-OT was handed is the primary tool.
+    """
+
+    def _make_source(self, tmp: Path) -> tuple[Path, Path]:
+        d = tmp / "dita"
+        d.mkdir()
+        (d / "main.ditamap").write_text(
+            '<map><title>Main</title></map>', encoding="utf-8",
+        )
+        (d / "trainee.ditaval").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n', encoding="utf-8",
+        )
+        fake_dita_ot = tmp / "dita-ot"
+        (fake_dita_ot / "bin").mkdir(parents=True)
+        (fake_dita_ot / "bin" / "dita").write_text("#!/bin/sh\n")
+        (fake_dita_ot / "bin" / "dita.bat").write_text("@echo off\n")
+        return d, fake_dita_ot
+
+    def _fake_run(self, *args, **kwargs):
+        argv = args[0]
+        output_arg = next(a for a in argv if a.startswith("--output="))
+        Path(output_arg.removeprefix("--output=")).mkdir(
+            parents=True, exist_ok=True,
+        )
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    def _run(self, tmp: Path, extra: list[str]) -> tuple[int, Path]:
+        d, fake_dita_ot = self._make_source(tmp)
+        staged = tmp / ".dita-build"
+        with mock.patch.object(publish_html, "subprocess") as mock_sub:
+            mock_sub.run.side_effect = self._fake_run
+            rc = publish_html.main([
+                "--dita", str(d),
+                "--out", str(tmp / "html"),
+                "--dita-ot", str(fake_dita_ot),
+                "--staged", str(staged),
+                *extra,
+            ])
+        return rc, staged
+
+    def test_staged_removed_by_default(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            rc, staged = self._run(tmp, extra=[])
+            self.assertEqual(rc, 0)
+            self.assertFalse(
+                staged.exists(),
+                "staged build tree must be cleaned up when --keep-staged absent",
+            )
+
+    def test_keep_staged_preserves_tree_and_ditamap(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            rc, staged = self._run(tmp, extra=["--keep-staged"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(
+                staged.is_dir(),
+                "--keep-staged must leave the staged build tree in place",
+            )
+            # stage() relocates each ditamap to <stem>/<stem>.ditamap — the
+            # exact resource DITA-OT is asked to load. Prove it is present.
+            self.assertTrue(
+                (staged / "main" / "main.ditamap").is_file(),
+                "kept staged tree must contain the relocated ditamap",
+            )
+
+
 def _html_twin(dita_path: Path) -> Path:
     """Return the HTML file produced by DITA-OT for ``dita_path``.
 

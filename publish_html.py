@@ -908,7 +908,16 @@ def main(argv: list[str] | None = None) -> int:
             "directory). It briefly holds a full copy of every image, so for "
             "the full corpus point it at a roomy volume such as the "
             "folder-share to avoid filling the local disk. Removed after each "
-            "run."
+            "run unless --keep-staged is given."
+        ),
+    )
+    parser.add_argument(
+        "--keep-staged",
+        action="store_true",
+        help=(
+            "Do not delete the staged build tree (--staged) after publishing. "
+            "Use this to inspect what DITA-OT was actually handed when a build "
+            "fails (e.g. confirm the .ditamap exists and check the exact path)."
         ),
     )
     args = parser.parse_args(argv)
@@ -964,7 +973,13 @@ def main(argv: list[str] | None = None) -> int:
             f"and linked it from {themed} HTML file(s)"
         )
 
-    shutil.rmtree(args.staged, ignore_errors=True)
+    if args.keep_staged:
+        print(
+            f"[stage] kept staged tree at {args.staged} (--keep-staged); "
+            "delete it manually when done inspecting."
+        )
+    else:
+        shutil.rmtree(args.staged, ignore_errors=True)
     return rc
 
 
