@@ -234,6 +234,44 @@ class ReverseWrapTests(SnapshotTestBase):
         self.assertEqual(docx.read_bytes(), first, "reverse .docx must be byte-stable")
         self.assertEqual(docx.stat().st_mtime_ns, mtime, "no re-wrap when .docx exists")
 
+    def test_no_reverse_wrap_suppresses_docx_synthesis(self) -> None:
+        """``--no-reverse-wrap`` (reverse_wrap=False) must skip FR-018:
+        a png-only analysis sheet stays png-only, no synthetic .docx is
+        written, and no result records ``docx_wrapped=True``. For
+        workflows where the source corpus must not be mutated with
+        synthesised Word files."""
+        png = self.root / "ggg_analysis.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        results = nas.snapshot(
+            self.root, STUB_CMD, dry_run=False, reverse_wrap=False,
+        )
+        docx = png.with_suffix(".docx")
+        self.assertFalse(
+            docx.exists(),
+            "--no-reverse-wrap must not synthesise a .docx for png-only sheets",
+        )
+        self.assertFalse(
+            any(r.docx_wrapped for r in results),
+            "no result should be marked docx_wrapped under --no-reverse-wrap",
+        )
+
+    def test_cli_no_reverse_wrap_threads_through_main(self) -> None:
+        """The ``--no-reverse-wrap`` CLI flag must reach ``snapshot()`` so
+        invoking via ``main`` produces the same suppression as the direct
+        keyword argument."""
+        png = self.root / "hhh_analysis.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        rc = nas.main([
+            "--content-root", str(self.root),
+            "--renderer-cmd", STUB_CMD,
+            "--no-reverse-wrap",
+        ])
+        self.assertEqual(rc, 0)
+        self.assertFalse(
+            png.with_suffix(".docx").exists(),
+            "CLI --no-reverse-wrap must suppress reverse wrap end-to-end",
+        )
+
 
 # -----------------------------------------------------------------------------
 # Selection + classification units (Phase 2)
