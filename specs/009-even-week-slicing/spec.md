@@ -9,11 +9,13 @@
 > numbered two ways — a single **continuous** sequence across the four weeks, or
 > each week **restarting at 1** — and this feature **supports both**, selected by
 > a parameter on the renumbering step (FR-009, FR-012). The document author will
-> choose which becomes the default (expected within a few days); until then the
-> provisional default is the continuous scheme. Because the toggle is confined to
-> the renumber step and the rest of the pipeline is scheme-agnostic, the author's
-> later decision does not reopen the design — so this spec is complete and can be
-> reviewed and merged now.
+> choose which becomes the default (expected within a few days). The **implemented
+> default is `per-week`** — the feature-008 behaviour (numbering unique within
+> each week), chosen so that tested invariant is not reversed before the author
+> decides; **`continuous` is opt-in** via `--main-numbering continuous`. Because
+> the toggle is confined to the renumber step and the rest of the pipeline is
+> scheme-agnostic, the author's later decision does not reopen the design — so
+> this spec is complete and can be reviewed and merged now.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -155,12 +157,16 @@ source number alongside the new one.
   renumbering step.
 - **FR-009**: The renumbering step MUST support two `main` numbering schemes,
   selectable per run:
-  - **continuous** (provisional default): one sequence across the four weeks,
-    ordered by (week, then within-week source order); week N begins at one past
-    week N-1's maximum, so inserting grams into an earlier week shifts the
-    starting number of later weeks (e.g. week 2 starts at 35 once 10 grams land
-    in week 1).
-  - **per-week**: each week is numbered independently from 1.
+  - **per-week** (default): numbering is unique *within* each week — the
+    feature-008 behaviour, preserving native gram numbers and bumping only
+    genuine collisions to one past the week's maximum. (The same number may
+    recur in different weeks.) *A literal "restart each week at 1..k" variant is
+    a possible future mode and is intentionally not built yet.*
+  - **continuous** (opt-in via `--main-numbering continuous`): one sequence
+    across the four weeks, ordered by (week, then within-week source order);
+    week N begins at one past week N-1's maximum, so inserting grams into an
+    earlier week shifts the starting number of later weeks (e.g. week 2 starts
+    at 35 once 10 grams land in week 1).
 
   Both schemes MUST yield folder-unique output per FR-005.
 - **FR-010**: The slicing and the renumbering MUST be deterministic — the same
@@ -173,8 +179,8 @@ source number alongside the new one.
   renumbering step (a flag on `deduplicate_csv.py`); no other stage needs to know
   the scheme. Extraction (slicing) and generation (flat layout + folder-uniqueness
   check) MUST behave identically regardless of the chosen scheme. The default
-  scheme is provisional (continuous), and changing the default MUST be a one-line
-  change.
+  scheme is **per-week** (feature-008 behaviour); changing the default MUST be a
+  one-line change.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -225,12 +231,14 @@ source number alongside the new one.
 ## Deferred decisions (non-blocking)
 
 - **Which numbering scheme is the default.** The feature supports *both* schemes
-  (FR-009, FR-012); only the **default** — which scheme runs when the flag is
-  omitted — is undecided, pending the document author (expected within a few
-  days). The provisional default is **continuous**. Because the toggle is confined
-  to the renumbering step and the rest of the pipeline is scheme-agnostic, this
-  decision blocks neither review, merge, nor implementation: either answer is a
-  one-line change to the default and reopens no part of the design.
+  (FR-009, FR-012); the implemented default is **per-week** (the feature-008
+  behaviour, so its tested invariant is not reversed), with **continuous** opt-in
+  via `--main-numbering continuous`. Which scheme becomes the *default* — and
+  whether to add a literal "restart each week at 1..k" mode — is the document
+  author's pending call (expected within a few days). Because the toggle is
+  confined to the renumbering step and the rest of the pipeline is
+  scheme-agnostic, this blocks neither review, merge, nor implementation: it is a
+  one-line default change and reopens no part of the design.
 
 ## Out of Scope
 

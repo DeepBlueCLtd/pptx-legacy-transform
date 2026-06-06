@@ -286,26 +286,29 @@ class GenerateDitaTests(unittest.TestCase):
                          f"duplicate topicrefs in ditamap: {hrefs}")
 
     def test_main_ditamap_href_clean_for_no_week_deck(self) -> None:
-        """A no-week ``main`` deck (e.g. Pub10 with a blank target_chapter)
-        has an EMPTY chapter slug; its ditamap href must stay a clean
-        relative path that matches the gram's on-disk location.
+        """An empty effective chapter on a ``main`` row must still yield a clean,
+        relative ditamap href — no ``main//...`` double slash.
 
-        Regression: an empty slug interpolated as ``main/{slug}/...`` emitted
-        ``main//...``; the publish stager's ``replace('href="main/', ...)``
-        then turned that into a leading-slash ``/...`` (absolute) href that
-        DITA-OT silently drops under --processing-mode=lax — the gram index
-        rendered but every such gram returned 404.
+        Regression (feature 007/008): an empty slug interpolated as
+        ``main/{slug}/...`` emitted ``main//...``; the publish stager's
+        ``replace('href="main/', ...)`` then turned that into a leading-slash
+        ``/...`` (absolute) href that DITA-OT silently drops under
+        --processing-mode=lax — the gram index rendered but every such gram 404'd.
+
+        Feature 009: ``main`` is doc-less, so even with a stray ``target_doc`` the
+        href carries no document tier — an empty chapter collapses cleanly to
+        ``main/gram-NN/...``.
         """
-        row = {c: "" for c in generate_dita.CSV_COLUMNS}
+        row = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
         row.update({
             "publication": "main", "chapter": "", "gram_id": "Gram 1",
             "topic_type": "main", "sequence": "1",
             "topic_filename": "gram_01.dita",
-            "target_doc": "Pub10_Ed22B_Updated.pptx",
+            "target_doc": "Pub10_Ed22B_Updated.pptx",  # ignored for main (feature 009 guard)
         })
         ditamap = generate_dita.emit_main_ditamap([row], self.out)
         hrefs = [tr.get("href") for tr in ET.parse(ditamap).getroot().iter("topicref")]
-        self.assertEqual(hrefs, ["main/pub10-ed22b-updated/gram-01/gram_01.dita"])
+        self.assertEqual(hrefs, ["main/gram-01/gram_01.dita"])
         self.assertNotIn("//", hrefs[0])
         # Mirror the publish stager's leading-`main/` strip: the result must
         # stay relative (no leading slash) so DITA-OT can resolve it.
@@ -597,6 +600,45 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(listed, actual)
         self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
                          "manifest must be sorted")
+
+
+class MainFlatLayoutTests(unittest.TestCase):
+    """Feature 009 (US2): ``main`` is flat — ``main/week-N/gram-NN/`` with no
+    source-document tier — and scoped per ``(main, week)``. This is already true
+    on extractor output (``target_doc=""`` for ``main``); these tests lock it and
+    verify the ``_effective_doc`` guard holds even if a CSV stray-sets
+    ``target_doc`` on a ``main`` row."""
+
+    def _row(self, **kw):
+        base = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
+        base.update(publication="main", topic_type="glc", sequence="1")
+        base.update(kw)
+        return base
+
+    def test_main_topic_path_has_no_doc_tier_even_with_stray_target_doc(self) -> None:
+        out = Path("/out")
+        row = self._row(
+            chapter="Some Deck", target_chapter="2", gram_id="Gram 3",
+            target_doc="Pub10.pptx",  # stray target_doc on a main row
+        )
+        rel = generate_dita._topic_dir_for_row(out, row).relative_to(out)
+        self.assertEqual(rel.as_posix(), "main/week-2/gram-03")
+
+    def test_main_collision_key_ignores_target_doc(self) -> None:
+        # Two distinct main grams, same week + number, different target_doc.
+        # The guard forces main's effective_doc to "" so they still collide
+        # (otherwise the flat folder would be silently overwritten).
+        rows = [
+            self._row(chapter="A deck", target_chapter="2", gram_id="Gram 5",
+                      vessel_name="V1", topic_type="analysis", target_doc="d1"),
+            self._row(chapter="B deck", target_chapter="2", gram_id="Gram 5",
+                      vessel_name="V2", topic_type="analysis", target_doc="d2"),
+        ]
+        errors = generate_dita.check_row_identity(rows)
+        self.assertTrue(
+            errors, "two distinct main grams at the same (week, number) must collide",
+        )
+        self.assertIn("renumber", errors[0].lower())
 
 
 class AudienceShapeTests(unittest.TestCase):

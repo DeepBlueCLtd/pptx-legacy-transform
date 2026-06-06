@@ -79,15 +79,15 @@ doc-slug segment, and two distinct grams sharing `(week, number)` fail fast.
 
 ### Tests for User Story 2 ⚠️ (write first, ensure they FAIL)
 
-- [ ] T007 [P] [US2] Test that a `main` gram's topic path is `main/week-N/gram-NN/` with **no** doc-slug tier, in `tests/test_generate_dita.py`.
-- [ ] T008 [US2] Test that `emit_main_ditamap` topicref hrefs are `main/week-N/gram-NN/gram_NN.dita` with no doc-slug segment, in `tests/test_generate_dita.py`.
-- [ ] T009 [US2] Test that two distinct `main` grams at the same `(week, number)` trigger the fail-fast (collision key drops `effective_doc` for `main`), and that non-`main` collision behaviour is unchanged, in `tests/test_generate_dita.py`.
+- [x] T007 [P] [US2] Test that a `main` gram's topic path is `main/week-N/gram-NN/` with **no** doc-slug tier, in `tests/test_generate_dita.py`.
+- [x] T008 [US2] Test that `emit_main_ditamap` topicref hrefs are `main/week-N/gram-NN/gram_NN.dita` with no doc-slug segment, in `tests/test_generate_dita.py`.
+- [x] T009 [US2] Test that two distinct `main` grams at the same `(week, number)` trigger the fail-fast (collision key drops `effective_doc` for `main`), and that non-`main` collision behaviour is unchanged, in `tests/test_generate_dita.py`.
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] In `generate_dita.py` `_publication_root`, stop appending the `doc_slug` segment for `main` (non-`main` unchanged).
-- [ ] T011 [US2] In `generate_dita.py` `emit_main_ditamap`, drop the `doc_slug` segment from the topicref href (keeping the existing empty-segment filtering) (depends on T010 conceptually; same file).
-- [ ] T012 [US2] In `generate_dita.py` `check_row_identity`, drop `effective_doc` from the collision key for `main` so uniqueness is `(publication, effective_chapter, effective number)`; keep `effective_doc` for non-`main`.
+- [x] T010 [US2] In `generate_dita.py` `_publication_root`, stop appending the `doc_slug` segment for `main` (non-`main` unchanged).
+- [x] T011 [US2] In `generate_dita.py` `emit_main_ditamap`, drop the `doc_slug` segment from the topicref href (keeping the existing empty-segment filtering) (depends on T010 conceptually; same file).
+- [x] T012 [US2] In `generate_dita.py` `check_row_identity`, drop `effective_doc` from the collision key for `main` so uniqueness is `(publication, effective_chapter, effective number)`; keep `effective_doc` for non-`main`.
 
 **Checkpoint**: `main` publishes flat and a residual collision is caught, not overwritten — US2 is independently testable.
 
@@ -106,15 +106,15 @@ publications are untouched.
 
 ### Tests for User Story 3 ⚠️ (write first, ensure they FAIL)
 
-- [ ] T013 [P] [US3] Test the **continuous** scheme: `main` numbered `1..N` over `(week, source-chapter, row-order)`, week N starting at one past week N-1's maximum, in `tests/test_deduplicate_csv.py`.
+- [x] T013 [P] [US3] Test the **continuous** scheme: `main` numbered `1..N` over `(week, source-chapter, row-order)`, week N starting at one past week N-1's maximum, in `tests/test_deduplicate_csv.py`.
 - [ ] T014 [US3] Test the **per-week** scheme: each `(main, week)` numbered `1..k` from 1, in `tests/test_deduplicate_csv.py`.
-- [ ] T015 [US3] Test that `--main-numbering` selects the scheme and **defaults to continuous**, that the number lands in `target_gram_id`, and that `gram_id` is never mutated, in `tests/test_deduplicate_csv.py`.
-- [ ] T016 [US3] Test that non-`main` publications are unaffected by the flag/scheme, and that the renumber is idempotent under both schemes (re-run is byte-identical), in `tests/test_deduplicate_csv.py`.
+- [x] T015 [US3] Test that `--main-numbering` selects the scheme and **defaults to continuous**, that the number lands in `target_gram_id`, and that `gram_id` is never mutated, in `tests/test_deduplicate_csv.py`.
+- [x] T016 [US3] Test that non-`main` publications are unaffected by the flag/scheme, and that the renumber is idempotent under both schemes (re-run is byte-identical), in `tests/test_deduplicate_csv.py`.
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Add `--main-numbering {continuous,per-week}` (default `continuous`) to `deduplicate_csv.py`'s argument parser, threaded into `renumber_grams`.
-- [ ] T018 [US3] In `deduplicate_csv.py` `renumber_grams`, branch on publication: for `main` assign numbers per the chosen scheme (continuous = publication-wide `1..N` in `(week, source-chapter, row-order)`; per-week = `1..k` per `(main, week)`); leave non-`main` on the existing `(publication, chapter, doc)` bump-on-collision path (depends on T017).
+- [x] T017 [US3] Add `--main-numbering {continuous,per-week}` (default `continuous`) to `deduplicate_csv.py`'s argument parser, threaded into `renumber_grams`.
+- [x] T018 [US3] In `deduplicate_csv.py` `renumber_grams`, branch on publication: for `main` assign numbers per the chosen scheme (continuous = publication-wide `1..N` in `(week, source-chapter, row-order)`; per-week = `1..k` per `(main, week)`); leave non-`main` on the existing `(publication, chapter, doc)` bump-on-collision path (depends on T017).
 
 **Checkpoint**: Sliced `main` grams get collision-free numbers under either scheme — US3 is independently testable.
 
@@ -123,10 +123,10 @@ publications are untouched.
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [ ] T019 [P] End-to-end test: a corpus with a no-week deck + native week decks runs extract → dedupe (once per scheme) → `publish_html.stage`; assert every staged `main` ditamap href resolves to a real topic file and no two grams share a folder (extend the `StagedHrefsResolveTests` pattern) in `tests/test_publish_html.py`.
-- [ ] T020 [P] Determinism/idempotency test in `tests/test_deduplicate_csv.py`: re-running the renumber over the same CSV yields a byte-identical `target_gram_id` under **both** schemes, and (alongside the existing generator idempotency tests) the slice + generate output is byte-stable (FR-010, Principle V).
-- [ ] T021 [P] Update `README.md`: in the CSV column reference, change `target_chapter` from "left blank for an analyst" to "auto-filled by the even slice for no-week `main` decks (editable)"; document the new `--main-numbering` flag; note the flat `main/week-N/gram-NN/` layout.
-- [ ] T022 Update in-tree fixtures / `source.csv` only as needed to keep the suite green under the flat layout + new numbering (delete superseded shapes per the development-phase posture).
-- [ ] T023 Run `python -m unittest discover tests/` and confirm green; confirm no new runtime dependency and Python 3.9 compatibility (`from __future__ import annotations`, no 3.10+ APIs).
+- [x] T020 [P] Determinism/idempotency test in `tests/test_deduplicate_csv.py`: re-running the renumber over the same CSV yields a byte-identical `target_gram_id` under **both** schemes, and (alongside the existing generator idempotency tests) the slice + generate output is byte-stable (FR-010, Principle V).
+- [x] T021 [P] Update `README.md`: in the CSV column reference, change `target_chapter` from "left blank for an analyst" to "auto-filled by the even slice for no-week `main` decks (editable)"; document the new `--main-numbering` flag; note the flat `main/week-N/gram-NN/` layout.
+- [x] T022 Update in-tree fixtures / `source.csv` only as needed to keep the suite green under the flat layout + new numbering (delete superseded shapes per the development-phase posture).
+- [x] T023 Run `python -m unittest discover tests/` and confirm green; confirm no new runtime dependency and Python 3.9 compatibility (`from __future__ import annotations`, no 3.10+ APIs).
 
 ---
 
@@ -213,3 +213,23 @@ per-week; no other task changes.
   afterthought — T020 guards it under both schemes.
 - Commit after each task or logical group; stop at any checkpoint to validate a
   story independently.
+
+---
+
+## Implementation notes (deviations from the original task wording)
+
+- **US2 was already satisfied by feature 008.** `main` is doc-less on extractor
+  output (`target_doc=""`), so the topic path, ditamap href and collision key
+  were already `(main, week)`-scoped. T010–T012 were realised as a *single*
+  defensive guard in `generate_dita._effective_doc` (returns `""` for `main`,
+  flattening all three call sites at once) plus the `MainFlatLayoutTests`
+  regression test — not three separate edits.
+- **Per-week default = the feature-008 behaviour** (preserve native numbers, bump
+  only genuine collisions; unique per week, not global), kept as the default per
+  the user's decision so feature 008's tested invariant is not reversed.
+  `continuous` is the opt-in. The literal "restart each week at 1..k" variant
+  (**T014**) is **deferred** — a distinct, more disruptive mode to add only if the
+  document author specifically requests it.
+- **T019** (dedicated slice→dedupe→generate e2e) deferred: folder resolution is
+  covered by the existing `StagedHrefsResolveTests` plus the new unit tests, and
+  determinism (T020) by the renumber/generator idempotency tests.

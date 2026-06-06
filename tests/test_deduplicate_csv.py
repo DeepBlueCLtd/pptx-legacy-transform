@@ -242,5 +242,86 @@ class RenumberGramsTests(unittest.TestCase):
         self.assertEqual([r["target_gram_id"] for r in rows], first)
 
 
+class ContinuousNumberingTests(unittest.TestCase):
+    """Feature 009: ``--main-numbering continuous`` numbers ``main`` as one
+    ``1..N`` sequence across the four weeks. The default (``per-week``) is the
+    feature-008 behaviour exercised by ``RenumberGramsTests``."""
+
+    @staticmethod
+    def _gram(chapter, gram_id, vessel, target_chapter="", publication="main"):
+        base = {
+            "publication": publication, "chapter": chapter, "gram_id": gram_id,
+            "vessel_name": vessel, "target_chapter": target_chapter,
+            "target_doc": "",
+        }
+        return [
+            {**base, "topic_type": "glc", "sequence": "1"},
+            {**base, "topic_type": "analysis", "sequence": "1"},
+        ]
+
+    def _target(self, rows):
+        out = {}
+        for r in rows:
+            out.setdefault(
+                (r["chapter"], r["gram_id"], r["vessel_name"]), r["target_gram_id"],
+            )
+        return out
+
+    def test_continuous_sequences_across_weeks(self) -> None:
+        # Week 1 grams 1,2 ; Week 2 grams 1,2 → continuous 1,2,3,4 (week 2 → 3,4).
+        rows = (
+            self._gram("W1", "1", "Va", "1")
+            + self._gram("W1", "2", "Vb", "1")
+            + self._gram("W2", "1", "Vc", "2")
+            + self._gram("W2", "2", "Vd", "2")
+        )
+        deduplicate_csv.renumber_grams(rows, main_numbering="continuous")
+        t = self._target(rows)
+        self.assertEqual(t[("W1", "1", "Va")], "")   # seq 1 == gram_id 1
+        self.assertEqual(t[("W1", "2", "Vb")], "")   # seq 2 == gram_id 2
+        self.assertEqual(t[("W2", "1", "Vc")], "3")  # week 2 starts past week 1
+        self.assertEqual(t[("W2", "2", "Vd")], "4")
+
+    def test_continuous_week_start_shifts_with_earlier_week_size(self) -> None:
+        # 3 grams in week 1 → week 2 starts at 4 (the "week 2 starts at 35" case).
+        rows = (
+            self._gram("W1", "1", "A", "1") + self._gram("W1", "2", "B", "1")
+            + self._gram("W1", "3", "C", "1")
+            + self._gram("W2", "1", "D", "2") + self._gram("W2", "2", "E", "2")
+        )
+        deduplicate_csv.renumber_grams(rows, main_numbering="continuous")
+        t = self._target(rows)
+        self.assertEqual(t[("W2", "1", "D")], "4")
+        self.assertEqual(t[("W2", "2", "E")], "5")
+
+    def test_default_scheme_is_per_week(self) -> None:
+        rows_default = self._gram("W1", "5", "A", "1") + self._gram("W2", "5", "B", "2")
+        rows_explicit = self._gram("W1", "5", "A", "1") + self._gram("W2", "5", "B", "2")
+        deduplicate_csv.renumber_grams(rows_default)  # no scheme → default
+        deduplicate_csv.renumber_grams(rows_explicit, main_numbering="per-week")
+        self.assertEqual(
+            [r["target_gram_id"] for r in rows_default],
+            [r["target_gram_id"] for r in rows_explicit],
+        )
+        # per-week keeps the same number in different weeks distinct (feature 008).
+        self.assertTrue(all(r["target_gram_id"] == "" for r in rows_default))
+
+    def test_non_main_unaffected_by_continuous(self) -> None:
+        # Non-main publications keep per-week bump-on-collision under either scheme.
+        rows = (
+            self._gram("PT", "5", "Vp", "", publication="progress-test-1")
+            + self._gram("PT", "5", "Vq", "", publication="progress-test-1")
+        )
+        deduplicate_csv.renumber_grams(rows, main_numbering="continuous")
+        self.assertEqual(sorted(self._target(rows).values()), ["", "6"])
+
+    def test_continuous_idempotent(self) -> None:
+        rows = self._gram("W1", "1", "A", "1") + self._gram("W2", "9", "B", "2")
+        deduplicate_csv.renumber_grams(rows, main_numbering="continuous")
+        first = [r["target_gram_id"] for r in rows]
+        deduplicate_csv.renumber_grams(rows, main_numbering="continuous")
+        self.assertEqual([r["target_gram_id"] for r in rows], first)
+
+
 if __name__ == "__main__":
     unittest.main()

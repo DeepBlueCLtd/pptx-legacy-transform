@@ -354,7 +354,18 @@ def _effective_chapter(row: dict) -> str:
 
 
 def _effective_doc(row: dict) -> str:
-    """Deck filename the row will land in after refactoring (may be empty)."""
+    """Deck filename the row will land in after refactoring (may be empty).
+
+    Feature 009: ``main`` carries **no** per-document folder tier — its grams
+    live flat at ``main/week-N/gram-NN/`` and are scoped per ``(main, week)``.
+    Forcing ``main``'s effective doc to ``""`` keeps the topic path, the ditamap
+    href, and the ``check_row_identity`` collision key consistently doc-less in
+    one place, even if a CSV stray-sets ``target_doc`` on a ``main`` row.
+    Extraction already writes ``target_doc=""`` for ``main`` (feature 008), so
+    this is a no-op on extractor output and purely a defensive guard.
+    """
+    if row.get("publication", "") == "main":
+        return ""
     return row.get("target_doc", "") or ""
 
 
