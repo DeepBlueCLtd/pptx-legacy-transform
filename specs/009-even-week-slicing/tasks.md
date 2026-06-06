@@ -54,14 +54,14 @@ deck of known size G; assert the deck's `target_chapter` values are an even spli
 
 ### Tests for User Story 1 ⚠️ (write first, ensure they FAIL)
 
-- [ ] T002 [P] [US1] Test the even-slice distribution for representative sizes (G=12 → 3/3/3/3; G=10 → 3/3/2/2; G=7 → 2/2/2/1; G=2 → 1/1/0/0) in `tests/test_extract_to_csv.py`.
-- [ ] T003 [US1] Test that sliced grams keep **source order** and fall in **contiguous** week blocks (first block → week 1, …), with the week written to `target_chapter`, in `tests/test_extract_to_csv.py`.
-- [ ] T004 [US1] Test the scope guards in `tests/test_extract_to_csv.py`: a `Week N`-token `main` deck is NOT sliced (keeps its single week); a `progress test` / `final assessment` deck still routes to its own publication (classification unchanged, FR-001); "Legacy Pub 10" is sliced exactly like Pub10 (no special case, FR-011).
+- [x] T002 [P] [US1] Test the even-slice distribution for representative sizes (G=12 → 3/3/3/3; G=10 → 3/3/2/2; G=7 → 2/2/2/1; G=2 → 1/1/0/0) in `tests/test_extract_to_csv.py`.
+- [x] T003 [US1] Test that sliced grams keep **source order** and fall in **contiguous** week blocks (first block → week 1, …), with the week written to `target_chapter`, in `tests/test_extract_to_csv.py`.
+- [x] T004 [US1] Test the scope guards in `tests/test_extract_to_csv.py`: a `Week N`-token `main` deck is NOT sliced (keeps its single week); a `progress test` / `final assessment` deck still routes to its own publication (classification unchanged, FR-001); "Legacy Pub 10" is sliced exactly like Pub10 (no special case, FR-011).
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Add a pure, deterministic helper to `extract_to_csv.py` that maps a gram's (source index, deck total G) to its week 1–4 using `base = G//4`, `rem = G%4`, weeks `1..rem` taking `base+1` (contiguous blocks).
-- [ ] T006 [US1] In `extract_to_csv.py`'s per-deck extraction pass, for a no-week `main` deck write the helper's week into `target_chapter` (replacing the leave-blank-for-analyst path); leave `Week N`-token decks and non-`main` publications untouched (depends on T005).
+- [x] T005 [US1] Add a pure, deterministic helper to `extract_to_csv.py` that maps a gram's (source index, deck total G) to its week 1–4 using `base = G//4`, `rem = G%4`, weeks `1..rem` taking `base+1` (contiguous blocks).
+- [x] T006 [US1] In `extract_to_csv.py`'s per-deck extraction pass, for a no-week `main` deck write the helper's week into `target_chapter` (replacing the leave-blank-for-analyst path); leave `Week N`-token decks and non-`main` publications untouched (depends on T005).
 
 **Checkpoint**: A no-week deck's grams carry an even week split in the CSV — US1 is independently testable.
 

@@ -147,6 +147,60 @@ class CsvWriteReadTests(unittest.TestCase):
                          "(BOM, line endings, quoting all preserved)")
 
 
+class EvenWeekSliceTests(unittest.TestCase):
+    """Feature 009: no-week ``main`` decks are sliced evenly across the four
+    weeks via ``target_chapter`` (replacing the leave-blank-for-analyst path)."""
+
+    def test_even_week_assignment_contiguous_blocks(self) -> None:
+        self.assertEqual(
+            extract_to_csv.even_week_assignment(12),
+            ["1", "1", "1", "2", "2", "2", "3", "3", "3", "4", "4", "4"],
+        )
+        self.assertEqual(
+            extract_to_csv.even_week_assignment(10),
+            ["1", "1", "1", "2", "2", "2", "3", "3", "4", "4"],
+        )
+        self.assertEqual(
+            extract_to_csv.even_week_assignment(7),
+            ["1", "1", "2", "2", "3", "3", "4"],
+        )
+        self.assertEqual(extract_to_csv.even_week_assignment(2), ["1", "2"])
+        self.assertEqual(extract_to_csv.even_week_assignment(1), ["1"])
+        self.assertEqual(extract_to_csv.even_week_assignment(0), [])
+
+    def test_even_week_counts_differ_by_at_most_one_and_are_ordered(self) -> None:
+        for total in range(0, 41):
+            labels = extract_to_csv.even_week_assignment(total)
+            self.assertEqual(len(labels), total)
+            counts = [labels.count(str(w)) for w in range(1, 5)]
+            self.assertLessEqual(max(counts) - min(counts), 1)
+            # Contiguous blocks in week order (week 1 block, then week 2, …).
+            self.assertEqual(labels, sorted(labels))
+
+    def test_deck_target_chapters_routing(self) -> None:
+        # No-week main deck → even slice.
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("main", "Pub10_Ed22B_Updated", 10),
+            ["1", "1", "1", "2", "2", "2", "3", "3", "4", "4"],
+        )
+        # Week-token main deck → all that week (feature 008 unchanged).
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("main", "Instructor Week 2 Grams", 3),
+            ["2", "2", "2"],
+        )
+        # Non-main publication → no week routing.
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("progress-test-1", "Test 1", 3),
+            ["", "", ""],
+        )
+        # "Legacy Pub 10" has no week token → sliced exactly like Pub10
+        # (no special case), and "Pub 10"/"10" must NOT match the week token.
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("main", "Legacy Pub 10", 4),
+            ["1", "2", "3", "4"],
+        )
+
+
 class GramToRowsTests(unittest.TestCase):
 
     def setUp(self) -> None:
