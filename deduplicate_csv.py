@@ -235,41 +235,37 @@ def _gram_number(gram_id: str) -> int | None:
     return int(match.group()) if match else None
 
 
-def renumber_grams(rows: list[dict]) -> int:
-    """Populate ``target_gram_id`` to give each gram a unique within-week number.
+def _week_sort_key(effective_chapter: str) -> tuple:
+    """Order numeric week chapters (1,2,3,4) ahead of any non-numeric effective
+    chapter, each group then by value / string. Used to walk ``main`` grams in
+    week order for the continuous scheme."""
+    ec = (effective_chapter or "").strip()
+    return (0, int(ec)) if ec.isdigit() else (1, ec)
 
-    The four-week ``main`` IA (feature 008) folds several source decks into one
-    week folder, so two distinct grams can claim the same number (e.g. a native
-    ``Week 2 / Gram 5`` and a Pub10 gram reassigned to Week 2). Within each
-    ``(publication, effective_chapter, effective_doc)`` bucket this walks the
-    distinct grams in ``(source chapter, first-row order)`` order; the first
+
+def _renumber_buckets(rows: list[dict], indices) -> int:
+    """Per-week (feature 008) renumber over ``indices``.
+
+    Within each ``(publication, effective_chapter, effective_doc)`` bucket, walk
+    the distinct grams in ``(source chapter, first-row order)`` order; the first
     claimant of a number keeps it and any later gram whose number is already
-    taken is reassigned to one greater than the bucket's current maximum,
-    recorded in ``target_gram_id``. ``gram_id`` is never mutated.
-
-    Idempotent: every row's ``target_gram_id`` is cleared first and recomputed
-    from ``gram_id`` each run, so re-running over the same inputs yields a
-    byte-identical CSV. Returns the count of renumbered grams.
+    taken is reassigned to one greater than the bucket's current maximum. Native
+    numbers are preserved; only genuine collisions move. ``gram_id`` is never
+    mutated. Returns the count of renumbered grams.
     """
-    # Reset so a CSV that already carries the column recomputes cleanly.
-    for row in rows:
-        row[TARGET_GRAM_ID] = ""
-
-    # Bucket rows, recording each row's original index for stable ordering and
-    # so we can write the assignment back to every row of a gram.
     buckets: dict[tuple, list[int]] = defaultdict(list)
-    for idx, row in enumerate(rows):
+    for idx in indices:
+        row = rows[idx]
         bucket = (row.get("publication", ""), _effective_chapter(row), _effective_doc(row))
         buckets[bucket].append(idx)
 
     renumbered = 0
     for bucket in sorted(buckets):
-        indices = buckets[bucket]
         # Distinct grams within the bucket: unique (chapter, gram_id, vessel),
         # remembering the first row index so we can order and assign to all rows.
         gram_rows: dict[tuple, list[int]] = {}
         gram_first: dict[tuple, int] = {}
-        for idx in indices:
+        for idx in buckets[bucket]:
             row = rows[idx]
             ident = (
                 row.get("chapter", ""), row.get("gram_id", ""),
@@ -298,8 +294,92 @@ def renumber_grams(rows: list[dict]) -> int:
                 renumbered += 1
             else:
                 used.add(number)
+    return renumbered
 
-    LOGGER.info("Renumber summary: grams_renumbered=%d", renumbered)
+
+def _renumber_main_continuous(rows: list[dict], indices) -> int:
+    """Continuous ``main`` numbering (feature 009): one ``1..N`` sequence across
+    the four weeks, ordered by ``(week, source chapter, first-row order)`` so
+    week N starts at one past week N-1's maximum. A gram whose ``gram_id``
+    already equals its assigned number keeps an empty ``target_gram_id``
+    (effective number == gram_id); ``gram_id`` is never mutated. Returns the
+    count of renumbered grams.
+    """
+    gram_rows: dict[tuple, list[int]] = {}
+    gram_first: dict[tuple, int] = {}
+    gram_week: dict[tuple, tuple] = {}
+    gram_chapter: dict[tuple, str] = {}
+    for idx in indices:
+        row = rows[idx]
+        ident = (
+            row.get("chapter", ""), row.get("gram_id", ""),
+            row.get("vessel_name", ""),
+        )
+        if ident not in gram_rows:
+            gram_rows[ident] = []
+            gram_first[ident] = idx
+            gram_week[ident] = _week_sort_key(_effective_chapter(row))
+            gram_chapter[ident] = row.get("chapter", "")
+        gram_rows[ident].append(idx)
+
+    ordered = sorted(
+        gram_rows,
+        key=lambda ident: (gram_week[ident], gram_chapter[ident], gram_first[ident]),
+    )
+    renumbered = 0
+    for seq, ident in enumerate(ordered, start=1):
+        if _gram_number(ident[1]) == seq:
+            continue  # already this number — leave target_gram_id empty
+        for idx in gram_rows[ident]:
+            rows[idx][TARGET_GRAM_ID] = str(seq)
+        LOGGER.info(
+            "main gram renumbered (continuous): chapter=%s gram_id=%s -> %d",
+            _effective_chapter(rows[gram_first[ident]]), ident[1], seq,
+        )
+        renumbered += 1
+    return renumbered
+
+
+def renumber_grams(rows: list[dict], main_numbering: str = "per-week") -> int:
+    """Populate ``target_gram_id`` to give grams collision-free numbers.
+
+    ``main_numbering`` (feature 009) selects how the ``main`` publication is
+    numbered; non-``main`` publications always use the per-week rule:
+
+    - ``"per-week"`` (default): every publication, ``main`` included, is numbered
+      **per week** — within each ``(publication, effective_chapter,
+      effective_doc)`` bucket native numbers are preserved and only genuine
+      collisions are bumped (the feature-008 behaviour; unique per week, not
+      globally).
+    - ``"continuous"``: ``main`` is numbered as one ``1..N`` sequence across the
+      four weeks (week N starts past week N-1's maximum); non-``main`` keeps the
+      per-week rule.
+
+    Idempotent: ``target_gram_id`` is cleared and recomputed from ``gram_id``
+    each run, so re-running over the same inputs and scheme yields a
+    byte-identical CSV. ``gram_id`` is never mutated. Returns the count of
+    renumbered grams.
+    """
+    # Reset so a CSV that already carries the column recomputes cleanly.
+    for row in rows:
+        row[TARGET_GRAM_ID] = ""
+
+    if main_numbering == "continuous":
+        main_idx = [i for i, r in enumerate(rows) if r.get("publication", "") == "main"]
+        nonmain_idx = [i for i, r in enumerate(rows) if r.get("publication", "") != "main"]
+        renumbered = (
+            _renumber_main_continuous(rows, main_idx)
+            + _renumber_buckets(rows, nonmain_idx)
+        )
+    else:
+        # per-week (default): feature-008 behaviour for every publication (main
+        # is per-week because effective_doc is "" for main).
+        renumbered = _renumber_buckets(rows, range(len(rows)))
+
+    LOGGER.info(
+        "Renumber summary: grams_renumbered=%d (main_numbering=%s)",
+        renumbered, main_numbering,
+    )
     return renumbered
 
 
@@ -322,6 +402,14 @@ def main(argv: Iterable[str] | None = None) -> int:
                         default=DEFAULT_THRESHOLD_BYTES, dest="threshold_bytes",
                         help="candidacy cut-off; only rows with file_size "
                              "strictly greater are eligible (default 10 MiB)")
+    parser.add_argument("--main-numbering", choices=("per-week", "continuous"),
+                        default="per-week", dest="main_numbering",
+                        help="how the main publication's grams are numbered "
+                             "(feature 009): 'per-week' (default) keeps numbering "
+                             "unique within each week, preserving native numbers "
+                             "and bumping only collisions; 'continuous' numbers "
+                             "main as one 1..N sequence across the four weeks. "
+                             "Non-main publications are unaffected.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("dedup.log"))
@@ -340,7 +428,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         if column not in fieldnames:
             fieldnames = fieldnames + [column]
 
-    renumber_grams(rows)
+    renumber_grams(rows, main_numbering=args.main_numbering)
     deduplicate(rows, args.image_root, args.threshold_bytes)
 
     try:

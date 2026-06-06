@@ -252,6 +252,43 @@ def week_chapter_number(chapter_title: str | None) -> str:
     return match.group(1) if match else ""
 
 
+def even_week_assignment(total: int, weeks: int = 4) -> list[str]:
+    """Per-gram week labels for ``total`` grams sliced evenly across ``weeks``.
+
+    Feature 009: a no-week ``main`` deck (Pub10, Legacy Pub 10) has no agreed
+    per-gram week, so its grams are distributed in **contiguous blocks** —
+    ``floor(total/weeks)`` per week with the first ``total % weeks`` weeks each
+    taking one extra. Returns a list of length ``total`` of bare-integer week
+    strings (``"1"``…``"4"``) in source order, so the first block lands in
+    week 1, the next in week 2, and so on. Deterministic and side-effect free.
+    """
+    base, rem = divmod(total, weeks)
+    labels: list[str] = []
+    for week in range(1, weeks + 1):
+        size = base + (1 if week <= rem else 0)
+        labels.extend([str(week)] * size)
+    return labels
+
+
+def deck_target_chapters(
+    publication: str, chapter: str | None, gram_count: int,
+) -> list[str]:
+    """Per-gram ``target_chapter`` values for one deck's grams (feature 009).
+
+    - non-``main`` publication → all empty (no week routing).
+    - ``main`` with a ``Week N`` title token → all that week (feature 008).
+    - ``main`` with no week token → an **even slice** across the four weeks
+      (``even_week_assignment``), replacing the old leave-blank-for-analyst
+      path. ``target_chapter`` stays author-editable downstream.
+    """
+    if publication != "main":
+        return [""] * gram_count
+    week = week_chapter_number(chapter)
+    if week:
+        return [week] * gram_count
+    return even_week_assignment(gram_count)
+
+
 def classify_publication(
     pptx: Path,
     test_pattern: str,
@@ -994,38 +1031,37 @@ def main(argv: Iterable[str] | None = None) -> int:
             except Exception as exc:
                 LOGGER.error("Cannot open PPTX %s: %s", pptx, exc)
                 return 1
+            deck_grams: list = []
             for slide_num, slide in enumerate(prs.slides, start=1):
                 if is_framing_slide(slide):
                     LOGGER.info("Skipping framing slide %d in %s", slide_num, pptx.name)
                     continue
-                grams = extract_grams_from_slide(
+                deck_grams.extend(extract_grams_from_slide(
                     slide, slide_num,
                     content_root=args.input_root,
                     source_dir=pptx.parent,
+                ))
+            # Feature 008/009: ``main`` is organised into four week folders.
+            # A deck whose title carries a ``Week N`` token sends all its grams
+            # to that week; a no-week ``main`` deck (e.g. Pub10, Legacy Pub 10)
+            # has its grams sliced **evenly** across the four weeks (feature
+            # 009), with the editable ``target_chapter`` filled per gram. Either
+            # way ``main`` has no per-document folder segment (target_doc empty).
+            # Non-main publications keep their existing per-document layout.
+            target_doc = "" if publication == "main" else pptx.name
+            target_chapters = deck_target_chapters(publication, chapter, len(deck_grams))
+            for gram, target_chapter in zip(deck_grams, target_chapters):
+                gram_rows = gram_to_rows(
+                    gram, publication, chapter, chapter_slug,
+                    args.input_root, source_dir=pptx.parent,
+                    target_doc=target_doc,
+                    target_chapter=target_chapter,
                 )
-                # Feature 008: ``main`` is organised into four week folders, so
-                # the editable target chapter is the bare-integer week number
-                # parsed from the deck title, and there is no per-document
-                # folder segment (target_doc empty). Non-main publications keep
-                # their existing per-document layout.
-                if publication == "main":
-                    target_chapter = week_chapter_number(chapter)
-                    target_doc = ""
-                else:
-                    target_chapter = ""
-                    target_doc = pptx.name
-                for gram in grams:
-                    gram_rows = gram_to_rows(
-                        gram, publication, chapter, chapter_slug,
-                        args.input_root, source_dir=pptx.parent,
-                        target_doc=target_doc,
-                        target_chapter=target_chapter,
-                    )
-                    rows.extend(gram_rows)
-                    for r in gram_rows:
-                        if r["warnings"]:
-                            for w in r["warnings"].split(", "):
-                                warning_counter[w] += 1
+                rows.extend(gram_rows)
+                for r in gram_rows:
+                    if r["warnings"]:
+                        for w in r["warnings"].split(", "):
+                            warning_counter[w] += 1
     except NotImplementedError as exc:
         LOGGER.error("Shape grouping stub reached: %s", exc)
         # Still write whatever rows were collected before the stub fired.
