@@ -285,6 +285,35 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(len(hrefs), len(set(hrefs)),
                          f"duplicate topicrefs in ditamap: {hrefs}")
 
+    def test_main_ditamap_href_clean_for_no_week_deck(self) -> None:
+        """A no-week ``main`` deck (e.g. Pub10 with a blank target_chapter)
+        has an EMPTY chapter slug; its ditamap href must stay a clean
+        relative path that matches the gram's on-disk location.
+
+        Regression: an empty slug interpolated as ``main/{slug}/...`` emitted
+        ``main//...``; the publish stager's ``replace('href="main/', ...)``
+        then turned that into a leading-slash ``/...`` (absolute) href that
+        DITA-OT silently drops under --processing-mode=lax — the gram index
+        rendered but every such gram returned 404.
+        """
+        row = {c: "" for c in generate_dita.CSV_COLUMNS}
+        row.update({
+            "publication": "main", "chapter": "", "gram_id": "Gram 1",
+            "topic_type": "main", "sequence": "1",
+            "topic_filename": "gram_01.dita",
+            "target_doc": "Pub10_Ed22B_Updated.pptx",
+        })
+        ditamap = generate_dita.emit_main_ditamap([row], self.out)
+        hrefs = [tr.get("href") for tr in ET.parse(ditamap).getroot().iter("topicref")]
+        self.assertEqual(hrefs, ["main/pub10-ed22b-updated/gram-01/gram_01.dita"])
+        self.assertNotIn("//", hrefs[0])
+        # Mirror the publish stager's leading-`main/` strip: the result must
+        # stay relative (no leading slash) so DITA-OT can resolve it.
+        self.assertFalse(
+            hrefs[0].replace("main/", "", 1).startswith("/"),
+            "stage() rewrite would yield an absolute href",
+        )
+
     def test_test_ditamap_is_flat(self) -> None:
         _run(self.out)
         ditamap = self.out / "progress-test-1.ditamap"

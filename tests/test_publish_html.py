@@ -928,6 +928,90 @@ class PublisherIdempotencyTests(unittest.TestCase):
                              "html/ trees from two main() runs must be byte-identical")
 
 
+class StagedHrefsResolveTests(unittest.TestCase):
+    """Every topicref href in a staged ditamap must resolve to a real topic
+    file. The ditamap hrefs are built by string interpolation in
+    generate_dita while the on-disk layout is built with pathlib; if they
+    diverge (e.g. an empty chapter slug emitting ``main//...`` that staging
+    rewrites into a leading-slash absolute href) DITA-OT silently drops the
+    topic under --processing-mode=lax — the index renders but the gram 404s.
+    This walks the real generate -> stage chain and asserts every href lands
+    on a file, which is the contract that prevents that 404.
+    """
+
+    def _write_csv(self, path: Path, rows: list) -> None:
+        import csv
+        import generate_dita
+        cols = generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS
+        with path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(
+                fh, fieldnames=list(cols),
+                quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n",
+            )
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+
+    def test_every_staged_ditamap_href_resolves(self):
+        import generate_dita
+
+        def row(**kw):
+            cols = generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS
+            base = {c: "" for c in cols}
+            base.update(
+                topic_type="glc", sequence="1",
+                link_href="supporting/c.glc", glc_path="supporting/c.glc",
+                png_path="images/g.png", time_end="1", freq_end="1",
+            )
+            base.update(kw)
+            return base
+
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            rows = [
+                # no-week main deck (Pub10): empty chapter -> empty slug.
+                # This is the row that regressed into a 404.
+                row(publication="main", chapter="",
+                    target_doc="Pub10_Ed22B_Updated.pptx",
+                    gram_id="Gram 1", topic_filename="gram_01.dita"),
+                # week-based main deck.
+                row(publication="main", chapter="Week 1",
+                    gram_id="Gram 2", topic_filename="gram_02.dita"),
+                # a flat progress test.
+                row(publication="progress-test-1", chapter="Test 1",
+                    gram_id="Gram 1", topic_filename="gram_01.dita"),
+            ]
+            csv_path = tmp / "in.csv"
+            self._write_csv(csv_path, rows)
+            dita = tmp / "dita"
+            rc = generate_dita.main([
+                "--csv", str(csv_path), "--out", str(dita),
+                "--image-root", str(tmp),
+            ])
+            self.assertEqual(rc, 0, "generate_dita should succeed")
+
+            staged = tmp / ".dita-build"
+            publish_html.stage(dita, staged)
+
+            ditamaps = sorted(staged.glob("*/*.ditamap"))
+            self.assertTrue(ditamaps, "stage() produced no ditamaps")
+            for ditamap in ditamaps:
+                root = ET.parse(ditamap).getroot()
+                hrefs = [tr.get("href") for tr in root.iter("topicref")]
+                self.assertTrue(hrefs, f"{ditamap.name}: no topicrefs")
+                for href in hrefs:
+                    self.assertNotIn(
+                        "//", href, f"{ditamap.name}: double slash in {href!r}",
+                    )
+                    # Staged hrefs are relative to the ditamap's folder.
+                    target = ditamap.parent / href
+                    self.assertTrue(
+                        target.is_file(),
+                        f"{ditamap.name}: href {href!r} does not resolve to a "
+                        f"topic file (expected {target}) — DITA-OT would 404 it",
+                    )
+
+
 def _html_twin(dita_path: Path) -> Path:
     """Return the HTML file produced by DITA-OT for ``dita_path``.
 
