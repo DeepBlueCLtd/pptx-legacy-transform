@@ -956,8 +956,18 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
                 continue
             seen.add(uniq)
             topic_file = _topic_filename(_effective_gram_id(row))
-            prefix = f"{doc_slug}/" if doc_slug else ""
-            href = f"main/{slug}/{prefix}{gram_dir}/{topic_file}"
+            # Build the href from non-empty segments only, mirroring the
+            # pathlib-based on-disk layout (_publication_root, which drops
+            # empty path parts). A bare-integer week gives slug "week-N"; a
+            # no-week deck (e.g. Pub10 with a blank target_chapter) gives an
+            # EMPTY slug. Interpolating an empty slug as "main/{slug}/..."
+            # would emit "main//..." — which the publish stager's
+            # `replace('href="main/', ...)` then turns into a leading-slash
+            # "/..." (absolute) href that DITA-OT cannot resolve, silently
+            # dropping the topic under --processing-mode=lax (a 404 in the
+            # rendered output). Filtering empties keeps href == file path.
+            href = "/".join([s for s in ("main", slug, doc_slug, gram_dir) if s]
+                            + [topic_file])
             ET.SubElement(topichead, "topicref", {"href": href})
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
