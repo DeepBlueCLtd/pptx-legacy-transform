@@ -141,6 +141,101 @@ python generate_dita.py --csv extracted.csv \
 A more detailed walkthrough lives in
 [`specs/001-pptx-dita-migration/quickstart.md`](specs/001-pptx-dita-migration/quickstart.md).
 
+## Running on the air-gapped target machine
+
+The delivered pipeline runs on an **air-gapped Windows box with WinPython
+3.9.4**. The Start-menu **WinPython interpreter** shortcut opens a Python
+REPL, and you drive the pipeline by `exec()`-ing thin **wrapper scripts**
+that live at the project root. `run_pipeline.bat` is *not* used here — the
+REPL plus wrappers are the interface.
+
+### Cold start — every session
+
+The WinPython shortcut opens the REPL with its working directory set to the
+**interpreter install dir**, not the project. So each session starts by
+changing into the project, then running the stage wrappers in order:
+
+```python
+import os
+os.chdir(r"C:\dev\aaac")         # the project root on the target — raw string!
+os.getcwd()                       # confirm it took
+
+exec(open(r"extract.py").read())     # Stage 3: walk source\ -> reports\extract.csv
+#   -> open reports\extract.csv in Excel, resolve warnings, save as UTF-8 CSV
+exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
+exec(open(r"write.py").read())       # Stage 5: generate the DITA tree -> dita\
+exec(open(r"publish.py").read())     # Stage 6: HTML preview -> html\ (Oxygen is the production publisher)
+```
+
+`introspect.py` is the diagnostic wrapper — a structural report for a single
+deck or the whole `source\` tree; reach for it (Stage 2) when a deck
+misbehaves.
+
+- Use a **raw string** (`r"..."`) or forward slashes in `os.chdir` so the
+  backslashes aren't read as escape sequences.
+- Do the `os.chdir` **once, by hand** — the wrappers use relative paths and
+  are deliberately cwd-independent, so don't bake the chdir into them.
+- Publishing must target a **mapped drive, not a `\\server\share` UNC path** —
+  see [Publishing to HTML](#publishing-to-html-optional).
+
+### After an edit — REPL ergonomics
+
+The wrappers are built so a VS Code edit lands on the next ↑+Enter without
+restarting the interpreter:
+
+- They re-read the canonical script from disk each call
+  (`runpy.run_path(path, run_name="__main__")`) — no `importlib.reload` dance.
+- They bust cross-script import caches (`sys.modules.pop("extract_to_csv", …)`)
+  so an edit to one canonical module is seen by the others.
+- Canonical scripts exit **REPL-safely**: `if rc and not hasattr(sys, "ps1"):
+  sys.exit(rc)` raises `SystemExit` only when run as a real script, never
+  killing the REPL.
+- To pass a new flag to a canonical script, append to `sys.argv` **in the
+  wrapper** — the canonical scripts under `scripts\` are never edited
+  per-target; the wrapper is the only place that knows target-specific paths
+  and toggles (e.g. `--stub-wav stock.wav`).
+
+### Project layout on the target
+
+```text
+ROOT\  (e.g. C:\dev\aaac)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py   ← thin wrappers
+├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
+├── source\              ← the real PPTX corpus
+├── reports\             ← per-run output (extract.csv, logs)
+└── scripts\
+    ├── pylib\           ← pip install --target lives here (see setup below)
+    └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
+```
+
+Each wrapper prepends `scripts\pylib` (for `python-pptx`) and `scripts\` (so
+the canonical modules can import each other) to `sys.path`, busts the module
+caches, sets `sys.argv`, then `runpy.run_path`s the canonical script.
+
+### First-time setup — WinPython gotchas
+
+WinPython sits under `Program Files\` (read-only to non-admins) on an
+AppLocker/WDAC-restricted box. Three traps surface before any pipeline code
+runs:
+
+- **User-site install fails silently.** `pip install python-pptx` lands in
+  `%APPDATA%\Python\…`, but WinPython ships `ENABLE_USER_SITE = False`, so
+  `import pptx` then raises `ModuleNotFoundError`. **Install with
+  `pip install --target scripts\pylib python-pptx`** and let the wrappers put
+  that dir on `sys.path`.
+- **Group-policy DLL block.** A user-folder `lxml`/`Pillow` fails with
+  `ImportError: DLL load failed … blocked by group policy` — AppLocker won't
+  load `.pyd` binaries from user-writable folders. **Delete the user-folder
+  copy** and let WinPython's own pre-trusted build take over
+  (`print(etree.__file__)` should point under `Program Files\WinPython\`).
+- **Pillow/NumPy mismatch.** A newer Pillow wheel hits
+  `numpy.typing has no attribute 'NDArray'` against WinPython's older NumPy —
+  same fix: use WinPython's bundled Pillow.
+
+**Rule:** the air-gap wheelhouse should ship **only `python-pptx`**. Source
+every binary dependency (`lxml`, `Pillow`, …) from WinPython's pre-trusted
+installs, not the user-folder install.
+
 ## Stage-by-stage guide
 
 1. **Stage 1 — Mock generation** (optional, for testing).
@@ -259,6 +354,70 @@ Mitigation: open the CSV with `Data → From Text/CSV → 65001: Unicode (UTF-8)
 and save back with the same encoding; do not edit identity columns
 (`publication`, `chapter`, `gram_id`, `topic_type`, `sequence`,
 `topic_filename`).
+
+## Corpus drift the extractor handles
+
+The legacy decks mix many authoring styles; `extract_to_csv.py` normalises
+the following real patterns, each a live failure before it was handled.
+(`extract_grams_from_slide` is the single grouping function both the
+extractor and `introspect_pptx.py` share, so a fix here flows to both.)
+
+- **Whitespace-padded titles** ("Battleship&nbsp;&nbsp;&nbsp;" forcing an
+  in-shape line break) — whitespace runs collapse to a single space before
+  splitting.
+- **Vestigial overlays** — a hidden `Group 197` shape stack carries dead
+  shape-level links to `file:///…` paths; header detection rejects any
+  `file:///` shape link.
+- **`.doc` vs `.docx` analysis sheets** — only `.doc/.docx/.png/.jpg/.jpeg`
+  are accepted as shape-level header links; a `.glc` at the shape level is
+  authoring residue and is skipped.
+- **Folder-name grouping, not screen position** — a header pairs with its
+  `.glc` candidates by **shared gram folder** in the URL
+  (`…/Gram001/… ↔ …/Gram001/…`), URL-decoded and lowercased so `Gram%20001`
+  and `Gram 001` collapse to one key.
+- **Multi-shape-type clicks** — hyperlinks are read from every descendant
+  `p:cNvPr/a:hlinkClick`, covering autoshape, picture, connector and
+  graphic-frame wrappers uniformly (picture-shape clicks were previously
+  invisible).
+- **SmartArt-embedded links** — a gram authored as a SmartArt diagram keeps
+  its hyperlinks under `ppt/diagrams/…_rels`; `_slide_diagram_hyperlinks`
+  walks those parts (and diagram-to-diagram refs) and threads node text back
+  into each `(text, href)`.
+- **Split-run labels** — a label split across runs (`"Lofar"` + `" 2"`) is
+  rejoined: a single-link paragraph returns the whole paragraph's text.
+- **Duplicate integer-only links** — a second link to the same `.glc`
+  labelled `"1"`/`"2"` is de-duped per href, keeping the longest label.
+- **Phantom / URL-encoded paths** — when a `content_root` is supplied each
+  paired `.glc` is checked on disk (missing → dropped with a WARNING), and
+  hrefs are `urllib.parse.unquote`d before the lookup so `%20` matches a real
+  space.
+- **Trailing-letter folder suffix** — a `.glc` in `Gram_11a/` whose header is
+  in `Gram_11/` is matched by retrying with the trailing `a` stripped.
+- **Office lock files** — `~$Name.pptx` lock files are filtered from the walk.
+- **Mixed student/instructor decks** — grams that resolve no `.glc` links are
+  hidden from the per-gram view (with the count surfaced); the header-only
+  rows are still emitted for downstream visibility.
+- **Final-assessment routing** — a deck matching `--final-pattern` (default
+  `final assessment`) routes to its own `final-assessment-N` publication
+  instead of falling through to `main`.
+
+### Design lessons worth keeping
+
+- **PPTX is just a zip.** When the high-level API misses a link (it will, in
+  legacy decks), drop to `zipfile` + `xml.etree.ElementTree`. A zip-grep
+  diagnostic is the difference between guessing and knowing where a
+  visible-but-unparsed hyperlink lives (`ppt/diagrams/_rels`,
+  `ppt/embeddings`, …).
+- **Surveys observe; pipelines transform.** `introspect_pptx.py` preserves
+  raw structure so drift stays visible; extraction normalises (whitespace,
+  vestigial overlays, duplicate links) because the CSV is a clean contract
+  for downstream stages.
+- **Filesystem existence is a good heuristic.** A `.glc` link to a file that
+  isn't on disk is almost always authoring residue, not content — filtering
+  on existence removes a surprising amount of drift cleanly.
+- **Match observed quirks, don't legislate cleaner authoring.** The
+  trailing-`a` fallback, integer-label dedup and split-run recovery are small
+  heuristics that fit real patterns rather than demanding re-authoring.
 
 ## Running tests
 
