@@ -93,7 +93,8 @@ analysis sheet has no rendered `.png` yet.
   it lives in the **parent calling script**, never in the canonical
   script: `run_pipeline.bat` forwards `%SNAPSHOT_EXTRA_ARGS%`
   (`set SNAPSHOT_EXTRA_ARGS=--extra-name "X-aaa" --extra-name "V III"`),
-  and a target-style wrapper appends the array to `sys.argv`:
+  and the committed `snapshot.py` wrapper appends the
+  `EXTRA_ANALYSIS_NAMES` list from its Config block to `sys.argv`:
 
   ```python
   EXTRA_ANALYSIS_NAMES = ["X-aaa", "V III"]   # sheets named without "analysis"
