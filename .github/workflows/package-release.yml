@@ -1,0 +1,61 @@
+name: Package release
+
+# Publishes the air-gap transfer artifact: a deterministic zip of the
+# deliverable files (root scripts as scripts/, static/, stock.wav,
+# requirements.txt, README.md) shaped to extract straight over ROOT\ on
+# the target, plus a .sha256 to verify after the removable-media hop.
+# See README.md — "Getting pipeline updates onto the target".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.py'
+      - 'static/**'
+      - 'stock.wav'
+      - 'requirements.txt'
+      - 'README.md'
+      - '.github/scripts/package_release.py'
+      - '.github/workflows/package-release.yml'
+  # Escape hatch for a change that slipped past the paths filter.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      # A red main must never cut a release; the suite runs in under a minute.
+      - name: Gate on the unittest suite
+        run: |
+          pip install -r requirements.txt
+          python -m unittest discover tests/
+
+      - name: Build the deliverable zip
+        run: |
+          tag="v$(date -u +%Y.%m.%d)-${GITHUB_RUN_NUMBER}"
+          echo "TAG=${tag}" >> "${GITHUB_ENV}"
+          python .github/scripts/package_release.py \
+            --timestamp "$(git log -1 --format=%ct)" \
+            --out "dist/aaac-pipeline-${tag}.zip"
+          (cd dist && sha256sum "aaac-pipeline-${tag}.zip" > "aaac-pipeline-${tag}.zip.sha256")
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${TAG}" \
+            "dist/aaac-pipeline-${TAG}.zip" \
+            "dist/aaac-pipeline-${TAG}.zip.sha256" \
+            --title "AAAC pipeline ${TAG}" \
+            --target "${GITHUB_SHA}" \
+            --generate-notes

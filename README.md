@@ -217,6 +217,31 @@ Each wrapper prepends `scripts\pylib` (for `python-pptx`) and `scripts\` (so
 the canonical modules can import each other) to `sys.path`, busts the module
 caches, sets `sys.argv`, then `runpy.run_path`s the canonical script.
 
+### Getting pipeline updates onto the target — GitHub releases
+
+Every merge to `main` that touches a deliverable file (root-level `*.py`,
+`static/`, `stock.wav`, `requirements.txt`, this README) runs the *Package
+release* workflow, which publishes a GitHub release carrying
+`aaac-pipeline-vYYYY.MM.DD-N.zip` and a matching `.sha256` file. The zip
+already mirrors the target layout above — root scripts under `scripts\`,
+`static\` and `stock.wav` at the root — so an update is:
+
+1. On a connected host, download both assets from the latest release
+   (far smaller than the full repository zip).
+2. After the removable-media transfer, verify on the target:
+   `certutil -hashfile aaac-pipeline-….zip SHA256` and compare against the
+   `.sha256` file.
+3. Extract over `ROOT\` (e.g. `C:\dev\aaac`), overwriting. The target-only
+   wrappers, `source\`, and `reports\` are not in the archive and are never
+   touched.
+
+The unittest suite gates the publish, so a red `main` never cuts a release.
+If a deliverable change ever slips through without touching one of the
+watched paths, run the workflow by hand (Actions → *Package release* → *Run
+workflow*). The `tests\` tree is deliberately not packaged: the tests pin a
+repo-shaped layout (`sys.path` points at the repo root), so on the air-gapped
+network they run from a full repository copy, not from `ROOT\`.
+
 ### First-time setup — WinPython gotchas
 
 WinPython sits under `Program Files\` (read-only to non-admins) on an
