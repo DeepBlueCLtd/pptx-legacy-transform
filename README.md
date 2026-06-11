@@ -32,25 +32,30 @@ for the implementation plan.
 
 ## Prerequisites
 
-- Python 3.11 or later (CPython, standard interpreter)
-- The `python-pptx` package (`pip install python-pptx`)
+- Python 3.9 or later (CPython, standard interpreter; the air-gapped
+  target runs WinPython 3.9.4.0)
+- The `python-pptx` and `lxml` packages (`pip install python-pptx lxml`)
 
 ### Air-gapped install
 
-`python-pptx` is the only third-party runtime dependency. To install it
-on a host with no internet access, build a wheelhouse on a
-development VM that does have internet access, then copy it across.
+`python-pptx` and `lxml` are the only third-party runtime
+dependencies. To install them on a host with no internet access,
+build a wheelhouse on a development VM that does have internet
+access, then copy it across.
 
-On the development VM:
+On the development VM (pinning to the target's interpreter and OS so
+the wheelhouse is self-contained):
 
 ```bash
-pip download python-pptx -d wheels/
+pip download python-pptx lxml \
+    --python-version 39 --platform win_amd64 \
+    --only-binary=:all: -d wheels/
 ```
 
 On the air-gapped host:
 
 ```bash
-pip install --no-index --find-links wheels/ python-pptx
+pip install --no-index --find-links wheels/ python-pptx lxml
 ```
 
 `requirements.txt` pins the version with `~=` compatibility so wheelhouse
@@ -73,7 +78,7 @@ rebuilds remain predictable.
 ## Quickstart
 
 ```bash
-python --version                   # expect 3.11+
+python --version                   # expect 3.9+
 python -c "import pptx; print(pptx.__version__)"
 python -m unittest discover tests/
 

@@ -9,6 +9,7 @@ has a paired test module.
 from __future__ import annotations
 
 import ast
+import os
 import sys
 import time
 import unittest
@@ -84,7 +85,7 @@ class AirGappedReadinessTests(unittest.TestCase):
         for case in _iter_test_cases(suite):
             if case.id().split(".")[0] != "test_air_gapped_readiness":
                 filtered.addTest(case)
-        with open("/dev/null", "w") as devnull:
+        with open(os.devnull, "w") as devnull:
             runner = unittest.TextTestRunner(verbosity=0, stream=devnull)
             start = time.perf_counter()
             runner.run(filtered)
