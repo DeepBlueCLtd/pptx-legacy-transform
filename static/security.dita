@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="security">
+  <title>Security</title>
+  <shortdesc>Handling and classification guidance for this material.</shortdesc>
+  <body>
+    <note type="important">This is mock development content. Replace it with
+      the real handling and classification guidance before delivery.</note>
+    <p>Treat every gram, analysis sheet and recording as controlled training
+      material. Do not copy publications onto removable media or transmit
+      them off the air-gapped network.</p>
+    <p>Return to the <xref href="welcome.dita">Welcome</xref> page.</p>
+  </body>
+</topic>

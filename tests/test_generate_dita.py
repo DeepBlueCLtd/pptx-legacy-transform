@@ -21,9 +21,13 @@ FIXTURES = REPO_ROOT / "tests" / "fixtures"
 TMP = REPO_ROOT / "tests" / "_tmp"
 
 
+STATIC_ROOT = REPO_ROOT / "static"
+
+
 def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          image_root: Path = FIXTURES, clean: bool = True,
-         stub_wav: "Path | None" = None) -> int:
+         stub_wav: "Path | None" = None,
+         static_root: "Path | None" = STATIC_ROOT) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -33,6 +37,11 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
     ]
     if stub_wav is not None:
         argv += ["--stub-wav", str(stub_wav)]
+    # Pin --static-root so the feature-010 common pages are sourced from a
+    # known location (the repo's static/) rather than the process cwd. Pass
+    # static_root=None to exercise the "no static root" degradation path.
+    if static_root is not None:
+        argv += ["--static-root", str(static_root)]
     return generate_dita.main(argv)
 
 
@@ -263,13 +272,20 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertTrue(ditamap.is_file())
         root = ET.parse(ditamap).getroot()
         self.assertEqual(root.tag, "map")
-        topicheads = root.findall("topichead")
-        self.assertGreaterEqual(len(topicheads), 1)
-        for th in topicheads:
+        # Feature 010: the per-gram content is demoted under a single root-level
+        # "Grams" <topichead>; the per-chapter topicheads nest inside it.
+        root_topicheads = root.findall("topichead")
+        self.assertEqual(len(root_topicheads), 1,
+                         "exactly one root-level topichead — the Grams folder")
+        grams = root_topicheads[0]
+        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
+        chapters = grams.findall("topichead")
+        self.assertGreaterEqual(len(chapters), 1)
+        for th in chapters:
             # Spec 003: chapter navtitles live inside <topicmeta>/<navtitle>
             # (replaces the legacy navtitle= attribute). Each chapter's
             # children are exactly one <topicmeta> followed by one or more
-            # <topicref> elements — no nested <topichead>.
+            # <topicref> elements — no further nested <topichead>.
             for child in th:
                 self.assertIn(child.tag, {"topicmeta", "topicref"})
             self.assertIsNone(th.find("topichead"),
@@ -317,18 +333,74 @@ class GenerateDitaTests(unittest.TestCase):
             "stage() rewrite would yield an absolute href",
         )
 
-    def test_test_ditamap_is_flat(self) -> None:
+    def test_test_ditamap_grams_under_grams_folder(self) -> None:
+        """Feature 010: a progress-test ditamap's root children are the <title>,
+        the common static <topicref>s, then a single "Grams" <topichead> holding
+        every gram topicref — no gram sits at the ditamap root any more."""
         _run(self.out)
         ditamap = self.out / "progress-test-1.ditamap"
         self.assertTrue(ditamap.is_file())
         root = ET.parse(ditamap).getroot()
-        # Spec 003: every ditamap carries a <title> child element (replaces
-        # the legacy title= attribute). Flat = no <topichead> below the
-        # title. Children are <title> followed by <topicref> elements.
         for child in root:
-            self.assertIn(child.tag, {"title", "topicref"},
-                          f"unexpected child {child.tag} in flat test ditamap")
-        self.assertIsNone(root.find("topichead"))
+            self.assertIn(child.tag, {"title", "topicref", "topichead"},
+                          f"unexpected child {child.tag} in test ditamap")
+        topicheads = root.findall("topichead")
+        self.assertEqual(len(topicheads), 1,
+                         "exactly one root-level topichead — the Grams folder")
+        grams = topicheads[0]
+        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
+        # Grams holds the gram topicrefs directly — progress tests have no
+        # per-chapter tier below the Grams folder.
+        self.assertGreaterEqual(len(grams.findall("topicref")), 1)
+        self.assertIsNone(grams.find("topichead"),
+                          "progress-test grams sit flat under Grams, no chapter tier")
+        # No gram topicref leaks up to the ditamap root.
+        self.assertEqual(
+            [tr.get("href") for tr in root.findall("topicref")
+             if "gram-" in (tr.get("href") or "")],
+            [], "no gram topicref may sit at the ditamap root",
+        )
+
+    def test_static_pages_lead_every_ditamap(self) -> None:
+        """Feature 010: Welcome then Security are the only root-level topicrefs,
+        href ``<pub>/<name>``, and precede the Grams folder in document order."""
+        _run(self.out)
+        for pub in ("main", "progress-test-1"):
+            root = ET.parse(self.out / f"{pub}.ditamap").getroot()
+            self.assertEqual(
+                [tr.get("href") for tr in root.findall("topicref")],
+                [f"{pub}/welcome.dita", f"{pub}/security.dita"],
+                f"{pub}: Welcome then Security must lead, and be the only "
+                "root-level topicrefs (grams live under the Grams folder)",
+            )
+            tags = [c.tag for c in root]
+            self.assertLess(tags.index("topicref"), tags.index("topichead"),
+                            "static pages must precede the Grams folder")
+
+    def test_static_tree_copied_into_each_publication(self) -> None:
+        """The whole static tree (pages + image subfolder) is copied verbatim,
+        byte-for-byte, into every publication folder."""
+        _run(self.out)
+        for pub in ("main", "progress-test-1"):
+            for rel in ("welcome.dita", "security.dita", "images/welcome-banner.png"):
+                dst = self.out / pub / rel
+                self.assertTrue(dst.is_file(), f"missing copied static file {dst}")
+                self.assertTrue(
+                    filecmp.cmp(STATIC_ROOT / rel, dst, shallow=False),
+                    f"{dst} must be a byte-for-byte copy of the static source",
+                )
+
+    def test_missing_static_root_degrades_gracefully(self) -> None:
+        """An absent static root omits the common pages (no root topicref) but
+        still demotes grams under the Grams folder and succeeds (rc 0)."""
+        rc = _run(self.out, static_root=TMP / "absent_static_dir")
+        self.assertEqual(rc, 0)
+        root = ET.parse(self.out / "progress-test-1.ditamap").getroot()
+        self.assertEqual(root.findall("topicref"), [],
+                         "no static pages when the static root is absent")
+        grams = root.find("topichead")
+        self.assertIsNotNone(grams, "grams are still demoted under a Grams folder")
+        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
 
     def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
         """A GLC row whose inner asset is a .wav renders as a §1.3
@@ -707,9 +779,13 @@ class AudienceShapeTests(unittest.TestCase):
         emitted."""
         ditamap = self.out / "main.ditamap"
         root = ET.parse(ditamap).getroot()
-        topicheads = root.findall("topichead")
+        # Feature 010: chapters nest under the root-level "Grams" topichead.
+        grams = root.find("topichead")
+        self.assertIsNotNone(grams, "feature 010: a root-level Grams topichead")
+        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
+        topicheads = grams.findall("topichead")
         self.assertEqual(len(topicheads), 2,
-                         "fixture defines two main chapters")
+                         "fixture defines two main chapters (nested under Grams)")
         navtitles_by_kind: dict[str, ET.Element] = {}
         for th in topicheads:
             self.assertIsNone(

@@ -119,6 +119,7 @@ the PNG in and re-running.
 | `rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
 | `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
+| `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the **Grams** nav folder (feature 010). Override with `--static-root`. |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |
@@ -640,6 +641,35 @@ See the full recipe in
 [`specs/001-pptx-dita-migration/contracts/dita-topic-schema.md`](specs/001-pptx-dita-migration/contracts/dita-topic-schema.md)
 §11 and the dual-edition contracts in
 [`specs/003-instructor-student-versions/contracts/`](specs/003-instructor-student-versions/contracts/).
+
+### Common pages and the Grams nav folder (feature 010)
+
+Oxygen renders each **direct child of a ditamap** as a header-bar tab and a
+welcome-page tile, so listing grams at the root floods the nav. Every generated
+ditamap is therefore shaped:
+
+```text
+<map>
+  <title>…</title>
+  <topicref href="<pub>/welcome.dita"/>     ← common pages, first
+  <topicref href="<pub>/security.dita"/>
+  <topichead><topicmeta><navtitle>Grams</navtitle></topicmeta>
+    …per-week topicheads (main) or gram topicrefs (progress tests)…
+  </topichead>
+</map>
+```
+
+— so the top-level nav is **Welcome · Security · Grams** for every publication.
+
+The common pages come from `static/` at the repo root: top-level `*.dita`
+(Welcome first, Security second, any extras alphabetical) plus their image
+subfolders. `generate_dita.py` copies the whole tree into **each** publication
+folder and references it with the `<pub>/` prefix the publish stager strips, so
+the pages resolve as bare local filenames beside the staged ditamap — no `../`.
+Point elsewhere with `--static-root <dir>` (default `static/`); a missing folder
+simply omits the pages (logged warning) rather than failing the build. Edit
+`static/welcome.dita` and `static/security.dita` in Oxygen like any topic — the
+committed copies are mock development content. See [`static/README.md`](static/README.md).
 
 ## Known limitations
 

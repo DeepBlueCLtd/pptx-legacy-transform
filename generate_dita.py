@@ -70,6 +70,16 @@ MAP_DOCTYPE = (
     '<!DOCTYPE map PUBLIC "-//OASIS//DTD DITA Map//EN" "map.dtd">\n'
 )
 
+# Common static pages (feature 010): topics shared by every publication,
+# copied into each publication folder and referenced as the first ditamap
+# entries — ahead of the "Grams" nav folder. Welcome leads, Security second;
+# any further top-level ``*.dita`` under the static root follow alphabetically.
+STATIC_PAGE_ORDER: tuple[str, ...] = ("welcome.dita", "security.dita")
+
+# Navtitle of the <topichead> that demotes the per-gram topicrefs out of the
+# ditamap root into a single nav entry (feature 010).
+GRAMS_NAVTITLE = "Grams"
+
 LOGGER = logging.getLogger(__name__)
 
 # Optional testing aid: when set via ``--stub-wav``, every .wav copy in
@@ -932,7 +942,79 @@ def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
         ph.tail = display_remainder
 
 
-def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
+def discover_static_pages(static_root: Path) -> list[str]:
+    """Return the common static page filenames (top-level ``*.dita`` under
+    ``static_root``) in nav order: Welcome, Security, then any extras
+    alphabetically (feature 010).
+
+    Returns ``[]`` when ``static_root`` is absent or holds no pages, so
+    generation degrades gracefully — the ditamaps then carry no shared pages.
+    """
+    if not static_root.is_dir():
+        return []
+    names = [p.name for p in static_root.glob("*.dita")]
+
+    def rank(name: str) -> tuple[int, str]:
+        try:
+            return (STATIC_PAGE_ORDER.index(name), "")
+        except ValueError:
+            return (len(STATIC_PAGE_ORDER), name)
+
+    return sorted(names, key=rank)
+
+
+def copy_static_tree(static_root: Path, pub_dir: Path) -> list[Path]:
+    """Mirror the ``static_root`` tree into ``pub_dir`` (a per-publication output
+    folder), returning the destination paths in a stable order (feature 010).
+
+    The static author keeps each page self-contained with relative hrefs;
+    copying the tree verbatim beside the ditamap preserves them — the publish
+    stager rewrites only the leading ``<publication>/`` map prefix, never a
+    topic-internal href. ``.md`` files (folder docs like README) are skipped;
+    copies are byte-for-byte for the determinism contract.
+    """
+    if not static_root.is_dir():
+        return []
+    copied: list[Path] = []
+    for src in sorted(static_root.rglob("*")):
+        if not src.is_file() or src.suffix.lower() == ".md":
+            continue
+        dst = pub_dir / src.relative_to(static_root)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+        copied.append(dst)
+    return copied
+
+
+def _append_static_topicrefs(
+    root: ET.Element, publication: str, static_pages: Iterable[str],
+) -> None:
+    """Prepend the common static pages as the first top-level ``<topicref>``s.
+
+    Each href is ``{publication}/{name}`` — the same ``<publication>/`` prefix
+    the publish stager strips, so after staging it resolves to a bare local
+    filename beside the relocated ditamap (feature 010).
+    """
+    for name in static_pages:
+        ET.SubElement(root, "topicref", {"href": f"{publication}/{name}"})
+
+
+def _append_grams_topichead(root: ET.Element) -> ET.Element:
+    """Append and return the ``<topichead>`` (navtitle ``Grams``) that holds
+    every per-gram topicref, collapsing N gram entries into a single root-level
+    nav item (feature 010). Uses the ``<topicmeta>/<navtitle>`` child form,
+    matching the chapter topicheads.
+    """
+    topichead = ET.SubElement(root, "topichead")
+    topicmeta = ET.SubElement(topichead, "topicmeta")
+    navtitle = ET.SubElement(topicmeta, "navtitle")
+    navtitle.text = GRAMS_NAVTITLE
+    return topichead
+
+
+def emit_main_ditamap(
+    rows: list[dict], out_dir: Path, static_pages: Iterable[str] = (),
+) -> Path:
     """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter.
 
     Chapters are grouped by the *effective* chapter (feature 008: the week
@@ -955,8 +1037,10 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
 
     root = ET.Element("map")
     _append_map_title(root, "Main")
+    _append_static_topicrefs(root, "main", static_pages)
+    grams_head = _append_grams_topichead(root)
     for slug, (title, chapter_rows) in chapters.items():
-        topichead = ET.SubElement(root, "topichead")
+        topichead = ET.SubElement(grams_head, "topichead")
         _append_chapter_navtitle(topichead, title)
         seen: set[str] = set()
         for row in chapter_rows:
@@ -1003,12 +1087,20 @@ def _flat_publication_title(publication: str) -> str:
 
 def emit_test_ditamap(
     publication: str, rows: list[dict], out_dir: Path,
+    static_pages: Iterable[str] = (),
 ) -> Path:
-    """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
+    """Write ``<publication>.ditamap`` at the output root.
+
+    The common static pages lead (feature 010); the per-gram topicrefs are
+    grouped under a single ``<topichead>`` (navtitle ``Grams``) so they sit one
+    level below the ditamap root rather than flooding it as direct children.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / f"{publication}.ditamap"
     root = ET.Element("map")
     _append_map_title(root, _flat_publication_title(publication))
+    _append_static_topicrefs(root, publication, static_pages)
+    grams_head = _append_grams_topichead(root)
     seen: set[str] = set()
     for row in rows:
         if row["publication"] != publication:
@@ -1022,7 +1114,7 @@ def emit_test_ditamap(
         topic_file = _topic_filename(_effective_gram_id(row))
         prefix = f"{doc_slug}/" if doc_slug else ""
         href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
-        ET.SubElement(root, "topicref", {"href": href})
+        ET.SubElement(grams_head, "topicref", {"href": href})
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
@@ -1090,6 +1182,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="Testing aid: copy this file in place of every .wav asset "
              "(keeps slugified per-gram filenames so paired .glc references "
              "still resolve). Slims the DITA tree for cross-system transit.")
+    parser.add_argument(
+        "--static-root", type=Path, dest="static_root", default=Path("static"),
+        help="Folder of common static pages (welcome.dita, security.dita, …) "
+             "and their image subfolders. Copied verbatim into each publication "
+             "folder and referenced as the first ditamap entries, ahead of the "
+             "Grams nav folder. Default: ./static. A missing folder yields no "
+             "shared pages (a logged warning), not an error.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("generate.log"))
@@ -1154,20 +1253,39 @@ def main(argv: Iterable[str] | None = None) -> int:
             LOGGER.error("Failed to emit gram %s: %s", key, exc)
 
     publications = sorted({r["publication"] for r in rows})
+
+    # Common static pages (feature 010): copy the static tree into each
+    # publication folder, then reference them as the first ditamap entries.
+    static_pages = discover_static_pages(args.static_root)
+    if static_pages:
+        LOGGER.info("Common static pages (first ditamap entries): %s",
+                    ", ".join(static_pages))
+    else:
+        LOGGER.warning(
+            "No static pages found under %s — ditamaps carry only the Grams "
+            "nav folder, no shared Welcome/Security pages.", args.static_root)
+    static_copied: list[Path] = []
+    for pub in publications:
+        copied = copy_static_tree(args.static_root, args.out / pub)
+        static_copied.extend(copied)
+        if copied:
+            LOGGER.info("Copied %d static file(s) into %s/", len(copied), pub)
+
     ditamap_paths: list[Path] = []
     if any(r["publication"] == "main" for r in rows):
-        ditamap_paths.append(emit_main_ditamap(rows, args.out))
+        ditamap_paths.append(emit_main_ditamap(rows, args.out, static_pages))
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
         if pub != "main":
-            path = emit_test_ditamap(pub, rows, args.out)
+            path = emit_test_ditamap(pub, rows, args.out, static_pages)
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
 
     ditaval_path = write_trainee_ditaval(args.out)
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
 
-    manifest_path = write_manifest(args.out, written + ditamap_paths + [ditaval_path])
+    manifest_path = write_manifest(
+        args.out, written + static_copied + ditamap_paths + [ditaval_path])
     LOGGER.info("Wrote manifest %s", manifest_path)
 
     skipped_path = write_skipped_report(args.out, skipped)
