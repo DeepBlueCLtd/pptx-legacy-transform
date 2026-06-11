@@ -9,6 +9,7 @@ for the script's command-line interface, behaviour, and exit codes.
 
 ```text
 python snapshot_analysis_docs.py --content-root <dir> [--renderer-cmd <cmd>] [--dry-run]
+                                 [--no-reverse-wrap] [--extra-name <token> ...]
 ```
 
 | Flag | Required | Default | Meaning |
@@ -16,6 +17,8 @@ python snapshot_analysis_docs.py --content-root <dir> [--renderer-cmd <cmd>] [--
 | `--content-root <dir>` | yes | — | Root of the content tree to walk for analysis sheets. |
 | `--renderer-cmd <cmd>` | no | `soffice` | Renderer executable/command used to convert a Word document to PNG/PDF. Allows substituting an equivalent converter or a test stub. |
 | `--dry-run` | no | off | Log what *would* be rendered/wrapped/skipped without writing any file. |
+| `--no-reverse-wrap` | no | off | Skip behaviour step 6 (FR-018): render `.doc`/`.docx` → `.png` only, never synthesise a `.docx`. For corpora that must not be mutated with new Word files. |
+| `--extra-name <token>` | no | — | Additional analysis-sheet name token, repeatable. Matched exactly like the built-in `analysis` token — a case-insensitive substring of the filename stem — so corpus sheets that deviate from the `*analysis*` convention (e.g. `V III .doc`) can be opted in. Blank tokens are dropped with a WARNING (an empty substring would select every Word document). The token list is per-corpus configuration: supply it from the parent wrapper/orchestrator script (`run_pipeline.bat` forwards `%SNAPSHOT_EXTRA_ARGS%`), never by editing the canonical script. |
 
 ## Behaviour
 
@@ -24,7 +27,9 @@ python snapshot_analysis_docs.py --content-root <dir> [--renderer-cmd <cmd>] [--
    `.doc` or `.docx`. Analysis documents live in the **chapter folder alongside
    other files** (PPT source data, unrelated Word docs), so selection keys on
    the analysis naming convention — it does **not** render every Word document it
-   finds. Iteration is deterministic (sorted).
+   finds. Sheets whose names deviate from the convention are opted in with
+   `--extra-name` tokens, each matched the same way as the built-in token.
+   Iteration is deterministic (sorted).
 2. **Classify** each: if a same-stem `.png` sibling already exists →
    `skipped_has_png` (no action, existing PNG untouched). Otherwise →
    render.
@@ -45,7 +50,9 @@ python snapshot_analysis_docs.py --content-root <dir> [--renderer-cmd <cmd>] [--
 6. **Reverse wrap** (FR-018): for an analysis sheet that has a `.png` but no
    same-stem `.docx`, emit a minimal full-page `.docx` embedding the image, using
    the stdlib `zipfile`+`xml.etree` approach (no dependency). Skip when the
-   `.docx` already exists (idempotent). (research R9)
+   `.docx` already exists (idempotent). Selection mirrors step 1 (`*analysis*`
+   plus any `--extra-name` tokens); the whole step is suppressed by
+   `--no-reverse-wrap`. (research R9)
 7. **Summary**: emit an end-of-run summary line (`sheets_seen`, `rendered`,
    `skipped_has_png`, `render_failed`, `multipage_warned`, `docx_wrapped`,
    `tidy_skipped`) to the log and console. (A gram with *no* analysis document is

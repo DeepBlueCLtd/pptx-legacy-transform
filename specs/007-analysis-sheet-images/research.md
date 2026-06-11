@@ -203,6 +203,17 @@ surface for no benefit, since the name convention is sufficient. *A configurable
 `--name-glob`* — deferred; the fixed `*analysis*` rule is adequate for the known
 corpus and can be parameterised later if a deck deviates.
 
+**Update (deck deviation found)**: the corpus does contain analysis sheets
+named without the token (`X-aaa.doc`; the extractor comments also record
+`V III .doc`), which the fixed rule skips — the extractor then flags the row
+`analysis image not rendered`. The deferred parameterisation landed as a
+repeatable `--extra-name <token>` flag: substring tokens rather than a glob,
+so deviating names match exactly like the built-in `analysis` token. The
+hyperlink-driven alternative stays rejected for the same coupling reasons; the
+token list is per-corpus configuration and is supplied by the parent
+wrapper/orchestrator script (see the CLI contract), never by editing the
+canonical script.
+
 ## R8 — Tidy inline image: margin-trim + DPI (FR-017)
 
 **Decision (added after `/speckit.review`, maintainer chose to fold in)**: After
