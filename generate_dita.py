@@ -354,19 +354,23 @@ def _effective_chapter(row: dict) -> str:
 
 
 def _effective_doc(row: dict) -> str:
-    """Deck filename the row will land in after refactoring (may be empty).
+    """Deck filename the row will land in after refactoring — always empty.
 
-    Feature 009: ``main`` carries **no** per-document folder tier — its grams
-    live flat at ``main/week-N/gram-NN/`` and are scoped per ``(main, week)``.
-    Forcing ``main``'s effective doc to ``""`` keeps the topic path, the ditamap
-    href, and the ``check_row_identity`` collision key consistently doc-less in
-    one place, even if a CSV stray-sets ``target_doc`` on a ``main`` row.
-    Extraction already writes ``target_doc=""`` for ``main`` (feature 008), so
-    this is a no-op on extractor output and purely a defensive guard.
+    No publication carries a per-document folder tier. ``main`` is flat at
+    ``main/week-N/gram-NN/``; every **non-main** publication
+    (``progress-test-N``, ``final-assessment-N``) is allocated per source-deck
+    stem in ``classify_publication``, so each maps to exactly **one** deck and a
+    ``doc`` tier could never disambiguate two decks — it only ever added a
+    redundant folder echoing the publication name (e.g.
+    ``progress-test-1/instructor-progress-test-1-grams/``).
+
+    Forcing the effective doc to ``""`` for **all** publications keeps the topic
+    path, the ditamap href, and the ``check_row_identity`` collision key
+    consistently doc-less in one place. The CSV's ``target_doc`` column is now
+    ignored here (deprecated like ``wav_treatment``, retained only for
+    round-trip compatibility), so a stray value never reintroduces the tier.
     """
-    if row.get("publication", "") == "main":
-        return ""
-    return row.get("target_doc", "") or ""
+    return ""
 
 
 def _doc_slug(target_doc: str) -> str:
