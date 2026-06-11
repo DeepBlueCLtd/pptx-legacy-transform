@@ -48,6 +48,13 @@ class RunPipelineBatTests(unittest.TestCase):
     def test_batch_forwards_input_root_to_snapshot(self) -> None:
         self.assertRegex(self.text, r"--content-root\s+%1")
 
+    def test_batch_passes_extra_name_args_to_snapshot(self) -> None:
+        # The caller opts in non-*analysis* sheet names via an env var on the
+        # snapshot line — per-corpus config lives in the parent, not the script.
+        self.assertRegex(
+            self.text,
+            r"snapshot_analysis_docs\.py\s+--content-root\s+%1\s+%SNAPSHOT_EXTRA_ARGS%")
+
     def test_batch_forwards_input_root_argument(self) -> None:
         # %1 must reach both --input-root (extractor) and --image-root (generator).
         self.assertRegex(self.text, r"--input-root\s+%1")

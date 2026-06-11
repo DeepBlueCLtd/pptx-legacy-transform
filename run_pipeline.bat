@@ -9,7 +9,10 @@ if "%~1"=="" (
 echo === PPTX to DITA Migration Pipeline ===
 
 echo [Stage 1] Snapshotting Word analysis sheets to PNG ...
-python scripts\snapshot_analysis_docs.py --content-root %1
+rem SNAPSHOT_EXTRA_ARGS opts in analysis sheets whose names lack the
+rem "analysis" token. Set it before calling, e.g.:
+rem   set SNAPSHOT_EXTRA_ARGS=--extra-name "X-aaa" --extra-name "V III"
+python scripts\snapshot_analysis_docs.py --content-root %1 %SNAPSHOT_EXTRA_ARGS%
 if errorlevel 1 goto error
 
 echo [Stage 2] Extracting PPTX content into extracted.csv ...

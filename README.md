@@ -84,6 +84,22 @@ analysis sheet has no rendered `.png` yet.
   `soffice` path or an equivalent converter (e.g. MS Word COM automation
   on a Windows site). Quote a path that contains spaces, e.g.
   `--renderer-cmd "C:\Program Files\LibreOffice\program\soffice.exe"`.
+- A few corpus sheets don't follow the `*analysis*` naming convention
+  (e.g. `X-aaa.doc`, `V III .doc`) and are therefore skipped by the name
+  rule — the extractor then flags their gram rows `analysis image not
+  rendered`. Opt them in with repeatable `--extra-name` tokens, matched
+  exactly like the built-in `analysis` token (case-insensitive substring
+  of the filename stem). The token list is per-corpus configuration, so
+  it lives in the **parent calling script**, never in the canonical
+  script: `run_pipeline.bat` forwards `%SNAPSHOT_EXTRA_ARGS%`
+  (`set SNAPSHOT_EXTRA_ARGS=--extra-name "X-aaa" --extra-name "V III"`),
+  and a target-style wrapper appends the array to `sys.argv`:
+
+  ```python
+  EXTRA_ANALYSIS_NAMES = ["X-aaa", "V III"]   # sheets named without "analysis"
+  for name in EXTRA_ANALYSIS_NAMES:
+      sys.argv += ["--extra-name", name]
+  ```
 - **Pillow is an *optional* prep-time wheel** used only to trim page
   margins and normalise DPI on the rendered PNG (FR-017). It is imported
   defensively: when Pillow is absent the snapshotter keeps the full-page
@@ -111,7 +127,7 @@ the PNG in and re-running.
 | Path | Role |
 |---|---|
 | `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
-| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
+| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |

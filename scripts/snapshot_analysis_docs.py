@@ -25,6 +25,10 @@ Design invariants (see specs/007-analysis-sheet-images/):
 - **Selection keys on the name, not "every Word doc".** Analysis sheets share
   the chapter folder with PPT source data and unrelated Word documents, so
   selection matches the ``*analysis*`` naming convention (research R7).
+  Corpus sheets that deviate from the convention (e.g. ``V III .doc``) are
+  opted in per-run with repeatable ``--extra-name`` tokens; the token list is
+  per-corpus configuration, so it belongs in the parent wrapper/orchestrator
+  script that invokes this one, never hard-coded here.
 
 Logging follows the project convention: dual stdout + ``snapshot.log``,
 DEBUG to file, INFO/WARNING to console.
@@ -43,7 +47,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 
 LOGGER = logging.getLogger(__name__)
@@ -96,20 +100,55 @@ class SnapshotResult:
 # Selection + classification (Phase 2: FR-015, research R7).
 # -----------------------------------------------------------------------------
 
-def iter_analysis_sheets(content_root: Path) -> Iterator[Path]:
+def _normalise_extra_names(extra_names: Iterable[str]) -> tuple[str, ...]:
+    """Strip, lower-case, and de-blank the operator-supplied extra tokens.
+
+    Blank tokens are dropped with a WARNING: an empty substring would match
+    every Word document, silently defeating the FR-015 selection guard.
+    """
+    kept: list[str] = []
+    for token in extra_names:
+        cleaned = token.strip().lower()
+        if cleaned:
+            kept.append(cleaned)
+        else:
+            LOGGER.warning("ignoring blank --extra-name token")
+    return tuple(kept)
+
+
+def _is_analysis_name(stem: str, extra_names: tuple[str, ...] = ()) -> bool:
+    """True iff ``stem`` names an analysis sheet.
+
+    Matches the ``*analysis*`` convention (case-insensitive) or any of the
+    ``extra_names`` tokens, each matched the same way -- as a case-insensitive
+    substring of the stem (research R7: deviating corpus sheets are opted in
+    by name, the hyperlink-driven alternative stays rejected).
+    """
+    lowered = stem.lower()
+    if ANALYSIS_NAME_TOKEN in lowered:
+        return True
+    return any(token.lower() in lowered for token in extra_names if token)
+
+
+def iter_analysis_sheets(
+    content_root: Path, extra_names: tuple[str, ...] = (),
+) -> Iterator[Path]:
     """Yield every Word analysis sheet under ``content_root``.
 
     A file qualifies when its **name contains ``analysis``** (case-insensitive)
     AND its suffix is ``.doc``/``.docx``. Unrelated Word documents sharing the
-    chapter folder (e.g. ``source_data.doc``) are NOT yielded. Iteration is
-    deterministic (sorted) for byte-stable logs and idempotent re-runs.
+    chapter folder (e.g. ``source_data.doc``) are NOT yielded. ``extra_names``
+    opts in sheets whose names deviate from the convention (e.g. ``X-aaa.doc``):
+    each token is matched exactly like the built-in ``analysis`` token.
+    Iteration is deterministic (sorted) for byte-stable logs and idempotent
+    re-runs.
     """
     for path in sorted(content_root.rglob("*")):
         if not path.is_file():
             continue
         if path.suffix.lower() not in WORD_SUFFIXES:
             continue
-        if ANALYSIS_NAME_TOKEN not in path.stem.lower():
+        if not _is_analysis_name(path.stem, extra_names):
             continue
         yield path
 
@@ -401,13 +440,18 @@ def _process_sheet(
 
 
 def _reverse_wrap_png_only(
-    content_root: Path, dry_run: bool) -> list[SnapshotResult]:
-    """For every ``*analysis*.png`` with no same-stem ``.docx``, emit one."""
+    content_root: Path, dry_run: bool, extra_names: tuple[str, ...] = (),
+) -> list[SnapshotResult]:
+    """For every analysis ``.png`` with no same-stem ``.docx``, emit one.
+
+    Selection mirrors :func:`iter_analysis_sheets` (``*analysis*`` plus the
+    ``extra_names`` tokens) so an opted-in sheet rides the same FR-018 path.
+    """
     results: list[SnapshotResult] = []
     for png in sorted(content_root.rglob("*")):
         if not png.is_file() or png.suffix.lower() != ".png":
             continue
-        if ANALYSIS_NAME_TOKEN not in png.stem.lower():
+        if not _is_analysis_name(png.stem, extra_names):
             continue
         docx_out = png.with_suffix(".docx")
         if docx_out.exists():
@@ -448,7 +492,7 @@ def _emit_summary(results: list[SnapshotResult]) -> None:
 
 def snapshot(
     content_root: Path, renderer_cmd: str, dry_run: bool,
-    reverse_wrap: bool = True,
+    reverse_wrap: bool = True, extra_names: Iterable[str] = (),
 ) -> list[SnapshotResult]:
     """Scan ``content_root``, render/skip each analysis sheet, reverse-wrap.
 
@@ -457,12 +501,18 @@ def snapshot(
     Word source). Default ``True`` preserves the original feature 007
     contract; pass ``False`` (CLI ``--no-reverse-wrap``) when the corpus
     is read-only-by-policy and synthesised ``.docx`` files would be noise.
+
+    ``extra_names`` (CLI ``--extra-name``, repeatable) opts in analysis
+    sheets whose filenames lack the ``analysis`` token; each entry is a
+    case-insensitive substring matched against the stem. Blank tokens are
+    dropped with a WARNING.
     """
+    tokens = _normalise_extra_names(extra_names)
     results: list[SnapshotResult] = []
-    for doc in iter_analysis_sheets(content_root):
+    for doc in iter_analysis_sheets(content_root, tokens):
         results.append(_process_sheet(doc, renderer_cmd, dry_run))
     if reverse_wrap:
-        results.extend(_reverse_wrap_png_only(content_root, dry_run))
+        results.extend(_reverse_wrap_png_only(content_root, dry_run, tokens))
     return results
 
 
@@ -479,6 +529,15 @@ def main(argv: list[str] | None = None) -> int:
              "every PNG-only analysis sheet). Use when the source corpus "
              "should not be mutated with new .docx files — only render "
              ".doc/.docx -> .png siblings.")
+    parser.add_argument(
+        "--extra-name", action="append", default=[], dest="extra_names",
+        metavar="TOKEN",
+        help="Additional analysis-sheet name token, matched exactly like the "
+             "built-in 'analysis' token (case-insensitive substring of the "
+             "filename stem). Repeatable. Opts in corpus sheets that do not "
+             "follow the *analysis* naming convention (e.g. 'V III .doc'); "
+             "the token list is per-corpus configuration, so supply it from "
+             "the parent wrapper/orchestrator script.")
     args = parser.parse_args(argv)
 
     content_root: Path = args.content_root
@@ -490,14 +549,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     LOGGER.info(
-        "snapshotting analysis sheets under %s (renderer=%r%s%s)",
+        "snapshotting analysis sheets under %s (renderer=%r%s%s%s)",
         content_root, args.renderer_cmd,
         ", dry-run" if args.dry_run else "",
-        "" if args.reverse_wrap else ", no-reverse-wrap")
+        "" if args.reverse_wrap else ", no-reverse-wrap",
+        ", extra-names=%r" % (args.extra_names,) if args.extra_names else "")
     try:
         results = snapshot(
             content_root, args.renderer_cmd, args.dry_run,
             reverse_wrap=args.reverse_wrap,
+            extra_names=args.extra_names,
         )
     except OSError as exc:
         LOGGER.error("snapshot failed: %s", exc)
