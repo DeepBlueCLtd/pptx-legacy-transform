@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Build the deterministic air-gap deliverable zip for a GitHub release.
 
-The archive mirrors "Project layout on the target" (README.md): the
-canonical root-level scripts land under ``scripts/``; ``static/``,
-``stock.wav``, ``requirements.txt`` and ``README.md`` sit at the archive
-root. The operator extracts it straight over ``ROOT\\`` on the target —
-the target-only wrapper scripts, ``source\\`` and ``reports\\`` are not in
-the archive, so an upgrade never touches them.
+The archive mirrors "Project layout on the target" (README.md), the
+layout the repo itself now follows: the canonical scripts ship from
+``scripts/`` as-is; ``static/``, ``stock.wav``, ``requirements.txt`` and
+``README.md`` sit at the archive root. The operator extracts it straight
+over ``ROOT\\`` on the target — the root-level wrapper templates
+(``extract.py`` … ``snapshot.py``), the dev-only mock tooling, ``source\\``
+and ``reports\\`` are not in the archive, so an upgrade never touches the
+operator's tuned wrappers or data.
 
 Determinism: entries are sorted, every zip timestamp comes from
 ``--timestamp`` (CI passes the commit date), and the permission/platform
@@ -30,6 +32,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # deliberately absent: it is a dev-host orchestrator, never used on target.
 ROOT_FILES = ("README.md", "requirements.txt", "stock.wav")
 
+# Dev-host-only helpers living in scripts/ that must not ship; every other
+# scripts/*.py is a canonical pipeline stage.
+DEV_ONLY_SCRIPTS = frozenset({"generate_mock_analysis_sheet.py"})
+
 # 1980-01-01, the zip format's epoch: the stamp used when no commit date is
 # supplied, and the earliest one the format can store.
 ZIP_EPOCH = 315532800
@@ -38,7 +44,9 @@ ZIP_EPOCH = 315532800
 def collect_entries():
     """Return (source path, archive name) pairs sorted by archive name."""
     entries = []
-    for path in REPO_ROOT.glob("*.py"):
+    for path in (REPO_ROOT / "scripts").glob("*.py"):
+        if path.name in DEV_ONLY_SCRIPTS:
+            continue
         entries.append((path, "scripts/" + path.name))
     for name in ROOT_FILES:
         path = REPO_ROOT / name

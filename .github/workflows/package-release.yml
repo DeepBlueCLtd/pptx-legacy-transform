@@ -1,16 +1,19 @@
 name: Package release
 
 # Publishes the air-gap transfer artifact: a deterministic zip of the
-# deliverable files (root scripts as scripts/, static/, stock.wav,
+# deliverable files (the canonical scripts/ tree, static/, stock.wav,
 # requirements.txt, README.md) shaped to extract straight over ROOT\ on
 # the target, plus a .sha256 to verify after the removable-media hop.
+# Root-level wrapper scripts are deliberately NOT packaged (and so don't
+# trigger releases). An edit to the dev-only mock-sheet tool under
+# scripts/ may cut a content-identical release — harmless.
 # See README.md — "Getting pipeline updates onto the target".
 
 on:
   push:
     branches: [main]
     paths:
-      - '*.py'
+      - 'scripts/*.py'
       - 'static/**'
       - 'stock.wav'
       - 'requirements.txt'

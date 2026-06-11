@@ -47,6 +47,18 @@ SCRIPTS = (
     "snapshot_analysis_docs.py",
 )
 
+# Thin REPL wrappers at the repo root (README "Running on the air-gapped
+# target machine"). Scanned for the stdlib-only guarantee like the
+# canonical scripts; tests/test_wrappers.py covers their shape.
+WRAPPERS = (
+    "extract.py",
+    "dedupe.py",
+    "write.py",
+    "publish.py",
+    "introspect.py",
+    "snapshot.py",
+)
+
 
 def _iter_test_cases(suite: unittest.TestSuite):
     """Recursively yield every TestCase under ``suite``."""
@@ -73,7 +85,8 @@ def _imported_top_modules(path: Path) -> set[str]:
 class AirGappedReadinessTests(unittest.TestCase):
 
     def test_no_third_party_imports_other_than_pptx(self) -> None:
-        targets = [REPO_ROOT / s for s in SCRIPTS]
+        targets = [REPO_ROOT / "scripts" / s for s in SCRIPTS]
+        targets.extend(REPO_ROOT / w for w in WRAPPERS)
         targets.extend((REPO_ROOT / "tests").glob("test_*.py"))
         targets.append(REPO_ROOT / "tests" / "conftest_helpers.py")
         offenders: list[tuple[str, str]] = []
@@ -112,6 +125,9 @@ class AirGappedReadinessTests(unittest.TestCase):
             test_module = REPO_ROOT / "tests" / f"test_{base}.py"
             self.assertTrue(test_module.is_file(),
                             f"no test module for {script} (expected {test_module.name})")
+        # The wrappers are covered collectively rather than one-per-file.
+        self.assertTrue((REPO_ROOT / "tests" / "test_wrappers.py").is_file(),
+                        "no test module for the root wrapper scripts")
 
 
 if __name__ == "__main__":

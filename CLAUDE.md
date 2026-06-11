@@ -27,12 +27,12 @@ npm install          # one-off, on an internet-connected host
 npm test             # Jest, asserts on the rendered html/ tree
 
 # The pipeline (synthetic path needs no real corpus)
-python mock_pptx.py --out mock_instructor.pptx
-python introspect_pptx.py --input mock_instructor.pptx --out mock_report.txt
-python extract_to_csv.py --input-root path/to/content --out extracted.csv
+python scripts/mock_pptx.py --out-root mock_corpus/
+python scripts/introspect_pptx.py --input "mock_corpus/Instructor Week 1 Grams/Instructor Week 1 Grams.pptx" --out mock_report.txt
+python scripts/extract_to_csv.py --input-root path/to/content --out extracted.csv
 # ...technical author reviews extracted.csv in Excel (UTF-8 CSV, not .xlsx)...
-python generate_dita.py --csv extracted.csv --out dita/ --image-root path/to/content
-python publish_html.py --dita-ot /path/to/dita-ot-4.2.4   # optional HTML preview
+python scripts/generate_dita.py --csv extracted.csv --out dita/ --image-root path/to/content
+python scripts/publish_html.py --dita-ot /path/to/dita-ot-4.2.4   # optional HTML preview
 ```
 
 There is no build step or linter. `run_pipeline.bat` is a Windows-only
@@ -43,11 +43,15 @@ is driven differently; see *Operating on the air-gapped target* below.
 ## Operating on the air-gapped target
 
 The **delivered** interface is neither `run_pipeline.bat` nor bare
-`python script.py` (both are dev-host shapes). On the air-gapped WinPython
-3.9.4 box the operator drives the pipeline from the **WinPython interpreter
-(REPL)** by `exec()`-ing thin **wrapper scripts** that live at the project
-root. Full detail is in README.md — "Running on the air-gapped target machine"
-(README.md:144) and "Project layout on the target" (README.md:198).
+`python scripts/script.py` (both are dev-host shapes). On the air-gapped
+WinPython 3.9.4 box the operator drives the pipeline from the **WinPython
+interpreter (REPL)** by `exec()`-ing the thin **wrapper scripts** at the
+project root. The wrappers are **committed templates** — the repo mirrors
+the target layout; only the target paths in each wrapper's Config block
+are tuned per machine, and the release zip deliberately excludes the
+wrappers so updates never overwrite that tuning. Full detail is in
+README.md — "Running on the air-gapped target machine" and "Project
+layout on the target".
 
 **Cold start, every session.** The REPL opens in the interpreter install dir,
 so chdir into the project **once, by hand** (raw string for the backslashes),
@@ -58,47 +62,52 @@ import os
 os.chdir(r"C:\dev\aaac")     # project ROOT on the target (illustrative path)
 os.getcwd()                   # confirm it took
 
-exec(open(r"extract.py").read())     # Stage 3: source\  -> reports\extract.csv
+exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): analysis sheets -> PNGs
+exec(open(r"extract.py").read())     # Stage 3: source\  -> extract.csv at ROOT
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
 exec(open(r"write.py").read())       # Stage 5: signed-off CSV -> dita\
 exec(open(r"publish.py").read())     # Stage 6: HTML preview  -> html\
 # introspect.py = Stage-2 diagnostic wrapper; reach for it when a deck misbehaves
 ```
 
-**Target layout** — the wrappers sit one level *above* the canonical scripts:
+**Target layout** — identical to the repo's own layout; the wrappers sit one
+level *above* the canonical scripts:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py   ← thin wrappers (set sys.argv, runpy the canonical script)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (set sys.argv, runpy the canonical script)
 ├── stock.wav            ← silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
-├── reports\             ← per-run output (extract.csv, logs)
+├── reports\             ← per-deck introspect reports, scratch output
 └── scripts\
     ├── pylib\           ← pip install --target python-pptx (WinPython sets ENABLE_USER_SITE = False)
+    ├── vendor\          ← publish assets (GramFrame bundle, theme.css), resolved beside publish_html.py
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
 
-- **chdir once, by hand** — the wrappers use relative paths and are deliberately
-  cwd-independent; don't bake the chdir into them.
+- **chdir once, by hand** — the wrappers never chdir; their relative
+  inputs/outputs (e.g. `extract.csv`) resolve against the cwd the operator
+  sets, so don't bake the chdir into them.
 - **Publish to a mapped drive, not a `\\server\share` UNC path** — DITA-OT chokes on UNC.
 - Target-specific paths/toggles (e.g. `--stub-wav stock.wav`) live **only** in the
   wrapper; the canonical scripts under `scripts\` are never edited per-target.
 
 ## Architecture
 
-The pipeline is a flat set of single-purpose scripts at the repo root, each one
-stage. Data flows strictly forward; the only branch point is a human.
+The pipeline is a flat set of single-purpose canonical scripts under
+`scripts/`, each one stage, fronted by the thin REPL wrappers at the repo
+root. Data flows strictly forward; the only branch point is a human.
 
-1. **`mock_pptx.py`** — synthetic instructor PPTX generator (test corpus).
-2. **`introspect_pptx.py`** — structural report for a real PPTX.
-3. **`extract_to_csv.py`** — walks a content tree, classifies each PPTX as
-   `main` or `progress-test-N`, parses linked `.glc` files, emits one CSV row
-   per resulting DITA topic.
+1. **`scripts/mock_pptx.py`** — synthetic instructor PPTX generator (test corpus).
+2. **`scripts/introspect_pptx.py`** — structural report for a real PPTX.
+3. **`scripts/extract_to_csv.py`** — walks a content tree, classifies each PPTX
+   as `main` or `progress-test-N`, parses linked `.glc` files, emits one CSV
+   row per resulting DITA topic.
 4. **(human)** — technical author triages the CSV in Excel.
-5. **`generate_dita.py`** — consumes the signed-off CSV, emits the DITA tree,
-   ditamaps, DITAVAL profiles, manifest, and skipped report.
-6. **`publish_html.py`** — renders DITA → HTML via DITA-OT (dev preview only;
-   Oxygen is the production publisher).
+5. **`scripts/generate_dita.py`** — consumes the signed-off CSV, emits the DITA
+   tree, ditamaps, DITAVAL profiles, manifest, and skipped report.
+6. **`scripts/publish_html.py`** — renders DITA → HTML via DITA-OT (dev preview
+   only; Oxygen is the production publisher).
 
 ### The core dispatch (read this before touching the generator)
 

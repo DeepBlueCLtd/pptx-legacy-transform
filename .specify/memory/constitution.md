@@ -1,7 +1,7 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0 (amendment; see "Amendment 1.1.0" below).
+Version change: 1.1.0 → 1.2.0 (amendment; see "Amendment 1.2.0" below).
 1.0.0 was the first concrete ratification, replacing the unmodified Spec Kit
 placeholder template (initial adoption, not an amendment).
 
@@ -41,6 +41,24 @@ Amendment 1.1.0 (2026-05-30):
     redefinition.
   - Consistency: CLAUDE.md "One runtime dependency" invariant and README's
     "only third-party runtime dependency" line updated to match.
+
+Amendment 1.2.0 (2026-06-11):
+  - Principle II — the "flat set … at the repo root" location guidance now
+    reads: canonical single-purpose scripts live under `scripts/` (one per
+    stage, data strictly forward, YAGNI unchanged), fronted by thin REPL
+    wrapper scripts at the repo root. The repository thereby mirrors the
+    delivered target layout already ratified by README ("Project layout on
+    the target") and built by the release packager; the wrappers become
+    version-controlled templates and are the only artifact carrying
+    target-specific paths.
+  - Bump rationale: MINOR. The principle's obligations — tiny
+    single-responsibility scripts, minimal surface, YAGNI — are unchanged;
+    only the descriptive file-location guidance is materially expanded to
+    name the wrapper tier. No previously compliant artifact becomes
+    non-compliant.
+  - Consistency: CLAUDE.md (Commands, Architecture, target layout), README
+    (folder structure, quickstart, target/release sections), HANDOVER.md
+    paths, and the packaging workflow updated to match.
 
 Deferred TODOs: none. Ratification date set to first concrete adoption
 (2026-05-29).
@@ -90,12 +108,17 @@ dependency tree is, in practice, undebuggable after handover.
 
 ### II. Single-Purpose Scripts, Minimal Surface
 
-The pipeline is a flat set of tiny, single-responsibility scripts at the repo
-root — one per stage — with data flowing strictly forward. New capability is
-preferred as the smallest change to an existing stage over new scripts,
-directories, frameworks, or abstraction layers. Apply YAGNI: build the simplest
-thing that satisfies the current spec, and reuse mechanisms already in the
-toolchain (e.g. DITA-OT's built-in DITAVAL filtering) before inventing new ones.
+The pipeline is a flat set of tiny, single-responsibility canonical scripts
+under `scripts/` — one per stage — with data flowing strictly forward, fronted
+by thin REPL wrapper scripts at the repo root that mirror the delivered target
+layout. The wrappers are the only per-target surface: each sets `sys.argv`
+(target paths and toggles live in its Config block alone) and `runpy`s its
+canonical script; canonical scripts never carry target-specific paths and are
+never edited per-target. New capability is preferred as the smallest change to
+an existing stage over new scripts, directories, frameworks, or abstraction
+layers. Apply YAGNI: build the simplest thing that satisfies the current spec,
+and reuse mechanisms already in the toolchain (e.g. DITA-OT's built-in DITAVAL
+filtering) before inventing new ones.
 
 Rationale: small scripts that one person can read end-to-end are the most
 debuggable artifact on an air-gapped network. Complexity that cannot be justified
@@ -201,4 +224,4 @@ deviation. Unjustified complexity is grounds for rejection.
 humans) provide day-to-day guidance and MUST remain consistent with this
 constitution.
 
-**Version**: 1.1.0 | **Ratified**: 2026-05-29 | **Last Amended**: 2026-05-30
+**Version**: 1.2.0 | **Ratified**: 2026-05-29 | **Last Amended**: 2026-06-11

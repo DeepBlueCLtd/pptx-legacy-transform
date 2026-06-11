@@ -65,6 +65,18 @@ class PackageReleaseTests(unittest.TestCase):
             )
             self.assertTrue(allowed, f"unexpected archive entry: {name}")
         self.assertNotIn("run_pipeline.bat", names)
+        # Dev-only mock tooling stays out of the deliverable.
+        self.assertNotIn("scripts/generate_mock_analysis_sheet.py", names)
+        # The root wrappers are committed templates, never shipped: an
+        # upgrade extracted over ROOT\ must not clobber the operator's
+        # tuned copies.
+        for wrapper in ("extract.py", "dedupe.py", "write.py",
+                        "publish.py", "introspect.py", "snapshot.py"):
+            self.assertNotIn(wrapper, names)
+        # vendor assets sit beside publish_html.py in the repo but are
+        # not part of the archive contract.
+        self.assertFalse(any(n.startswith("scripts/vendor/") for n in names),
+                         "vendor assets must not ship in the archive")
 
     def test_rebuild_is_byte_identical(self):
         first = self._build("first.zip")

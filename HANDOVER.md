@@ -9,10 +9,11 @@ pipeline scripts and their two Python dependencies.
 
 | Path | Why |
 |---|---|
-| `extract_to_csv.py`, `generate_dita.py`, `introspect_pptx.py`, `mock_pptx.py`, `publish_html.py` | The five pipeline scripts. |
+| `scripts/extract_to_csv.py`, `scripts/generate_dita.py`, `scripts/introspect_pptx.py`, `scripts/mock_pptx.py`, `scripts/publish_html.py` | The five pipeline scripts. |
+| `extract.py`, `dedupe.py`, `write.py`, `publish.py`, `introspect.py`, `snapshot.py` | Thin REPL wrappers at the root — tune the Config block per target (see README §"Running on the air-gapped target machine"). |
 | `run_pipeline.bat` | Windows orchestrator (extract → review → generate). |
-| `vendor/gramframe/gramframe.bundle.js` | Spectrogram-viewer plugin injected by `publish_html.py`. |
-| `vendor/themes/operator-console-v2/theme.css` | Dark theme injected by `publish_html.py`. |
+| `scripts/vendor/gramframe/gramframe.bundle.js` | Spectrogram-viewer plugin injected by `publish_html.py`. |
+| `scripts/vendor/themes/operator-console-v2/theme.css` | Dark theme injected by `publish_html.py`. |
 | `tests/` (with `tests/fixtures/`) | Standard-library `unittest` suite + 296 KB of self-contained fixtures. |
 | `wheels/` | Offline-installable wheels for `python-pptx` and `lxml` (cp39 / win_amd64). |
 | `README.md` | Full reference: CSV schema, troubleshooting, publish layout. |
@@ -80,13 +81,13 @@ Two manual steps (the .bat handles steps 1+2, you handle step 3).
      `progress-test-*.ditamap`) and use the publish dialog. For the
      student edition, select `dita/trainee.ditaval` as the DITAVAL
      filter. The Oxygen template must link `theme.css` and
-     `gramframe.bundle.js` from the `vendor/` paths above — otherwise
-     the published pages will render unstyled.
+     `gramframe.bundle.js` from the `scripts/vendor/` paths above —
+     otherwise the published pages will render unstyled.
 
    - **From the command line** (faster for full-corpus republish):
 
      ```cmd
-     python publish_html.py --dita-ot C:\path\to\dita-ot-4.2.4
+     python scripts\publish_html.py --dita-ot C:\path\to\dita-ot-4.2.4
      ```
 
      This produces both editions under `html/instructor/` and
@@ -104,8 +105,8 @@ These are all regenerated on the next pipeline run:
 - `.dita-build/` (publisher staging; auto-cleaned but harmless to nuke)
 - `*.log` at the root (`extract.log`, `generate.log`, `introspect.log`)
 
-The bundled scripts, `tests/`, `vendor/`, and `wheels/` are never
-written to by the pipeline.
+The bundled `scripts/` tree (including `scripts/vendor/`), `tests/`,
+and `wheels/` are never written to by the pipeline.
 
 ## If something breaks
 

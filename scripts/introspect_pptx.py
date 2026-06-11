@@ -19,7 +19,7 @@ Sections:
 
 Run as:
 
-    python introspect_pptx.py --input PATH [--out PATH] [--slides N,M,...] [--verbose]
+    python scripts/introspect_pptx.py --input PATH [--out PATH] [--slides N,M,...] [--verbose]
 """
 
 from __future__ import annotations

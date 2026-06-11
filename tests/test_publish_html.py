@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import textwrap
 import unittest
 import xml.etree.ElementTree as ET
@@ -17,8 +18,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
 
-import publish_html
-from publish_html import (
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import publish_html  # noqa: E402
+from publish_html import (  # noqa: E402
     EDITIONS,
     Edition,
     GRAMFRAME_BUNDLE_NAME,
@@ -35,7 +40,6 @@ from publish_html import (
     write_shared_landing,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
 DITA_ROOT = REPO_ROOT / "dita"
 HTML_ROOT = REPO_ROOT / "html"
 
@@ -1144,7 +1148,7 @@ class PublishedImagePresenceTests(unittest.TestCase):
                     cls._stale_reason = (
                         f"html/ tree is stale (sample: {html_path.relative_to(REPO_ROOT)} "
                         f"has <img src={src!r}>). Regenerate with "
-                        f"`python publish_html.py --dita-ot <path>` and re-run."
+                        f"`python scripts/publish_html.py --dita-ot <path>` and re-run."
                     )
                     return
 
