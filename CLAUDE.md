@@ -163,6 +163,29 @@ once per edition, producing `html/instructor/`, `html/student-own/`, and
 `html/student-other/` plus a shared `html/index.html`. Audience consistency
 across a gram's rows is enforced fail-fast in the generator.
 
+### Static common pages and the Grams nav folder (feature 010)
+
+Oxygen's webhelp renders every **direct child of a ditamap** as both a
+header-bar tab and a welcome-page tile, so a flat list of grams floods the nav.
+The generator therefore reshapes every ditamap:
+
+- **Grams are demoted** under a single `<topichead>` (navtitle `Grams`) — one nav
+  entry instead of N. For `main` the per-week chapter topicheads nest inside
+  Grams; for the progress tests the gram topicrefs sit flat under it.
+- **Common static pages** (`welcome.dita`, `security.dita`, then any further
+  top-level `*.dita` alphabetically) are prepended as the first topicrefs, so
+  every publication opens **Welcome · Security · Grams**.
+
+The pages live in `static/` at the repo root (`--static-root`, default
+`static/`): top-level `*.dita` plus their image subfolders. The generator
+**copies the whole tree into each publication folder** and references it as
+`<publication>/<name>` — the same prefix `publish_html.py`'s stager strips, so
+after staging the pages resolve as bare local filenames beside the relocated
+ditamap (matching the self-contained-publication, no-`../` invariant). A missing
+`static/` degrades gracefully (warn, no pages) per the dangling-asset rule.
+Per-publication duplication is intentional: Oxygen publishes each ditamap
+independently, so each must be self-contained.
+
 ## Invariants to preserve
 
 - **Determinism / idempotency.** Re-running the same CSV produces byte-identical
