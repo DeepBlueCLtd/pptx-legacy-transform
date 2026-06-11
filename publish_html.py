@@ -39,6 +39,17 @@ MAP_DOCTYPE = (
 LOGGER = logging.getLogger("publish_html")
 
 
+def _write_text(path: Path, text: str) -> None:
+    """Write ``text`` with LF endings, working on Python 3.9.
+
+    ``Path.write_text`` only grew a ``newline`` parameter in 3.10; the
+    air-gapped target runs WinPython 3.9, so force LF via ``open`` to
+    preserve the byte-identical-output contract.
+    """
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
 # -----------------------------------------------------------------------------
 # Editions — spec 003
 # -----------------------------------------------------------------------------
@@ -87,6 +98,20 @@ EDITIONS: tuple[Edition, ...] = (
 )
 
 
+def _with_doctype(body: str, doctype: str) -> str:
+    """Return ``body`` prefixed with ``doctype`` unless it already carries one.
+
+    ``generate_dita.py`` now emits the OASIS XML declaration + DOCTYPE into
+    the source tree (so Oxygen recognises topics and maps). DITA-OT needs the
+    same preamble, but prepending a second copy would yield two ``<?xml?>``
+    lines and invalid XML — so inject only when the source lacks it. This
+    keeps staging correct for both current and older DOCTYPE-less trees.
+    """
+    if body.lstrip().startswith("<?xml"):
+        return body
+    return doctype + body
+
+
 def stage(src: Path, dst: Path) -> None:
     """Copy ``src`` to ``dst``, add DOCTYPEs, and tuck each ditamap inside
     its publication folder with hrefs rewritten relative to it.
@@ -113,7 +138,7 @@ def stage(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
     for path in dst.rglob("*.dita"):
         body = path.read_text(encoding="utf-8")
-        path.write_text(TOPIC_DOCTYPE + body, encoding="utf-8", newline="\n")
+        _write_text(path, _with_doctype(body, TOPIC_DOCTYPE))
     for path in sorted(dst.glob("*.ditamap")):
         stem = path.stem
         body = path.read_text(encoding="utf-8")
@@ -121,7 +146,7 @@ def stage(src: Path, dst: Path) -> None:
         new_dir = dst / stem
         new_dir.mkdir(parents=True, exist_ok=True)
         new_path = new_dir / path.name
-        new_path.write_text(MAP_DOCTYPE + body, encoding="utf-8", newline="\n")
+        _write_text(new_path, _with_doctype(body, MAP_DOCTYPE))
         path.unlink()
 
 
@@ -306,7 +331,7 @@ def prettify_tree(root: Path) -> int:
     count = 0
     for path in root.rglob("*.html"):
         original = path.read_text(encoding="utf-8")
-        path.write_text(prettify_html(original), encoding="utf-8", newline="\n")
+        _write_text(path, prettify_html(original))
         count += 1
     return count
 
@@ -388,7 +413,7 @@ def inject_gramframe_plugin(
             re.escape(_GRAMFRAME_HEAD_CLOSE), tag, body, count=1,
         )
         if replaced:
-            path.write_text(new_body, encoding="utf-8", newline="\n")
+            _write_text(path, new_body)
             count += 1
     return count
 
@@ -526,7 +551,7 @@ def inject_operator_console_theme(
             changed = True
 
         if changed:
-            path.write_text(body, encoding="utf-8", newline="\n")
+            _write_text(path, body)
             count += 1
     return count
 
@@ -582,7 +607,7 @@ def scrub_nondeterministic_metadata(root: Path) -> int:
         original = path.read_text(encoding="utf-8")
         scrubbed = _DITAOT_DATE_META_RE.sub("", original)
         if scrubbed != original:
-            path.write_text(scrubbed, encoding="utf-8", newline="\n")
+            _write_text(path, scrubbed)
         count += 1
     return count
 
@@ -681,7 +706,8 @@ def write_edition_index(
     edition_name = edition.name.title()
     out_subdir.mkdir(parents=True, exist_ok=True)
     index_path = out_subdir / "index.html"
-    index_path.write_text(
+    _write_text(
+        index_path,
         '<!DOCTYPE html>\n'
         '<html lang="en">\n'
         '  <head>\n'
@@ -698,8 +724,6 @@ def write_edition_index(
         '    </main>\n'
         '  </body>\n'
         '</html>\n',
-        encoding="utf-8",
-        newline="\n",
     )
     return index_path
 
@@ -727,7 +751,8 @@ def write_shared_landing(
     )
     out_root.mkdir(parents=True, exist_ok=True)
     index_path = out_root / "index.html"
-    index_path.write_text(
+    _write_text(
+        index_path,
         '<!DOCTYPE html>\n'
         '<html lang="en">\n'
         '  <head>\n'
@@ -744,10 +769,24 @@ def write_shared_landing(
         '    </main>\n'
         '  </body>\n'
         '</html>\n',
-        encoding="utf-8",
-        newline="\n",
     )
     return index_path
+
+
+def _dita_launcher(dita_ot: Path) -> Path:
+    """Return the platform-appropriate DITA-OT launcher under ``dita_ot/bin``.
+
+    DITA-OT ships two launchers side by side: an extensionless POSIX
+    shell script (``bin/dita``) and a Windows batch wrapper
+    (``bin/dita.bat``). Handing the shell script to ``CreateProcess`` on
+    Windows fails with ``OSError: [WinError 193] %1 is not a valid Win32
+    application`` because it is not a PE binary — the ``.bat`` wrapper
+    must be used there instead. Selecting on ``os.name`` keeps one code
+    path working on both the POSIX dev host and the air-gapped WinPython
+    target.
+    """
+    name = "dita.bat" if os.name == "nt" else "dita"
+    return dita_ot / "bin" / name
 
 
 def _dita_ot_command(
@@ -762,7 +801,7 @@ def _dita_ot_command(
     command shape without invoking the Java toolchain.
     """
     argv = [
-        str(dita_ot / "bin" / "dita"),
+        str(_dita_launcher(dita_ot)),
         f"--input={ditamap}",
         "--format=html5",
         f"--output={target}",
@@ -834,11 +873,53 @@ def publish(
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dita", default=Path("dita"), type=Path)
-    parser.add_argument("--out", default=Path("html"), type=Path)
-    parser.add_argument("--dita-ot", required=True, type=Path)
-    parser.add_argument("--staged", default=Path(".dita-build"), type=Path)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=(
+            "Disk usage: the staging copy (--staged) and each HTML edition "
+            "under --out both hold a full copy of every referenced image. "
+            "For the full corpus, point --staged and --out at a roomy volume "
+            "(e.g. the provided folder-share) so they do not fill the local "
+            "disk."
+        ),
+    )
+    parser.add_argument(
+        "--dita", default=Path("dita"), type=Path,
+        help="Source DITA tree to publish (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--out", default=Path("html"), type=Path,
+        help=(
+            "Directory for the rendered HTML editions (default: %(default)s). "
+            "Holds a full copy of every referenced image per edition "
+            "(instructor + student); point it at a roomy volume such as the "
+            "folder-share for full-corpus runs."
+        ),
+    )
+    parser.add_argument(
+        "--dita-ot", required=True, type=Path,
+        help="Path to a DITA-OT installation (must contain bin/dita).",
+    )
+    parser.add_argument(
+        "--staged", default=Path(".dita-build"), type=Path,
+        help=(
+            "Throwaway staging directory for the DOCTYPE-injected build copy "
+            "of the DITA tree (default: %(default)s, created in the current "
+            "directory). It briefly holds a full copy of every image, so for "
+            "the full corpus point it at a roomy volume such as the "
+            "folder-share to avoid filling the local disk. Removed after each "
+            "run unless --keep-staged is given."
+        ),
+    )
+    parser.add_argument(
+        "--keep-staged",
+        action="store_true",
+        help=(
+            "Do not delete the staged build tree (--staged) after publishing. "
+            "Use this to inspect what DITA-OT was actually handed when a build "
+            "fails (e.g. confirm the .ditamap exists and check the exact path)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.dita.is_dir():
@@ -852,7 +933,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    if not (args.dita_ot / "bin" / "dita").exists():
+    if not _dita_launcher(args.dita_ot).exists():
         print(f"DITA-OT not found at {args.dita_ot}", file=sys.stderr)
         return 1
 
@@ -892,9 +973,22 @@ def main(argv: list[str] | None = None) -> int:
             f"and linked it from {themed} HTML file(s)"
         )
 
-    shutil.rmtree(args.staged, ignore_errors=True)
+    if args.keep_staged:
+        print(
+            f"[stage] kept staged tree at {args.staged} (--keep-staged); "
+            "delete it manually when done inspecting."
+        )
+    else:
+        shutil.rmtree(args.staged, ignore_errors=True)
     return rc
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    rc = main()
+    # Preserve CLI exit codes when invoked as a script, but stay silent
+    # when invoked from an interactive REPL via runpy.run_path —
+    # ``sys.exit`` would otherwise kill the interpreter and break the
+    # up-arrow iteration loop. ``sys.ps1`` is only defined in
+    # interactive sessions.
+    if rc and not hasattr(sys, "ps1"):
+        sys.exit(rc)

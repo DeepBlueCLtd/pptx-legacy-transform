@@ -4,8 +4,8 @@ A defensive five-stage pipeline that migrates legacy AAAC PowerPoint
 instructor presentations into DITA XML publications matching the
 existing pub-9/pub-10 structure. The pipeline is built to remain
 debuggable on an air-gapped network without internet or AI
-assistance: tiny scripts, one third-party dependency, dual-output
-logging, and a `unittest`-based test suite.
+assistance: tiny scripts, a minimal and individually justified set of
+dependencies, dual-output logging, and a `unittest`-based test suite.
 
 ## Project context
 
@@ -15,7 +15,7 @@ toolchain (Oxygen) renders in both an instructor profile and a
 trainee profile. Each gram has a title with vessel name, a hyperlinked
 analysis sheet, and one or more `Lofar`-labelled hyperlinks that
 **always** point to a `.glc` configuration file. The `.glc` in turn
-references a sibling asset: usually a `.png` / `.jpg` (~82%,
+references a sibling asset: usually a `.png` / `.jpg` / `.gif` (~82%,
 pre-rendered spectrogram), occasionally a `.wav` (~18%, raw audio
 rendered live by the on-PC GLC viewer). The generator dispatches on
 the inner asset extension: image assets are embedded inline, audio
@@ -38,10 +38,13 @@ for the implementation plan.
 
 ### Air-gapped install
 
-`python-pptx` and `lxml` are the only third-party runtime
-dependencies. To install them on a host with no internet access,
-build a wheelhouse on a development VM that does have internet
-access, then copy it across.
+`python-pptx` is the runtime baseline dependency — kept deliberately
+minimal, though not capped at one (see the constitution, Principle I:
+each dependency is weighed against air-gap transfer effort and fragility,
+and prep-time/optional tools like the LibreOffice renderer and the
+optional Pillow trim live off the runtime path). To install on a host
+with no internet access, build a wheelhouse on a development VM that does
+have internet access, then copy it across.
 
 On the development VM (pinning to the target's interpreter and OS so
 the wheelhouse is self-contained):
@@ -61,16 +64,61 @@ pip install --no-index --find-links wheels/ python-pptx lxml
 `requirements.txt` pins the version with `~=` compatibility so wheelhouse
 rebuilds remain predictable.
 
+### Renderer prerequisites (analysis sheets)
+
+Feature 007 adds a **prep-time** stage, `snapshot_analysis_docs.py`,
+that renders each Word analysis sheet (`*analysis*.doc` / `.docx`) to a
+same-stem `.png` sibling so the generator embeds the analysis table
+**inline** instead of leaving a click-to-open link that launches MS Word
+mid-lesson. Like DITA-OT, the renderer is an **external tool, not bundled
+and not a Python runtime dependency**, and is only needed when a Word
+analysis sheet has no rendered `.png` yet.
+
+- **LibreOffice headless (`soffice`)** is the default renderer. On a
+  development VM with internet, install LibreOffice normally; for the
+  air-gapped PC, download the LibreOffice installer on a connected host
+  and transfer it across the air-gap (the same posture as DITA-OT). The
+  snapshotter invokes `soffice --headless --convert-to png …` once per
+  un-rendered sheet.
+- Override the command with `--renderer-cmd` to point at a specific
+  `soffice` path or an equivalent converter (e.g. MS Word COM automation
+  on a Windows site). Quote a path that contains spaces, e.g.
+  `--renderer-cmd "C:\Program Files\LibreOffice\program\soffice.exe"`.
+- **Pillow is an *optional* prep-time wheel** used only to trim page
+  margins and normalise DPI on the rendered PNG (FR-017). It is imported
+  defensively: when Pillow is absent the snapshotter keeps the full-page
+  render and logs an INFO line — it never fails and is never required by
+  the test suite. To use it, add it to the prep-time wheelhouse
+  (`pip download Pillow -d wheels/`); it is **not** installed on the
+  pipeline runtime path.
+
+The rendered PNG (and, for a PNG-only sheet, a reverse-wrapped `.docx`,
+FR-018) is a **committed source asset**: the snapshotter is idempotent
+(it skips any sheet that already has its sibling `.png`), so the renderer
+never runs inside the re-runnable generate/publish loop and re-runs are
+byte-identical. The snapshotter renders the **first page** and **detects
+multi-page sources** — it still produces the page-1 image but logs a
+WARNING (and flags the row) rather than silently truncating; the corpus
+is single-landscape-page, so the warning is a safety net for the
+exception. A render failure or an unavailable renderer is a WARNING that
+defers (the run continues, exit 0) and surfaces in `snapshot.log`, the
+end-of-run summary, and the analysis row's `warnings` column — the image
+then dangles as an intended local `<image>` href, resolved by dropping
+the PNG in and re-running.
+
 ## Folder structure
 
 | Path | Role |
 |---|---|
+| `snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
 | `generate_dita.py` | Consume the signed-off CSV and emit DITA topics, copied assets, and ditamaps (Story 1, MVP). |
+| `deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
+| `rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
-| `run_pipeline.bat` | Windows orchestrator: extract → manual review → generate (Story 6). |
+| `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |
@@ -97,6 +145,101 @@ python generate_dita.py --csv extracted.csv \
 A more detailed walkthrough lives in
 [`specs/001-pptx-dita-migration/quickstart.md`](specs/001-pptx-dita-migration/quickstart.md).
 
+## Running on the air-gapped target machine
+
+The delivered pipeline runs on an **air-gapped Windows box with WinPython
+3.9.4**. The Start-menu **WinPython interpreter** shortcut opens a Python
+REPL, and you drive the pipeline by `exec()`-ing thin **wrapper scripts**
+that live at the project root. `run_pipeline.bat` is *not* used here — the
+REPL plus wrappers are the interface.
+
+### Cold start — every session
+
+The WinPython shortcut opens the REPL with its working directory set to the
+**interpreter install dir**, not the project. So each session starts by
+changing into the project, then running the stage wrappers in order:
+
+```python
+import os
+os.chdir(r"C:\dev\aaac")         # the project root on the target — raw string!
+os.getcwd()                       # confirm it took
+
+exec(open(r"extract.py").read())     # Stage 3: walk source\ -> reports\extract.csv
+#   -> open reports\extract.csv in Excel, resolve warnings, save as UTF-8 CSV
+exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
+exec(open(r"write.py").read())       # Stage 5: generate the DITA tree -> dita\
+exec(open(r"publish.py").read())     # Stage 6: HTML preview -> html\ (Oxygen is the production publisher)
+```
+
+`introspect.py` is the diagnostic wrapper — a structural report for a single
+deck or the whole `source\` tree; reach for it (Stage 2) when a deck
+misbehaves.
+
+- Use a **raw string** (`r"..."`) or forward slashes in `os.chdir` so the
+  backslashes aren't read as escape sequences.
+- Do the `os.chdir` **once, by hand** — the wrappers use relative paths and
+  are deliberately cwd-independent, so don't bake the chdir into them.
+- Publishing must target a **mapped drive, not a `\\server\share` UNC path** —
+  see [Publishing to HTML](#publishing-to-html-optional).
+
+### After an edit — REPL ergonomics
+
+The wrappers are built so a VS Code edit lands on the next ↑+Enter without
+restarting the interpreter:
+
+- They re-read the canonical script from disk each call
+  (`runpy.run_path(path, run_name="__main__")`) — no `importlib.reload` dance.
+- They bust cross-script import caches (`sys.modules.pop("extract_to_csv", …)`)
+  so an edit to one canonical module is seen by the others.
+- Canonical scripts exit **REPL-safely**: `if rc and not hasattr(sys, "ps1"):
+  sys.exit(rc)` raises `SystemExit` only when run as a real script, never
+  killing the REPL.
+- To pass a new flag to a canonical script, append to `sys.argv` **in the
+  wrapper** — the canonical scripts under `scripts\` are never edited
+  per-target; the wrapper is the only place that knows target-specific paths
+  and toggles (e.g. `--stub-wav stock.wav`).
+
+### Project layout on the target
+
+```text
+ROOT\  (e.g. C:\dev\aaac)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py   ← thin wrappers
+├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
+├── source\              ← the real PPTX corpus
+├── reports\             ← per-run output (extract.csv, logs)
+└── scripts\
+    ├── pylib\           ← pip install --target lives here (see setup below)
+    └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
+```
+
+Each wrapper prepends `scripts\pylib` (for `python-pptx`) and `scripts\` (so
+the canonical modules can import each other) to `sys.path`, busts the module
+caches, sets `sys.argv`, then `runpy.run_path`s the canonical script.
+
+### First-time setup — WinPython gotchas
+
+WinPython sits under `Program Files\` (read-only to non-admins) on an
+AppLocker/WDAC-restricted box. Three traps surface before any pipeline code
+runs:
+
+- **User-site install fails silently.** `pip install python-pptx` lands in
+  `%APPDATA%\Python\…`, but WinPython ships `ENABLE_USER_SITE = False`, so
+  `import pptx` then raises `ModuleNotFoundError`. **Install with
+  `pip install --target scripts\pylib python-pptx`** and let the wrappers put
+  that dir on `sys.path`.
+- **Group-policy DLL block.** A user-folder `lxml`/`Pillow` fails with
+  `ImportError: DLL load failed … blocked by group policy` — AppLocker won't
+  load `.pyd` binaries from user-writable folders. **Delete the user-folder
+  copy** and let WinPython's own pre-trusted build take over
+  (`print(etree.__file__)` should point under `Program Files\WinPython\`).
+- **Pillow/NumPy mismatch.** A newer Pillow wheel hits
+  `numpy.typing has no attribute 'NDArray'` against WinPython's older NumPy —
+  same fix: use WinPython's bundled Pillow.
+
+**Rule:** the air-gap wheelhouse should ship **only `python-pptx`**. Source
+every binary dependency (`lxml`, `Pillow`, …) from WinPython's pre-trusted
+installs, not the user-folder install.
+
 ## Stage-by-stage guide
 
 1. **Stage 1 — Mock generation** (optional, for testing).
@@ -116,6 +259,14 @@ A more detailed walkthrough lives in
    The shape-grouping function (`extract_grams_from_slide`) is currently
    a documented stub; the rest of the infrastructure runs end-to-end.
 
+   For fast debug iteration on a single chapter, pass
+   `--only "<Chapter Folder Name>"`. The walk is scoped to that subdir
+   but the CSV's path schema stays corpus-root-relative, so
+   `deduplicate_csv.py` and `generate_dita.py` can keep `--image-root`
+   pointing at the corpus root without re-editing. **Don't be tempted
+   to narrow `--input-root` instead** — that changes the relpath schema
+   and breaks the downstream tools, one folder segment short.
+
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,
@@ -131,6 +282,11 @@ A more detailed walkthrough lives in
    per gram** at `dita/<publication>/<chapter>/gram-NN/gram_NN.dita`
    (the N+1 CSV rows for the gram are merged — Analysis Sheet
    section first, then one section per Lofar in `sequence` order).
+   For `main`, the chapter is the **week** (feature 008): a bare-integer
+   `target_chapter` of `1`…`4` becomes `dita/main/week-N/`, headed
+   `Week N`, and the per-gram `NN` is the effective gram number
+   (`target_gram_id` when the dedupe step renumbered a collision, else
+   `gram_id`).
    Every referenced asset (PNG, WAV, analysis sheet) is copied beside
    the topic with a stable per-section name (`analysis.png`,
    `lofar-1.png`, `lofar-2-i.png`, ...) so each `href` in the topic
@@ -168,9 +324,18 @@ Reviewers should not edit the identity columns
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
 | 11 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
 | 12 | `freq_end` | yes | From GLC `bandwidth`; numeric string. |
-| 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
+| 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg`/`.gif` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
 | 14 | `wav_treatment` | yes | Deprecated; left blank. Retained only for CSV round-trip compatibility. |
 | 15 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
+
+Optional, additive columns are appended at the right edge and read with an
+empty default, so a CSV without them behaves exactly as before:
+
+| Column | Written by | Notes |
+|---|---|---|
+| `target_chapter` | extractor / author | **Feature 008/009:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; for a **no-week** deck (e.g. Pub10, Legacy Pub 10) extraction now **even-slices** the deck's grams across the four weeks (`floor(G/4)` per week, remainder to the earliest weeks, in source order) instead of leaving it blank (feature 009). Remains author-editable. The generator expands a bare integer to heading `Week N` and folder `main/week-N/` (`main` carries no per-document tier). Empty falls back to the source `chapter`. |
+| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) keeps numbering unique *within* each week — native numbers are preserved and only genuine collisions are bumped to one past the week's maximum (the feature-008 behaviour; the same number may recur in different weeks); **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-week rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong
 
@@ -193,6 +358,70 @@ Mitigation: open the CSV with `Data → From Text/CSV → 65001: Unicode (UTF-8)
 and save back with the same encoding; do not edit identity columns
 (`publication`, `chapter`, `gram_id`, `topic_type`, `sequence`,
 `topic_filename`).
+
+## Corpus drift the extractor handles
+
+The legacy decks mix many authoring styles; `extract_to_csv.py` normalises
+the following real patterns, each a live failure before it was handled.
+(`extract_grams_from_slide` is the single grouping function both the
+extractor and `introspect_pptx.py` share, so a fix here flows to both.)
+
+- **Whitespace-padded titles** ("Battleship&nbsp;&nbsp;&nbsp;" forcing an
+  in-shape line break) — whitespace runs collapse to a single space before
+  splitting.
+- **Vestigial overlays** — a hidden `Group 197` shape stack carries dead
+  shape-level links to `file:///…` paths; header detection rejects any
+  `file:///` shape link.
+- **`.doc` vs `.docx` analysis sheets** — only `.doc/.docx/.png/.jpg/.jpeg`
+  are accepted as shape-level header links; a `.glc` at the shape level is
+  authoring residue and is skipped.
+- **Folder-name grouping, not screen position** — a header pairs with its
+  `.glc` candidates by **shared gram folder** in the URL
+  (`…/Gram001/… ↔ …/Gram001/…`), URL-decoded and lowercased so `Gram%20001`
+  and `Gram 001` collapse to one key.
+- **Multi-shape-type clicks** — hyperlinks are read from every descendant
+  `p:cNvPr/a:hlinkClick`, covering autoshape, picture, connector and
+  graphic-frame wrappers uniformly (picture-shape clicks were previously
+  invisible).
+- **SmartArt-embedded links** — a gram authored as a SmartArt diagram keeps
+  its hyperlinks under `ppt/diagrams/…_rels`; `_slide_diagram_hyperlinks`
+  walks those parts (and diagram-to-diagram refs) and threads node text back
+  into each `(text, href)`.
+- **Split-run labels** — a label split across runs (`"Lofar"` + `" 2"`) is
+  rejoined: a single-link paragraph returns the whole paragraph's text.
+- **Duplicate integer-only links** — a second link to the same `.glc`
+  labelled `"1"`/`"2"` is de-duped per href, keeping the longest label.
+- **Phantom / URL-encoded paths** — when a `content_root` is supplied each
+  paired `.glc` is checked on disk (missing → dropped with a WARNING), and
+  hrefs are `urllib.parse.unquote`d before the lookup so `%20` matches a real
+  space.
+- **Trailing-letter folder suffix** — a `.glc` in `Gram_11a/` whose header is
+  in `Gram_11/` is matched by retrying with the trailing `a` stripped.
+- **Office lock files** — `~$Name.pptx` lock files are filtered from the walk.
+- **Mixed student/instructor decks** — grams that resolve no `.glc` links are
+  hidden from the per-gram view (with the count surfaced); the header-only
+  rows are still emitted for downstream visibility.
+- **Final-assessment routing** — a deck matching `--final-pattern` (default
+  `final assessment`) routes to its own `final-assessment-N` publication
+  instead of falling through to `main`.
+
+### Design lessons worth keeping
+
+- **PPTX is just a zip.** When the high-level API misses a link (it will, in
+  legacy decks), drop to `zipfile` + `xml.etree.ElementTree`. A zip-grep
+  diagnostic is the difference between guessing and knowing where a
+  visible-but-unparsed hyperlink lives (`ppt/diagrams/_rels`,
+  `ppt/embeddings`, …).
+- **Surveys observe; pipelines transform.** `introspect_pptx.py` preserves
+  raw structure so drift stays visible; extraction normalises (whitespace,
+  vestigial overlays, duplicate links) because the CSV is a clean contract
+  for downstream stages.
+- **Filesystem existence is a good heuristic.** A `.glc` link to a file that
+  isn't on disk is almost always authoring residue, not content — filtering
+  on existence removes a surprising amount of drift cleanly.
+- **Match observed quirks, don't legislate cleaner authoring.** The
+  trailing-`a` fallback, integer-label dedup and split-run recovery are small
+  heuristics that fit real patterns rather than demanding re-authoring.
 
 ## Running tests
 
@@ -261,7 +490,7 @@ canonical air-gapped test surface.
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | `GLC missing bottom_crop` / `bandwidth` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `freq_end` directly or accept the empty defaults. |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
-| Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
+| Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 
 ## Publishing to HTML (optional)
 
@@ -295,6 +524,85 @@ under `.dita-build/`, injects the DOCTYPE declarations DITA-OT needs
 validation), and writes HTML5 under `html/<edition>/<ditamap-stem>/`
 per ditamap per edition. The staging directory is cleaned up after
 each run.
+
+#### Staging and output on a roomy disk (full-corpus runs)
+
+The staging copy under `.dita-build/` briefly holds a **full copy of
+every referenced image** — DITA-OT resolves the bare-filename image
+hrefs relative to each topic, so the assets must sit beside the staged
+topics. The `html/` output then holds another copy per edition
+(instructor **and** student). For the full corpus (~1,000 grams) these
+copies can overwhelm a small local disk.
+
+Both locations are configurable. Point `--staged` and `--out` at a
+roomy volume such as the provided folder-share:
+
+```bash
+python publish_html.py --dita-ot /path/to/dita-ot-4.2.4 \
+    --staged /mnt/share/dita-build --out /mnt/share/html
+# Windows: python publish_html.py --dita-ot C:\dita-ot-4.2.4 ^
+#              --staged D:\share\dita-build --out D:\share\html
+```
+
+`--staged` is a throwaway, deleted after each run (pass `--keep-staged`
+to leave it in place when debugging a failed build — see below); `--out`
+holds the deliverable HTML editions. Both default to the current
+directory (`.dita-build/` and `html/`) when the flags are omitted.
+
+#### Map a drive — DITA-OT cannot read `\\server\share` (UNC) paths
+
+The "roomy volume" above must be reached through a **mapped drive
+letter**, not a raw UNC path. DITA-OT — both the `publish_html.py`
+preview and the Oxygen production transform — fails to resolve
+`\\server\share\…` inputs: it builds a malformed `file:/server/share/…`
+URI (dropping the `//server` authority) and aborts with
+
+```text
+[DOTX008E] The resource 'file:/10.159.0.118/Share/…/x.ditamap' cannot
+be loaded. … Unable to set input file to job configuration
+```
+
+even though the file is present and readable. (The give-away is the
+single slash after `file:` — a valid UNC URI is `file://server/share/…`.)
+
+Map the share to a drive letter first, in the **same, non-elevated**
+session you publish from:
+
+```bat
+net use Z: \\10.159.0.118\Share    REM /persistent:yes to keep it across reboots
+```
+
+Then use `Z:\…` paths everywhere — never `\\server\share\…`:
+
+- **`publish_html.py`** — pass drive-letter paths to every directory
+  flag: `--dita Z:\Out --staged Z:\dita-build --out Z:\html --dita-ot
+  Z:\dita-ot-4.4`.
+- **Oxygen (production publisher)** — open the map from `Z:\…`, then in
+  the transformation scenario's **Output** tab set the **base**,
+  **temporary**, and **output** directories to absolute drive-letter
+  paths (e.g. `Z:\dita-temp`, `Z:\html\…`). Duplicate the stock
+  scenario first — the built-ins are read-only.
+
+> **Privilege gotcha:** a drive mapped in an Administrator shell is
+> invisible to a non-Administrator publisher (and vice-versa). Map the
+> drive and launch the publisher — Python or Oxygen — at the same
+> privilege level, or the drive letter won't exist for the process and
+> you will hit the same "cannot be loaded" error.
+
+#### Debugging a failed build with `--keep-staged`
+
+`publish_html.py` deletes the staged build tree (`--staged`) at the end
+of every run, which erases the evidence exactly when a DITA-OT build
+fails. Pass `--keep-staged` to leave it in place so you can inspect
+what DITA-OT was actually handed — confirm the relocated
+`<stem>/<stem>.ditamap` exists and check its exact path:
+
+```bat
+python publish_html.py --dita-ot Z:\dita-ot-4.4 --staged Z:\dita-build --keep-staged
+```
+
+The tree is overwritten at the start of the next run, so a kept copy
+never goes stale; delete it by hand once you are done inspecting.
 
 ### Output layout (spec 003)
 

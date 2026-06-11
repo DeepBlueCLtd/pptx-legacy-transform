@@ -53,6 +53,21 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(chapter2, "Nordic Fishing Vessels")
         self.assertEqual(slug2, "nordic-fishing-vessels")
 
+    def test_week_chapter_number_parses_week_token(self) -> None:
+        """Feature 008: a "Week N" deck title yields the bare-integer week."""
+        self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 1 Grams"), "1")
+        self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 4 Grams_Updated"), "4")
+        self.assertEqual(extract_to_csv.week_chapter_number("Week 03"), "3")  # leading zero stripped
+        self.assertEqual(extract_to_csv.week_chapter_number("Week2"), "2")  # no space
+        self.assertEqual(extract_to_csv.week_chapter_number("WEEK 2 grams"), "2")  # case-insensitive
+
+    def test_week_chapter_number_blank_for_non_week_titles(self) -> None:
+        """A deck with no week token (Pub10) leaves target_chapter for the analyst."""
+        self.assertEqual(extract_to_csv.week_chapter_number("Instructor Pub10_Ed22B_Updated"), "")
+        self.assertEqual(extract_to_csv.week_chapter_number("Nordic Fishing Vessels"), "")
+        self.assertEqual(extract_to_csv.week_chapter_number(""), "")
+        self.assertEqual(extract_to_csv.week_chapter_number(None), "")
+
 
 class CsvWriteReadTests(unittest.TestCase):
 
@@ -132,6 +147,60 @@ class CsvWriteReadTests(unittest.TestCase):
                          "(BOM, line endings, quoting all preserved)")
 
 
+class EvenWeekSliceTests(unittest.TestCase):
+    """Feature 009: no-week ``main`` decks are sliced evenly across the four
+    weeks via ``target_chapter`` (replacing the leave-blank-for-analyst path)."""
+
+    def test_even_week_assignment_contiguous_blocks(self) -> None:
+        self.assertEqual(
+            extract_to_csv.even_week_assignment(12),
+            ["1", "1", "1", "2", "2", "2", "3", "3", "3", "4", "4", "4"],
+        )
+        self.assertEqual(
+            extract_to_csv.even_week_assignment(10),
+            ["1", "1", "1", "2", "2", "2", "3", "3", "4", "4"],
+        )
+        self.assertEqual(
+            extract_to_csv.even_week_assignment(7),
+            ["1", "1", "2", "2", "3", "3", "4"],
+        )
+        self.assertEqual(extract_to_csv.even_week_assignment(2), ["1", "2"])
+        self.assertEqual(extract_to_csv.even_week_assignment(1), ["1"])
+        self.assertEqual(extract_to_csv.even_week_assignment(0), [])
+
+    def test_even_week_counts_differ_by_at_most_one_and_are_ordered(self) -> None:
+        for total in range(0, 41):
+            labels = extract_to_csv.even_week_assignment(total)
+            self.assertEqual(len(labels), total)
+            counts = [labels.count(str(w)) for w in range(1, 5)]
+            self.assertLessEqual(max(counts) - min(counts), 1)
+            # Contiguous blocks in week order (week 1 block, then week 2, …).
+            self.assertEqual(labels, sorted(labels))
+
+    def test_deck_target_chapters_routing(self) -> None:
+        # No-week main deck → even slice.
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("main", "Pub10_Ed22B_Updated", 10),
+            ["1", "1", "1", "2", "2", "2", "3", "3", "4", "4"],
+        )
+        # Week-token main deck → all that week (feature 008 unchanged).
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("main", "Instructor Week 2 Grams", 3),
+            ["2", "2", "2"],
+        )
+        # Non-main publication → no week routing.
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("progress-test-1", "Test 1", 3),
+            ["", "", ""],
+        )
+        # "Legacy Pub 10" has no week token → sliced exactly like Pub10
+        # (no special case), and "Pub 10"/"10" must NOT match the week token.
+        self.assertEqual(
+            extract_to_csv.deck_target_chapters("main", "Legacy Pub 10", 4),
+            ["1", "2", "3", "4"],
+        )
+
+
 class GramToRowsTests(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -193,6 +262,61 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(wav_row["freq_end"], "")
         self.assertEqual(wav_row["wav_treatment"], "")
         self.assertIn("GLC not found", wav_row["warnings"])
+
+    def test_analysis_doc_redirects_to_sibling_png(self) -> None:
+        # Feature 007 (T009): a .doc/.docx analysis hyperlink with a rendered
+        # sibling .png present -> the analysis row points at the .png inline,
+        # target_ext is .png, and no warning is recorded.
+        (self.tmp / "analysis_sheet.doc").write_bytes(b"placeholder doc")
+        png = self.tmp / "analysis_sheet.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="analysis_sheet.doc")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(analysis["topic_type"], "analysis")
+        self.assertTrue(analysis["png_path"].endswith(".png"))
+        self.assertEqual(analysis["target_ext"], ".png")
+        self.assertEqual(analysis["warnings"], "")
+        self.assertNotEqual(analysis["file_size"], "")
+
+    def test_analysis_docx_redirects_to_sibling_png(self) -> None:
+        # As above but a .docx hyperlink (FR-004 covers both Word forms).
+        (self.tmp / "analysis_sheet.docx").write_bytes(b"placeholder docx")
+        png = self.tmp / "analysis_sheet.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="analysis_sheet.docx")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertTrue(analysis["png_path"].endswith(".png"))
+        self.assertEqual(analysis["target_ext"], ".png")
+        self.assertEqual(analysis["warnings"], "")
+
+    def test_analysis_doc_without_png_records_warning(self) -> None:
+        # Feature 007 (T017): a .doc analysis hyperlink whose sibling .png is
+        # absent -> png_path is still the intended .png (so the generator
+        # dangles an <image>, not a Word <xref>) and the row carries the
+        # "analysis image not rendered" warning (FR-009/FR-010).
+        (self.tmp / "analysis_sheet.doc").write_bytes(b"placeholder doc")
+        gram = _gram(png="analysis_sheet.doc")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertTrue(analysis["png_path"].endswith(".png"),
+                        "png_path keeps the intended .png href even when absent")
+        self.assertEqual(analysis["target_ext"], ".png")
+        self.assertIn("analysis image not rendered", analysis["warnings"])
+        self.assertEqual(analysis["file_size"], "")
 
 
 class GroupingAgainstMockCorpusTests(unittest.TestCase):
@@ -306,6 +430,74 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
             rows = list(csv.DictReader(fh))
         pubs = {r["publication"] for r in rows}
         self.assertEqual(pubs, {"progress-test-1"}, f"unexpected publications: {pubs}")
+
+
+class OnlyChapterScopingTests(unittest.TestCase):
+    """``--only <subdir>`` keeps ``--input-root`` at the corpus root and
+    filters the walk to one chapter folder. Important: the CSV's path
+    schema must stay corpus-root-relative (i.e. every relpath begins with
+    the scoped chapter folder name), so dedupe/generate keep using the
+    same hardcoded ``--image-root`` and "just work" without re-pointing.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(TMP / "extract_only_corpus")
+
+    def _read(self, csv_path: Path) -> list[dict]:
+        with csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
+            return list(csv.DictReader(fh))
+
+    def test_only_scopes_walk_and_keeps_corpus_root_relative_paths(self) -> None:
+        out_csv = TMP / "extract_only_week1.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.corpus),
+            "--out", str(out_csv),
+            "--only", "Instructor Week 1 Grams",
+        ])
+        self.assertEqual(rc, 0)
+        rows = self._read(out_csv)
+        self.assertGreater(len(rows), 0, "expected non-empty CSV for scoped chapter")
+        for r in rows:
+            for col in ("glc_path", "png_path"):
+                value = r.get(col, "")
+                if not value:
+                    continue
+                self.assertTrue(
+                    value.startswith("Instructor Week 1 Grams/"),
+                    f"{col}={value!r} should start with the chapter folder so "
+                    "dedupe/generate can resolve it from --image-root=<corpus>",
+                )
+                self.assertNotIn(
+                    "Instructor Week 2 Grams", value,
+                    f"--only must not leak rows from outside the scoped folder ({col}={value!r})",
+                )
+
+    def test_only_case_insensitive_match(self) -> None:
+        out_csv = TMP / "extract_only_case.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.corpus),
+            "--out", str(out_csv),
+            "--only", "instructor week 1 grams",
+        ])
+        self.assertEqual(rc, 0)
+        rows = self._read(out_csv)
+        self.assertGreater(len(rows), 0)
+
+    def test_only_zero_match_fails_loudly(self) -> None:
+        out_csv = TMP / "extract_only_miss.csv"
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            rc = extract_to_csv.main([
+                "--input-root", str(self.corpus),
+                "--out", str(out_csv),
+                "--only", "No Such Chapter",
+            ])
+        self.assertEqual(rc, 1, "zero-match must fail-fast, not write an empty CSV")
+        self.assertFalse(out_csv.exists(), "no CSV should be written on zero-match")
+        joined = "\n".join(cm.output)
+        self.assertIn("No Such Chapter", joined)
+        self.assertIn("matched no PPTXs", joined)
 
 
 if __name__ == "__main__":

@@ -34,10 +34,59 @@ from typing import Iterable
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "wav_treatment", "warnings",
+    "time_end", "freq_end", "png_path", "file_size", "wav_treatment", "warnings",
+)
+
+# Optional refactoring-planning columns the extractor now writes. Their
+# presence is not required (old CSVs still validate) but when present
+# they steer DITA generation per spec 005-style refactor flow.
+#
+# ``master_png_path`` (feature 006) is read with an empty default and is
+# never added to the strict ``CSV_COLUMNS`` required-set, so a CSV without
+# it (the current 16-column ``source.csv`` or any legacy CSV) stays valid
+# and produces byte-identical output — the deduplication feature is inert
+# by default (FR-010, SC-005).
+OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
+    "target_doc", "target_chapter", "target_ext", "master_png_path",
+    "target_gram_id",
+)
+
+# The ``@name`` of the DITA ``<data>`` provenance element that flags a
+# redirected (deduplicated) lofar and anchors its reversal (feature 006).
+ORIGINAL_ASSET_PATH = "original-asset-path"
+
+# XML declaration + OASIS DOCTYPE preambles emitted at the head of every
+# generated topic and ditamap. Oxygen identifies a file as DITA by its
+# DOCTYPE public ID; without these its DITA Maps Manager rejects a bare
+# ``<map>`` ("This file does not appear to be a DITA map") and Author
+# will not recognise a bare ``<topic>``. The same constants are mirrored
+# in ``publish_html.py`` for DITA-OT's benefit.
+TOPIC_DOCTYPE = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">\n'
+)
+MAP_DOCTYPE = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<!DOCTYPE map PUBLIC "-//OASIS//DTD DITA Map//EN" "map.dtd">\n'
 )
 
 LOGGER = logging.getLogger(__name__)
+
+# Optional testing aid: when set via ``--stub-wav``, every .wav copy in
+# ``copy_asset`` is sourced from this path instead of the real file.
+# Keeps the DITA tree slim for transit during cross-network testing.
+_STUB_WAV_PATH: "Path | None" = None
+
+
+def _write_text(path: Path, text: str) -> None:
+    """Write ``text`` with LF endings, working on Python 3.9.
+
+    ``Path.write_text`` only grew a ``newline`` parameter in 3.10; the
+    air-gapped target runs WinPython 3.9, so force LF via ``open`` to
+    preserve the byte-identical-output contract.
+    """
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
 
 
 def setup_logging(log_path: Path) -> None:
@@ -95,9 +144,11 @@ def read_csv(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         actual = tuple(reader.fieldnames or ())
-        if actual != CSV_COLUMNS:
+        missing = [c for c in CSV_COLUMNS if c not in actual]
+        if missing:
             raise ValueError(
-                f"CSV header mismatch.\nExpected: {CSV_COLUMNS}\nActual:   {actual}"
+                f"CSV missing required columns: {missing}\n"
+                f"Actual header: {actual}"
             )
         rows: list[dict] = []
         for row in reader:
@@ -124,25 +175,36 @@ def check_row_identity(rows: list[dict]) -> list[str]:
     each duplicate tuple is reported as the anchor, so the author can
     decide which side to renumber.
     """
-    first_seen: dict[tuple[str, str, str, str, str], int] = {}
+    first_seen: dict[tuple, tuple[int, dict]] = {}
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        # The key is the path the gram lands at: publication + effective
+        # chapter + effective doc + effective gram number + topic_type +
+        # sequence. Two rows sharing it mean two distinct grams resolve to
+        # the same week + number without renumbering (feature 008) — the
+        # generator would otherwise silently merge them into one topic.
         key = (
-            row.get("publication", ""), row.get("chapter", ""),
-            row.get("gram_id", ""), row.get("topic_type", ""),
-            row.get("sequence", ""),
+            row.get("publication", ""), _effective_chapter(row),
+            _effective_doc(row), _gram_num(_effective_gram_id(row)),
+            row.get("topic_type", ""), row.get("sequence", ""),
         )
         if key in first_seen:
+            anchor_line, anchor = first_seen[key]
             errors.append(
-                f"Duplicate row identity at CSV line {line_no} "
-                f"(first seen at line {first_seen[key]}): "
-                f"publication={key[0]!r} chapter={key[1]!r} "
-                f"gram_id={key[2]!r} topic_type={key[3]!r} sequence={key[4]!r}. "
-                f"Two source grams collide on this slot — renumber one "
-                f"to disambiguate before regenerating."
+                f"Duplicate gram slot at CSV line {line_no} "
+                f"(first seen at line {anchor_line}): "
+                f"publication={key[0]!r} effective_chapter={key[1]!r} "
+                f"effective_doc={key[2]!r} gram_number={key[3]!r} "
+                f"topic_type={key[4]!r} sequence={key[5]!r}. "
+                f"Two distinct grams "
+                f"(gram_id={anchor.get('gram_id', '')!r} from chapter="
+                f"{anchor.get('chapter', '')!r} vs gram_id="
+                f"{row.get('gram_id', '')!r} from chapter="
+                f"{row.get('chapter', '')!r}) resolve to the same week + "
+                f"number — run deduplicate_csv.py to renumber the collision."
             )
         else:
-            first_seen[key] = line_no
+            first_seen[key] = (line_no, row)
     return errors
 
 
@@ -187,6 +249,22 @@ def resolve_image_href(png_path: str, image_root: Path, topic_dir: Path) -> str:
         return Path(rel_str).as_posix()
 
 
+def _relpath_posix(target: Path, start_dir: Path) -> str:
+    """Return ``target`` as a POSIX path relative to ``start_dir`` (may use ``..``).
+
+    Mirrors the ``os.path.relpath`` branch of ``resolve_image_href`` but for
+    two *output* locations: the file a redirected lofar links to (in the
+    master gram's folder) and the redirected gram's own folder. Used by the
+    deduplication redirect branch (feature 006) so a redirected href is the
+    same kind of ``../``-bearing relative path the generator already emits.
+    """
+    import os
+    rel_str = os.path.relpath(
+        target.resolve(strict=False), start_dir.resolve(strict=False),
+    )
+    return Path(rel_str).as_posix()
+
+
 def copy_asset(
     src_relpath: str, image_root: Path, topic_dir: Path,
 ) -> tuple[str, Path | None]:
@@ -210,6 +288,13 @@ def copy_asset(
     source = image_root / src_relpath
     target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
+    # Testing aid: when --stub-wav is set, every .wav copy is sourced from
+    # the stub file but keeps its slugified per-gram filename so the
+    # paired .glc's internal `data_source/filename` reference still
+    # resolves at publish time. Keeps gramframe functional with a silent
+    # stub and slims the DITA tree for transit between systems.
+    if _STUB_WAV_PATH is not None and source.suffix.lower() == ".wav":
+        source = _STUB_WAV_PATH
     if source.is_file():
         topic_dir.mkdir(parents=True, exist_ok=True)
         # ``copy2`` preserves the source mtime so two consecutive generator
@@ -241,7 +326,62 @@ def _gram_folder_name(gram_id: str) -> str:
     return f"gram-{_gram_num(gram_id)}"
 
 
+def _topic_filename(gram_id: str) -> str:
+    """Return the per-gram topic filename, e.g. ``"gram_01.dita"``."""
+    return f"gram_{_gram_num(gram_id)}.dita"
+
+
+def _topic_id(gram_id: str) -> str:
+    """Return the topic ``id`` attribute, e.g. ``"gram_01"``."""
+    return f"gram_{_gram_num(gram_id)}"
+
+
+def _effective_gram_id(row: dict) -> str:
+    """The gram number the row lands at: ``target_gram_id`` else ``gram_id``.
+
+    Feature 008: when several source decks fold into one week folder, the
+    dedupe step renumbers colliding grams into the optional ``target_gram_id``
+    column. The generator derives every per-gram name (folder, topic filename,
+    topic id, ``Gram NN`` title) from this effective value so a renumbered gram
+    gets a clean, unique path; ``gram_id`` is preserved as provenance.
+    """
+    return (row.get("target_gram_id", "") or "").strip() or row.get("gram_id", "")
+
+
+def _effective_chapter(row: dict) -> str:
+    """Chapter the row will land in after refactoring. Falls back to source."""
+    return row.get("target_chapter") or row.get("chapter", "")
+
+
+def _effective_doc(row: dict) -> str:
+    """Deck filename the row will land in after refactoring (may be empty).
+
+    Feature 009: ``main`` carries **no** per-document folder tier — its grams
+    live flat at ``main/week-N/gram-NN/`` and are scoped per ``(main, week)``.
+    Forcing ``main``'s effective doc to ``""`` keeps the topic path, the ditamap
+    href, and the ``check_row_identity`` collision key consistently doc-less in
+    one place, even if a CSV stray-sets ``target_doc`` on a ``main`` row.
+    Extraction already writes ``target_doc=""`` for ``main`` (feature 008), so
+    this is a no-op on extractor output and purely a defensive guard.
+    """
+    if row.get("publication", "") == "main":
+        return ""
+    return row.get("target_doc", "") or ""
+
+
+def _doc_slug(target_doc: str) -> str:
+    """Slugified stem of a target-deck filename for use as a path segment.
+
+    Empty input → empty output, so a missing ``target_doc`` omits the
+    deck level from the output path entirely.
+    """
+    if not target_doc:
+        return ""
+    return slugify(Path(target_doc).stem)
+
+
 _INSTRUCTOR_PREFIX_RE = re.compile(r"^(Instructor )", re.IGNORECASE)
+_WEEK_NUMBER_RE = re.compile(r"^\d+$")
 
 
 def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
@@ -258,17 +398,26 @@ def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
     chapter at the same path below their edition segment (FR-014,
     FR-016).
 
+    A bare-integer chapter ``N`` (feature 008's four-week ``main`` IA) expands
+    to display ``Week N`` and slug ``week-N`` — the editable ``target_chapter``
+    holds the terse week number, expanded only at emit time.
+
     Examples:
 
     >>> _normalise_chapter("Instructor Week 1 Grams")
     ('Instructor ', 'Week 1 Grams', 'week-1-grams')
     >>> _normalise_chapter("Instructor Pub10_Ed22B_Updated")
     ('Instructor ', 'Pub10_Ed22B_Updated', 'pub10-ed22b-updated')
+    >>> _normalise_chapter("2")
+    (None, 'Week 2', 'week-2')
     >>> _normalise_chapter("Plain Chapter Without Prefix")
     (None, 'Plain Chapter Without Prefix', 'plain-chapter-without-prefix')
     >>> _normalise_chapter("")
     (None, '', '')
     """
+    if _WEEK_NUMBER_RE.match(raw):
+        week = str(int(raw))  # strip any leading zeros
+        return None, f"Week {week}", f"week-{week}"
     match = _INSTRUCTOR_PREFIX_RE.match(raw)
     if match is None:
         return None, raw, slugify(raw)
@@ -278,12 +427,23 @@ def _normalise_chapter(raw: str) -> tuple[str | None, str, str]:
 
 
 def _publication_root(out_dir: Path, row: dict) -> Path:
-    """Return the per-publication root, ``{out}/{pub}`` or ``{out}/main/{chapter}``."""
+    """Return the per-publication root.
+
+    Layout: ``{out}/{pub}/[{doc_slug}/]`` for non-main publications and
+    ``{out}/main/{chapter_slug}/[{doc_slug}/]`` for the main pub. The
+    ``doc_slug`` segment is only inserted when ``target_doc`` is
+    populated, keeping pre-refactor CSVs producing the original layout.
+    """
     pub = row["publication"]
+    doc_slug = _doc_slug(_effective_doc(row))
     if pub != "main":
-        return out_dir / pub
-    _, _, chapter_slug = _normalise_chapter(row.get("chapter", ""))
-    return out_dir / "main" / chapter_slug
+        root = out_dir / pub
+    else:
+        _, _, chapter_slug = _normalise_chapter(_effective_chapter(row))
+        root = out_dir / "main" / chapter_slug
+    if doc_slug:
+        root = root / doc_slug
+    return root
 
 
 def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
@@ -291,9 +451,64 @@ def _topic_dir_for_row(out_dir: Path, row: dict) -> Path:
 
     Each gram gets its own sub-directory so the original asset filenames
     can be preserved (slugified) without colliding across grams in the
-    same chapter.
+    same chapter. The folder is named from the *effective* gram number
+    (``target_gram_id`` else ``gram_id``), so a renumbered gram (feature
+    007) lands at its clean, unique ``gram-NN`` path.
     """
-    return _publication_root(out_dir, row) / _gram_folder_name(row["gram_id"])
+    return _publication_root(out_dir, row) / _gram_folder_name(_effective_gram_id(row))
+
+
+# -----------------------------------------------------------------------------
+# Large-asset deduplication: master index (feature 006)
+# -----------------------------------------------------------------------------
+
+@dataclass
+class MasterTarget:
+    """Where a redirected lofar links to: the master gram's copy.
+
+    ``topic_dir`` is the master gram's output folder; ``link_basename`` is
+    the slugified filename of the asset a redirector links to within it —
+    the image for an image lofar, the ``.glc`` for an audio lofar (the link
+    target of the ``.glc``/``.wav`` pair, FR-009). See data-model.md Entity 3.
+    """
+
+    topic_dir: Path
+    link_basename: str
+
+
+def build_master_index(
+    rows: list[dict], out_dir: Path,
+) -> dict[str, MasterTarget]:
+    """Map every non-redirected asset-owning row's ``png_path`` → ``MasterTarget``.
+
+    The **index pass** (feature 006, R4): a redirected row carries the
+    master row's ``png_path`` in ``master_png_path``; this index lets the
+    emit pass resolve that key to the master's output location and link
+    filename. Only non-redirected rows (empty ``master_png_path``) are
+    recorded — they are the masters. Rows without a usable asset extension
+    are skipped. Building this is pure in-memory work over already-loaded
+    rows and emits nothing, so it is inert when no row redirects (FR-010).
+    """
+    index: dict[str, MasterTarget] = {}
+    for row in rows:
+        if (row.get("master_png_path", "") or "").strip():
+            continue  # redirected row — never itself a master
+        png = row.get("png_path", "") or ""
+        if not png:
+            continue
+        asset_suffix = Path(png).suffix.lower()
+        if asset_suffix == ".wav":
+            glc = row.get("glc_path", "") or ""
+            if not glc:
+                continue
+            link_basename = slugify_asset_name(Path(glc).name)
+        elif asset_suffix in (".png", ".jpg", ".jpeg", ".gif"):
+            link_basename = slugify_asset_name(Path(png).name)
+        else:
+            continue
+        topic_dir = _topic_dir_for_row(out_dir, row)
+        index[png] = MasterTarget(topic_dir, link_basename)
+    return index
 
 
 # -----------------------------------------------------------------------------
@@ -327,8 +542,15 @@ def _pretty_indent(elem: ET.Element, level: int = 0, indent: str = "  ") -> None
     children[-1].tail = closing_pad
 
 
-def _serialise(root: ET.Element) -> str:
-    """Serialise ``root`` to a UTF-8 XML string with LF endings, no preamble.
+def _serialise(root: ET.Element, doctype: str = "") -> str:
+    """Serialise ``root`` to a UTF-8 XML string with LF endings.
+
+    ``doctype`` is an optional preamble (XML declaration + ``<!DOCTYPE>``)
+    prepended verbatim — see ``TOPIC_DOCTYPE`` / ``MAP_DOCTYPE``. Oxygen's
+    DITA Maps Manager (and Author) classifies a file as DITA by its DOCTYPE
+    public ID; without it a bare ``<map>``/``<topic>`` is rejected with
+    "This file does not appear to be a DITA map". The preamble is therefore
+    emitted into the source tree rather than only injected at publish time.
 
     Output is pretty-printed for human review while preserving mixed-content
     elements (titles, paragraphs with inline phrases) byte-for-byte.
@@ -337,13 +559,30 @@ def _serialise(root: ET.Element) -> str:
     body = ET.tostring(root, encoding="unicode")
     # ElementTree uses self-closing for empty elements; that matches the
     # contract examples (e.g. <image .../>, <link .../>).
-    return f"{body}\n"
+    return f"{doctype}{body}\n"
+
+
+def _append_provenance_data(section: ET.Element, original_path: str) -> None:
+    """Append the redirected-lofar provenance ``<data>`` element (feature 006).
+
+    Emitted as the **last** child of a redirected lofar ``<section>``:
+    ``<data name="original-asset-path" value="…"/>``. Its presence alone
+    flags the lofar as redirected (FR-007) and anchors reversal (FR-008);
+    ``<data>`` is part of the standard DITA metadata domain (DTD-valid, no
+    specialisation) and is suppressed from default trainee XHTML (FR-006).
+    ``value`` is the original local path of the **link target** — the row's
+    ``png_path`` for an image lofar, its ``glc_path`` for an audio lofar
+    (never the ``.wav``).
+    """
+    ET.SubElement(section, "data", {
+        "name": ORIGINAL_ASSET_PATH, "value": original_path,
+    })
 
 
 def _append_gramframe_table(
     parent: ET.Element, image_href: str, time_end: str, freq_end: str,
     display_text: str = "",
-) -> None:
+) -> ET.Element:
     """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
 
     The HTML produced by DITA-OT carries ``class="gram-config"`` on the
@@ -382,6 +621,7 @@ def _append_gramframe_table(
         r = ET.SubElement(tbody, "row")
         ET.SubElement(r, "entry").text = label
         ET.SubElement(r, "entry").text = value
+    return section
 
 
 def _append_analysis_section(
@@ -416,7 +656,7 @@ def _append_analysis_section(
 
 def _append_glc_viewer_link(
     parent: ET.Element, glc_href: str, display_text: str,
-) -> None:
+) -> ET.Element:
     """Append a GLC-viewer link block (§1.3) to the gram body.
 
     Emitted instead of a GramFrame table when the GLC's inner
@@ -438,11 +678,13 @@ def _append_glc_viewer_link(
         "href": glc_href, "format": "glc", "scope": "local",
     })
     xref.text = display_text or glc_href
+    return section
 
 
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
-) -> tuple[list[Path], list[dict]]:
+    master_index: dict[str, MasterTarget] | None = None,
+) -> tuple[list[Path], list[dict], int]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
     The body contains, in order:
@@ -453,7 +695,7 @@ def emit_gram_topic(
        order. The block shape is chosen by the extension of the asset
        named inside the ``.glc`` (carried through as ``png_path``):
 
-       - ``.png`` / ``.jpg`` → GramFrame ``gram-config`` table
+       - ``.png`` / ``.jpg`` / ``.gif`` → GramFrame ``gram-config`` table
          embedding the image (`dita-topic-schema.md` §1.2). This is
          the shape `gramframe.bundle.js` recognises.
        - ``.wav`` → an ``<xref>`` linking to the ``.glc`` itself
@@ -469,12 +711,13 @@ def emit_gram_topic(
     glc_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
 
     first = analysis_rows[0] if analysis_rows else glc_rows[0]
-    gram_num = _gram_num(first["gram_id"])
+    eff_gram_id = _effective_gram_id(first)
+    gram_num = _gram_num(eff_gram_id)
     topic_dir = _topic_dir_for_row(out_dir, first)
     topic_dir.mkdir(parents=True, exist_ok=True)
-    topic_path = topic_dir / first["topic_filename"]
+    topic_path = topic_dir / _topic_filename(eff_gram_id)
 
-    topic = ET.Element("topic", {"id": f"gram_{gram_num}"})
+    topic = ET.Element("topic", {"id": _topic_id(eff_gram_id)})
     title = ET.SubElement(topic, "title")
     title.text = f"Gram {gram_num}"
     if first.get("vessel_name"):
@@ -486,6 +729,29 @@ def emit_gram_topic(
 
     written: list[Path] = []
     skipped: list[dict] = []
+    index = master_index or {}
+    redirected = 0
+
+    def _resolve_redirect(r: dict) -> MasterTarget | None:
+        """Return the master this row redirects to, or ``None``.
+
+        A row is redirected iff ``master_png_path`` is non-empty *and*
+        resolves in the master index. A non-empty-but-unresolvable target
+        (missing/blank master) is logged as a WARNING and treated as
+        non-redirected so the asset is copied locally instead (FR-014).
+        """
+        key = (r.get("master_png_path", "") or "").strip()
+        if not key:
+            return None
+        target = index.get(key)
+        if target is None:
+            LOGGER.warning(
+                "Redirect target not resolvable for %s/%s/%s seq=%s: "
+                "master_png_path=%r not found; copying asset locally instead.",
+                r["publication"], r["gram_id"], r["topic_type"],
+                r["sequence"], key,
+            )
+        return target
 
     if analysis_rows:
         analysis_row = analysis_rows[0]
@@ -500,7 +766,20 @@ def emit_gram_topic(
         png_path = row.get("png_path", "") or ""
         asset_suffix = Path(png_path).suffix.lower()
 
-        if asset_suffix in (".png", ".jpg", ".jpeg"):
+        if asset_suffix in (".png", ".jpg", ".jpeg", ".gif"):
+            master = _resolve_redirect(row)
+            if master is not None:
+                # Redirected: link to the master copy, copy nothing locally,
+                # and record the original local path for reversal (feature 006).
+                href = _relpath_posix(master.topic_dir / master.link_basename, topic_dir)
+                section = _append_gramframe_table(
+                    body, href,
+                    row.get("time_end", ""), row.get("freq_end", ""),
+                    row.get("display_text", ""),
+                )
+                _append_provenance_data(section, png_path)
+                redirected += 1
+                continue
             image_href, copied = copy_asset(png_path, image_root, topic_dir)
             if copied is not None:
                 written.append(copied)
@@ -521,6 +800,21 @@ def emit_gram_topic(
                     row["sequence"], reason,
                 )
                 skipped.append(_skip_record(row, reason))
+                continue
+            master = _resolve_redirect(row)
+            if master is not None:
+                # Redirected audio pair: link to the master ``.glc`` (FR-009);
+                # neither ``.glc`` nor ``.wav`` is copied — the large ``.wav``
+                # stays adjacent to the master ``.glc``. Record the ``.glc``
+                # link-target path (not the ``.wav``) for an exact inverse.
+                glc_href = _relpath_posix(
+                    master.topic_dir / master.link_basename, topic_dir,
+                )
+                section = _append_glc_viewer_link(
+                    body, glc_href, row.get("display_text", ""),
+                )
+                _append_provenance_data(section, glc_path)
+                redirected += 1
                 continue
             glc_href, glc_copied = copy_asset(glc_path, image_root, topic_dir)
             wav_href, wav_copied = copy_asset(png_path, image_root, topic_dir)
@@ -547,8 +841,8 @@ def emit_gram_topic(
     # the historical ``<related-links>`` pointed at a ``gram-index.dita``
     # that was never generated, producing a 404 in every gram page.
 
-    topic_path.write_text(_serialise(topic), encoding="utf-8", newline="\n")
-    return [topic_path] + written, skipped
+    _write_text(topic_path, _serialise(topic, TOPIC_DOCTYPE))
+    return [topic_path] + written, skipped, redirected
 
 
 # -----------------------------------------------------------------------------
@@ -562,11 +856,24 @@ class EmitResult:
     errors: int
 
 
-def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple[str, str, str], list[dict]]":
-    """Group rows by ``(publication, chapter, gram_id)`` preserving CSV order."""
-    groups: OrderedDict[tuple[str, str, str], list[dict]] = OrderedDict()
+def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple, list[dict]]":
+    """Group rows into grams, preserving CSV order.
+
+    A "gram" is the rows sharing ``(publication, effective_chapter,
+    effective_doc, effective_gram_number)`` — the path the gram lands at.
+    After the dedupe step renumbers within-week collisions (feature 008),
+    distinct grams carry distinct effective numbers, so each forms its own
+    group. Any *un-renumbered* collision is caught by ``check_row_identity``
+    (which aborts before grouping), so two distinct grams never merge here.
+    """
+    groups: OrderedDict[tuple, list[dict]] = OrderedDict()
     for row in rows:
-        key = (row["publication"], row.get("chapter", ""), row["gram_id"])
+        key = (
+            row.get("publication", ""),
+            _effective_chapter(row),
+            _effective_doc(row),
+            _gram_num(_effective_gram_id(row)),
+        )
         groups.setdefault(key, []).append(row)
     return groups
 
@@ -626,7 +933,13 @@ def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
 
 
 def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
-    """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter."""
+    """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter.
+
+    Chapters are grouped by the *effective* chapter (feature 008: the week
+    number a row lands in, ``target_chapter`` else ``chapter``), so the map's
+    ``<topichead>`` per week (``Week 1`` … ``Week 4``) matches the on-disk
+    ``main/week-N/`` tree, and topic hrefs use the effective gram number.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / "main.ditamap"
 
@@ -634,12 +947,11 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
     for row in rows:
         if row["publication"] != "main":
             continue
-        chapter_title = row.get("chapter", "") or ""
-        _, _, slug = _normalise_chapter(chapter_title)
-        key = slug
-        if key not in chapters:
-            chapters[key] = (chapter_title, [])
-        chapters[key][1].append(row)
+        eff_chapter = _effective_chapter(row)
+        _, _, slug = _normalise_chapter(eff_chapter)
+        if slug not in chapters:
+            chapters[slug] = (eff_chapter, [])
+        chapters[slug][1].append(row)
 
     root = ET.Element("map")
     _append_map_title(root, "Main")
@@ -648,14 +960,28 @@ def emit_main_ditamap(rows: list[dict], out_dir: Path) -> Path:
         _append_chapter_navtitle(topichead, title)
         seen: set[str] = set()
         for row in chapter_rows:
-            gram_dir = _gram_folder_name(row["gram_id"])
-            if gram_dir in seen:
+            doc_slug = _doc_slug(_effective_doc(row))
+            gram_dir = _gram_folder_name(_effective_gram_id(row))
+            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+            if uniq in seen:
                 continue
-            seen.add(gram_dir)
-            href = f"main/{slug}/{gram_dir}/{row['topic_filename']}"
+            seen.add(uniq)
+            topic_file = _topic_filename(_effective_gram_id(row))
+            # Build the href from non-empty segments only, mirroring the
+            # pathlib-based on-disk layout (_publication_root, which drops
+            # empty path parts). A bare-integer week gives slug "week-N"; a
+            # no-week deck (e.g. Pub10 with a blank target_chapter) gives an
+            # EMPTY slug. Interpolating an empty slug as "main/{slug}/..."
+            # would emit "main//..." — which the publish stager's
+            # `replace('href="main/', ...)` then turns into a leading-slash
+            # "/..." (absolute) href that DITA-OT cannot resolve, silently
+            # dropping the topic under --processing-mode=lax (a 404 in the
+            # rendered output). Filtering empties keeps href == file path.
+            href = "/".join([s for s in ("main", slug, doc_slug, gram_dir) if s]
+                            + [topic_file])
             ET.SubElement(topichead, "topicref", {"href": href})
 
-    map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
+    _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
 
@@ -675,7 +1001,9 @@ def _flat_publication_title(publication: str) -> str:
     return publication.replace("-", " ").title()
 
 
-def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path:
+def emit_test_ditamap(
+    publication: str, rows: list[dict], out_dir: Path,
+) -> Path:
     """Write ``<publication>.ditamap`` at the output root, flat (no topichead)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     map_path = out_dir / f"{publication}.ditamap"
@@ -685,13 +1013,17 @@ def emit_test_ditamap(publication: str, rows: list[dict], out_dir: Path) -> Path
     for row in rows:
         if row["publication"] != publication:
             continue
-        gram_dir = _gram_folder_name(row["gram_id"])
-        if gram_dir in seen:
+        doc_slug = _doc_slug(_effective_doc(row))
+        gram_dir = _gram_folder_name(_effective_gram_id(row))
+        uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+        if uniq in seen:
             continue
-        seen.add(gram_dir)
-        href = f"{publication}/{gram_dir}/{row['topic_filename']}"
+        seen.add(uniq)
+        topic_file = _topic_filename(_effective_gram_id(row))
+        prefix = f"{doc_slug}/" if doc_slug else ""
+        href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
         ET.SubElement(root, "topicref", {"href": href})
-    map_path.write_text(_serialise(root), encoding="utf-8", newline="\n")
+    _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
 
@@ -715,7 +1047,7 @@ def write_trainee_ditaval(out_dir: Path) -> Path:
     exist next to the ditamaps and refuses to build otherwise.
     """
     path = out_dir / "trainee.ditaval"
-    path.write_text(TRAINEE_DITAVAL, encoding="utf-8", newline="\n")
+    _write_text(path, TRAINEE_DITAVAL)
     return path
 
 
@@ -723,7 +1055,7 @@ def write_manifest(out_dir: Path, files: list[Path]) -> Path:
     """Write ``manifest.txt`` listing every produced file (sorted)."""
     manifest_path = out_dir / "manifest.txt"
     rels = sorted(p.relative_to(out_dir).as_posix() for p in files)
-    manifest_path.write_text("\n".join(rels) + "\n", encoding="utf-8", newline="\n")
+    _write_text(manifest_path, "\n".join(rels) + "\n")
     return manifest_path
 
 
@@ -739,7 +1071,7 @@ def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
             f'gram_id="{s["gram_id"]}" topic_type={s["topic_type"]} '
             f'sequence={s["sequence"]} reason="{s["reason"]}"'
         )
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    _write_text(path, "\n".join(lines) + "\n")
     return path
 
 
@@ -753,9 +1085,24 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
     parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--stub-wav", type=Path, dest="stub_wav", default=None,
+        help="Testing aid: copy this file in place of every .wav asset "
+             "(keeps slugified per-gram filenames so paired .glc references "
+             "still resolve). Slims the DITA tree for cross-system transit.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("generate.log"))
+
+    global _STUB_WAV_PATH
+    if args.stub_wav is not None:
+        if not args.stub_wav.is_file():
+            LOGGER.error("--stub-wav file does not exist: %s", args.stub_wav)
+            return 1
+        _STUB_WAV_PATH = args.stub_wav.resolve()
+        LOGGER.info("Using stub WAV for every .wav copy: %s", _STUB_WAV_PATH)
+    else:
+        _STUB_WAV_PATH = None
 
     if not args.csv_path.is_file():
         LOGGER.error("CSV does not exist: %s", args.csv_path)
@@ -775,23 +1122,33 @@ def main(argv: Iterable[str] | None = None) -> int:
     duplicates = check_row_identity(rows)
     if duplicates:
         for msg in duplicates:
-            LOGGER.error(msg)
-        LOGGER.error(
-            "Aborting before emission: %d duplicate row identit%s detected.",
+            LOGGER.warning(msg)
+        LOGGER.warning(
+            "Continuing despite %d duplicate row identit%s — affected grams "
+            "will be merged into one topic with partial content "
+            "(later row's analysis section drops, GLC sections interleave). "
+            "Run deduplicate_csv.py to renumber before final emission.",
             len(duplicates), "y" if len(duplicates) == 1 else "ies",
         )
-        return 1
 
     written: list[Path] = []
     skipped: list[dict] = []
     errors = 0
+    redirected_total = 0
+    # Index pass (feature 006): map each master row's png_path to its output
+    # location so redirected rows can link to it. Inert when no row redirects.
+    master_index = build_master_index(rows, args.out)
     for key, gram_rows in _gram_groups(rows).items():
         try:
-            paths, skips = emit_gram_topic(gram_rows, args.out, args.image_root)
+            paths, skips, redirected = emit_gram_topic(
+                gram_rows, args.out, args.image_root,
+                master_index=master_index,
+            )
             for path in paths:
                 written.append(path)
                 LOGGER.info("Wrote %s", path)
             skipped.extend(skips)
+            redirected_total += redirected
         except Exception as exc:
             errors += 1
             LOGGER.error("Failed to emit gram %s: %s", key, exc)
@@ -818,11 +1175,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.info("Wrote skipped report %s", skipped_path)
 
     LOGGER.info(
-        "Generation summary: files=%d ditamaps=%d skipped=%d errors=%d",
-        len(written), len(ditamap_paths), len(skipped), errors,
+        "Generation summary: files=%d ditamaps=%d skipped=%d redirected=%d errors=%d",
+        len(written), len(ditamap_paths), len(skipped), redirected_total, errors,
     )
     return 0 if errors == 0 else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    rc = main()
+    # Preserve CLI exit codes when invoked as a script, but stay silent
+    # when invoked from an interactive REPL via runpy.run_path —
+    # ``sys.exit`` would otherwise kill the interpreter and break the
+    # up-arrow iteration loop. ``sys.ps1`` is only defined in
+    # interactive sessions.
+    if rc and not hasattr(sys, "ps1"):
+        sys.exit(rc)

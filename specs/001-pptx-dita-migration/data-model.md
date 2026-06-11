@@ -92,7 +92,7 @@ docstring contract on the stub.
 | `display_text` | `str` | e.g. `"LOFAR 1"` |
 | `href` | `str` | relative URI from the run's hyperlink, may be `.glc` or `.wav` |
 
-### 1.7 `AnalysisSheet` *(produced by the FR-023 normalisation stage)*
+### 1.7 `AnalysisSheet` *(produced by the FR-023 snapshot stage)*
 
 The analysis artefact attached to a gram *folder* on disk. Exactly one
 record per gram folder regardless of how many slide instances reference
@@ -106,7 +106,7 @@ that gram.
 | `source_form` | `str` | enum: `"docx"`, `"png"`, `"both"`, `"missing"` | which form(s) existed *before* normalisation; recorded for the CSV review trail |
 | `warnings` | `list[str]` | accumulated during normalisation | empty when both forms exist post-normalisation |
 
-**Validation**: The normalisation stage produces one record per gram
+**Validation**: The snapshot stage produces one record per gram
 folder it visits; a `"missing"` `source_form` (no `.docx` and no `.png`
 present) yields a warning and leaves both paths `None`. A renderer
 failure leaves the *unproduced* path `None` and records a warning; the

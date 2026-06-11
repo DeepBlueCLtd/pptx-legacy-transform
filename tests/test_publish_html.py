@@ -23,6 +23,7 @@ from publish_html import (
     Edition,
     GRAMFRAME_BUNDLE_NAME,
     THEME_BUNDLE_NAME,
+    _dita_launcher,
     _dita_ot_command,
     inject_gramframe_plugin,
     inject_operator_console_theme,
@@ -274,6 +275,48 @@ class DitaOtCommandTests(unittest.TestCase):
         )
         self.assertIn("--filter=/staged/trainee.ditaval", argv)
         self.assertIn("--output=/html/student/main", argv)
+
+
+class DitaLauncherTests(unittest.TestCase):
+    """``_dita_launcher`` picks the right ``bin/`` entry point per platform.
+
+    On Windows the extensionless POSIX ``dita`` shell script makes
+    ``CreateProcess`` raise ``WinError 193`` (``%1 is not a valid Win32
+    application``); the ``dita.bat`` wrapper must be used instead.
+    """
+
+    def test_posix_uses_extensionless_launcher(self):
+        # Build Paths before patching os.name: pathlib picks its flavour
+        # at construction time, so constructing a Path while os.name=="nt"
+        # would raise NotImplementedError on a POSIX host. Joins inside
+        # _dita_launcher keep the already-chosen flavour.
+        dita_ot = Path("/opt/dita-ot")
+        with mock.patch.object(publish_html.os, "name", "posix"):
+            launcher = _dita_launcher(dita_ot)
+        self.assertEqual(launcher, Path("/opt/dita-ot/bin/dita"))
+
+    def test_windows_uses_bat_launcher(self):
+        dita_ot = Path("/opt/dita-ot")
+        with mock.patch.object(publish_html.os, "name", "nt"):
+            launcher = _dita_launcher(dita_ot)
+        self.assertEqual(launcher.name, "dita.bat")
+        self.assertEqual(launcher.parent.name, "bin")
+
+    def test_command_uses_windows_launcher_as_argv0(self):
+        dita_ot = Path("/opt/dita-ot")
+        ditamap = Path("/staged/main.ditamap")
+        target = Path("/html/instructor/main")
+        with mock.patch.object(publish_html.os, "name", "nt"):
+            argv = _dita_ot_command(
+                dita_ot=dita_ot,
+                ditamap=ditamap,
+                target=target,
+                ditaval=None,
+            )
+        self.assertTrue(
+            argv[0].endswith("dita.bat"),
+            f"on Windows argv[0] must be the .bat wrapper, got {argv[0]!r}",
+        )
 
 
 class PublishDualEditionTests(unittest.TestCase):
@@ -859,7 +902,10 @@ class PublisherIdempotencyTests(unittest.TestCase):
 
             fake_dita_ot = tmp / "dita-ot"
             (fake_dita_ot / "bin").mkdir(parents=True)
+            # DITA-OT ships both launchers; create both so main()'s
+            # existence check passes on POSIX (dita) and Windows (dita.bat).
             (fake_dita_ot / "bin" / "dita").write_text("#!/bin/sh\n")
+            (fake_dita_ot / "bin" / "dita.bat").write_text("@echo off\n")
 
             def run_once(variant: str) -> Path:
                 out = tmp / variant / "html"
@@ -880,6 +926,162 @@ class PublisherIdempotencyTests(unittest.TestCase):
             out_b = run_once("b")
             self.assertEqual(self._hash_tree(out_a), self._hash_tree(out_b),
                              "html/ trees from two main() runs must be byte-identical")
+
+
+class StagedHrefsResolveTests(unittest.TestCase):
+    """Every topicref href in a staged ditamap must resolve to a real topic
+    file. The ditamap hrefs are built by string interpolation in
+    generate_dita while the on-disk layout is built with pathlib; if they
+    diverge (e.g. an empty chapter slug emitting ``main//...`` that staging
+    rewrites into a leading-slash absolute href) DITA-OT silently drops the
+    topic under --processing-mode=lax — the index renders but the gram 404s.
+    This walks the real generate -> stage chain and asserts every href lands
+    on a file, which is the contract that prevents that 404.
+    """
+
+    def _write_csv(self, path: Path, rows: list) -> None:
+        import csv
+        import generate_dita
+        cols = generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS
+        with path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(
+                fh, fieldnames=list(cols),
+                quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n",
+            )
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+
+    def test_every_staged_ditamap_href_resolves(self):
+        import generate_dita
+
+        def row(**kw):
+            cols = generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS
+            base = {c: "" for c in cols}
+            base.update(
+                topic_type="glc", sequence="1",
+                link_href="supporting/c.glc", glc_path="supporting/c.glc",
+                png_path="images/g.png", time_end="1", freq_end="1",
+            )
+            base.update(kw)
+            return base
+
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            rows = [
+                # no-week main deck (Pub10): empty chapter -> empty slug.
+                # This is the row that regressed into a 404.
+                row(publication="main", chapter="",
+                    target_doc="Pub10_Ed22B_Updated.pptx",
+                    gram_id="Gram 1", topic_filename="gram_01.dita"),
+                # week-based main deck.
+                row(publication="main", chapter="Week 1",
+                    gram_id="Gram 2", topic_filename="gram_02.dita"),
+                # a flat progress test.
+                row(publication="progress-test-1", chapter="Test 1",
+                    gram_id="Gram 1", topic_filename="gram_01.dita"),
+            ]
+            csv_path = tmp / "in.csv"
+            self._write_csv(csv_path, rows)
+            dita = tmp / "dita"
+            rc = generate_dita.main([
+                "--csv", str(csv_path), "--out", str(dita),
+                "--image-root", str(tmp),
+            ])
+            self.assertEqual(rc, 0, "generate_dita should succeed")
+
+            staged = tmp / ".dita-build"
+            publish_html.stage(dita, staged)
+
+            ditamaps = sorted(staged.glob("*/*.ditamap"))
+            self.assertTrue(ditamaps, "stage() produced no ditamaps")
+            for ditamap in ditamaps:
+                root = ET.parse(ditamap).getroot()
+                hrefs = [tr.get("href") for tr in root.iter("topicref")]
+                self.assertTrue(hrefs, f"{ditamap.name}: no topicrefs")
+                for href in hrefs:
+                    self.assertNotIn(
+                        "//", href, f"{ditamap.name}: double slash in {href!r}",
+                    )
+                    # Staged hrefs are relative to the ditamap's folder.
+                    target = ditamap.parent / href
+                    self.assertTrue(
+                        target.is_file(),
+                        f"{ditamap.name}: href {href!r} does not resolve to a "
+                        f"topic file (expected {target}) — DITA-OT would 404 it",
+                    )
+
+
+class KeepStagedTests(unittest.TestCase):
+    """``--keep-staged`` leaves the staged build tree behind for inspection.
+
+    Default behaviour removes ``--staged`` after publishing; the flag is a
+    debugging affordance for the air-gapped target, where post-mortem
+    inspection of exactly what DITA-OT was handed is the primary tool.
+    """
+
+    def _make_source(self, tmp: Path) -> tuple[Path, Path]:
+        d = tmp / "dita"
+        d.mkdir()
+        (d / "main.ditamap").write_text(
+            '<map><title>Main</title></map>', encoding="utf-8",
+        )
+        (d / "trainee.ditaval").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n', encoding="utf-8",
+        )
+        fake_dita_ot = tmp / "dita-ot"
+        (fake_dita_ot / "bin").mkdir(parents=True)
+        (fake_dita_ot / "bin" / "dita").write_text("#!/bin/sh\n")
+        (fake_dita_ot / "bin" / "dita.bat").write_text("@echo off\n")
+        return d, fake_dita_ot
+
+    def _fake_run(self, *args, **kwargs):
+        argv = args[0]
+        output_arg = next(a for a in argv if a.startswith("--output="))
+        Path(output_arg.removeprefix("--output=")).mkdir(
+            parents=True, exist_ok=True,
+        )
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    def _run(self, tmp: Path, extra: list[str]) -> tuple[int, Path]:
+        d, fake_dita_ot = self._make_source(tmp)
+        staged = tmp / ".dita-build"
+        with mock.patch.object(publish_html, "subprocess") as mock_sub:
+            mock_sub.run.side_effect = self._fake_run
+            rc = publish_html.main([
+                "--dita", str(d),
+                "--out", str(tmp / "html"),
+                "--dita-ot", str(fake_dita_ot),
+                "--staged", str(staged),
+                *extra,
+            ])
+        return rc, staged
+
+    def test_staged_removed_by_default(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            rc, staged = self._run(tmp, extra=[])
+            self.assertEqual(rc, 0)
+            self.assertFalse(
+                staged.exists(),
+                "staged build tree must be cleaned up when --keep-staged absent",
+            )
+
+    def test_keep_staged_preserves_tree_and_ditamap(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            rc, staged = self._run(tmp, extra=["--keep-staged"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(
+                staged.is_dir(),
+                "--keep-staged must leave the staged build tree in place",
+            )
+            # stage() relocates each ditamap to <stem>/<stem>.ditamap — the
+            # exact resource DITA-OT is asked to load. Prove it is present.
+            self.assertTrue(
+                (staged / "main" / "main.ditamap").is_file(),
+                "kept staged tree must contain the relocated ditamap",
+            )
 
 
 def _html_twin(dita_path: Path) -> Path:

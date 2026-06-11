@@ -327,6 +327,21 @@ def emit_docx(path: Path, *, title: str) -> None:
             zf.writestr(info, content)
 
 
+def emit_doc(path: Path, *, title: str) -> None:
+    """Write deterministic placeholder bytes for a legacy ``.doc`` sheet.
+
+    The mock is not a renderer and nothing downstream parses the ``.doc``
+    (``snapshot_analysis_docs.py`` only hands it to LibreOffice), so a
+    fixed, byte-stable placeholder is sufficient for the test corpus. The
+    rendered sibling ``.png`` is emitted alongside by ``_emit_analysis_sheet``
+    so the full pipeline exercises the doc -> inline-image path without
+    LibreOffice (feature 007 T013).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    placeholder = f"[legacy .doc analysis sheet placeholder] {title}\n"
+    path.write_bytes(placeholder.encode("utf-8"))
+
+
 def _escape_xml(text: str) -> str:
     return (
         text.replace("&", "&amp;")
@@ -346,7 +361,7 @@ class GramSpec:
     folder_path: Path        # absolute folder path on disk
     descriptor: str          # "Gram N: <instructor detail>"
     rel_analysis: str        # relative href from PPTX to Analysis Sheet
-    analysis_kind: str       # "docx" or "png"
+    analysis_kind: str       # "doc", "docx", or "png"
     lofars: list["LofarSpec"]
 
 
@@ -356,6 +371,78 @@ class LofarSpec:
     rel_glc: str             # relative href from PPTX to .glc
     rel_media: str           # relative href to .png or .wav referenced by GLC
     media_kind: str          # "png" or "wav"
+
+
+# -----------------------------------------------------------------------------
+# Deliberate cross-publication duplicates (reverse-spec §7; corpus dedup demo)
+# -----------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SharedLofar:
+    label: str
+    media_kind: str  # "png" or "wav"
+    time_end: int
+    freq_end: int
+
+
+@dataclass(frozen=True)
+class SharedGram:
+    """A gram emitted byte-identically into two publications.
+
+    Same gram_num, same lofar layout, same time_end / freq_end values, same
+    analysis-sheet kind, so every emitted asset (GLC, PNG, WAV, Analysis.png)
+    is byte-for-byte identical across the two publications. The PPTX
+    descriptor may differ between publications — that's the realistic case
+    the duplicate-detection workflow has to catch (the file_size column
+    surfaces it even when names drift).
+    """
+    gram_num: int
+    descriptor_week1: str   # PPTX descriptor used in Instructor Week 1 Grams
+    descriptor_test1: str   # PPTX descriptor used in Instructor Progress Test 1 Grams
+    lofars: tuple[SharedLofar, ...]
+
+
+SHARED_GRAMS_WEEK1_TEST1: tuple[SharedGram, ...] = (
+    # Identical descriptors in both publications — pure dupe (matches by
+    # both name and file_size).
+    SharedGram(
+        gram_num=3,
+        descriptor_week1="Gram 3: FR Constitution-class, Category 2, Endor",
+        descriptor_test1="Gram 3: FR Constitution-class, Category 2, Endor",
+        lofars=(
+            SharedLofar(label="Lofar 1", media_kind="png", time_end=300, freq_end=400),
+            SharedLofar(label="Lofar 2", media_kind="png", time_end=240, freq_end=200),
+        ),
+    ),
+    # Identical descriptors in both publications, but a wav-rendered lofar.
+    SharedGram(
+        gram_num=7,
+        descriptor_week1="Gram 7: FR Defiant, Category 1, Vulcan",
+        descriptor_test1="Gram 7: FR Defiant, Category 1, Vulcan",
+        lofars=(
+            SharedLofar(label="Lofar 1", media_kind="wav", time_end=271, freq_end=100),
+        ),
+    ),
+    # Slightly different descriptor across publications — same assets, drifted
+    # name. This is the case the file_size column has to catch: gram_id and
+    # vessel_name would not match by string compare, but every asset still has
+    # an identical byte count to its twin in the other publication.
+    SharedGram(
+        gram_num=11,
+        descriptor_week1="Gram 11: FR Voyager, Category 3, Risa",
+        descriptor_test1="Gram 11: FR Voyager, Category 3, Risa (mark II)",
+        lofars=(
+            SharedLofar(label="Lofar 1", media_kind="png", time_end=180, freq_end=800),
+            SharedLofar(label="Lofar 2", media_kind="png", time_end=240, freq_end=400),
+            SharedLofar(label="Lofar 3", media_kind="png", time_end=360, freq_end=200),
+        ),
+    ),
+)
+
+SHARED_PUB_NAMES: frozenset[str] = frozenset((
+    "Instructor Week 1 Grams",
+    "Instructor Progress Test 1 Grams",
+))
 
 
 def _gram_numbers_with_gaps(target: int, rng: random.Random) -> list[int]:
@@ -431,6 +518,12 @@ def _emit_analysis_sheet(
     if kind == "docx":
         name = "Analysis Sheet.docx"
         emit_docx(gram_folder / name, title=title)
+    elif kind == "doc":
+        name = "Analysis Sheet.doc"
+        emit_doc(gram_folder / name, title=title)
+        # Ship the rendered sibling .png (same stem) so the doc -> inline-image
+        # path runs end to end without LibreOffice (feature 007 T013).
+        emit_analysis_sheet_image(gram_folder / "Analysis Sheet.png")
     else:
         name = "Analysis.png"
         emit_analysis_sheet_image(gram_folder / name)
@@ -465,7 +558,7 @@ def build_gram_specs(pub: Publication, files_dir: Path, rng: random.Random) -> l
         files_dir_name = files_dir.name
         rel_folder_from_pptx = f"{files_dir_name}/{rel_folder}"
 
-        analysis_kind = rng.choice(("docx", "png"))
+        analysis_kind = rng.choice(("doc", "docx", "png"))
         rel_analysis = _emit_analysis_sheet(
             folder_path, rel_folder_from_pptx, analysis_kind, title=descriptor)
         lofars = _build_lofars(folder_path, rel_folder_from_pptx, rng)
@@ -656,12 +749,95 @@ def build_publication_pptx(pub: Publication, out_pptx: Path, specs: list[GramSpe
     prs.save(out_pptx)
 
 
+def _emit_shared_gram(
+    files_dir: Path, shared: SharedGram, descriptor: str
+) -> GramSpec:
+    """Emit one duplicate-across-publications gram into ``files_dir``.
+
+    Always uses the flat (non-batched) layout because the two participating
+    publications (Week 1, Progress Test 1) are non-batched. Lofar media
+    filenames match their labels exactly (no random suffix) so the same
+    ``_pick_variant`` stem is used in both publications and the resulting
+    PNG bytes are identical.
+    """
+    folder_name = f"Gram {shared.gram_num}"
+    folder_path = files_dir / folder_name
+    folder_path.mkdir(parents=True, exist_ok=True)
+
+    rel_folder_from_pptx = f"{files_dir.name}/{folder_name}"
+
+    lofars: list[LofarSpec] = []
+    for lf in shared.lofars:
+        media_stem = lf.label  # e.g. "Lofar 1" — no suffix; ensures byte-identical PNGs.
+        glc_path = folder_path / f"{media_stem}.glc"
+        media_path = folder_path / f"{media_stem}.{lf.media_kind}"
+        emit_glc(glc_path, image_filename=media_path.name,
+                 time_end=lf.time_end, freq_end=lf.freq_end)
+        if lf.media_kind == "png":
+            emit_spectrogram(media_path)
+        else:
+            emit_wav(media_path)
+        lofars.append(LofarSpec(
+            label=lf.label,
+            rel_glc=f"{rel_folder_from_pptx}/{glc_path.name}",
+            rel_media=f"{rel_folder_from_pptx}/{media_path.name}",
+            media_kind=lf.media_kind,
+        ))
+
+    # Always png-form analysis sheet so the bytes match across publications
+    # (the docx-form's bytes depend on the descriptor, which may differ).
+    rel_analysis = _emit_analysis_sheet(
+        folder_path, rel_folder_from_pptx, "png", title=descriptor,
+    )
+
+    return GramSpec(
+        gram_num=shared.gram_num,
+        folder_name=folder_name,
+        folder_path=folder_path,
+        descriptor=descriptor,
+        rel_analysis=rel_analysis,
+        analysis_kind="png",
+        lofars=lofars,
+    )
+
+
+def _inject_shared_duplicates(
+    pub: Publication, files_dir: Path, specs: list[GramSpec]
+) -> list[GramSpec]:
+    """Replace any conflicting auto-generated specs with the shared duplicates.
+
+    Only applies to Week 1 Grams and Progress Test 1 Grams; every other
+    publication is returned unchanged. The shared specs are placed at the
+    front of the list so they land on the first content slide.
+    """
+    if pub.name not in SHARED_PUB_NAMES:
+        return specs
+    is_week1 = pub.name == "Instructor Week 1 Grams"
+
+    shared_nums = {s.gram_num for s in SHARED_GRAMS_WEEK1_TEST1}
+    kept: list[GramSpec] = []
+    for spec in specs:
+        if spec.gram_num in shared_nums:
+            if spec.folder_path.exists():
+                shutil.rmtree(spec.folder_path)
+            continue
+        kept.append(spec)
+
+    shared_specs: list[GramSpec] = []
+    for shared in SHARED_GRAMS_WEEK1_TEST1:
+        descriptor = shared.descriptor_week1 if is_week1 else shared.descriptor_test1
+        shared_specs.append(_emit_shared_gram(files_dir, shared, descriptor))
+
+    return shared_specs + kept
+
+
 def build_publication(pub: Publication, out_root: Path, rng: random.Random) -> None:
     """Write one publication: <Name>/<Name>.pptx + <Name> Files/Gram N/..."""
     pub_dir = out_root / pub.name
     files_dir = pub_dir / f"{pub.name} Files"
     files_dir.mkdir(parents=True, exist_ok=True)
     specs = build_gram_specs(pub, files_dir, rng)
+    specs = _inject_shared_duplicates(pub, files_dir, specs)
     out_pptx = pub_dir / f"{pub.name}.pptx"
     build_publication_pptx(pub, out_pptx, specs)
 
@@ -697,4 +873,11 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    rc = main()
+    # Preserve CLI exit codes when invoked as a script, but stay silent
+    # when invoked from an interactive REPL via runpy.run_path —
+    # ``sys.exit`` would otherwise kill the interpreter and break the
+    # up-arrow iteration loop. ``sys.ps1`` is only defined in
+    # interactive sessions.
+    if rc and not hasattr(sys, "ps1"):
+        sys.exit(rc)

@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import generate_dita  # noqa: E402
+import deduplicate_csv  # noqa: E402
 
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
@@ -21,14 +22,18 @@ TMP = REPO_ROOT / "tests" / "_tmp"
 
 
 def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
-         image_root: Path = FIXTURES, clean: bool = True) -> int:
+         image_root: Path = FIXTURES, clean: bool = True,
+         stub_wav: "Path | None" = None) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
-    return generate_dita.main([
+    argv = [
         "--csv", str(csv_path),
         "--out", str(out_dir),
         "--image-root", str(image_root),
-    ])
+    ]
+    if stub_wav is not None:
+        argv += ["--stub-wav", str(stub_wav)]
+    return generate_dita.main(argv)
 
 
 class GenerateDitaTests(unittest.TestCase):
@@ -280,6 +285,38 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(len(hrefs), len(set(hrefs)),
                          f"duplicate topicrefs in ditamap: {hrefs}")
 
+    def test_main_ditamap_href_clean_for_no_week_deck(self) -> None:
+        """An empty effective chapter on a ``main`` row must still yield a clean,
+        relative ditamap href — no ``main//...`` double slash.
+
+        Regression (feature 007/008): an empty slug interpolated as
+        ``main/{slug}/...`` emitted ``main//...``; the publish stager's
+        ``replace('href="main/', ...)`` then turned that into a leading-slash
+        ``/...`` (absolute) href that DITA-OT silently drops under
+        --processing-mode=lax — the gram index rendered but every such gram 404'd.
+
+        Feature 009: ``main`` is doc-less, so even with a stray ``target_doc`` the
+        href carries no document tier — an empty chapter collapses cleanly to
+        ``main/gram-NN/...``.
+        """
+        row = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
+        row.update({
+            "publication": "main", "chapter": "", "gram_id": "Gram 1",
+            "topic_type": "main", "sequence": "1",
+            "topic_filename": "gram_01.dita",
+            "target_doc": "Pub10_Ed22B_Updated.pptx",  # ignored for main (feature 009 guard)
+        })
+        ditamap = generate_dita.emit_main_ditamap([row], self.out)
+        hrefs = [tr.get("href") for tr in ET.parse(ditamap).getroot().iter("topicref")]
+        self.assertEqual(hrefs, ["main/gram-01/gram_01.dita"])
+        self.assertNotIn("//", hrefs[0])
+        # Mirror the publish stager's leading-`main/` strip: the result must
+        # stay relative (no leading slash) so DITA-OT can resolve it.
+        self.assertFalse(
+            hrefs[0].replace("main/", "", 1).startswith("/"),
+            "stage() rewrite would yield an absolute href",
+        )
+
     def test_test_ditamap_is_flat(self) -> None:
         _run(self.out)
         ditamap = self.out / "progress-test-1.ditamap"
@@ -401,9 +438,52 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "config.glc")
         self.assertEqual(xref.get("format"), "glc")
 
+    def test_stub_wav_substitutes_contents_keeps_slug(self) -> None:
+        """``--stub-wav`` swaps every .wav source with the stub file but keeps
+        the slugified per-gram filename so the paired .glc's internal
+        ``data_source/filename`` reference still resolves at publish time.
+        The .glc itself is copied verbatim — only the .wav is stubbed."""
+        glc_src = TMP / "stub_wav_src" / "supporting" / "gram08" / "config.glc"
+        wav_src = TMP / "stub_wav_src" / "supporting" / "gram08" / "audio_clip.wav"
+        stub_src = TMP / "stub.wav"
+        glc_src.parent.mkdir(parents=True, exist_ok=True)
+        glc_src.write_bytes(b"<GAPS_Lite_configuration/>")
+        wav_src.write_bytes(b"REAL-WAV-CONTENT")
+        stub_src.write_bytes(b"STUB-WAV-CONTENT")
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 08", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_08.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram08/config.glc",
+            "glc_path": "supporting/gram08/config.glc",
+            "png_path": "supporting/gram08/audio_clip.wav",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path, image_root=TMP / "stub_wav_src",
+             stub_wav=stub_src)
+        gram_dir = self.out / "main" / "arctic-survey" / "gram-08"
+        glc_copy = gram_dir / "config.glc"
+        wav_copy = gram_dir / "audio-clip.wav"
+        self.assertTrue(wav_copy.is_file())
+        # Slug preserved so the .glc's internal filename reference resolves.
+        self.assertEqual(wav_copy.name, "audio-clip.wav")
+        # Contents come from the stub, not the original.
+        self.assertEqual(wav_copy.read_bytes(), b"STUB-WAV-CONTENT")
+        # The .glc is copied verbatim — stubbing is wav-only.
+        self.assertEqual(glc_copy.read_bytes(), glc_src.read_bytes())
+
     def test_glc_row_with_unsupported_extension_is_skipped(self) -> None:
         """The dispatch must reject any extension that is neither image
-        (.png/.jpg/.jpeg) nor .wav — including plausible-looking ones
+        (.png/.jpg/.jpeg/.gif) nor .wav — including plausible-looking ones
         like .bmp or .pdf — and record the skip with the offending
         extension in the reason so the technical author can triage."""
         csv_path = TMP / f"{self._testMethodName}.csv"
@@ -434,6 +514,42 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIn('gram_id="8"', skipped)
         self.assertIn(".bmp", skipped,
                       "the skip reason should name the rejected extension")
+
+    def test_glc_row_with_gif_asset_embeds_gramframe_image(self) -> None:
+        """A pre-rendered spectrogram named in the GLC may be a ``.gif``
+        (some legacy decks use them). It must dispatch to the inline
+        GramFrame table exactly like ``.png``/``.jpg`` — not be skipped —
+        and the case of the source suffix (``.GIF``) must not matter."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        rows = [{c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 09", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_09.dita",
+            "display_text": "Lofar 1",
+            "link_href": "supporting/gram09/config.glc",
+            "glc_path": "supporting/gram09/config.glc",
+            "png_path": "supporting/gram09/spectrogram.GIF",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(rows[0])
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "arctic-survey" / "gram-09" / "gram_09.dita"
+        self.assertTrue(topic.is_file())
+        root = ET.parse(topic).getroot()
+        image = root.find(".//table[@outputclass='gram-config']//image")
+        self.assertIsNotNone(image, "a .gif Lofar must embed a GramFrame image")
+        self.assertEqual(image.get("href"), "spectrogram.gif",
+                         "the copied asset href is the slugified, lower-cased name")
+        skipped = self.out / "skipped.txt"
+        if skipped.is_file():
+            self.assertNotIn("spectrogram", skipped.read_text(encoding="utf-8"),
+                             "a .gif Lofar must not be skipped")
 
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)
@@ -484,6 +600,45 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(listed, actual)
         self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
                          "manifest must be sorted")
+
+
+class MainFlatLayoutTests(unittest.TestCase):
+    """Feature 009 (US2): ``main`` is flat — ``main/week-N/gram-NN/`` with no
+    source-document tier — and scoped per ``(main, week)``. This is already true
+    on extractor output (``target_doc=""`` for ``main``); these tests lock it and
+    verify the ``_effective_doc`` guard holds even if a CSV stray-sets
+    ``target_doc`` on a ``main`` row."""
+
+    def _row(self, **kw):
+        base = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
+        base.update(publication="main", topic_type="glc", sequence="1")
+        base.update(kw)
+        return base
+
+    def test_main_topic_path_has_no_doc_tier_even_with_stray_target_doc(self) -> None:
+        out = Path("/out")
+        row = self._row(
+            chapter="Some Deck", target_chapter="2", gram_id="Gram 3",
+            target_doc="Pub10.pptx",  # stray target_doc on a main row
+        )
+        rel = generate_dita._topic_dir_for_row(out, row).relative_to(out)
+        self.assertEqual(rel.as_posix(), "main/week-2/gram-03")
+
+    def test_main_collision_key_ignores_target_doc(self) -> None:
+        # Two distinct main grams, same week + number, different target_doc.
+        # The guard forces main's effective_doc to "" so they still collide
+        # (otherwise the flat folder would be silently overwritten).
+        rows = [
+            self._row(chapter="A deck", target_chapter="2", gram_id="Gram 5",
+                      vessel_name="V1", topic_type="analysis", target_doc="d1"),
+            self._row(chapter="B deck", target_chapter="2", gram_id="Gram 5",
+                      vessel_name="V2", topic_type="analysis", target_doc="d2"),
+        ]
+        errors = generate_dita.check_row_identity(rows)
+        self.assertTrue(
+            errors, "two distinct main grams at the same (week, number) must collide",
+        )
+        self.assertIn("renumber", errors[0].lower())
 
 
 class AudienceShapeTests(unittest.TestCase):
@@ -604,12 +759,16 @@ class CsvRefactoringSupportTests(unittest.TestCase):
             shutil.rmtree(self.tmp)
         self.tmp.mkdir(parents=True)
 
-    def _write_csv(self, rows: list[list[str]]) -> Path:
+    def _write_csv(self, rows: list[dict]) -> Path:
         csv_path = self.tmp / "source.csv"
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
-            writer = csv.writer(fh, lineterminator="\r\n")
-            writer.writerow(list(generate_dita.CSV_COLUMNS))
-            writer.writerows(rows)
+            writer = csv.DictWriter(
+                fh, fieldnames=list(generate_dita.CSV_COLUMNS),
+                lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL,
+            )
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({col: row.get(col, "") for col in generate_dita.CSV_COLUMNS})
         return csv_path
 
     def test_normalise_gram_id_canonicalises_to_plain_integer(self) -> None:
@@ -630,12 +789,17 @@ class CsvRefactoringSupportTests(unittest.TestCase):
     def test_read_csv_normalises_gram_id_column(self) -> None:
         """Mixed integer/legacy forms in the same gram still group as one."""
         csv_path = self._write_csv([
-            ["main", "Week 2 Grams", "12", "FR Foo", "glc", "1",
-             "gram_12.dita", "LOFAR 1", "supporting/gram12/c.glc",
-             "supporting/gram12/c.glc", "271", "400", "images/gram12.png", "", ""],
-            ["main", "Week 2 Grams", "Gram 12", "FR Foo", "analysis", "1",
-             "gram_12.dita", "", "", "", "", "", "images/gram12_analysis.png",
-             "", ""],
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "12",
+             "vessel_name": "FR Foo", "topic_type": "glc", "sequence": "1",
+             "topic_filename": "gram_12.dita", "display_text": "LOFAR 1",
+             "link_href": "supporting/gram12/c.glc",
+             "glc_path": "supporting/gram12/c.glc",
+             "time_end": "271", "freq_end": "400",
+             "png_path": "images/gram12.png"},
+            {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 12",
+             "vessel_name": "FR Foo", "topic_type": "analysis", "sequence": "1",
+             "topic_filename": "gram_12.dita",
+             "png_path": "images/gram12_analysis.png"},
         ])
         rows = generate_dita.read_csv(csv_path)
         self.assertEqual([r["gram_id"] for r in rows], ["12", "12"])
@@ -644,13 +808,19 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         """A CSV authored with bare integers emits to the same paths as
         the legacy ``"Gram NN"`` form would."""
         csv_path = self._write_csv([
-            ["main", "Nordic Fishing Vessels", "12", "Nordik Jockey", "glc",
-             "1", "gram_12.dita", "LOFAR 1", "supporting/gram12/config_1.glc",
-             "supporting/gram12/config_1.glc", "271", "400",
-             "images/gram12.png", "", ""],
-            ["main", "Nordic Fishing Vessels", "12", "Nordik Jockey", "analysis",
-             "1", "gram_12.dita", "", "", "", "", "",
-             "images/gram12_analysis.png", "", ""],
+            {"publication": "main", "chapter": "Nordic Fishing Vessels",
+             "gram_id": "12", "vessel_name": "Nordik Jockey",
+             "topic_type": "glc", "sequence": "1", "topic_filename": "gram_12.dita",
+             "display_text": "LOFAR 1",
+             "link_href": "supporting/gram12/config_1.glc",
+             "glc_path": "supporting/gram12/config_1.glc",
+             "time_end": "271", "freq_end": "400",
+             "png_path": "images/gram12.png"},
+            {"publication": "main", "chapter": "Nordic Fishing Vessels",
+             "gram_id": "12", "vessel_name": "Nordik Jockey",
+             "topic_type": "analysis", "sequence": "1",
+             "topic_filename": "gram_12.dita",
+             "png_path": "images/gram12_analysis.png"},
         ])
         rc = generate_dita.main([
             "--csv", str(csv_path),
@@ -695,35 +865,351 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ]
         self.assertEqual(generate_dita.check_row_identity(rows), [])
 
-    def test_main_aborts_with_duplicate_row_identity(self) -> None:
-        """Running the generator against a CSV with a collision exits
-        non-zero and writes nothing — refactoring mistakes never reach
-        DITA-OT."""
-        csv_path = self._write_csv([
-            # Original Week 2 / Gram 05
-            ["main", "Week 2 Grams", "5", "Vessel A", "glc", "1",
-             "gram_05.dita", "LOFAR 1", "supporting/a/c.glc",
-             "supporting/a/c.glc", "180", "400", "images/a.png", "", ""],
-            ["main", "Week 2 Grams", "5", "Vessel A", "analysis", "1",
-             "gram_05.dita", "", "", "", "", "", "images/a_an.png", "", ""],
-            # Moved-from-Pub10 Gram 05 — author forgot to renumber
-            ["main", "Week 2 Grams", "Gram 05", "Vessel B", "glc", "1",
-             "gram_05.dita", "LOFAR 1", "supporting/b/c.glc",
-             "supporting/b/c.glc", "271", "400", "images/b.png", "", ""],
-            ["main", "Week 2 Grams", "Gram 05", "Vessel B", "analysis", "1",
-             "gram_05.dita", "", "", "", "", "", "images/b_an.png", "", ""],
-        ])
+    # The two distinct Week 2 grams that both claim number 5 (feature 008).
+    _COLLIDING_GRAMS = [
+        # Native Week 2 / Gram 5
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
+         "vessel_name": "Vessel A", "topic_type": "glc", "sequence": "1",
+         "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
+         "link_href": "supporting/a/c.glc", "glc_path": "supporting/a/c.glc",
+         "time_end": "180", "freq_end": "400", "png_path": "images/a.png"},
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
+         "vessel_name": "Vessel A", "topic_type": "analysis", "sequence": "1",
+         "topic_filename": "gram_05.dita", "png_path": "images/a_an.png"},
+        # A Pub10 gram reassigned to Week 2 that also claims number 5.
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
+         "vessel_name": "Vessel B", "topic_type": "glc", "sequence": "1",
+         "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
+         "link_href": "supporting/b/c.glc", "glc_path": "supporting/b/c.glc",
+         "time_end": "271", "freq_end": "400", "png_path": "images/b.png"},
+        {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
+         "vessel_name": "Vessel B", "topic_type": "analysis", "sequence": "1",
+         "topic_filename": "gram_05.dita", "png_path": "images/b_an.png"},
+    ]
+
+    def test_main_warns_but_continues_on_unrenumbered_collision(self) -> None:
+        """Two distinct grams sharing a week + number with no renumbering
+        applied must surface as a WARNING (one per collision) yet still emit,
+        so the iteration loop is fast: the operator sees the warning, runs
+        deduplicate_csv.py, and re-emits. The merge is lossy (later row's
+        analysis section drops, GLC sections interleave), which the
+        warning text spells out (feature 008 safety net, relaxed)."""
+        csv_path = self._write_csv(self._COLLIDING_GRAMS)
+        out_dir = self.tmp / "out"
+        with self.assertLogs(generate_dita.LOGGER, level="WARNING") as cm:
+            rc = generate_dita.main([
+                "--csv", str(csv_path),
+                "--out", str(out_dir),
+                "--image-root", str(FIXTURES),
+            ])
+        self.assertEqual(rc, 0, "generator must continue despite the collision")
+        self.assertTrue((out_dir / "main" / "week-2-grams").exists(),
+                        "the (merged) topic should still be written")
+        joined = "\n".join(cm.output)
+        self.assertIn("Duplicate gram slot", joined,
+                      "the per-collision warning must surface in logs")
+        self.assertIn("Continuing despite", joined,
+                      "the summary warning must surface in logs")
+
+    def test_renumbering_resolves_collision_into_unique_folders(self) -> None:
+        """Running the dedupe renumber step assigns the later gram a fresh
+        number (max+1), so the two grams land at distinct gram-NN folders with
+        no letter suffix (feature 008)."""
+        rows = [dict(r) for r in self._COLLIDING_GRAMS]
+        renumbered = deduplicate_csv.renumber_grams(rows)
+        self.assertEqual(renumbered, 1, "exactly the second gram is renumbered")
+
+        cols = list(generate_dita.CSV_COLUMNS) + ["target_gram_id"]
+        csv_path = self.tmp / "renumbered.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=cols,
+                                    lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({c: row.get(c, "") for c in cols})
+
         out_dir = self.tmp / "out"
         rc = generate_dita.main([
             "--csv", str(csv_path),
             "--out", str(out_dir),
             "--image-root", str(FIXTURES),
         ])
-        self.assertEqual(rc, 1, "generator must reject the duplicate")
-        # Nothing under the chapter should have been written.
+        self.assertEqual(rc, 0, "generator must accept the renumbered CSV")
         chapter_dir = out_dir / "main" / "week-2-grams"
-        self.assertFalse(chapter_dir.exists(),
-                         "generator must abort before emitting topics")
+        self.assertTrue((chapter_dir / "gram-05" / "gram_05.dita").is_file(),
+                        "native gram keeps number 5")
+        self.assertTrue((chapter_dir / "gram-06" / "gram_06.dita").is_file(),
+                        "renumbered gram lands at max+1 = 6, no letter suffix")
+        self.assertFalse((chapter_dir / "gram-05a").exists(),
+                         "letter-suffix folders must no longer be produced")
+
+    def test_bare_integer_target_chapter_expands_to_week(self) -> None:
+        """Feature 008: target_chapter="2" lands under main/week-2/ and the
+        main ditamap heads the chapter "Week 2"."""
+        cols = list(generate_dita.CSV_COLUMNS) + ["target_chapter"]
+        csv_path = self.tmp / "weeks.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=cols,
+                                    lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+            writer.writeheader()
+            for row in [
+                {"publication": "main", "chapter": "Instructor Pub10_Ed22B_Updated",
+                 "target_chapter": "2", "gram_id": "7", "vessel_name": "Nordik",
+                 "topic_type": "glc", "sequence": "1", "topic_filename": "gram_07.dita",
+                 "display_text": "LOFAR 1", "link_href": "supporting/g/c.glc",
+                 "glc_path": "supporting/g/c.glc", "time_end": "271", "freq_end": "400",
+                 "png_path": "images/g.png"},
+                {"publication": "main", "chapter": "Instructor Pub10_Ed22B_Updated",
+                 "target_chapter": "2", "gram_id": "7", "vessel_name": "Nordik",
+                 "topic_type": "analysis", "sequence": "1", "topic_filename": "gram_07.dita",
+                 "png_path": "images/g_an.png"},
+            ]:
+                writer.writerow({c: row.get(c, "") for c in cols})
+
+        out_dir = self.tmp / "out"
+        rc = generate_dita.main([
+            "--csv", str(csv_path), "--out", str(out_dir),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertTrue((out_dir / "main" / "week-2" / "gram-07" / "gram_07.dita").is_file(),
+                        "bare-integer chapter must slug to week-2, not pub10")
+        ditamap = (out_dir / "main.ditamap").read_text(encoding="utf-8")
+        self.assertIn("<navtitle>Week 2</navtitle>", ditamap)
+        self.assertIn("main/week-2/gram-07/gram_07.dita", ditamap)
+
+
+class DedupGenerateDitaTests(unittest.TestCase):
+    """Large-asset deduplication redirect behaviour (feature 006, US1).
+
+    These tests hand-craft a CSV carrying the optional ``master_png_path``
+    column (as ``deduplicate_csv.py`` would produce) and assert the
+    generator redirects to a single master copy, records provenance, stays
+    inert when the column is absent, and remains idempotent.
+    """
+
+    DEDUP_COLUMNS = generate_dita.CSV_COLUMNS + ("master_png_path",)
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.tmp = TMP / f"dedup_{self._testMethodName}"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _write_csv(self, rows: list[dict], cols=None) -> Path:
+        cols = cols or self.DEDUP_COLUMNS
+        csv_path = self.tmp / "source.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            writer = csv.DictWriter(
+                fh, fieldnames=list(cols),
+                lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL,
+            )
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({c: row.get(c, "") for c in cols})
+        return csv_path
+
+    def _generate(self, csv_path: Path, out_name: str = "out") -> Path:
+        out_dir = self.tmp / out_name
+        rc = generate_dita.main([
+            "--csv", str(csv_path), "--out", str(out_dir),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0)
+        return out_dir
+
+    def _image_glc_row(self, gid, vessel, png, master="") -> dict:
+        return {
+            "publication": "main", "chapter": "Images", "gram_id": gid,
+            "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
+            "topic_filename": f"gram_{gid}.dita", "display_text": "Image",
+            "time_end": "271", "freq_end": "400", "png_path": png,
+            "master_png_path": master,
+        }
+
+    def _audio_glc_row(self, gid, vessel, wav, glc, master="") -> dict:
+        return {
+            "publication": "main", "chapter": "Audio", "gram_id": gid,
+            "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
+            "topic_filename": f"gram_{gid}.dita", "display_text": "Audio",
+            "link_href": glc, "glc_path": glc, "png_path": wav,
+            "master_png_path": master,
+        }
+
+    # -- T006: inert when the master_png_path column is absent ---------------
+    def test_inert_when_master_column_absent(self) -> None:
+        """A CSV without master_png_path produces byte-identical output to a
+        baseline run and emits no <data> element anywhere (FR-010, SC-005)."""
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png"),
+        ]
+        # With column present-but-empty.
+        with_col = self._generate(self._write_csv(rows), "with_col")
+        # Without the column at all (legacy 16-col CSV).
+        csv_no_col = self.tmp / "no_col.csv"
+        with csv_no_col.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(generate_dita.CSV_COLUMNS),
+                               lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+            w.writeheader()
+            for r in rows:
+                w.writerow({c: r.get(c, "") for c in generate_dita.CSV_COLUMNS})
+        without_col = self.tmp / "without_col"
+        rc = generate_dita.main([
+            "--csv", str(csv_no_col), "--out", str(without_col),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0)
+        cmp = filecmp.dircmp(with_col, without_col)
+        self.assertEqual(cmp.diff_files, [], "present-empty column must be inert")
+        self.assertEqual(cmp.left_only, [])
+        self.assertEqual(cmp.right_only, [])
+        # No <data> emitted, and both grams copied their own image.
+        for topic in without_col.rglob("*.dita"):
+            root = ET.parse(topic).getroot()
+            self.assertIsNone(root.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
+        self.assertTrue((without_col / "main" / "images" / "gram-31" / "shared-b.png").is_file())
+
+    # -- T007: redirected image links the master, copies nothing -------------
+    def test_redirected_image_href_points_to_master(self) -> None:
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                 master="dedup/img/shared.png"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        g31 = out / "main" / "images" / "gram-31"
+        topic = ET.parse(g31 / "gram_31.dita").getroot()
+        image = topic.find(".//table[@outputclass='gram-config']//image")
+        self.assertIsNotNone(image)
+        self.assertEqual(image.get("href"), "../gram-30/shared.png")
+        # No local copy in the redirected gram.
+        self.assertFalse((g31 / "shared-b.png").exists())
+        self.assertFalse((g31 / "shared.png").exists())
+        # Master copy exists in gram-30.
+        self.assertTrue((out / "main" / "images" / "gram-30" / "shared.png").is_file())
+
+    # -- T008: redirected audio links the master .glc, pairs untouched -------
+    def test_redirected_audio_links_master_glc(self) -> None:
+        rows = [
+            self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
+                                "dedup/audio/master.glc"),
+            self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
+                                "dedup/audio/dup1.glc",
+                                master="dedup/audio/master.wav"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        g21 = out / "main" / "audio" / "gram-21"
+        topic = ET.parse(g21 / "gram_21.dita").getroot()
+        xref = topic.find(".//xref[@format='glc']")
+        self.assertIsNotNone(xref)
+        self.assertEqual(xref.get("href"), "../gram-20/master.glc")
+        # Neither .glc nor .wav copied into the redirected gram.
+        self.assertEqual(sorted(p.name for p in g21.iterdir()), ["gram_21.dita"])
+        # Master gram holds both files side by side.
+        g20 = out / "main" / "audio" / "gram-20"
+        self.assertTrue((g20 / "master.glc").is_file())
+        self.assertTrue((g20 / "master.wav").is_file())
+
+    # -- T009: master binary written exactly once across N redirects --------
+    def test_master_binary_written_exactly_once(self) -> None:
+        rows = [
+            self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
+                                "dedup/audio/master.glc"),
+            self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
+                                "dedup/audio/dup1.glc",
+                                master="dedup/audio/master.wav"),
+            self._audio_glc_row("22", "Charlie", "dedup/audio/dup2.wav",
+                                "dedup/audio/dup2.glc",
+                                master="dedup/audio/master.wav"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        wavs = sorted(p for p in out.rglob("*.wav"))
+        self.assertEqual(len(wavs), 1, f"exactly one physical .wav, got {wavs}")
+        glcs = sorted(p for p in out.rglob("*.glc"))
+        self.assertEqual(len(glcs), 1, f"exactly one physical .glc, got {glcs}")
+
+    # -- T010: provenance <data> on redirected lofars only ------------------
+    def test_provenance_data_emitted_on_redirected_lofar_only(self) -> None:
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                 master="dedup/img/shared.png"),
+            self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
+                                "dedup/audio/dup1.glc",
+                                master="dedup/audio/master.wav"),
+            self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
+                                "dedup/audio/master.glc"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        name = generate_dita.ORIGINAL_ASSET_PATH
+
+        def data_values(topic_path):
+            root = ET.parse(topic_path).getroot()
+            return [d.get("value") for d in root.findall(f".//data[@name='{name}']")]
+
+        # Redirected image gram: value is the row's own png_path.
+        self.assertEqual(
+            data_values(out / "main" / "images" / "gram-31" / "gram_31.dita"),
+            ["dedup/img/shared_b.png"],
+        )
+        # Redirected audio gram: value is the row's glc_path (not the .wav).
+        self.assertEqual(
+            data_values(out / "main" / "audio" / "gram-21" / "gram_21.dita"),
+            ["dedup/audio/dup1.glc"],
+        )
+        # Masters carry none.
+        self.assertEqual(data_values(out / "main" / "images" / "gram-30" / "gram_30.dita"), [])
+        self.assertEqual(data_values(out / "main" / "audio" / "gram-20" / "gram_20.dita"), [])
+
+    # -- T011: blank/unresolvable master falls back with a WARNING ----------
+    def test_blank_or_unresolvable_master_falls_back_with_warning(self) -> None:
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            # master_png_path points at a png_path no master row owns.
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                 master="dedup/img/does_not_exist.png"),
+        ]
+        csv_path = self._write_csv(rows)
+        out = self._generate(csv_path)
+        # main() reconfigures root logging, so assert against the dual-logged
+        # generate.log file (the air-gapped debugging surface) rather than
+        # assertLogs (whose handler setup_logging would remove).
+        log_text = Path("generate.log").read_text(encoding="utf-8")
+        self.assertIn("not resolvable", log_text)
+        self.assertIn("dedup/img/does_not_exist.png", log_text)
+        g31 = out / "main" / "images" / "gram-31"
+        # Fell back to a local copy; no <data> emitted.
+        self.assertTrue((g31 / "shared-b.png").is_file())
+        topic = ET.parse(g31 / "gram_31.dita").getroot()
+        self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
+
+    # -- T012: deduplicated export is idempotent ----------------------------
+    def test_dedup_export_idempotent(self) -> None:
+        rows = [
+            self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
+                                "dedup/audio/master.glc"),
+            self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
+                                "dedup/audio/dup1.glc",
+                                master="dedup/audio/master.wav"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                 master="dedup/img/shared.png"),
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+        ]
+        csv_path = self._write_csv(rows)
+        first = self._generate(csv_path, "run1")
+        second = self._generate(csv_path, "run2")
+
+        def _assert_identical(a: Path, b: Path) -> None:
+            cmp = filecmp.dircmp(a, b)
+            self.assertEqual(cmp.diff_files, [], f"diffs under {a}")
+            self.assertEqual(cmp.left_only, [])
+            self.assertEqual(cmp.right_only, [])
+            for sub in cmp.common_dirs:
+                _assert_identical(a / sub, b / sub)
+
+        _assert_identical(first, second)
 
 
 if __name__ == "__main__":

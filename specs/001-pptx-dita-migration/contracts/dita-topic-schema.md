@@ -11,9 +11,15 @@ All output files are:
 - UTF-8 encoded, no BOM
 - LF line endings (`"\n"`) — the publishing toolchain on Linux build
   machines is happier with LF than CRLF
-- No XML declaration (matches existing pub-9/pub-10 convention)
-- No DOCTYPE declaration (validation against the DITA DTD happens in
-  Oxygen at publish time)
+- An XML declaration (`<?xml version="1.0" encoding="UTF-8"?>`) followed by
+  the OASIS DOCTYPE for the root type — `topic.dtd` for topics, `map.dtd`
+  for ditamaps. Oxygen identifies a file as DITA by its DOCTYPE public ID;
+  without it the DITA Maps Manager rejects a bare `<map>` ("This file does
+  not appear to be a DITA map") and Author will not recognise a bare
+  `<topic>`. (Earlier revisions omitted both, on the assumption that Oxygen
+  only needed them at validation time — that proved wrong for authoring,
+  so the preamble is now emitted into the source tree. `publish_html.py`
+  still tolerates DOCTYPE-less inputs by injecting them only when absent.)
 
 ## 1. `gram_NN.dita` — single gram topic
 
@@ -35,7 +41,7 @@ by the extension of the asset named by the GLC's inner
 
 | GLC inner filename ends in | Block shape | Asset copied into gram folder |
 |---|---|---|
-| `.png` / `.jpg` | §1.2 GramFrame table embedding the image | The image file |
+| `.png` / `.jpg` / `.gif` | §1.2 GramFrame table embedding the image | The image file |
 | `.wav` | §1.3 GLC-viewer link | Both the `.glc` and the referenced `.wav` |
 | anything else | row skipped (§2) | none |
 
@@ -151,6 +157,36 @@ already lives inside the GLC for the viewer to consume directly.
 `display_text` is the human-readable label exactly as it appeared in
 the PPTX run (e.g. `"Lofar 1"`), distinct from `link_href` which is
 the raw URI from the PPTX hyperlink.
+
+### 1.4 Redirected lofar — `<data>` provenance (feature 006)
+
+When a `topic_type="glc"` row carries a resolvable `master_png_path`
+(see `csv-schema.md` → optional columns), its lofar is **redirected**:
+the asset is **not** copied into this gram's folder. The §1.2/§1.3
+block is emitted unchanged except that (1) the `<image>`/`<xref>` href
+is a topic-relative `../` path to the single master copy in the master
+gram's folder, and (2) a provenance element is appended as the **last**
+child of the lofar `<section>`:
+
+```xml
+<data name="original-asset-path" value="{link target's original local path}"/>
+```
+
+- `@value` is the original local path of the **link target** — the row's
+  `png_path` for an image lofar, its `glc_path` for an audio lofar (never
+  the `.wav`). For audio the redirected `<xref>` targets the master `.glc`,
+  and the large `.wav` stays adjacent to that master `.glc`.
+- `<data>` is part of the standard DITA metadata domain (DTD-valid, no
+  specialisation), survives DITA-OT, and is suppressed from default trainee
+  XHTML. Its **presence alone** flags the lofar as redirected — no separate
+  `@outputclass` token.
+- The element plus the master href are a complete inverse transform:
+  `rehydrate_dita.py` copies the master link target (and, for a pair, its
+  adjacent `.wav`) back under the local slug recomputed from `basename(@value)`,
+  re-localises the href, and removes the `<data>` element — yielding a topic
+  indistinguishable from a never-deduplicated one. See
+  `specs/006-large-asset-deduplication/contracts/dita-provenance-data.md`.
+- Absent on non-redirected lofars (the inert-by-default case).
 
 ## 2. Skipped rows
 
@@ -334,10 +370,11 @@ target — Oxygen remains the production publishing path (FR-021).
 
 `publish_html.py` operates on `{out}` non-destructively:
 
-1. Stages a copy of `{out}` under `.dita-build/` and prepends the OASIS
-   DITA Topic and Map DOCTYPE declarations (the source DITA omits
-   DOCTYPEs per §0; Oxygen handles validation at publish time, but
-   DITA-OT requires them to classify elements). Ditamaps already sit
+1. Stages a copy of `{out}` under the staging directory (`--staged`,
+   default `.dita-build/`). The source DITA already
+   carries the OASIS Topic/Map DOCTYPE declarations per §0, so staging
+   injects them only if absent (tolerating older DOCTYPE-less trees);
+   DITA-OT requires them to classify elements. Ditamaps already sit
    at the root of `{out}` with forward-only hrefs into their sibling
    content folders, so no path rewriting or promotion step is needed.
 2. Invokes DITA-OT once per staged ditamap with
@@ -345,6 +382,11 @@ target — Oxygen remains the production publishing path (FR-021).
    `html/{ditamap-stem}/`.
 3. Removes the staging directory once publishing completes.
 
-The script's only inputs are `--dita` (default `dita/`), `--out`
-(default `html/`), and `--dita-ot` (path to a DITA-OT installation
-that the maintainer transfers across the air-gap per FR-021).
+The script's inputs are `--dita` (default `dita/`), `--out` (default
+`html/`), `--dita-ot` (path to a DITA-OT installation that the
+maintainer transfers across the air-gap per FR-021), and `--staged`
+(default `.dita-build/`, the throwaway staging directory from step 1).
+For full-corpus runs, `--staged` and `--out` can be pointed at a roomy
+volume (e.g. the provided folder-share) so the staging copy and
+per-edition HTML — each holding a full copy of every image — don't
+fill the local disk.

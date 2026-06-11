@@ -25,7 +25,7 @@ development VM, which only happen after handover.
 
 **Language/Version**: Python 3.11+ (CPython, standard interpreter)
 **Primary Dependencies**: `python-pptx` for PPTX reading and mock generation; standard library only for everything else (`xml.etree.ElementTree`, `csv`, `pathlib`, `logging`, `argparse`, `unittest`)
-**External Toolchain (not a Python dependency, not bundled)**: (1) DITA-OT plus a Java runtime, installed manually on the air-gapped target PC. Used ad-hoc by the maintainer to render generated DITA to HTML for inspection (automated by the `publish_html.py` helper). Oxygen XML Author remains the production publishing path — DITA-OT is for development and sanity-check previews only, and is invoked outside the automated pipeline. (2) LibreOffice (headless `soffice`) used by the FR-023 analysis-sheet normalisation stage to convert `.docx` analysis sheets to PNG. Failure or absence is logged as a per-folder WARNING and surfaced in the affected CSV row's `warnings` column rather than aborting the run. Both toolchains ship acquisition/install/run instructions in the README; the user handles transfer through the air-gap.
+**External Toolchain (not a Python dependency, not bundled)**: (1) DITA-OT plus a Java runtime, installed manually on the air-gapped target PC. Used ad-hoc by the maintainer to render generated DITA to HTML for inspection (automated by the `publish_html.py` helper). Oxygen XML Author remains the production publishing path — DITA-OT is for development and sanity-check previews only, and is invoked outside the automated pipeline. (2) LibreOffice (headless `soffice`) used by the FR-023 analysis-sheet snapshot stage to convert `.docx` analysis sheets to PNG. Failure or absence is logged as a per-folder WARNING and surfaced in the affected CSV row's `warnings` column rather than aborting the run. Both toolchains ship acquisition/install/run instructions in the README; the user handles transfer through the air-gap.
 **Storage**: Filesystem only — PPTX/GLC/PNG/WAV inputs read from a configurable content root; intermediate CSV at the project root; DITA topics, copied assets (PNG/WAV/analysis sheets per FR-022), and ditamaps written under the `dita/` tree (each asset is renamed to match its owning topic's stem); HTML preview (when `publish_html.py` is run) under `html/`
 **Testing**: `unittest` discovery (`python -m unittest discover tests/`); fixtures shipped under `tests/fixtures/`; no third-party test framework
 **Target Platform**: Windows workstations on an air-gapped analyst network (post-deployment) and an internet-connected Windows VM (development); both run the same Python and the same scripts
@@ -85,7 +85,7 @@ specs/001-pptx-dita-migration/
 ```text
 mock_pptx.py                 # Synthetic instructor PPTX generator (Story 4)
 introspect_pptx.py           # Structural report producer (Story 3)
-normalise_analysis_sheets.py # Per-gram-folder .docx⇄.png normaliser (FR-023, Phase 12)
+snapshot_analysis_docs.py # Per-gram-folder .docx⇄.png snapshotter (FR-023, Phase 12)
 extract_to_csv.py            # PPTX + GLC → intermediate CSV (Story 2)
 generate_dita.py             # Reviewed CSV → DITA topics + assets + ditamaps (Story 1)
 publish_html.py              # DITA → HTML5 via DITA-OT (FR-021 preview helper)
