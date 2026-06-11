@@ -135,7 +135,7 @@ def render(path: Path) -> None:
 
 
 if __name__ == "__main__":
-    here = Path(__file__).resolve().parent.parent
+    here = Path(__file__).resolve().parent
     out = here / "mock_pptx_data" / "analysis-sheet.png"
     render(out)
     print(f"wrote {out}")

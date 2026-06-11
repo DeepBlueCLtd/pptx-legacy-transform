@@ -9,7 +9,7 @@ assets.
 
 Run as a script:
 
-    python mock_pptx.py --out-root source
+    python scripts/mock_pptx.py --out-root source
 
 Defaults to writing into the repo's ``source/`` folder so the corpus is a
 committed, reviewable deliverable (per the Phase 10 amendment in

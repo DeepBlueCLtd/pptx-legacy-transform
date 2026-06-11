@@ -225,6 +225,7 @@ __marimo__/
 output/
 tests/_tmp/
 mock_instructor.pptx
+mock_corpus/
 extracted.csv
 source.csv
 
@@ -238,3 +239,12 @@ node_modules/
 
 # Emitted by generate_dita.py on every run; not a source artefact (see 31d7de8e).
 dita/trainee.ditaval
+
+# Target-layout dirs that may appear on dev hosts (wrapper runs /
+# pip install --target per README's air-gapped setup)
+scripts/pylib/
+reports/
+
+# Default outputs of the root wrapper scripts (target-style argv)
+extract.csv
+extract.dedupe.csv

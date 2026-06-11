@@ -110,14 +110,16 @@ the PNG in and re-running.
 
 | Path | Role |
 |---|---|
-| `snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
-| `mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
-| `introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
-| `extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
-| `generate_dita.py` | Consume the signed-off CSV and emit DITA topics, copied assets, and ditamaps (Story 1, MVP). |
-| `deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
-| `rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
-| `publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
+| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
+| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
+| `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
+| `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
+| `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
+| `scripts/generate_dita.py` | Consume the signed-off CSV and emit DITA topics, copied assets, and ditamaps (Story 1, MVP). |
+| `scripts/deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
+| `scripts/rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
+| `scripts/publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
+| `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`, operator-console theme) resolved beside `publish_html.py`. |
 | `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
 | `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the **Grams** nav folder (feature 010). Override with `--static-root`. |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
@@ -132,15 +134,17 @@ python -c "import pptx; print(pptx.__version__)"
 python -m unittest discover tests/
 
 # Synthetic data path — no real corpus required
-python mock_pptx.py --out mock_instructor.pptx
-python introspect_pptx.py --input mock_instructor.pptx --out mock_report.txt
+python scripts/mock_pptx.py --out-root mock_corpus/
+python scripts/introspect_pptx.py \
+    --input "mock_corpus/Instructor Week 1 Grams/Instructor Week 1 Grams.pptx" \
+    --out mock_report.txt
 
 # Real or fixture content tree
-python extract_to_csv.py --input-root path/to/content --out extracted.csv
+python scripts/extract_to_csv.py --input-root path/to/content --out extracted.csv
 # ...review extracted.csv in Excel...
-python generate_dita.py --csv extracted.csv \
-                        --out dita/ \
-                        --image-root path/to/content
+python scripts/generate_dita.py --csv extracted.csv \
+                                --out dita/ \
+                                --image-root path/to/content
 ```
 
 A more detailed walkthrough lives in
@@ -154,6 +158,12 @@ REPL, and you drive the pipeline by `exec()`-ing thin **wrapper scripts**
 that live at the project root. `run_pipeline.bat` is *not* used here — the
 REPL plus wrappers are the interface.
 
+The repository follows the same layout: the wrappers are **committed
+templates** at the repo root. Their Config blocks carry illustrative
+target paths (`C:\dev\AAAC`, `Z:\dita`, …) that the operator tunes once
+per machine; pipeline updates never overwrite them (the release zip
+deliberately excludes the wrappers).
+
 ### Cold start — every session
 
 The WinPython shortcut opens the REPL with its working directory set to the
@@ -165,9 +175,10 @@ import os
 os.chdir(r"C:\dev\aaac")         # the project root on the target — raw string!
 os.getcwd()                       # confirm it took
 
-exec(open(r"extract.py").read())     # Stage 3: walk source\ -> reports\extract.csv
-#   -> open reports\extract.csv in Excel, resolve warnings, save as UTF-8 CSV
-exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
+exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): render analysis sheets -> sibling PNGs
+exec(open(r"extract.py").read())     # Stage 3: walk source\ -> extract.csv at ROOT
+#   -> open extract.csv in Excel, resolve warnings, save as UTF-8 CSV
+exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions -> extract.dedupe.csv
 exec(open(r"write.py").read())       # Stage 5: generate the DITA tree -> dita\
 exec(open(r"publish.py").read())     # Stage 6: HTML preview -> html\ (Oxygen is the production publisher)
 ```
@@ -178,8 +189,9 @@ misbehaves.
 
 - Use a **raw string** (`r"..."`) or forward slashes in `os.chdir` so the
   backslashes aren't read as escape sequences.
-- Do the `os.chdir` **once, by hand** — the wrappers use relative paths and
-  are deliberately cwd-independent, so don't bake the chdir into them.
+- Do the `os.chdir` **once, by hand** — the wrappers never chdir; their
+  relative inputs/outputs (e.g. `extract.csv`) resolve against the cwd you
+  set, so don't bake the chdir into them.
 - Publishing must target a **mapped drive, not a `\\server\share` UNC path** —
   see [Publishing to HTML](#publishing-to-html-optional).
 
@@ -204,14 +216,18 @@ restarting the interpreter:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py   ← thin wrappers
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (committed templates)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
-├── reports\             ← per-run output (extract.csv, logs)
+├── reports\             ← per-deck introspect reports and scratch output
 └── scripts\
     ├── pylib\           ← pip install --target lives here (see setup below)
+    ├── vendor\          ← publish assets (GramFrame bundle, theme), resolved beside publish_html.py
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
+
+This is the repository's own layout too — clone-for-clone, minus `pylib\`
+(installed per-target) and the corpus.
 
 Each wrapper prepends `scripts\pylib` (for `python-pptx`) and `scripts\` (so
 the canonical modules can import each other) to `sys.path`, busts the module
@@ -219,11 +235,11 @@ caches, sets `sys.argv`, then `runpy.run_path`s the canonical script.
 
 ### Getting pipeline updates onto the target — GitHub releases
 
-Every merge to `main` that touches a deliverable file (root-level `*.py`,
-`static/`, `stock.wav`, `requirements.txt`, this README) runs the *Package
-release* workflow, which publishes a GitHub release carrying
-`aaac-pipeline-vYYYY.MM.DD-N.zip` and a matching `.sha256` file. The zip
-already mirrors the target layout above — root scripts under `scripts\`,
+Every merge to `main` that touches a deliverable file (canonical
+`scripts/*.py`, `static/`, `stock.wav`, `requirements.txt`, this README)
+runs the *Package release* workflow, which publishes a GitHub release
+carrying `aaac-pipeline-vYYYY.MM.DD-N.zip` and a matching `.sha256` file.
+The zip mirrors the target layout above — the canonical `scripts\` tree,
 `static\` and `stock.wav` at the root — so an update is:
 
 1. On a connected host, download both assets from the latest release
@@ -231,9 +247,10 @@ already mirrors the target layout above — root scripts under `scripts\`,
 2. After the removable-media transfer, verify on the target:
    `certutil -hashfile aaac-pipeline-….zip SHA256` and compare against the
    `.sha256` file.
-3. Extract over `ROOT\` (e.g. `C:\dev\aaac`), overwriting. The target-only
-   wrappers, `source\`, and `reports\` are not in the archive and are never
-   touched.
+3. Extract over `ROOT\` (e.g. `C:\dev\aaac`), overwriting. The wrappers
+   (committed templates in the repo, deliberately absent from the archive),
+   `source\`, and `reports\` are never touched — your tuned Config blocks
+   survive every update.
 
 The unittest suite gates the publish, so a red `main` never cuts a release.
 If a deliverable change ever slips through without touching one of the
@@ -360,7 +377,7 @@ empty default, so a CSV without them behaves exactly as before:
 | Column | Written by | Notes |
 |---|---|---|
 | `target_chapter` | extractor / author | **Feature 008/009:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; for a **no-week** deck (e.g. Pub10, Legacy Pub 10) extraction now **even-slices** the deck's grams across the four weeks (`floor(G/4)` per week, remainder to the earliest weeks, in source order) instead of leaving it blank (feature 009). Remains author-editable. The generator expands a bare integer to heading `Week N` and folder `main/week-N/` (`main` carries no per-document tier). Empty falls back to the source `chapter`. |
-| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
 | `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) keeps numbering unique *within* each week — native numbers are preserved and only genuine collisions are bumped to one past the week's maximum (the feature-008 behaviour; the same number may recur in different weeks); **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-week rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong
@@ -487,7 +504,7 @@ npm test
 The Jest layer (`tests/web/`) verifies the *rendered* HTML output of
 the dual-edition publish pipeline. It runs against the live `html/`
 tree at the repo root, so it MUST be invoked *after* a successful
-`python publish_html.py` run. It asserts:
+`python scripts/publish_html.py` run. It asserts:
 
 - **No leakage of "instructor" content into the student edition** —
   recursive case-insensitive grep over every file and every path
@@ -540,8 +557,8 @@ maintainer transfers the installers across the air-gap manually:
 Render the generated tree:
 
 ```bash
-python publish_html.py --dita-ot /path/to/dita-ot-4.2.4
-# Windows: python publish_html.py --dita-ot C:\dita-ot-4.2.4
+python scripts/publish_html.py --dita-ot /path/to/dita-ot-4.2.4
+# Windows: python scripts\publish_html.py --dita-ot C:\dita-ot-4.2.4
 ```
 
 `publish_html.py` (standard-library only) stages a copy of `dita/`
@@ -564,9 +581,9 @@ Both locations are configurable. Point `--staged` and `--out` at a
 roomy volume such as the provided folder-share:
 
 ```bash
-python publish_html.py --dita-ot /path/to/dita-ot-4.2.4 \
+python scripts/publish_html.py --dita-ot /path/to/dita-ot-4.2.4 \
     --staged /mnt/share/dita-build --out /mnt/share/html
-# Windows: python publish_html.py --dita-ot C:\dita-ot-4.2.4 ^
+# Windows: python scripts\publish_html.py --dita-ot C:\dita-ot-4.2.4 ^
 #              --staged D:\share\dita-build --out D:\share\html
 ```
 
@@ -624,7 +641,7 @@ what DITA-OT was actually handed — confirm the relocated
 `<stem>/<stem>.ditamap` exists and check its exact path:
 
 ```bat
-python publish_html.py --dita-ot Z:\dita-ot-4.4 --staged Z:\dita-build --keep-staged
+python scripts\publish_html.py --dita-ot Z:\dita-ot-4.4 --staged Z:\dita-build --keep-staged
 ```
 
 The tree is overwritten at the start of the next run, so a kept copy

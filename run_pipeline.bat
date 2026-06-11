@@ -9,11 +9,11 @@ if "%~1"=="" (
 echo === PPTX to DITA Migration Pipeline ===
 
 echo [Stage 1] Snapshotting Word analysis sheets to PNG ...
-python snapshot_analysis_docs.py --content-root %1
+python scripts\snapshot_analysis_docs.py --content-root %1
 if errorlevel 1 goto error
 
 echo [Stage 2] Extracting PPTX content into extracted.csv ...
-python extract_to_csv.py --input-root %1 --out extracted.csv
+python scripts\extract_to_csv.py --input-root %1 --out extracted.csv
 if errorlevel 1 goto error
 
 echo.
@@ -21,7 +21,7 @@ echo Review extracted.csv now. Press any key to continue with DITA generation.
 pause > nul
 
 echo [Stage 4] Generating DITA into dita\ ...
-python generate_dita.py --csv extracted.csv --out dita\ --image-root %1
+python scripts\generate_dita.py --csv extracted.csv --out dita\ --image-root %1
 if errorlevel 1 goto error
 
 goto end
