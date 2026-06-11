@@ -37,7 +37,52 @@ python publish_html.py --dita-ot /path/to/dita-ot-4.2.4   # optional HTML previe
 
 There is no build step or linter. `run_pipeline.bat` is a Windows-only
 orchestrator (extract → manual review → generate); on POSIX run the scripts
-directly.
+directly. **These are dev-host invocations** — the delivered air-gapped target
+is driven differently; see *Operating on the air-gapped target* below.
+
+## Operating on the air-gapped target
+
+The **delivered** interface is neither `run_pipeline.bat` nor bare
+`python script.py` (both are dev-host shapes). On the air-gapped WinPython
+3.9.4 box the operator drives the pipeline from the **WinPython interpreter
+(REPL)** by `exec()`-ing thin **wrapper scripts** that live at the project
+root. Full detail is in README.md — "Running on the air-gapped target machine"
+(README.md:144) and "Project layout on the target" (README.md:198).
+
+**Cold start, every session.** The REPL opens in the interpreter install dir,
+so chdir into the project **once, by hand** (raw string for the backslashes),
+then run the wrappers in order:
+
+```python
+import os
+os.chdir(r"C:\dev\aaac")     # project ROOT on the target (illustrative path)
+os.getcwd()                   # confirm it took
+
+exec(open(r"extract.py").read())     # Stage 3: source\  -> reports\extract.csv
+exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
+exec(open(r"write.py").read())       # Stage 5: signed-off CSV -> dita\
+exec(open(r"publish.py").read())     # Stage 6: HTML preview  -> html\
+# introspect.py = Stage-2 diagnostic wrapper; reach for it when a deck misbehaves
+```
+
+**Target layout** — the wrappers sit one level *above* the canonical scripts:
+
+```text
+ROOT\  (e.g. C:\dev\aaac)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py   ← thin wrappers (set sys.argv, runpy the canonical script)
+├── stock.wav            ← silent stub for generate_dita.py --stub-wav
+├── source\              ← the real PPTX corpus
+├── reports\             ← per-run output (extract.csv, logs)
+└── scripts\
+    ├── pylib\           ← pip install --target python-pptx (WinPython sets ENABLE_USER_SITE = False)
+    └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
+```
+
+- **chdir once, by hand** — the wrappers use relative paths and are deliberately
+  cwd-independent; don't bake the chdir into them.
+- **Publish to a mapped drive, not a `\\server\share` UNC path** — DITA-OT chokes on UNC.
+- Target-specific paths/toggles (e.g. `--stub-wav stock.wav`) live **only** in the
+  wrapper; the canonical scripts under `scripts\` are never edited per-target.
 
 ## Architecture
 
