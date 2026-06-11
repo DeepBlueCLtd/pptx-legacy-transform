@@ -52,10 +52,15 @@ class SnapshotTestBase(unittest.TestCase):
         path.write_bytes(content)
         return path
 
-    def _run(self, *, renderer_cmd: str = STUB_CMD, dry_run: bool = False) -> int:
+    def _run(
+        self, *, renderer_cmd: str = STUB_CMD, dry_run: bool = False,
+        extra_names: list[str] | None = None,
+    ) -> int:
         argv = ["--content-root", str(self.root), "--renderer-cmd", renderer_cmd]
         if dry_run:
             argv.append("--dry-run")
+        for token in extra_names or []:
+            argv += ["--extra-name", token]
         return nas.main(argv)
 
 
@@ -271,6 +276,70 @@ class ReverseWrapTests(SnapshotTestBase):
             png.with_suffix(".docx").exists(),
             "CLI --no-reverse-wrap must suppress reverse wrap end-to-end",
         )
+
+
+# -----------------------------------------------------------------------------
+# --extra-name: opt-in for sheets that deviate from the *analysis* convention
+# -----------------------------------------------------------------------------
+
+class ExtraNameTests(SnapshotTestBase):
+
+    def test_extra_name_selects_nonconforming_doc(self) -> None:
+        doc = self._write_doc("X-aaa.doc")
+        self._write_doc("source_data.doc")
+        rc = self._run(extra_names=["X-aaa"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(doc.with_suffix(".png").exists(),
+                        "an --extra-name sheet must gain a sibling .png")
+        self.assertFalse((self.root / "source_data.png").exists(),
+                         "unrelated Word docs must stay untouched (FR-015 guard)")
+
+    def test_without_extra_name_nonconforming_doc_is_skipped(self) -> None:
+        doc = self._write_doc("X-aaa.doc")
+        rc = self._run()
+        self.assertEqual(rc, 0)
+        self.assertFalse(doc.with_suffix(".png").exists(),
+                         "default selection must stay *analysis*-only")
+
+    def test_extra_name_matches_case_insensitively(self) -> None:
+        # Real-corpus shape: no 'analysis' token, interior spaces, mixed case.
+        doc = self._write_doc("V III .doc")
+        rc = self._run(extra_names=["v iii"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(doc.with_suffix(".png").exists(),
+                        "extra-name tokens must match case-insensitively")
+
+    def test_iter_selects_extra_names_alongside_convention(self) -> None:
+        self._write_doc("X-aaa.doc")
+        self._write_doc("normal_analysis.doc")
+        self._write_doc("source_data.doc")
+        found = {p.name for p in nas.iter_analysis_sheets(self.root, ("x-aaa",))}
+        self.assertEqual(found, {"X-aaa.doc", "normal_analysis.doc"})
+
+    def test_blank_extra_name_token_is_ignored(self) -> None:
+        # An empty substring would match *every* Word doc — must be dropped.
+        self._write_doc("source_data.doc")
+        with self.assertLogs(nas.LOGGER, level="WARNING") as cm:
+            results = nas.snapshot(
+                self.root, STUB_CMD, dry_run=False, extra_names=["", "  "])
+        self.assertEqual(results, [])
+        self.assertFalse((self.root / "source_data.png").exists(),
+                         "a blank token must not widen selection to every doc")
+        self.assertTrue(any("blank --extra-name" in m for m in cm.output))
+
+    def test_extra_name_reverse_wraps_png_only_sheet(self) -> None:
+        png = self.root / "X-aaa.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        nas.snapshot(self.root, STUB_CMD, dry_run=False, extra_names=["X-aaa"])
+        self.assertTrue(png.with_suffix(".docx").exists(),
+                        "an --extra-name sheet must ride the FR-018 wrap path")
+
+    def test_cli_extra_name_threads_through_main(self) -> None:
+        doc = self._write_doc("Y-bbb.doc")
+        rc = self._run(extra_names=["Y-bbb", "zzz"])  # repeatable; no-match is harmless
+        self.assertEqual(rc, 0)
+        self.assertTrue(doc.with_suffix(".png").exists(),
+                        "CLI --extra-name must reach snapshot() end-to-end")
 
 
 # -----------------------------------------------------------------------------
