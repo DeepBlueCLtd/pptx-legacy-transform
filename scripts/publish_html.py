@@ -389,6 +389,11 @@ def _prune_linked_nav_branches(node: "_Element") -> int:
         kept.append(child)
         if isinstance(child, _Element):
             pruned += _prune_linked_nav_branches(child)
+    if has_link and pruned:
+        # Drop the indentation text that framed the removed <ul>, so the
+        # collapsed <li> re-emits flat: <li…><a …>Week N</a></li>.
+        kept = [c for c in kept
+                if not (isinstance(c, _Text) and not c.data.strip())]
     node.children = kept
     return pruned
 

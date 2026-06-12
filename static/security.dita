@@ -6,9 +6,9 @@
   <body>
     <note type="important">This is mock development content. Replace it with
       the real handling and classification guidance before delivery.</note>
-    <p>Treat every gram, analysis sheet and recording as controlled training
-      material. Do not copy publications onto removable media or transmit
-      them off the air-gapped network.</p>
+    <p>Treat every gram<ph audience="-trainee">, analysis sheet</ph> and
+      recording as controlled training material. Do not copy publications
+      onto removable media or transmit them off the air-gapped network.</p>
     <p>Return to the <xref href="welcome.dita">Welcome</xref> page.</p>
   </body>
 </topic>
