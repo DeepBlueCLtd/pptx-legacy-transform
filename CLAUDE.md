@@ -237,8 +237,12 @@ independently, so each must be self-contained.
   at the `subprocess` boundary).
 - **`tests/web/` (Jest)** is developer-time only and asserts on the *rendered*
   `html/` tree — so it must run *after* a successful `publish_html.py`. It checks
-  no instructor-content leakage into student editions, gram-heading shape, URL
-  parity across editions, and HTML idempotency.
+  no instructor-content leakage into student editions, gram-heading shape, and
+  URL parity across editions. The `dita/` and `html/` trees are **not
+  committed**: CI's web job rebuilds both from `source/` via the full pipeline
+  before running Jest (plus the dita↔html image-presence cross-checks), and the
+  gh-pages regenerate workflow double-publishes and tree-compares to enforce
+  the byte-determinism invariant.
 
 ## Known stub
 
