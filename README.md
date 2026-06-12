@@ -128,6 +128,7 @@ the PNG in and re-running.
 | Path | Role |
 |---|---|
 | `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
+| `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
 | `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
@@ -204,6 +205,21 @@ exec(open(r"publish.py").read())     # Stage 6: HTML preview -> html\ (Oxygen is
 deck or the whole `source\` tree; reach for it (Stage 2) when a deck
 misbehaves.
 
+To run the four core stages in one shot instead of stage-by-stage, use the
+**orchestrator** `pipeline.py`. It drives extract → dedupe → write → publish
+in order and **fails fast** — if any stage returns a non-zero exit code the
+run stops there and the later stages are skipped. Set `ONLY` in its Config
+block to a source-folder name to scope the whole run to **one document**
+(or `None` for the whole corpus), and trim its `STAGES` tuple to stop early
+(e.g. drop `publish` to skip the slow DITA-OT render):
+
+```python
+exec(open(r"pipeline.py").read())    # extract -> dedupe -> write -> publish, fail-fast
+```
+
+Keep its output paths (`DITA_OUT`, `HTML_OUT`, …) in step with the
+`write.py` / `publish.py` Config blocks.
+
 - Use a **raw string** (`r"..."`) or forward slashes in `os.chdir` so the
   backslashes aren't read as escape sequences.
 - Do the `os.chdir` **once, by hand** — the wrappers never chdir; their
@@ -234,6 +250,7 @@ restarting the interpreter:
 ```text
 ROOT\  (e.g. C:\dev\aaac)
 ├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (committed templates)
+├── pipeline.py          ← orchestrator: extract -> dedupe -> write -> publish, fail-fast (committed template)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
 ├── reports\             ← per-deck introspect reports and scratch output
