@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GAPS_Lite_configuration>
+  <data_source>
+    <filename>twoview.wav</filename>
+    <bitmap_crop_values>
+      <bottom_crop>271</bottom_crop>
+    </bitmap_crop_values>
+  </data_source>
+  <settings>
+    <lofar>
+      <bandwidth>800</bandwidth>
+    </lofar>
+  </settings>
+</GAPS_Lite_configuration>

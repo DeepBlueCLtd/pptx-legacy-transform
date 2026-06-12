@@ -128,6 +128,7 @@ the PNG in and re-running.
 | Path | Role |
 |---|---|
 | `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
+| `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
 | `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
@@ -204,6 +205,21 @@ exec(open(r"publish.py").read())     # Stage 6: HTML preview -> html\ (Oxygen is
 deck or the whole `source\` tree; reach for it (Stage 2) when a deck
 misbehaves.
 
+To run the four core stages in one shot instead of stage-by-stage, use the
+**orchestrator** `pipeline.py`. It drives extract → dedupe → write → publish
+in order and **fails fast** — if any stage returns a non-zero exit code the
+run stops there and the later stages are skipped. Set `ONLY` in its Config
+block to a source-folder name to scope the whole run to **one document**
+(or `None` for the whole corpus), and trim its `STAGES` tuple to stop early
+(e.g. drop `publish` to skip the slow DITA-OT render):
+
+```python
+exec(open(r"pipeline.py").read())    # extract -> dedupe -> write -> publish, fail-fast
+```
+
+Keep its output paths (`DITA_OUT`, `HTML_OUT`, …) in step with the
+`write.py` / `publish.py` Config blocks.
+
 - Use a **raw string** (`r"..."`) or forward slashes in `os.chdir` so the
   backslashes aren't read as escape sequences.
 - Do the `os.chdir` **once, by hand** — the wrappers never chdir; their
@@ -234,6 +250,7 @@ restarting the interpreter:
 ```text
 ROOT\  (e.g. C:\dev\aaac)
 ├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (committed templates)
+├── pipeline.py          ← orchestrator: extract -> dedupe -> write -> publish, fail-fast (committed template)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
 ├── reports\             ← per-deck introspect reports and scratch output
@@ -401,7 +418,7 @@ empty default, so a CSV without them behaves exactly as before:
 | Column | Written by | Notes |
 |---|---|---|
 | `target_chapter` | extractor / author | **Feature 008/009:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; for a **no-week** deck (e.g. Pub10, Legacy Pub 10) extraction now **even-slices** the deck's grams across the four weeks (`floor(G/4)` per week, remainder to the earliest weeks, in source order) instead of leaving it blank (feature 009). Remains author-editable. The generator expands a bare integer to heading `Week N` and folder `main/week-N/` (`main` carries no per-document tier). Empty falls back to the source `chapter`. |
-| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected. Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected; for `.wav` rows "genuinely duplicate" also requires identical `time_end`/`freq_end` — two `.glc` files windowing the same recording differently are never merged, so neither student view is lost (issue #78). Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
 | `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) keeps numbering unique *within* each week — native numbers are preserved and only genuine collisions are bumped to one past the week's maximum (the feature-008 behaviour; the same number may recur in different weeks); **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-week rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong
