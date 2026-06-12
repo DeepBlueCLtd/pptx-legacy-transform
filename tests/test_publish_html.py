@@ -1049,6 +1049,9 @@ class PruneMapIndexNavTests(unittest.TestCase):
                          "grams move off the index — the week page lists them")
         self.assertNotIn("gram_07.html", pruned_html)
         self.assertIn("welcome.html", pruned_html)
+        # Collapsed entries are marked for the theme's section-tile styling.
+        self.assertEqual(pruned_html.count('class="topicref subdoc"'), 2,
+                         "each collapsed li gains the subdoc class token")
 
     def test_linkless_topichead_keeps_children(self):
         # A flat progress-test map: grams sit under the link-less Grams

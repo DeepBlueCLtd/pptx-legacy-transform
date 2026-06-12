@@ -376,7 +376,13 @@ def _find_map_navs(node: "_Element") -> "list[_Element]":
 def _prune_linked_nav_branches(node: "_Element") -> int:
     """Drop every direct ``<ul>`` child of an ``<li>`` that also carries a
     direct ``<a>`` — the linked page itself lists those children. Returns
-    the number of removed ``<ul>`` subtrees."""
+    the number of removed ``<ul>`` subtrees.
+
+    A collapsed ``<li>`` gains the class token ``subdoc`` so the theme can
+    style these entries (the week sub-documents) as section tiles, distinct
+    from plain gram tiles. The indentation text framing the removed ``<ul>``
+    is dropped too, so the entry re-emits flat.
+    """
     pruned = 0
     has_link = node.tag == "li" and any(
         isinstance(c, _Element) and c.tag == "a" for c in node.children
@@ -390,12 +396,21 @@ def _prune_linked_nav_branches(node: "_Element") -> int:
         if isinstance(child, _Element):
             pruned += _prune_linked_nav_branches(child)
     if has_link and pruned:
-        # Drop the indentation text that framed the removed <ul>, so the
-        # collapsed <li> re-emits flat: <li…><a …>Week N</a></li>.
         kept = [c for c in kept
                 if not (isinstance(c, _Text) and not c.data.strip())]
+        _add_class(node, "subdoc")
     node.children = kept
     return pruned
+
+
+def _add_class(node: "_Element", token: str) -> None:
+    """Append ``token`` to ``node``'s ``class`` attribute (idempotent)."""
+    for i, (name, value) in enumerate(node.attrs):
+        if name == "class":
+            if token not in (value or "").split():
+                node.attrs[i] = (name, f"{value} {token}" if value else token)
+            return
+    node.attrs.append(("class", token))
 
 
 def prune_map_index_nav(source: str, indent: str = "  ") -> "tuple[str, int]":
