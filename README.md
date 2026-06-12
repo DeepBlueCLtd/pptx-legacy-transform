@@ -139,7 +139,7 @@ the PNG in and re-running.
 | `scripts/publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
 | `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`, operator-console theme) resolved beside `publish_html.py`. |
 | `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
-| `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the **Grams** nav folder (feature 010). Override with `--static-root`. |
+| `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the content nav — the top-level **Week** folders for `main`, the **Grams** folder for the progress tests (feature 010). Override with `--static-root`. |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |
@@ -644,10 +644,10 @@ directory is cleaned up after each run.
 Each publication's `index.html` nav is then pruned to the nodes that
 own pages: DITA-OT renders the *entire* map tree on that page, which
 for `main` meant every gram in the corpus on one very long page. With
-each week now a chapter sub-document, the main index lists Welcome,
-Security, and the weeks under Grams; each week's own page lists its
-grams. Branches under a link-less topichead (the flat progress tests'
-grams) are kept — they appear nowhere else.
+each week now a top-level chapter sub-document, the main index lists
+Welcome, Security, and the weeks; each week's own page lists its grams.
+Branches under a link-less topichead (the flat progress tests' grams)
+are kept — they appear nowhere else.
 
 #### Staging and output on a roomy disk (full-corpus runs)
 
@@ -770,24 +770,41 @@ See the full recipe in
 Oxygen renders each **direct child of a ditamap** as a header-bar tab and a
 welcome-page tile, so listing grams at the root floods the nav. Every generated
 ditamap lives **inside its publication folder** (`dita/<pub>/<pub>.ditamap`,
-hrefs relative to that folder — no ditamap at the `dita/` root) and is shaped:
+hrefs relative to that folder — no ditamap at the `dita/` root) and is shaped
+per publication kind:
 
 ```text
+# main — weeks pulled up to the top level
 <map>
   <title>…</title>
   <topicref href="welcome.dita"/>           ← common pages, first
   <topicref href="security.dita"/>
+  <topicref href="week-1/week_1.dita">      ← each week is a top-level entry
+    …week 1's gram topicrefs…
+  </topicref>
+  <topicref href="week-2/week_2.dita"> … </topicref>
+</map>
+
+# progress tests — flat grams stay under one Grams folder
+<map>
+  <title>…</title>
+  <topicref href="welcome.dita"/>
+  <topicref href="security.dita"/>
   <topichead><topicmeta><navtitle>Grams</navtitle></topicmeta>
-    …per-week chapter-topic topicrefs (main) or gram topicrefs (progress tests)…
+    …gram topicrefs…
   </topichead>
 </map>
 ```
 
-— so the top-level nav is **Welcome · Security · Grams** for every publication.
-For `main`, each week under Grams is a **sub-document**: a chapter topic
-(`week-N/week_N.dita`) whose `<topicref>` nests the week's gram topicrefs one
-tier below it, so the rendered publication lists the weeks and each week's own
-page lists its grams — rather than every gram landing on one very long page.
+— so the top-level nav is **Welcome · Security · Week 1 · Week 2 · …** for
+`main`, and **Welcome · Security · Grams** for each flat progress test. For
+`main`, each week is a **sub-document**: a chapter topic (`week-N/week_N.dita`)
+whose `<topicref>` nests the week's gram topicrefs one tier below it, so the
+rendered publication lists the weeks and each week's own page lists its grams —
+rather than every gram landing on one very long page. Because the weeks now sit
+at the top level (with no Grams folder to park a weekless gram under), a `main`
+row with no week assigned (a Pub10-style deck whose `target_chapter` an analyst
+hasn't filled in) is a **fail-fast** error — fill in `target_chapter` and re-run.
 
 The common pages come from `static/` at the repo root: top-level `*.dita`
 (Welcome first, Security second, any extras alphabetical) plus their image

@@ -973,10 +973,12 @@ class StagedHrefsResolveTests(unittest.TestCase):
         with TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             rows = [
-                # no-week main deck (Pub10): empty chapter -> empty slug.
-                # This is the row that regressed into a 404.
-                row(publication="main", chapter="",
-                    target_doc="Pub10_Ed22B_Updated.pptx",
+                # no-week-token main deck (Pub10): the analyst has assigned a
+                # week via target_chapter (weekless main now fails fast). The
+                # stray target_doc still exercises the feature-009 doc-less
+                # guard — main hrefs carry no document tier.
+                row(publication="main", chapter="Pub10",
+                    target_chapter="2", target_doc="Pub10_Ed22B_Updated.pptx",
                     gram_id="Gram 1", topic_filename="gram_01.dita"),
                 # week-based main deck.
                 row(publication="main", chapter="Week 1",

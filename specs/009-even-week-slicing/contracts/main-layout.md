@@ -6,7 +6,12 @@
 > (`<week-slug>/gram-NN/gram_NN.dita` — no `main/` prefix and no publish-stage
 > rewriting), and each week is referenced as a **chapter sub-document**
 > (`<topicref href="week-N/week_N.dita">` wrapping the week's gram topicrefs)
-> rather than a nav-only `<topichead>`. See `README.md` → *Common pages and the
+> rather than a nav-only `<topichead>`. **Superseded again (2026-06, weeks at
+> top level):** `main` no longer has a `Grams` folder — each week
+> `<topicref>` now sits at the **top level** of the map, beside the static
+> pages, so the top-level nav is **Welcome · Security · Week 1 · Week 2 · …**,
+> and a `main` row with no week assigned is a fail-fast error
+> (`check_main_chapter_assigned`). See `README.md` → *Common pages and the
 > Grams nav folder* for the current shape.
 
 ## Path shape
