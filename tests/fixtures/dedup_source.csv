@@ -2,6 +2,8 @@
 main,Audio,20,Alpha,glc,1,gram_20.dita,Audio A,dedup/audio/master.glc,dedup/audio/master.glc,271,400,dedup/audio/master.wav,11000000,,
 main,Audio,21,Bravo,glc,1,gram_21.dita,Audio B,dedup/audio/dup1.glc,dedup/audio/dup1.glc,271,400,dedup/audio/dup1.wav,11000000,,
 main,Audio,22,Charlie,glc,1,gram_22.dita,Audio C,dedup/audio/dup2.glc,dedup/audio/dup2.glc,271,400,dedup/audio/dup2.wav,11000000,,
+main,Audio,23,Pair,glc,1,gram_23.dita,0-400 Hz,dedup/audio/twoview_a.glc,dedup/audio/twoview_a.glc,271,400,dedup/audio/twoview.wav,11000000,,
+main,Audio,23,Pair,glc,2,gram_23.dita,0-800 Hz,dedup/audio/twoview_b.glc,dedup/audio/twoview_b.glc,271,800,dedup/audio/twoview.wav,11000000,,
 main,Images,30,Delta,glc,1,gram_30.dita,Image A,,,271,400,dedup/img/shared.png,11000000,,
 main,Images,31,Echo,glc,1,gram_31.dita,Image B,,,271,400,dedup/img/shared_b.png,11000000,,
 main,Images,32,Foxtrot,glc,1,gram_32.dita,Image C,,,271,400,dedup/img/unique.png,11000000,,

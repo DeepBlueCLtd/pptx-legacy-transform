@@ -31,6 +31,11 @@ python deduplicate_csv.py \
 - Candidate = `int(file_size) > threshold`. Group candidates by `file_size` then
   confirm with `sha256` of `image_root / png_path`. First occurrence (sorted by
   the row-identity tuple) is master; the rest get `master_png_path = master.png_path`.
+- `.wav` rows additionally require an exact `(time_end, freq_end)` match
+  (issue #78): an audio pair's link target is its `.glc`, and two `.glc` files
+  can window the same recording differently. Byte-identical `.wav` rows whose
+  views differ are left non-redirected; a `.wav` row with a blank `time_end` or
+  `freq_end` is never merged (its view cannot be confirmed) and logs a WARNING.
 - Appends the `master_png_path` column if absent; otherwise repopulates it.
 - Preserves the CSV file-level contract (utf-8-sig, QUOTE_MINIMAL, `\r\n`) and is
   idempotent (re-running over the same inputs → byte-identical CSV).
