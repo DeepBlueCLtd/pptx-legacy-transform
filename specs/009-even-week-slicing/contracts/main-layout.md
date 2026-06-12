@@ -1,5 +1,14 @@
 # Contract: `main` output layout (flattened)
 
+> **Superseded in part (2026-06, week sub-documents + in-folder ditamaps).**
+> The topic *paths* below still hold, but the ditamap now lives **inside** the
+> publication folder (`main/main.ditamap`) with folder-relative hrefs
+> (`<week-slug>/gram-NN/gram_NN.dita` — no `main/` prefix and no publish-stage
+> rewriting), and each week is referenced as a **chapter sub-document**
+> (`<topicref href="week-N/week_N.dita">` wrapping the week's gram topicrefs)
+> rather than a nav-only `<topichead>`. See `README.md` → *Common pages and the
+> Grams nav folder* for the current shape.
+
 ## Path shape
 
 | | Before (feature 008) | After (feature 009) |

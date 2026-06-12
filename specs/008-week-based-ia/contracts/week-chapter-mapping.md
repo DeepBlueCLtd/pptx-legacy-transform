@@ -46,6 +46,12 @@ out/main/week-2/gram-01/gram_01.dita
 ...
 ```
 
-The main ditamap groups one `<topichead>` per effective (week) chapter with a
-`<navtitle>Week N</navtitle>`, and one `<topicref>` per gram at its
-effective-numbered path.
+The main ditamap groups one entry per effective (week) chapter, and one
+`<topicref>` per gram at its effective-numbered path.
+
+> **Update (2026-06, week sub-documents):** the chapter entry is no longer a
+> `<topichead>` with a `<navtitle>`. Each week is now a **chapter topic**
+> (`main/week-N/week_N.dita`, title `Week N` via the same
+> `_normalise_chapter` decomposition, Instructor prefix audience-tagged) and
+> the map nests the week's gram topicrefs under a `<topicref>` to it. The map
+> itself lives at `main/main.ditamap` with folder-relative hrefs.

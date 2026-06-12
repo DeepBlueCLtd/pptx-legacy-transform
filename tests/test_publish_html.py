@@ -1016,6 +1016,151 @@ class StagedHrefsResolveTests(unittest.TestCase):
                     )
 
 
+class PruneMapIndexNavTests(unittest.TestCase):
+    """The publication index's full-map nav is collapsed to the nodes that
+    own pages: a linked ``<li>`` (e.g. a week chapter sub-document) loses its
+    nested ``<ul>`` — the week's own page lists its grams — while a link-less
+    topichead ``<li>`` (the Grams folder; the flat progress tests) keeps its
+    children, which have nowhere else to appear."""
+
+    MAIN_NAV = (
+        '<html><body><nav><ul class="map">'
+        '<li class="topicref"><a href="welcome.html">Welcome</a></li>'
+        '<li class="topicref topichead">Grams'
+        '<ul>'
+        '<li class="topicref"><a href="week-1/week_1.html">Week 1</a>'
+        '<ul><li class="topicref"><a href="week-1/gram-01/gram_01.html">Gram 01</a></li></ul>'
+        '</li>'
+        '<li class="topicref"><a href="week-2/week_2.html">Week 2</a>'
+        '<ul><li class="topicref"><a href="week-2/gram-07/gram_07.html">Gram 07</a></li></ul>'
+        '</li>'
+        '</ul>'
+        '</li>'
+        '</ul></nav></body></html>'
+    )
+
+    def test_linked_week_branches_are_collapsed(self):
+        pruned_html, pruned = publish_html.prune_map_index_nav(self.MAIN_NAV)
+        self.assertEqual(pruned, 2, "one nested <ul> removed per week")
+        self.assertIn("week-1/week_1.html", pruned_html,
+                      "the week links survive — they are the index entries")
+        self.assertIn("week-2/week_2.html", pruned_html)
+        self.assertNotIn("gram_01.html", pruned_html,
+                         "grams move off the index — the week page lists them")
+        self.assertNotIn("gram_07.html", pruned_html)
+        self.assertIn("welcome.html", pruned_html)
+
+    def test_linkless_topichead_keeps_children(self):
+        # A flat progress-test map: grams sit under the link-less Grams
+        # topichead and must stay on the index — they appear nowhere else.
+        source = (
+            '<html><body><nav><ul class="map">'
+            '<li class="topicref topichead">Grams'
+            '<ul><li class="topicref"><a href="gram-03/gram_03.html">Gram 03</a></li></ul>'
+            '</li>'
+            '</ul></nav></body></html>'
+        )
+        unchanged, pruned = publish_html.prune_map_index_nav(source)
+        self.assertEqual(pruned, 0)
+        self.assertEqual(unchanged, source,
+                         "nothing pruned — source returned byte-identical")
+
+    def test_prune_only_touches_the_map_nav(self):
+        # An <li><a>…</a><ul>…</ul></li> outside ul.map is left alone.
+        source = (
+            '<html><body><ul class="other">'
+            '<li><a href="x.html">x</a><ul><li>kept</li></ul></li>'
+            '</ul></body></html>'
+        )
+        unchanged, pruned = publish_html.prune_map_index_nav(source)
+        self.assertEqual(pruned, 0)
+        self.assertEqual(unchanged, source)
+
+    def test_prune_is_idempotent(self):
+        once, _ = publish_html.prune_map_index_nav(self.MAIN_NAV)
+        twice, pruned_again = publish_html.prune_map_index_nav(once)
+        self.assertEqual(pruned_again, 0)
+        self.assertEqual(twice, once)
+
+    def test_prune_index_navs_targets_publication_indexes_only(self):
+        with TemporaryDirectory() as tmp_str:
+            out = Path(tmp_str)
+            pub_index = out / "instructor" / "main" / "index.html"
+            pub_index.parent.mkdir(parents=True)
+            pub_index.write_text(self.MAIN_NAV, encoding="utf-8")
+            # A topic page carrying the same shape must not be rewritten:
+            # only <edition>/<pub>/index.html holds the full-map nav.
+            topic = out / "instructor" / "main" / "week-1" / "week_1.html"
+            topic.parent.mkdir(parents=True)
+            topic.write_text(self.MAIN_NAV, encoding="utf-8")
+            count = publish_html.prune_index_navs(out)
+            self.assertEqual(count, 1)
+            self.assertNotIn("gram_01.html",
+                             pub_index.read_text(encoding="utf-8"))
+            self.assertEqual(topic.read_text(encoding="utf-8"), self.MAIN_NAV,
+                             "non-index pages are out of scope for the prune")
+
+
+class StageMapPlacementTests(unittest.TestCase):
+    """``stage()`` accepts both generator layouts.
+
+    The current generator emits each ditamap *inside* its publication folder
+    with folder-relative hrefs — staging must pass that shape through
+    untouched (bar DOCTYPE injection). Older trees kept the maps at the
+    source root with ``<stem>/``-prefixed hrefs; those are still relocated
+    and rewritten so a legacy tree publishes identically.
+    """
+
+    def test_in_folder_map_stages_through_untouched(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            src = tmp / "dita"
+            (src / "main" / "gram-01").mkdir(parents=True)
+            (src / "main" / "main.ditamap").write_text(
+                '<map><title>Main</title>'
+                '<topicref href="gram-01/gram_01.dita"/></map>',
+                encoding="utf-8",
+            )
+            (src / "main" / "gram-01" / "gram_01.dita").write_text(
+                '<topic id="gram_01"><title>Gram 01</title></topic>',
+                encoding="utf-8",
+            )
+            staged = tmp / ".dita-build"
+            publish_html.stage(src, staged)
+            staged_map = staged / "main" / "main.ditamap"
+            self.assertTrue(staged_map.is_file(),
+                            "in-folder map must stay at <stem>/<stem>.ditamap")
+            self.assertEqual(list(staged.glob("*.ditamap")), [],
+                             "no map may surface at the staged root")
+            body = staged_map.read_text(encoding="utf-8")
+            self.assertTrue(body.startswith("<?xml"),
+                            "staged map must carry the XML/DOCTYPE preamble")
+            self.assertIn('href="gram-01/gram_01.dita"', body,
+                          "folder-relative hrefs must not be rewritten")
+
+    def test_legacy_root_map_is_still_relocated(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            src = tmp / "dita"
+            (src / "main" / "gram-01").mkdir(parents=True)
+            (src / "main.ditamap").write_text(
+                '<map><title>Main</title>'
+                '<topicref href="main/gram-01/gram_01.dita"/></map>',
+                encoding="utf-8",
+            )
+            (src / "main" / "gram-01" / "gram_01.dita").write_text(
+                '<topic id="gram_01"><title>Gram 01</title></topic>',
+                encoding="utf-8",
+            )
+            staged = tmp / ".dita-build"
+            publish_html.stage(src, staged)
+            self.assertFalse((staged / "main.ditamap").exists(),
+                             "legacy root map must be relocated, not left behind")
+            body = (staged / "main" / "main.ditamap").read_text(encoding="utf-8")
+            self.assertIn('href="gram-01/gram_01.dita"', body,
+                          "legacy <stem>/ href prefix must be stripped")
+
+
 class KeepStagedTests(unittest.TestCase):
     """``--keep-staged`` leaves the staged build tree behind for inspection.
 

@@ -267,40 +267,62 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "analysis.docx")
         self.assertEqual(xref.get("format"), "docx")
 
-    def test_main_ditamap_topichead_per_chapter(self) -> None:
+    def test_main_ditamap_chapter_subdocuments_under_grams(self) -> None:
+        """Each main chapter (week) is a *sub-document*: a real chapter topic
+        referenced by a ``<topicref>`` nested under the Grams folder, with the
+        chapter's gram topicrefs one tier below it — not a nav-only
+        ``<topichead>`` that dumps every gram onto one page."""
         _run(self.out)
-        ditamap = self.out / "main.ditamap"
-        self.assertTrue(ditamap.is_file())
+        ditamap = self.out / "main" / "main.ditamap"
+        self.assertTrue(ditamap.is_file(),
+                        "main.ditamap must live inside the main/ folder")
         root = ET.parse(ditamap).getroot()
         self.assertEqual(root.tag, "map")
         # Feature 010: the per-gram content is demoted under a single root-level
-        # "Grams" <topichead>; the per-chapter topicheads nest inside it.
+        # "Grams" <topichead>; the chapter topicrefs nest inside it.
         root_topicheads = root.findall("topichead")
         self.assertEqual(len(root_topicheads), 1,
                          "exactly one root-level topichead — the Grams folder")
         grams = root_topicheads[0]
         self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
-        chapters = grams.findall("topichead")
+        self.assertIsNone(grams.find("topichead"),
+                          "chapters are topicrefs to chapter topics, "
+                          "not nested topicheads")
+        chapters = grams.findall("topicref")
         self.assertGreaterEqual(len(chapters), 1)
-        for th in chapters:
-            # Spec 003: chapter navtitles live inside <topicmeta>/<navtitle>
-            # (replaces the legacy navtitle= attribute). Each chapter's
-            # children are exactly one <topicmeta> followed by one or more
-            # <topicref> elements — no further nested <topichead>.
-            for child in th:
-                self.assertIn(child.tag, {"topicmeta", "topicref"})
-            self.assertIsNone(th.find("topichead"),
-                              "no nested topicheads — chapter layout is one level deep")
+        for chapter_ref in chapters:
+            href = chapter_ref.get("href")
+            self.assertRegex(href, r"^[a-z0-9-]+/[a-z0-9_]+\.dita$",
+                             "chapter topicref points at the chapter topic")
+            chapter_topic = ditamap.parent / href
+            self.assertTrue(chapter_topic.is_file(),
+                            f"chapter topic missing on disk: {chapter_topic}")
+            gram_refs = chapter_ref.findall("topicref")
+            self.assertGreaterEqual(len(gram_refs), 1,
+                                    "gram topicrefs nest inside the chapter")
+            for gram_ref in gram_refs:
+                self.assertTrue((ditamap.parent / gram_ref.get("href")).is_file(),
+                                "gram hrefs are relative to the ditamap folder")
 
     def test_main_ditamap_one_topicref_per_gram(self) -> None:
         """The CSV carries N+1 rows per gram but the ditamap must point to
         the single gram topic once, not once per row."""
         _run(self.out)
-        ditamap = self.out / "main.ditamap"
+        ditamap = self.out / "main" / "main.ditamap"
         root = ET.parse(ditamap).getroot()
         hrefs = [tr.get("href") for tr in root.findall(".//topicref")]
         self.assertEqual(len(hrefs), len(set(hrefs)),
                          f"duplicate topicrefs in ditamap: {hrefs}")
+
+    def test_no_ditamap_at_output_root(self) -> None:
+        """Every ditamap lives inside its named publication folder; nothing
+        ``*.ditamap`` may sit at the root of the output tree."""
+        _run(self.out)
+        self.assertEqual(sorted(p.name for p in self.out.glob("*.ditamap")), [],
+                         "no ditamap may sit at the output root")
+        self.assertTrue((self.out / "main" / "main.ditamap").is_file())
+        self.assertTrue(
+            (self.out / "progress-test-1" / "progress-test-1.ditamap").is_file())
 
     def test_main_ditamap_href_clean_for_no_week_deck(self) -> None:
         """An empty effective chapter on a ``main`` row must still yield a clean,
@@ -314,7 +336,8 @@ class GenerateDitaTests(unittest.TestCase):
 
         Feature 009: ``main`` is doc-less, so even with a stray ``target_doc`` the
         href carries no document tier — an empty chapter collapses cleanly to
-        ``main/gram-NN/...``.
+        ``gram-NN/...`` directly under the Grams folder (no chapter
+        sub-document to nest under), relative to the in-folder ditamap.
         """
         row = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
         row.update({
@@ -324,23 +347,21 @@ class GenerateDitaTests(unittest.TestCase):
             "target_doc": "Pub10_Ed22B_Updated.pptx",  # ignored for main (feature 009 guard)
         })
         ditamap = generate_dita.emit_main_ditamap([row], self.out)
+        self.assertEqual(ditamap, self.out / "main" / "main.ditamap")
         hrefs = [tr.get("href") for tr in ET.parse(ditamap).getroot().iter("topicref")]
-        self.assertEqual(hrefs, ["main/gram-01/gram_01.dita"])
+        self.assertEqual(hrefs, ["gram-01/gram_01.dita"])
         self.assertNotIn("//", hrefs[0])
-        # Mirror the publish stager's leading-`main/` strip: the result must
-        # stay relative (no leading slash) so DITA-OT can resolve it.
-        self.assertFalse(
-            hrefs[0].replace("main/", "", 1).startswith("/"),
-            "stage() rewrite would yield an absolute href",
-        )
+        self.assertFalse(hrefs[0].startswith("/"),
+                         "an empty chapter slug must not yield an absolute href")
 
     def test_test_ditamap_grams_under_grams_folder(self) -> None:
         """Feature 010: a progress-test ditamap's root children are the <title>,
         the common static <topicref>s, then a single "Grams" <topichead> holding
         every gram topicref — no gram sits at the ditamap root any more."""
         _run(self.out)
-        ditamap = self.out / "progress-test-1.ditamap"
-        self.assertTrue(ditamap.is_file())
+        ditamap = self.out / "progress-test-1" / "progress-test-1.ditamap"
+        self.assertTrue(ditamap.is_file(),
+                        "the test ditamap must live inside its publication folder")
         root = ET.parse(ditamap).getroot()
         for child in root:
             self.assertIn(child.tag, {"title", "topicref", "topichead"},
@@ -364,13 +385,14 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_static_pages_lead_every_ditamap(self) -> None:
         """Feature 010: Welcome then Security are the only root-level topicrefs,
-        href ``<pub>/<name>``, and precede the Grams folder in document order."""
+        bare-filename hrefs (the map sits beside the copied pages), and precede
+        the Grams folder in document order."""
         _run(self.out)
         for pub in ("main", "progress-test-1"):
-            root = ET.parse(self.out / f"{pub}.ditamap").getroot()
+            root = ET.parse(self.out / pub / f"{pub}.ditamap").getroot()
             self.assertEqual(
                 [tr.get("href") for tr in root.findall("topicref")],
-                [f"{pub}/welcome.dita", f"{pub}/security.dita"],
+                ["welcome.dita", "security.dita"],
                 f"{pub}: Welcome then Security must lead, and be the only "
                 "root-level topicrefs (grams live under the Grams folder)",
             )
@@ -396,7 +418,8 @@ class GenerateDitaTests(unittest.TestCase):
         still demotes grams under the Grams folder and succeeds (rc 0)."""
         rc = _run(self.out, static_root=TMP / "absent_static_dir")
         self.assertEqual(rc, 0)
-        root = ET.parse(self.out / "progress-test-1.ditamap").getroot()
+        root = ET.parse(
+            self.out / "progress-test-1" / "progress-test-1.ditamap").getroot()
         self.assertEqual(root.findall("topicref"), [],
                          "no static pages when the static root is absent")
         grams = root.find("topichead")
@@ -749,7 +772,7 @@ class AudienceShapeTests(unittest.TestCase):
         """Map title is a ``<title>`` child of ``<map>`` carrying an audience-
         tagged ``<ph audience="-trainee"> — Instructor Version</ph>`` suffix.
         The legacy ``title=`` attribute on ``<map>`` is no longer emitted."""
-        ditamap = self.out / "main.ditamap"
+        ditamap = self.out / "main" / "main.ditamap"
         root = ET.parse(ditamap).getroot()
         self.assertIsNone(root.get("title"),
                           'legacy title="..." attribute on <map> must not be emitted')
@@ -762,7 +785,7 @@ class AudienceShapeTests(unittest.TestCase):
                              '<title> must contain a <ph audience="-trainee"> suffix')
         self.assertEqual(ph.text, " — Instructor Version")
         # The progress-test ditamap follows the same shape.
-        pt_ditamap = self.out / "progress-test-1.ditamap"
+        pt_ditamap = self.out / "progress-test-1" / "progress-test-1.ditamap"
         pt_root = ET.parse(pt_ditamap).getroot()
         self.assertIsNone(pt_root.get("title"))
         pt_title = pt_root.find("title")
@@ -772,51 +795,52 @@ class AudienceShapeTests(unittest.TestCase):
         self.assertIsNotNone(pt_ph)
         self.assertEqual(pt_ph.text, " — Instructor Version")
 
-    def test_topichead_uses_topicmeta_navtitle(self) -> None:
-        """Each ``<topichead>`` carries ``<topicmeta>/<navtitle>``. Chapters
-        whose source name began with "Instructor " emit the prefix inside
-        ``<ph audience="-trainee">`` and the remainder as the navtitle tail.
-        The legacy ``navtitle=`` attribute on ``<topichead>`` is no longer
-        emitted."""
-        ditamap = self.out / "main.ditamap"
+    def test_chapter_topic_title_carries_audience_prefix(self) -> None:
+        """Each main chapter is a real chapter topic (a week *sub-document*),
+        and its ``<title>`` carries the audience-tagged decomposition the
+        chapter navtitles used to: a source name beginning "Instructor "
+        emits the prefix inside ``<ph audience="-trainee">`` with the
+        remainder as the tail; plain chapters emit bare text."""
+        ditamap = self.out / "main" / "main.ditamap"
         root = ET.parse(ditamap).getroot()
         # Feature 010: chapters nest under the root-level "Grams" topichead.
         grams = root.find("topichead")
         self.assertIsNotNone(grams, "feature 010: a root-level Grams topichead")
         self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
-        topicheads = grams.findall("topichead")
-        self.assertEqual(len(topicheads), 2,
+        self.assertIsNone(grams.find("topichead"),
+                          "chapters are topicrefs to chapter topics, "
+                          "not nested topicheads")
+        chapter_refs = grams.findall("topicref")
+        self.assertEqual(len(chapter_refs), 2,
                          "fixture defines two main chapters (nested under Grams)")
-        navtitles_by_kind: dict[str, ET.Element] = {}
-        for th in topicheads:
-            self.assertIsNone(
-                th.get("navtitle"),
-                'legacy navtitle="..." attribute on <topichead> must not be emitted',
-            )
-            topicmeta = th.find("topicmeta")
-            self.assertIsNotNone(topicmeta,
-                                 "<topichead> must carry a <topicmeta> child")
-            navtitle = topicmeta.find("navtitle")
-            self.assertIsNotNone(navtitle,
-                                 "<topicmeta> must carry a <navtitle> child")
-            ph = navtitle.find("ph[@audience='-trainee']")
+        titles_by_kind: dict[str, ET.Element] = {}
+        for chapter_ref in chapter_refs:
+            topic_path = ditamap.parent / chapter_ref.get("href")
+            self.assertTrue(topic_path.is_file(),
+                            f"chapter topic missing: {topic_path}")
+            topic = ET.parse(topic_path).getroot()
+            self.assertEqual(topic.tag, "topic")
+            title = topic.find("title")
+            self.assertIsNotNone(title,
+                                 "chapter topic must carry a <title>")
+            ph = title.find("ph[@audience='-trainee']")
             kind = "instructor_prefixed" if ph is not None else "plain"
-            navtitles_by_kind[kind] = navtitle
-        self.assertIn("instructor_prefixed", navtitles_by_kind,
+            titles_by_kind[kind] = title
+        self.assertIn("instructor_prefixed", titles_by_kind,
                       "fixture defines an Instructor-prefixed chapter")
-        self.assertIn("plain", navtitles_by_kind,
+        self.assertIn("plain", titles_by_kind,
                       "fixture defines a plain chapter")
-        prefixed = navtitles_by_kind["instructor_prefixed"]
+        prefixed = titles_by_kind["instructor_prefixed"]
         prefixed_ph = prefixed.find("ph")
         self.assertEqual(prefixed_ph.text, "Instructor ",
                          "audience-tagged prefix preserves the leading 'Instructor ' word + space")
         self.assertEqual(prefixed_ph.tail, "Week 1 Grams",
                          "remainder text follows the <ph> as its tail")
-        plain = navtitles_by_kind["plain"]
+        plain = titles_by_kind["plain"]
         self.assertEqual(plain.text, "Plain Chapter",
                          "plain chapters emit text directly with no <ph> wrapper")
         self.assertEqual(len(list(plain)), 0,
-                         "plain navtitle must have no child elements")
+                         "plain title must have no child elements")
 
 
 class CsvRefactoringSupportTests(unittest.TestCase):
@@ -1051,9 +1075,15 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue((out_dir / "main" / "week-2" / "gram-07" / "gram_07.dita").is_file(),
                         "bare-integer chapter must slug to week-2, not pub10")
-        ditamap = (out_dir / "main.ditamap").read_text(encoding="utf-8")
-        self.assertIn("<navtitle>Week 2</navtitle>", ditamap)
-        self.assertIn("main/week-2/gram-07/gram_07.dita", ditamap)
+        ditamap = (out_dir / "main" / "main.ditamap").read_text(encoding="utf-8")
+        self.assertIn('href="week-2/week_2.dita"', ditamap,
+                      "the week is a sub-document referenced by the map")
+        self.assertIn("week-2/gram-07/gram_07.dita", ditamap)
+        week_topic = out_dir / "main" / "week-2" / "week_2.dita"
+        self.assertTrue(week_topic.is_file(), "week chapter topic must exist")
+        self.assertIn("<title>Week 2</title>",
+                      week_topic.read_text(encoding="utf-8"),
+                      "the expanded Week N heading lives in the chapter topic")
 
 
 class DedupGenerateDitaTests(unittest.TestCase):
