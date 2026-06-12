@@ -45,5 +45,8 @@ sys.argv = [
     # Fast per-chapter iteration: scope the walk to one deck folder. CSV
     # paths stay corpus-root-relative, so downstream flags don't move:
     # "--only", "Instructor Week 1 Grams",
+    # Build only the main document — walk the whole corpus but drop the
+    # progress-test and final-assessment decks:
+    # "--exclude-tests",
 ]
 runpy.run_path(str(EXTRACT), run_name="__main__")

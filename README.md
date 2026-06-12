@@ -347,6 +347,16 @@ installs, not the user-folder install.
    The shape-grouping function (`extract_grams_from_slide`) is currently
    a documented stub; the rest of the infrastructure runs end-to-end.
 
+   The `N` in `progress-test-N` is taken from the **single integer in the
+   deck name** (`Instructor Progress Test 2 Grams` → `progress-test-2`), so
+   the number is stable no matter what subset of the corpus a run covers —
+   a `--only` run yields the same number as a full-corpus walk. A test deck
+   whose name carries no integer (or more than one) falls back to stable
+   encounter-order numbering. Because the number is the deck's own, two
+   decks that claim the same integer (e.g. a `… No FR` variant of test 3)
+   would both land on `progress-test-3`; keep one canonical deck per number
+   in `source\`.
+
    For fast debug iteration on a single chapter, pass
    `--only "<Chapter Folder Name>"`. The walk is scoped to that subdir
    but the CSV's path schema stays corpus-root-relative, so
@@ -354,6 +364,11 @@ installs, not the user-folder install.
    pointing at the corpus root without re-editing. **Don't be tempted
    to narrow `--input-root` instead** — that changes the relpath schema
    and breaks the downstream tools, one folder segment short.
+
+   To build and review **just the main document** without first carving the
+   tests out of `source\`, pass `--exclude-tests`: the walk still covers the
+   whole corpus but drops every progress-test and final-assessment deck,
+   emitting only the `main` publication. It composes with `--only`.
 
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
