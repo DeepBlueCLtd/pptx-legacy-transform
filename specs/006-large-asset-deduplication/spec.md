@@ -128,6 +128,14 @@ post-processed CSV and confirm deduplication occurs.
   gram). Deduplicating the `.wav` while leaving a local `.glc` — which would
   break the on-PC GLC viewer's adjacent-`.wav` lookup — is explicitly not
   done.
+- **Same `.wav`, different `.glc` views** (issue #78): two `.glc` files can
+  window the same recording differently (e.g. different frequency bounds, so
+  students consider two aspects of one gram). Because the link target is the
+  `.glc`, byte-identity of the `.wav` alone is not enough: `.wav` rows are
+  merged only when their extracted `(time_end, freq_end)` values also match
+  exactly. Rows sharing the bytes but not the view (or whose view cells are
+  blank) each keep their own `.glc`/`.wav` pair — a distinct student view is
+  never dropped for a space saving.
 - **Chosen master is itself empty/invalid**: if the nominated master path is
   blank, the row is treated as non-redirected (no dedup applied) and a WARNING
   is logged.
@@ -203,7 +211,8 @@ post-processed CSV and confirm deduplication occurs.
   lofar was redirected and the anchor for reversing the operation.
 - **Deduplication unit**: for image lofars, the single image file; for audio
   lofars, the `.glc`/`.wav` pair handled together, with the link targeting the
-  master `.glc`.
+  master `.glc`. Two audio units are duplicates only when the `.wav` bytes
+  *and* the `.glc` view (`time_end`, `freq_end`) both match (issue #78).
 
 ## Success Criteria *(mandatory)*
 

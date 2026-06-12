@@ -8,6 +8,13 @@ becomes the master and the remaining occurrences are pointed at it. The
 generator (``generate_dita.py``) then links every redirected lofar to the
 single master copy instead of copying its own asset.
 
+Byte-identity alone is not sufficient for ``.wav`` rows (issue #78): an
+audio lofar's link target is its ``.glc``, and two ``.glc`` files can
+present different time/frequency windows onto the same recording. A
+``.wav`` row therefore only joins a duplicate group when its extracted
+``(time_end, freq_end)`` view also matches; rows sharing the bytes but
+not the view each keep their own ``.glc``/``.wav`` pair.
+
 This step is **opt-in** and **inert-safe**: assets at or below the
 threshold, or used only once, are never redirected, and a CSV the operator
 never runs this over keeps the column absent (the export stays
@@ -127,6 +134,29 @@ def _parse_size(row: dict) -> int | None:
         return None
 
 
+def _view_key(row: dict) -> tuple:
+    """Sub-grouping key applied within a byte-identical duplicate group.
+
+    An audio lofar's link target is its ``.glc``, not the ``.wav`` it
+    names (FR-009), and two ``.glc`` files can window the same recording
+    differently. Byte-identical ``.wav`` rows are therefore
+    interchangeable only when the extracted view matches: they merge only
+    on equal ``(time_end, freq_end)`` (issue #78). A ``.wav`` row missing
+    either value gets a unique key and is never merged — dropping a
+    distinct student view is worse than missing a reclamation. Non-wav
+    assets carry their view in the row itself (the gram-config table), so
+    byte-identity alone suffices and they share one key.
+    """
+    png = (row.get("png_path", "") or "").strip()
+    if Path(png).suffix.lower() != ".wav":
+        return ("any",)
+    time_end = (row.get("time_end", "") or "").strip()
+    freq_end = (row.get("freq_end", "") or "").strip()
+    if not time_end or not freq_end:
+        return ("wav-view-unknown",) + _identity_key(row)
+    return ("wav-view", time_end, freq_end)
+
+
 def _hash_file(image_root: Path, png_path: str) -> str | None:
     """Return the sha256 hex digest of ``image_root / png_path`` or ``None``.
 
@@ -155,9 +185,11 @@ def deduplicate(
     Candidacy: ``file_size`` strictly greater than ``threshold_bytes``
     (FR-003). Candidates are grouped by ``file_size`` first; only within a
     size-collision group of >=2 is content confirmed by ``sha256`` (a
-    unique-size large file is never hashed). Within each confirmed
-    byte-identical group of >=2, the first row by ``_identity_key`` is the
-    master (empty ``master_png_path``); the rest carry the master's
+    unique-size large file is never hashed). Confirmed byte-identical
+    rows are then split by ``_view_key`` so ``.wav`` rows merge only when
+    their ``(time_end, freq_end)`` view also matches (issue #78). Within
+    each resulting group of >=2, the first row by ``_identity_key`` is
+    the master (empty ``master_png_path``); the rest carry the master's
     ``png_path``.
     """
     # Every row starts non-redirected; this also repopulates (clears stale
@@ -186,25 +218,45 @@ def deduplicate(
             digest = _hash_file(image_root, row["png_path"])
             if digest is not None:
                 by_hash[digest].append(row)
-        # 3) Nominate master + redirect within each confirmed group.
+        # 3) Nominate master + redirect within each confirmed group. A
+        #    byte-identical set is split by view first: .wav rows merge
+        #    only when (time_end, freq_end) also match (issue #78).
         for digest in sorted(by_hash):
-            group = by_hash[digest]
-            if len(group) < 2:
+            members = by_hash[digest]
+            if len(members) < 2:
                 continue
-            group.sort(key=_identity_key)
-            master = group[0]
-            master_png = master.get("png_path", "")
-            count = 0
-            for row in group[1:]:
-                row[MASTER_PNG_PATH] = master_png
-                count += 1
-            redirected += count
-            reclaimed = count * size
-            total_reclaimed += reclaimed
-            LOGGER.info(
-                "Duplicate group: master=%s redirected=%d bytes_reclaimed=%d",
-                master_png, count, reclaimed,
-            )
+            by_view: dict[tuple, list[dict]] = defaultdict(list)
+            for row in members:
+                key = _view_key(row)
+                if key[0] == "wav-view-unknown":
+                    LOGGER.warning(
+                        "Byte-identical .wav left non-redirected: %s "
+                        "(gram %s seq %s) is missing time_end/freq_end, so "
+                        "its .glc view cannot be confirmed to match",
+                        row.get("png_path", ""), row.get("gram_id", ""),
+                        row.get("sequence", ""),
+                    )
+                by_view[key].append(row)
+            for view in sorted(by_view):
+                group = by_view[view]
+                if len(group) < 2:
+                    continue
+                group.sort(key=_identity_key)
+                master = group[0]
+                master_png = master.get("png_path", "")
+                count = 0
+                for row in group[1:]:
+                    row[MASTER_PNG_PATH] = master_png
+                    count += 1
+                redirected += count
+                reclaimed = count * size
+                total_reclaimed += reclaimed
+                LOGGER.info(
+                    "Duplicate group: master=%s%s redirected=%d bytes_reclaimed=%d",
+                    master_png,
+                    " view=%s/%s" % (view[1], view[2]) if view[0] == "wav-view" else "",
+                    count, reclaimed,
+                )
 
     LOGGER.info(
         "Deduplication summary: groups_redirected_rows=%d total_bytes_reclaimed=%d",

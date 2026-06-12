@@ -68,6 +68,8 @@ exec(open(r"dedupe.py").read())      # optional: renumber within-week gram colli
 exec(open(r"write.py").read())       # Stage 5: signed-off CSV -> dita\
 exec(open(r"publish.py").read())     # Stage 6: HTML preview  -> html\
 # introspect.py = Stage-2 diagnostic wrapper; reach for it when a deck misbehaves
+# pipeline.py   = orchestrator: runs extract -> dedupe -> write -> publish in one
+#                 call, fail-fast; set ONLY to scope the run to a single document
 ```
 
 **Target layout** — identical to the repo's own layout; the wrappers sit one
@@ -76,6 +78,7 @@ level *above* the canonical scripts:
 ```text
 ROOT\  (e.g. C:\dev\aaac)
 ├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (set sys.argv, runpy the canonical script)
+├── pipeline.py          ← orchestrator: runs the four core stages in sequence, fail-fast
 ├── stock.wav            ← silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
 ├── reports\             ← per-deck introspect reports, scratch output

@@ -47,9 +47,11 @@ SCRIPTS = (
     "snapshot_analysis_docs.py",
 )
 
-# Thin REPL wrappers at the repo root (README "Running on the air-gapped
-# target machine"). Scanned for the stdlib-only guarantee like the
-# canonical scripts; tests/test_wrappers.py covers their shape.
+# Thin REPL wrappers at the repo root plus the pipeline orchestrator
+# (README "Running on the air-gapped target machine"). Scanned for the
+# stdlib-only guarantee like the canonical scripts; tests/test_wrappers.py
+# covers the single-stage wrappers' shape, tests/test_pipeline.py the
+# orchestrator's.
 WRAPPERS = (
     "extract.py",
     "dedupe.py",
@@ -57,6 +59,7 @@ WRAPPERS = (
     "publish.py",
     "introspect.py",
     "snapshot.py",
+    "pipeline.py",
 )
 
 
@@ -98,9 +101,12 @@ class AirGappedReadinessTests(unittest.TestCase):
                     continue
                 if mod in PREP_TIME_ALLOWED.get(path.name, set()):
                     continue
-                # In-tree modules: scripts at root and the test package.
+                # In-tree modules: canonical scripts, root-level wrappers /
+                # orchestrator (e.g. test_pipeline imports pipeline), and the
+                # test package.
                 in_tree_scripts = {Path(s).stem for s in SCRIPTS}
-                if mod in in_tree_scripts | {"tests"}:
+                in_tree_roots = {Path(w).stem for w in WRAPPERS}
+                if mod in in_tree_scripts | in_tree_roots | {"tests"}:
                     continue
                 offenders.append((path.name, mod))
         self.assertEqual(offenders, [], f"unexpected third-party imports: {offenders}")

@@ -67,11 +67,12 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertNotIn("run_pipeline.bat", names)
         # Dev-only mock tooling stays out of the deliverable.
         self.assertNotIn("scripts/generate_mock_analysis_sheet.py", names)
-        # The root wrappers are committed templates, never shipped: an
-        # upgrade extracted over ROOT\ must not clobber the operator's
-        # tuned copies.
+        # The root wrappers and the pipeline orchestrator are committed
+        # templates, never shipped: an upgrade extracted over ROOT\ must
+        # not clobber the operator's tuned copies.
         for wrapper in ("extract.py", "dedupe.py", "write.py",
-                        "publish.py", "introspect.py", "snapshot.py"):
+                        "publish.py", "introspect.py", "snapshot.py",
+                        "pipeline.py"):
             self.assertNotIn(wrapper, names)
         # vendor assets sit beside publish_html.py in the repo but are
         # not part of the archive contract.

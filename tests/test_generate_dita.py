@@ -1180,12 +1180,14 @@ class DedupGenerateDitaTests(unittest.TestCase):
             "master_png_path": master,
         }
 
-    def _audio_glc_row(self, gid, vessel, wav, glc, master="") -> dict:
+    def _audio_glc_row(self, gid, vessel, wav, glc, master="",
+                       time_end="", freq_end="") -> dict:
         return {
             "publication": "main", "chapter": "Audio", "gram_id": gid,
             "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
             "topic_filename": f"gram_{gid}.dita", "display_text": "Audio",
             "link_href": glc, "glc_path": glc, "png_path": wav,
+            "time_end": time_end, "freq_end": freq_end,
             "master_png_path": master,
         }
 
@@ -1336,6 +1338,77 @@ class DedupGenerateDitaTests(unittest.TestCase):
         self.assertTrue((g31 / "shared-b.png").is_file())
         topic = ET.parse(g31 / "gram_31.dita").getroot()
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
+
+    # -- issue #78: .wav redirects are gated on the (time, freq) view --------
+    def test_wav_redirect_view_mismatch_falls_back_locally(self) -> None:
+        """A stale or hand-edited redirect onto a master whose .glc presents
+        a different (time_end, freq_end) window must not resolve: the row
+        falls back to its own local .glc/.wav pair with a WARNING, so the
+        distinct student view is never dropped (issue #78)."""
+        rows = [
+            self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
+                                "dedup/audio/master.glc",
+                                time_end="271", freq_end="400"),
+            self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
+                                "dedup/audio/dup1.glc",
+                                master="dedup/audio/master.wav",
+                                time_end="271", freq_end="800"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        log_text = Path("generate.log").read_text(encoding="utf-8")
+        self.assertIn("matching (time_end, freq_end) view", log_text)
+        g21 = out / "main" / "audio" / "gram-21"
+        self.assertTrue((g21 / "dup1.glc").is_file())
+        self.assertTrue((g21 / "dup1.wav").is_file())
+        topic = ET.parse(g21 / "gram_21.dita").getroot()
+        xref = topic.find(".//xref[@format='glc']")
+        self.assertIsNotNone(xref)
+        self.assertEqual(xref.get("href"), "dup1.glc")
+        # Fell back to a local pair; no provenance <data> emitted.
+        self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
+
+    def test_wav_redirect_resolves_view_matching_master(self) -> None:
+        """Two masters share one .wav path with different .glc views; a
+        redirected row must link the master whose view matches its own,
+        regardless of CSV row order (issue #78)."""
+        rows = [
+            # The view-matching master is listed first so a path-only index
+            # (which the mismatched master would overwrite) gets this wrong.
+            self._audio_glc_row("21", "Bravo", "dedup/audio/twoview.wav",
+                                "dedup/audio/twoview_b.glc",
+                                time_end="271", freq_end="800"),
+            self._audio_glc_row("20", "Alpha", "dedup/audio/twoview.wav",
+                                "dedup/audio/twoview_a.glc",
+                                time_end="271", freq_end="400"),
+            self._audio_glc_row("22", "Charlie", "dedup/audio/twoview.wav",
+                                "dedup/audio/dup2.glc",
+                                master="dedup/audio/twoview.wav",
+                                time_end="271", freq_end="800"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        topic = ET.parse(
+            out / "main" / "audio" / "gram-22" / "gram_22.dita").getroot()
+        xref = topic.find(".//xref[@format='glc']")
+        self.assertIsNotNone(xref)
+        self.assertEqual(xref.get("href"), "../gram-21/twoview-b.glc")
+
+    def test_image_redirect_ignores_view_mismatch(self) -> None:
+        """Image redirects stay byte-identity-only: the row's own time/freq
+        ride in its gram-config table, so a differing view still redirects
+        (only .wav rows are view-gated, issue #78)."""
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                 master="dedup/img/shared.png"),
+        ]
+        rows[1]["time_end"], rows[1]["freq_end"] = "999", "888"
+        out = self._generate(self._write_csv(rows))
+        g31 = out / "main" / "images" / "gram-31"
+        topic = ET.parse(g31 / "gram_31.dita").getroot()
+        image = topic.find(".//table[@outputclass='gram-config']//image")
+        self.assertIsNotNone(image)
+        self.assertEqual(image.get("href"), "../gram-30/shared.png")
+        self.assertFalse((g31 / "shared-b.png").exists())
 
     # -- T012: deduplicated export is idempotent ----------------------------
     def test_dedup_export_idempotent(self) -> None:

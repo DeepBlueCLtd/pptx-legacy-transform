@@ -21,9 +21,11 @@ in-memory structures. No database; all state is the CSV and the DITA tree.
 - Only rows whose `file_size` parses to an integer **strictly > threshold**
   (default 10 MiB) are eligible to be redirected (FR-003).
 - A non-empty `master_png_path` MUST equal the `png_path` of an existing,
-  non-redirected row in the same CSV (the master). If it is blank-but-present in
-  a way the generator cannot resolve, the row is treated as non-redirected and a
-  WARNING is logged (FR-014).
+  non-redirected row in the same CSV (the master). For a `.wav` row the master
+  must also present the same `(time_end, freq_end)` view — two `.glc` windows
+  onto one recording are never merged (issue #78). If the value cannot be
+  resolved (including a `.wav` view mismatch), the row is treated as
+  non-redirected and a WARNING is logged (FR-014).
 - The master row itself carries an **empty** `master_png_path`.
 - Relationship to existing fields: orthogonal to `target_doc`/`target_chapter`
   (refactor columns) and `png_path` (unchanged meaning). For a `.wav` row the
@@ -73,8 +75,9 @@ audio example above carries the `.glc` link-target path, **not** the `.wav`.)
 Built in the **index pass**, consumed in the **emit pass**. Not persisted.
 
 ```
-master_index: dict[str, MasterTarget]
-  key   = master row's png_path (source-relative)            # the master_png_path value redirectors carry
+master_index: dict[tuple, MasterTarget]
+  key   = ("img", master png_path)                                  # image lofars
+        | ("wav", master png_path, time_end, freq_end)              # audio pairs (issue #78)
   value = MasterTarget(
             topic_dir,        # the master gram's output folder (Path)
             link_basename,    # slug of the file a redirector links to:
@@ -84,15 +87,19 @@ master_index: dict[str, MasterTarget]
 ```
 
 **Population rule**: during the index pass, for every **non-redirected**
-asset-owning glc/image/analysis row, record `png_path → MasterTarget`. Only keys
-that are actually referenced by some `master_png_path` need survive, but
-recording all is simplest and harmless.
+asset-owning glc/image/analysis row, record its key → `MasterTarget`. Audio
+keys carry the master row's `(time_end, freq_end)` so two masters can share one
+`.wav` path with different `.glc` views (issue #78). Only keys that are
+actually referenced by some `master_png_path` need survive, but recording all
+is simplest and harmless.
 
-**Resolution rule** (emit pass): a redirected row's href =
+**Resolution rule** (emit pass): a redirected row builds its lookup key from
+`master_png_path` plus — for a `.wav` row — its **own** `(time_end, freq_end)`,
+so it resolves only to a view-matching master. Its href =
 `relpath(master.topic_dir / master.link_basename, this_gram.topic_dir)` as POSIX
 (via the existing `resolve_image_href`/`os.path.relpath` path). If the key is
-absent (master missing/blank), the row falls back to the normal local-copy path
-and a WARNING is logged (FR-014).
+absent (master missing/blank, or no master with the matching view), the row
+falls back to the normal local-copy path and a WARNING is logged (FR-014).
 
 ---
 
