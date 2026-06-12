@@ -490,20 +490,42 @@ class MasterTarget:
     link_basename: str
 
 
+def _master_index_key(png_path: str, asset_suffix: str, row: dict) -> tuple:
+    """Master-index key for an asset-owning row or for its redirector.
+
+    Audio rows are keyed by view as well as path (issue #78): a redirected
+    ``.wav`` row links to the *master's* ``.glc``, so it must resolve only
+    to a master presenting the same ``(time_end, freq_end)`` window —
+    ``deduplicate_csv.py`` only pairs rows whose views match, so building
+    the lookup key from the redirector's own values makes key equality
+    exactly view equality (and lets two masters share one ``.wav`` path
+    with different views). Image redirects stay path-only: the row's own
+    time/freq ride in its gram-config table, so byte-identical images are
+    interchangeable across views.
+    """
+    if asset_suffix == ".wav":
+        return ("wav", png_path,
+                (row.get("time_end", "") or "").strip(),
+                (row.get("freq_end", "") or "").strip())
+    return ("img", png_path)
+
+
 def build_master_index(
     rows: list[dict], out_dir: Path,
-) -> dict[str, MasterTarget]:
-    """Map every non-redirected asset-owning row's ``png_path`` → ``MasterTarget``.
+) -> dict[tuple, MasterTarget]:
+    """Map every non-redirected asset-owning row's index key → ``MasterTarget``.
 
     The **index pass** (feature 006, R4): a redirected row carries the
     master row's ``png_path`` in ``master_png_path``; this index lets the
-    emit pass resolve that key to the master's output location and link
-    filename. Only non-redirected rows (empty ``master_png_path``) are
-    recorded — they are the masters. Rows without a usable asset extension
-    are skipped. Building this is pure in-memory work over already-loaded
-    rows and emits nothing, so it is inert when no row redirects (FR-010).
+    emit pass resolve that key (combined with the redirector's own view
+    for ``.wav`` rows — see ``_master_index_key``) to the master's output
+    location and link filename. Only non-redirected rows (empty
+    ``master_png_path``) are recorded — they are the masters. Rows without
+    a usable asset extension are skipped. Building this is pure in-memory
+    work over already-loaded rows and emits nothing, so it is inert when
+    no row redirects (FR-010).
     """
-    index: dict[str, MasterTarget] = {}
+    index: dict[tuple, MasterTarget] = {}
     for row in rows:
         if (row.get("master_png_path", "") or "").strip():
             continue  # redirected row — never itself a master
@@ -521,7 +543,9 @@ def build_master_index(
         else:
             continue
         topic_dir = _topic_dir_for_row(out_dir, row)
-        index[png] = MasterTarget(topic_dir, link_basename)
+        index[_master_index_key(png, asset_suffix, row)] = MasterTarget(
+            topic_dir, link_basename,
+        )
     return index
 
 
@@ -697,7 +721,7 @@ def _append_glc_viewer_link(
 
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
-    master_index: dict[str, MasterTarget] | None = None,
+    master_index: dict[tuple, MasterTarget] | None = None,
 ) -> tuple[list[Path], list[dict], int]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
@@ -750,20 +774,27 @@ def emit_gram_topic(
         """Return the master this row redirects to, or ``None``.
 
         A row is redirected iff ``master_png_path`` is non-empty *and*
-        resolves in the master index. A non-empty-but-unresolvable target
-        (missing/blank master) is logged as a WARNING and treated as
-        non-redirected so the asset is copied locally instead (FR-014).
+        resolves in the master index. For a ``.wav`` row the lookup key
+        also carries the row's own ``(time_end, freq_end)`` view, so the
+        redirect only resolves to a master whose ``.glc`` presents the
+        same window (issue #78). A non-empty-but-unresolvable target
+        (missing/blank master, or no master with the matching view) is
+        logged as a WARNING and treated as non-redirected so the asset is
+        copied locally instead (FR-014).
         """
         key = (r.get("master_png_path", "") or "").strip()
         if not key:
             return None
-        target = index.get(key)
+        suffix = Path(r.get("png_path", "") or "").suffix.lower()
+        target = index.get(_master_index_key(key, suffix, r))
         if target is None:
             LOGGER.warning(
                 "Redirect target not resolvable for %s/%s/%s seq=%s: "
-                "master_png_path=%r not found; copying asset locally instead.",
+                "master_png_path=%r %s; copying asset locally instead.",
                 r["publication"], r["gram_id"], r["topic_type"],
                 r["sequence"], key,
+                "has no master row with a matching (time_end, freq_end) view"
+                if suffix == ".wav" else "not found",
             )
         return target
 
