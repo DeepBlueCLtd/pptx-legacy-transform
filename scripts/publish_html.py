@@ -353,10 +353,11 @@ def prettify_tree(root: Path) -> int:
 # really long page. The generator now gives each week its own chapter
 # topic ("sub-document") whose page lists its grams, so the index only
 # needs to reach the nodes that own pages: any nav branch whose <li>
-# carries its own link is collapsed to just that link. Branches under a
-# *link-less* <li> (a topichead, e.g. the Grams folder — and the flat
-# progress tests' grams beneath it) are untouched, because removing them
-# would orphan their topics from the nav entirely.
+# carries its own link is collapsed to just that link — so main's
+# top-level week branches collapse to the week links. Branches under a
+# *link-less* <li> (a topichead, e.g. the progress tests' Grams folder and
+# its grams beneath it) are untouched, because removing them would orphan
+# their topics from the nav entirely.
 
 
 def _find_map_navs(node: "_Element") -> "list[_Element]":

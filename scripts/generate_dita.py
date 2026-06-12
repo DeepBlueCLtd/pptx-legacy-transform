@@ -218,6 +218,41 @@ def check_row_identity(rows: list[dict]) -> list[str]:
     return errors
 
 
+def check_main_chapter_assigned(rows: list[dict]) -> list[str]:
+    """Verify every ``main`` row resolves to a week (a non-empty chapter slug).
+
+    Since the week folders are pulled up to the top level of the main
+    ditamap (replacing the single ``Grams`` folder), a ``main`` row with no
+    effective chapter has no week sub-document to nest under — its gram would
+    sit naked at the map root, flooding the nav. A no-week ``main`` deck
+    (e.g. Pub10, whose ``target_chapter`` an analyst hasn't filled in yet)
+    is therefore a fail-fast error: the analyst must assign the week before
+    final emission, exactly as an un-renumbered collision must be deduped.
+
+    The effective chapter is ``target_chapter`` else ``chapter`` (feature
+    008); ``_normalise_chapter`` yields an empty slug only when that value is
+    blank (or punctuation/whitespace-only). Returns the list of
+    human-readable error strings (one per offending row); empty means every
+    ``main`` row is assigned a week.
+    """
+    errors: list[str] = []
+    for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        if row.get("publication", "") != "main":
+            continue
+        eff_chapter = _effective_chapter(row)
+        _, _, slug = _normalise_chapter(eff_chapter)
+        if not slug:
+            errors.append(
+                f"Unassigned week on main row at CSV line {line_no}: "
+                f"gram_id={row.get('gram_id', '')!r} from "
+                f"chapter={row.get('chapter', '')!r} has a blank effective "
+                f"chapter (target_chapter={row.get('target_chapter', '')!r}). "
+                f"Fill in target_chapter with the week number so the gram "
+                f"lands under a Week folder."
+            )
+    return errors
+
+
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -975,17 +1010,17 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
 
     The ditamap nests each week's gram topicrefs under a ``<topicref>`` to
     this topic (not a nav-only ``<topichead>``), so every renderer gives the
-    week its own page one tier below the Grams folder — the publication
-    index lists the weeks, and each week page lists its grams (DITA-OT and
-    Oxygen both auto-generate child links for a topic with topicref
-    children). The topic body is intentionally empty: the title is the
-    content, the children are the point.
+    week its own page at the top level of the map — the publication index
+    lists the weeks, and each week page lists its grams (DITA-OT and Oxygen
+    both auto-generate child links for a topic with topicref children). The
+    topic body is intentionally empty: the title is the content, the
+    children are the point.
 
     The title is decomposed by ``_normalise_chapter``: a leading
     "Instructor " (case-insensitive) is wrapped in ``<ph audience="-trainee">``
     so the trainee filter strips it, exactly as the chapter navtitles did.
-    Chapterless rows (empty slug) get no chapter topic — their gram
-    topicrefs sit directly under the Grams folder.
+    Chapterless rows (empty slug) get no chapter topic; ``main`` rejects
+    them fail-fast in ``check_main_chapter_assigned`` before this runs.
     """
     written: list[Path] = []
     for slug, (raw_chapter, _) in _main_chapters(rows).items():
@@ -1101,7 +1136,7 @@ def emit_main_ditamap(
     rows: list[dict], out_dir: Path, static_pages: Iterable[str] = (),
 ) -> Path:
     """Write ``main/main.ditamap`` — inside the publication folder — with one
-    chapter-topic ``<topicref>`` per week under the Grams folder.
+    chapter-topic ``<topicref>`` per week at the **top level** of the map.
 
     The map lives beside the content it references, so every href is
     folder-relative (``welcome.dita``, ``week-2/gram-07/gram_07.dita``) and
@@ -1110,14 +1145,21 @@ def emit_main_ditamap(
     written at the output root.
 
     Each chapter (``Week 1`` … ``Week 4``, per feature 008's effective
-    chapter) is a real sub-document: a ``<topicref>`` to the chapter topic
-    written by ``emit_main_chapter_topics``, with the week's gram topicrefs
-    nested one tier below it in ascending gram-number order. (CSV order
-    interleaves decks — a week's native grams first, then the even-sliced
-    no-week decks' renumbered grams — which read as a jumble when
-    rendered.) Rows with an empty chapter slug have no sub-document to
-    nest under, so their gram topicrefs sit directly under the Grams
-    folder, equally number-ordered.
+    chapter) is a real sub-document pulled **up to the top level** of the
+    map (replacing the former single ``Grams`` folder): a ``<topicref>`` to
+    the chapter topic written by ``emit_main_chapter_topics``, sitting beside
+    the common static pages, with the week's gram topicrefs nested one tier
+    below it in ascending gram-number order. (CSV order interleaves decks —
+    a week's native grams first, then the even-sliced no-week decks'
+    renumbered grams — which read as a jumble when rendered.) So the
+    top-level nav reads ``Welcome · Security · Week 1 · Week 2 · …``.
+
+    Every ``main`` row must resolve to a week (a non-empty chapter slug);
+    an unassigned chapter is rejected fail-fast upstream by
+    ``check_main_chapter_assigned`` before this emitter runs, so no gram
+    topicref sits naked at the map root. The defensive ``else`` below keeps
+    the emitter structural (flat at root) should it ever be called directly
+    with such a row.
     """
     pub_dir = out_dir / "main"
     pub_dir.mkdir(parents=True, exist_ok=True)
@@ -1126,14 +1168,13 @@ def emit_main_ditamap(
     root = ET.Element("map")
     _append_map_title(root, "Main")
     _append_static_topicrefs(root, static_pages)
-    grams_head = _append_grams_topichead(root)
     for slug, (_, chapter_rows) in _main_chapters(rows).items():
         if slug:
-            chapter_ref = ET.SubElement(grams_head, "topicref", {
+            chapter_ref = ET.SubElement(root, "topicref", {
                 "href": f"{slug}/{_chapter_topic_stem(slug)}.dita",
             })
         else:
-            chapter_ref = grams_head
+            chapter_ref = root
         seen: set[str] = set()
         gram_refs: list[tuple[int, str]] = []
         for row in chapter_rows:
@@ -1318,6 +1359,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("Failed to read CSV: %s", exc)
         return 1
 
+    unassigned = check_main_chapter_assigned(rows)
+    if unassigned:
+        for msg in unassigned:
+            LOGGER.error(msg)
+        LOGGER.error(
+            "Aborting: %d main row(s) have no week assigned. Each week is a "
+            "top-level entry in the main ditamap, so every main gram must "
+            "land under a week — fill in target_chapter and re-run.",
+            len(unassigned),
+        )
+        return 1
+
     duplicates = check_row_identity(rows)
     if duplicates:
         for msg in duplicates:
@@ -1362,8 +1415,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                     ", ".join(static_pages))
     else:
         LOGGER.warning(
-            "No static pages found under %s — ditamaps carry only the Grams "
-            "nav folder, no shared Welcome/Security pages.", args.static_root)
+            "No static pages found under %s — ditamaps carry only their "
+            "content nav (top-level Week folders for main, the Grams folder "
+            "for progress tests), no shared Welcome/Security pages.",
+            args.static_root)
     static_copied: list[Path] = []
     for pub in publications:
         copied = copy_static_tree(args.static_root, args.out / pub)
@@ -1375,7 +1430,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     if any(r["publication"] == "main" for r in rows):
         # Week sub-documents: one chapter topic per effective main chapter,
         # referenced (not topichead-ed) by the main ditamap so each week is
-        # its own page one tier below the Grams folder.
+        # its own page at the top level of the map.
         chapter_topics = emit_main_chapter_topics(rows, args.out)
         for path in chapter_topics:
             written.append(path)

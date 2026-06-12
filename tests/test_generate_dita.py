@@ -267,28 +267,25 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "analysis.docx")
         self.assertEqual(xref.get("format"), "docx")
 
-    def test_main_ditamap_chapter_subdocuments_under_grams(self) -> None:
-        """Each main chapter (week) is a *sub-document*: a real chapter topic
-        referenced by a ``<topicref>`` nested under the Grams folder, with the
-        chapter's gram topicrefs one tier below it — not a nav-only
-        ``<topichead>`` that dumps every gram onto one page."""
+    def test_main_ditamap_weeks_at_top_level(self) -> None:
+        """Each main chapter (week) is a *sub-document* pulled up to the **top
+        level** of the map: a real chapter topic referenced by a top-level
+        ``<topicref>`` (beside the static pages, no enclosing ``Grams``
+        ``<topichead>``), with the chapter's gram topicrefs one tier below it."""
         _run(self.out)
         ditamap = self.out / "main" / "main.ditamap"
         self.assertTrue(ditamap.is_file(),
                         "main.ditamap must live inside the main/ folder")
         root = ET.parse(ditamap).getroot()
         self.assertEqual(root.tag, "map")
-        # Feature 010: the per-gram content is demoted under a single root-level
-        # "Grams" <topichead>; the chapter topicrefs nest inside it.
-        root_topicheads = root.findall("topichead")
-        self.assertEqual(len(root_topicheads), 1,
-                         "exactly one root-level topichead — the Grams folder")
-        grams = root_topicheads[0]
-        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
-        self.assertIsNone(grams.find("topichead"),
-                          "chapters are topicrefs to chapter topics, "
-                          "not nested topicheads")
-        chapters = grams.findall("topicref")
+        # The weeks are pulled up to the top level — the single "Grams"
+        # <topichead> folder is gone from main.
+        self.assertEqual(root.findall("topichead"), [],
+                         "main has no Grams folder — weeks sit at the top level")
+        # A week topicref points at its chapter topic; static pages are bare
+        # filenames. The chapter topicrefs are the non-static root topicrefs.
+        chapters = [tr for tr in root.findall("topicref")
+                    if "/" in (tr.get("href") or "")]
         self.assertGreaterEqual(len(chapters), 1)
         for chapter_ref in chapters:
             href = chapter_ref.get("href")
@@ -324,20 +321,16 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertTrue(
             (self.out / "progress-test-1" / "progress-test-1.ditamap").is_file())
 
-    def test_main_ditamap_href_clean_for_no_week_deck(self) -> None:
-        """An empty effective chapter on a ``main`` row must still yield a clean,
-        relative ditamap href — no ``main//...`` double slash.
+    def test_main_unassigned_week_fails_fast(self) -> None:
+        """A ``main`` row with an empty effective chapter (no week assigned —
+        e.g. a Pub10 deck whose ``target_chapter`` an analyst hasn't filled
+        in) is a fail-fast error: with the weeks pulled up to the top level
+        of the map there is no Grams folder to park a weekless gram under, so
+        the generator must reject it rather than emit a naked root gram.
 
-        Regression (feature 007/008): an empty slug interpolated as
-        ``main/{slug}/...`` emitted ``main//...``; the publish stager's
-        ``replace('href="main/', ...)`` then turned that into a leading-slash
-        ``/...`` (absolute) href that DITA-OT silently drops under
-        --processing-mode=lax — the gram index rendered but every such gram 404'd.
-
-        Feature 009: ``main`` is doc-less, so even with a stray ``target_doc`` the
-        href carries no document tier — an empty chapter collapses cleanly to
-        ``gram-NN/...`` directly under the Grams folder (no chapter
-        sub-document to nest under), relative to the in-folder ditamap.
+        ``check_main_chapter_assigned`` flags the row, and a full run aborts
+        with rc 1 before writing any ditamap. (Non-``main`` weekless rows are
+        unaffected — the progress tests have no week tier.)
         """
         row = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
         row.update({
@@ -346,13 +339,33 @@ class GenerateDitaTests(unittest.TestCase):
             "topic_filename": "gram_01.dita",
             "target_doc": "Pub10_Ed22B_Updated.pptx",  # ignored for main (feature 009 guard)
         })
-        ditamap = generate_dita.emit_main_ditamap([row], self.out)
-        self.assertEqual(ditamap, self.out / "main" / "main.ditamap")
-        hrefs = [tr.get("href") for tr in ET.parse(ditamap).getroot().iter("topicref")]
-        self.assertEqual(hrefs, ["gram-01/gram_01.dita"])
-        self.assertNotIn("//", hrefs[0])
-        self.assertFalse(hrefs[0].startswith("/"),
-                         "an empty chapter slug must not yield an absolute href")
+        errors = generate_dita.check_main_chapter_assigned([row])
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("target_chapter", errors[0])
+        # A weekless progress-test row is not flagged — only main has weeks.
+        test_row = dict(row)
+        test_row["publication"] = "progress-test-1"
+        self.assertEqual(generate_dita.check_main_chapter_assigned([test_row]), [])
+
+    def test_main_unassigned_week_aborts_full_run(self) -> None:
+        """The fail-fast check is wired into the CLI: a CSV with a weekless
+        ``main`` row exits rc 1 and writes no main ditamap."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        row = {c: "" for c in cols}
+        row.update({
+            "publication": "main", "chapter": "", "gram_id": "Gram 1",
+            "topic_type": "main", "sequence": "1", "topic_filename": "gram_01.dita",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(row)
+        rc = _run(self.out, csv_path=csv_path)
+        self.assertEqual(rc, 1, "weekless main row must abort the run")
+        self.assertFalse((self.out / "main" / "main.ditamap").is_file(),
+                         "no main ditamap may be written when a week is unassigned")
 
     def test_main_ditamap_grams_sorted_by_effective_number(self) -> None:
         """Within a week, gram topicrefs are emitted in ascending numeric
@@ -429,21 +442,32 @@ class GenerateDitaTests(unittest.TestCase):
         )
 
     def test_static_pages_lead_every_ditamap(self) -> None:
-        """Feature 010: Welcome then Security are the only root-level topicrefs,
-        bare-filename hrefs (the map sits beside the copied pages), and precede
-        the Grams folder in document order."""
+        """Feature 010: Welcome then Security are the first root-level
+        topicrefs, bare-filename hrefs (the map sits beside the copied
+        pages). For progress tests they precede the Grams folder; for main
+        they precede the top-level Week folders."""
         _run(self.out)
-        for pub in ("main", "progress-test-1"):
-            root = ET.parse(self.out / pub / f"{pub}.ditamap").getroot()
-            self.assertEqual(
-                [tr.get("href") for tr in root.findall("topicref")],
-                ["welcome.dita", "security.dita"],
-                f"{pub}: Welcome then Security must lead, and be the only "
-                "root-level topicrefs (grams live under the Grams folder)",
-            )
-            tags = [c.tag for c in root]
-            self.assertLess(tags.index("topicref"), tags.index("topichead"),
-                            "static pages must precede the Grams folder")
+        # Progress tests: static pages are the *only* root topicrefs, ahead
+        # of the single Grams <topichead>.
+        root = ET.parse(self.out / "progress-test-1"
+                        / "progress-test-1.ditamap").getroot()
+        self.assertEqual(
+            [tr.get("href") for tr in root.findall("topicref")],
+            ["welcome.dita", "security.dita"],
+            "progress test: Welcome then Security must be the only root "
+            "topicrefs (grams live under the Grams folder)",
+        )
+        tags = [c.tag for c in root]
+        self.assertLess(tags.index("topicref"), tags.index("topichead"),
+                        "static pages must precede the Grams folder")
+        # Main: weeks are pulled up to the top level, so the root topicrefs are
+        # Welcome, Security, then the Week sub-documents — static pages lead.
+        root = ET.parse(self.out / "main" / "main.ditamap").getroot()
+        hrefs = [tr.get("href") for tr in root.findall("topicref")]
+        self.assertEqual(hrefs[:2], ["welcome.dita", "security.dita"],
+                         "main: Welcome then Security must lead the top level")
+        self.assertGreater(len(hrefs), 2,
+                           "main: Week sub-documents follow the static pages")
 
     def test_static_tree_copied_into_each_publication(self) -> None:
         """The whole static tree (pages + image subfolder) is copied verbatim,
@@ -848,16 +872,15 @@ class AudienceShapeTests(unittest.TestCase):
         remainder as the tail; plain chapters emit bare text."""
         ditamap = self.out / "main" / "main.ditamap"
         root = ET.parse(ditamap).getroot()
-        # Feature 010: chapters nest under the root-level "Grams" topichead.
-        grams = root.find("topichead")
-        self.assertIsNotNone(grams, "feature 010: a root-level Grams topichead")
-        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
-        self.assertIsNone(grams.find("topichead"),
-                          "chapters are topicrefs to chapter topics, "
-                          "not nested topicheads")
-        chapter_refs = grams.findall("topicref")
+        # Weeks are pulled up to the top level — no enclosing Grams topichead.
+        self.assertEqual(root.findall("topichead"), [],
+                         "main has no Grams folder — weeks sit at the top level")
+        # The chapter topicrefs are the top-level topicrefs that point at a
+        # chapter topic (href has a folder segment); static pages are bare.
+        chapter_refs = [tr for tr in root.findall("topicref")
+                        if "/" in (tr.get("href") or "")]
         self.assertEqual(len(chapter_refs), 2,
-                         "fixture defines two main chapters (nested under Grams)")
+                         "fixture defines two main chapters at the top level")
         titles_by_kind: dict[str, ET.Element] = {}
         for chapter_ref in chapter_refs:
             topic_path = ditamap.parent / chapter_ref.get("href")
