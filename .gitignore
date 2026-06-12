@@ -230,6 +230,12 @@ extracted.csv
 source.csv
 source.dedup.csv
 
+# Pipeline output trees — never committed. The PR CI web job and the
+# gh-pages regenerate workflow rebuild them from source/ via the full
+# pipeline; gh-pages carries the browsable preview.
+/dita/
+/html/
+
 
 # DITA-OT staging directory (publish_html.py)
 .dita-build/
@@ -237,9 +243,7 @@ source.dedup.csv
 # Jest test layer (HTML-output verification — spec 003)
 node_modules/
 .jest-cache/
-
-# Emitted by generate_dita.py on every run; not a source artefact (see 31d7de8e).
-dita/trainee.ditaval
+tests/web/__snapshots__/
 
 # Target-layout dirs that may appear on dev hosts (wrapper runs /
 # pip install --target per README's air-gapped setup)

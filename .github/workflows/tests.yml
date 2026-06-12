@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  DITA_OT_VERSION: 4.2.4
+
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -20,12 +23,61 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run unittest suite
+        # The dita/ and html/ trees are not committed, so the
+        # PublishedImagePresenceTests cross-checks self-skip here; the web
+        # job re-runs them against the freshly built trees.
         run: python -m unittest discover tests/ -v
 
+  # Builds dita/ and html/ from the committed mock corpus via the full
+  # pipeline (the output trees are not committed), then runs the Jest
+  # layer plus the dita↔html cross-checks against the fresh build.
   web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up Java (for DITA-OT)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache DITA-OT
+        id: cache-dita-ot
+        uses: actions/cache@v4
+        with:
+          path: dita-ot-${{ env.DITA_OT_VERSION }}
+          key: dita-ot-${{ env.DITA_OT_VERSION }}
+
+      - name: Download DITA-OT
+        if: steps.cache-dita-ot.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -fSL -o dita-ot.zip \
+            "https://github.com/dita-ot/dita-ot/releases/download/${DITA_OT_VERSION}/dita-ot-${DITA_OT_VERSION}.zip"
+          unzip -q dita-ot.zip
+          rm dita-ot.zip
+          chmod +x "dita-ot-${DITA_OT_VERSION}/bin/dita"
+
+      - name: Build dita/ and html/ from the mock corpus
+        run: |
+          set -euo pipefail
+          python scripts/extract_to_csv.py --input-root source/ --out source.csv
+          python scripts/deduplicate_csv.py --csv source.csv --image-root source/ --out source.dedup.csv
+          python scripts/generate_dita.py --csv source.dedup.csv --out dita/ --image-root source/ --clean
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          python scripts/publish_html.py --dita-ot "dita-ot-${DITA_OT_VERSION}"
+
+      - name: Cross-check dita/ against html/
+        run: python -m unittest tests.test_publish_html.PublishedImagePresenceTests -v
 
       - uses: actions/setup-node@v4
         with:

@@ -101,6 +101,20 @@ jobs:
           python scripts/publish_html.py \
             --dita-ot "${GITHUB_WORKSPACE}/dita-ot-${DITA_OT_VERSION}"
 
+      - name: Verify publish is byte-deterministic (second run, tree compare)
+        working-directory: main-checkout
+        # The determinism invariant (FR-008/SC-006): two consecutive publish
+        # runs over an unchanged source yield byte-identical HTML in every
+        # edition. This replaces the retired Jest sha256-snapshot test, which
+        # needed a committed html/ tree to compare against.
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          python scripts/publish_html.py \
+            --dita-ot "${GITHUB_WORKSPACE}/dita-ot-${DITA_OT_VERSION}" \
+            --out html-verify --staged .dita-build-verify
+          diff -r html html-verify
+          rm -rf html-verify
+
       - name: Checkout gh-pages
         uses: actions/checkout@v4
         with:

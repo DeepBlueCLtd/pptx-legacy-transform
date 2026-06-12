@@ -545,7 +545,11 @@ npm test
 The Jest layer (`tests/web/`) verifies the *rendered* HTML output of
 the dual-edition publish pipeline. It runs against the live `html/`
 tree at the repo root, so it MUST be invoked *after* a successful
-`python scripts/publish_html.py` run. It asserts:
+`python scripts/publish_html.py` run. The `dita/` and `html/` trees
+are **not committed** — CI's web job rebuilds them from the committed
+`source/` mock corpus via the full pipeline (extract → dedupe →
+generate → publish) before running Jest, and the gh-pages regenerate
+workflow publishes the browsable preview. Jest asserts:
 
 - **No leakage of "instructor" content into the student edition** —
   recursive case-insensitive grep over every file and every path
@@ -556,9 +560,10 @@ tree at the repo root, so it MUST be invoked *after* a successful
   corresponding sibling under `html/student/` and vice versa.
 - **Shared landing page** — `html/index.html` exposes two
   unambiguous links to the two editions.
-- **Output idempotency** — sha256 snapshot of every file under
-  `html/` is stable across publish runs against an unchanged DITA
-  source.
+
+Output idempotency (byte-identical HTML across publish runs over an
+unchanged source) is verified by the gh-pages regenerate workflow,
+which publishes twice and tree-compares the results.
 
 The Jest layer is developer-time only — it is not part of the air-
 gapped runtime contract. The Python `unittest` suite remains the
