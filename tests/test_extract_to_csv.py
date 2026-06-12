@@ -42,9 +42,10 @@ class ClassificationTests(unittest.TestCase):
 
     def test_progress_test_routing(self) -> None:
         allocated: dict[str, int] = {}
+        # The number comes from the integer in the deck name, not walk order.
         pub, chapter, slug = extract_to_csv.classify_publication(
             Path("/root/Tests/Progress_Test_3.pptx"), "progress_test", allocated)
-        self.assertEqual(pub, "progress-test-1")
+        self.assertEqual(pub, "progress-test-3")
         self.assertIsNone(chapter)
         self.assertIsNone(slug)
 
@@ -53,6 +54,38 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(pub2, "main")
         self.assertEqual(chapter2, "Nordic Fishing Vessels")
         self.assertEqual(slug2, "nordic-fishing-vessels")
+
+    def test_progress_test_number_is_name_derived_not_walk_order(self) -> None:
+        """The N in progress-test-N is the deck name's integer, so a scoped
+        run yields the same number as a full-corpus walk (feature: stable
+        test numbering under --only)."""
+        allocated: dict[str, int] = {}
+        # Test 2 seen first (e.g. an --only run) still gets progress-test-2.
+        pub2, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor Progress Test 2 Grams_Updated/"
+                 "Instructor Progress Test 2 Grams_Updated.pptx"),
+            "progress test", allocated)
+        self.assertEqual(pub2, "progress-test-2")
+        pub4, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor Progress Test 4 Grams/"
+                 "Instructor Progress Test 4 Grams.pptx"),
+            "progress test", allocated)
+        self.assertEqual(pub4, "progress-test-4")
+
+    def test_test_number_from_name_falls_back_when_ambiguous(self) -> None:
+        """No integer, or more than one, returns None so the caller can fall
+        back to encounter-order allocation."""
+        self.assertEqual(extract_to_csv.test_number_from_name("Progress Test 7 Grams"), 7)
+        self.assertEqual(extract_to_csv.test_number_from_name("Progress Test 09"), 9)
+        self.assertIsNone(extract_to_csv.test_number_from_name("Progress Test Grams"))
+        self.assertIsNone(extract_to_csv.test_number_from_name("Test 3 of 4"))
+        # Unnumbered names fall back to stable encounter order.
+        allocated: dict[str, int] = {}
+        first, _, _ = extract_to_csv.classify_publication(
+            Path("/root/x/Progress Test Alpha.pptx"), "progress test", allocated)
+        second, _, _ = extract_to_csv.classify_publication(
+            Path("/root/y/Progress Test Beta.pptx"), "progress test", allocated)
+        self.assertEqual((first, second), ("progress-test-1", "progress-test-2"))
 
     def test_week_chapter_number_parses_week_token(self) -> None:
         """Feature 008: a "Week N" deck title yields the bare-integer week."""
@@ -431,6 +464,23 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
             rows = list(csv.DictReader(fh))
         pubs = {r["publication"] for r in rows}
         self.assertEqual(pubs, {"progress-test-1"}, f"unexpected publications: {pubs}")
+
+    def test_exclude_tests_emits_only_main(self) -> None:
+        # --exclude-tests walks the whole corpus but drops the progress-test
+        # and final-assessment decks, leaving only the main publication so the
+        # main document can be built without carving the tests out of source\.
+        out_csv = TMP / "extract_exclude_tests.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.corpus),
+            "--out", str(out_csv),
+            "--exclude-tests",
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        self.assertTrue(rows, "Expected main rows from the corpus")
+        pubs = {r["publication"] for r in rows}
+        self.assertEqual(pubs, {"main"}, f"non-main publications leaked: {pubs}")
 
 
 class OnlyChapterScopingTests(unittest.TestCase):
