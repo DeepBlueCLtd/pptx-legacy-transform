@@ -289,6 +289,24 @@ def deck_target_chapters(
     return even_week_assignment(gram_count)
 
 
+def test_number_from_name(name: str) -> int | None:
+    """Return the lone integer in a progress-test deck ``name``, or ``None``.
+
+    Progress-test decks are named ``…Progress Test N…`` (the corpus folder /
+    file carries a single integer), so ``N`` is the stable publication
+    number. Deriving ``progress-test-N`` from the name — rather than the order
+    decks happen to be walked — keeps the number identical whether the run
+    covers the whole corpus or is scoped to a subset with ``--only``. Leading
+    zeros are stripped. Returns ``None`` when the name holds no integer, or
+    more than one (ambiguous), leaving the caller to fall back to
+    encounter-order allocation.
+    """
+    numbers = re.findall(r"\d+", name)
+    if len(numbers) == 1:
+        return int(numbers[0])
+    return None
+
+
 def classify_publication(
     pptx: Path,
     test_pattern: str,
@@ -299,8 +317,10 @@ def classify_publication(
     """Return ``(publication, chapter, chapter_slug)`` per R2/R3.
 
     Progress-test PPTXs are detected by case-insensitive substring match
-    against the filename. Test numbering is allocated stably in the order
-    callers request previously-unseen test PPTXs.
+    against the filename. The test number is taken from the **single integer
+    in the deck name** (``test_number_from_name``), so ``progress-test-N`` is
+    stable under ``--only`` scoping; a name with no/ambiguous integer falls
+    back to stable encounter-order allocation.
 
     Final-assessment PPTXs (matched against ``final_pattern`` when
     non-empty and a separate ``final_allocated`` map is supplied) get
@@ -314,9 +334,12 @@ def classify_publication(
             final_allocated[pptx.stem] = len(final_allocated) + 1
         return (f"final-assessment-{final_allocated[pptx.stem]}", None, None)
     if test_pattern.lower() in name:
-        if pptx.stem not in allocated:
-            allocated[pptx.stem] = len(allocated) + 1
-        return (f"progress-test-{allocated[pptx.stem]}", None, None)
+        number = test_number_from_name(pptx.stem)
+        if number is None:
+            if pptx.stem not in allocated:
+                allocated[pptx.stem] = len(allocated) + 1
+            number = allocated[pptx.stem]
+        return (f"progress-test-{number}", None, None)
     chapter_title = pptx.parent.name
     return ("main", chapter_title, slugify(chapter_title))
 
@@ -1004,6 +1027,13 @@ def main(argv: Iterable[str] | None = None) -> int:
              "--input-root unchanged. Useful for fast per-chapter debug "
              "iteration without re-pointing the downstream wrappers.",
     )
+    parser.add_argument(
+        "--exclude-tests", action="store_true", dest="exclude_tests",
+        help="Skip the progress-test and final-assessment decks, emitting only "
+             "the 'main' publication. Lets you build and review the main "
+             "document from the full corpus without first carving the tests "
+             "out of source\\. Independent of --only.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("extract.log"))
@@ -1026,6 +1056,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                 pptx, args.test_pattern, allocated,
                 args.final_pattern, final_allocated,
             )
+            if args.exclude_tests and publication != "main":
+                LOGGER.info(
+                    "Skipping %s deck (--exclude-tests): %s", publication, pptx.name)
+                continue
             try:
                 prs = Presentation(pptx)
             except Exception as exc:
