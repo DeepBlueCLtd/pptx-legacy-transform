@@ -1,11 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="gram_19">
   <title>Gram 19<ph audience="-trainee" outputclass="vessel-name"> - Intrepid-class contact bearing 256, codename Caprica</ph></title>
   <body>
     <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
-      <p>
-        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
-      </p>
+      <image href="analysis-sheet.png" placement="break" align="center" />
     </section>
     <section outputclass="lofar-stage">
       <title>Lofar 1</title>

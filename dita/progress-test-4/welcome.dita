@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="welcome">
+  <title>Welcome</title>
+  <shortdesc>Acoustic grams<ph audience="-trainee"> instructor</ph> reference — start here.</shortdesc>
+  <body>
+    <image href="images/welcome-banner.png" alt="AAAC acoustic grams"/>
+    <p>This publication collects the acoustic <q>grams</q> for the course,
+      each with its<ph audience="-trainee"> analysis sheet and</ph> LOFAR
+      spectrograms. Use the
+      <b>Grams</b> entry in the navigation to browse them by week (in the
+      main publication) or in sequence (in the progress tests).</p>
+    <p>Read the <xref href="security.dita">Security</xref> page before
+      handling any material.</p>
+  </body>
+</topic>

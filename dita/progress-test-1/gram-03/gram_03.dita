@@ -1,11 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="gram_03">
-  <title>Gram 03<ph audience="-trainee" outputclass="vessel-name"> - FR Ghost, Category 1, Tantive</ph></title>
+  <title>Gram 03<ph audience="-trainee" outputclass="vessel-name"> - FR Constitution-class, Category 2, Endor</ph></title>
   <body>
     <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
-      <p>
-        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
-      </p>
+      <image href="analysis.png" placement="break" align="center" />
     </section>
     <section outputclass="lofar-stage">
       <title>Lofar 1</title>
@@ -16,7 +16,7 @@
           <tbody>
             <row>
               <entry namest="c1" nameend="c2">
-                <image href="lofar-1-abc.png" placement="break" align="center" />
+                <image href="lofar-1.png" placement="break" align="center" />
               </entry>
             </row>
             <row>
@@ -25,7 +25,7 @@
             </row>
             <row>
               <entry>time-end</entry>
-              <entry>271</entry>
+              <entry>300</entry>
             </row>
             <row>
               <entry>freq-start</entry>
@@ -33,7 +33,39 @@
             </row>
             <row>
               <entry>freq-end</entry>
-              <entry>800</entry>
+              <entry>400</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    <section outputclass="lofar-stage">
+      <title>Lofar 2</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-2.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>240</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>200</entry>
             </row>
           </tbody>
         </tgroup>

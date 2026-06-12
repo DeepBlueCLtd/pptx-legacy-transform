@@ -1,11 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="gram_14">
   <title>Gram 14<ph audience="-trainee" outputclass="vessel-name"> - FR TIE Fighter, Category 4, Tantive</ph></title>
   <body>
     <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
-      <p>
-        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
-      </p>
+      <image href="analysis-sheet.png" placement="break" align="center" />
     </section>
     <section outputclass="lofar-stage">
       <title>Lofar 1</title>
