@@ -77,8 +77,9 @@ Two manual steps (the .bat handles steps 1+2, you handle step 3).
 
 3. **Publish** to HTML. Two options:
 
-   - **From Oxygen** (preferred): open `dita/main.ditamap` (or a
-     `progress-test-*.ditamap`) and use the publish dialog. For the
+   - **From Oxygen** (preferred): open `dita/main/main.ditamap` (or a
+     `progress-test-*/progress-test-*.ditamap` — each ditamap lives
+     inside its publication folder) and use the publish dialog. For the
      student edition, select `dita/trainee.ditaval` as the DITAVAL
      filter. The Oxygen template must link `theme.css` and
      `gramframe.bundle.js` from the `scripts/vendor/` paths above —

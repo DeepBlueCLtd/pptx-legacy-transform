@@ -363,12 +363,19 @@ installs, not the user-folder install.
    `target_chapter` of `1`…`4` becomes `dita/main/week-N/`, headed
    `Week N`, and the per-gram `NN` is the effective gram number
    (`target_gram_id` when the dedupe step renumbered a collision, else
-   `gram_id`).
+   `gram_id`). Each week is a **sub-document**: a chapter topic at
+   `dita/main/week-N/week_N.dita` that the ditamap references with the
+   week's gram topicrefs nested one tier below it, so the publication
+   index lists the weeks and each week's page lists its grams.
    Every referenced asset (PNG, WAV, analysis sheet) is copied beside
    the topic with a stable per-section name (`analysis.png`,
    `lofar-1.png`, `lofar-2-i.png`, ...) so each `href` in the topic
-   is a bare filename — no `../` traversal. Ditamaps, manifest, and
-   skipped report are written alongside. Output is deterministic: re-running the same CSV
+   is a bare filename — no `../` traversal. Each publication's ditamap
+   is written **inside its folder** (`dita/<pub>/<pub>.ditamap` with
+   folder-relative hrefs — nothing at the `dita/` root except the
+   manifest, skipped report, and DITAVAL profile), so a publication
+   folder is self-contained and can be opened in Oxygen as-is. Output
+   is deterministic: re-running the same CSV
    produces byte-identical files (including the copied assets). If a
    referenced asset is missing on disk, the generator logs a warning
    and still emits the topic with the intended local href — dropping
@@ -597,10 +604,19 @@ python scripts/publish_html.py --dita-ot /path/to/dita-ot-4.2.4
 
 `publish_html.py` (standard-library only) stages a copy of `dita/`
 under `.dita-build/`, injects the DOCTYPE declarations DITA-OT needs
-(the source DITA omits these per the schema contract — Oxygen handles
-validation), and writes HTML5 under `html/<edition>/<ditamap-stem>/`
-per ditamap per edition. The staging directory is cleaned up after
-each run.
+into any file that lacks them (and relocates a legacy root-level
+ditamap into its publication folder — current trees already keep each
+map at `dita/<pub>/<pub>.ditamap`), and writes HTML5 under
+`html/<edition>/<ditamap-stem>/` per ditamap per edition. The staging
+directory is cleaned up after each run.
+
+Each publication's `index.html` nav is then pruned to the nodes that
+own pages: DITA-OT renders the *entire* map tree on that page, which
+for `main` meant every gram in the corpus on one very long page. With
+each week now a chapter sub-document, the main index lists Welcome,
+Security, and the weeks under Grams; each week's own page lists its
+grams. Branches under a link-less topichead (the flat progress tests'
+grams) are kept — they appear nowhere else.
 
 #### Staging and output on a roomy disk (full-corpus runs)
 
@@ -671,7 +687,7 @@ Then use `Z:\…` paths everywhere — never `\\server\share\…`:
 `publish_html.py` deletes the staged build tree (`--staged`) at the end
 of every run, which erases the evidence exactly when a DITA-OT build
 fails. Pass `--keep-staged` to leave it in place so you can inspect
-what DITA-OT was actually handed — confirm the relocated
+what DITA-OT was actually handed — confirm the
 `<stem>/<stem>.ditamap` exists and check its exact path:
 
 ```bat
@@ -722,26 +738,31 @@ See the full recipe in
 
 Oxygen renders each **direct child of a ditamap** as a header-bar tab and a
 welcome-page tile, so listing grams at the root floods the nav. Every generated
-ditamap is therefore shaped:
+ditamap lives **inside its publication folder** (`dita/<pub>/<pub>.ditamap`,
+hrefs relative to that folder — no ditamap at the `dita/` root) and is shaped:
 
 ```text
 <map>
   <title>…</title>
-  <topicref href="<pub>/welcome.dita"/>     ← common pages, first
-  <topicref href="<pub>/security.dita"/>
+  <topicref href="welcome.dita"/>           ← common pages, first
+  <topicref href="security.dita"/>
   <topichead><topicmeta><navtitle>Grams</navtitle></topicmeta>
-    …per-week topicheads (main) or gram topicrefs (progress tests)…
+    …per-week chapter-topic topicrefs (main) or gram topicrefs (progress tests)…
   </topichead>
 </map>
 ```
 
 — so the top-level nav is **Welcome · Security · Grams** for every publication.
+For `main`, each week under Grams is a **sub-document**: a chapter topic
+(`week-N/week_N.dita`) whose `<topicref>` nests the week's gram topicrefs one
+tier below it, so the rendered publication lists the weeks and each week's own
+page lists its grams — rather than every gram landing on one very long page.
 
 The common pages come from `static/` at the repo root: top-level `*.dita`
 (Welcome first, Security second, any extras alphabetical) plus their image
 subfolders. `generate_dita.py` copies the whole tree into **each** publication
-folder and references it with the `<pub>/` prefix the publish stager strips, so
-the pages resolve as bare local filenames beside the staged ditamap — no `../`.
+folder and references it by bare filename beside the in-folder ditamap — no
+`../`.
 Point elsewhere with `--static-root <dir>` (default `static/`); a missing folder
 simply omits the pages (logged warning) rather than failing the build. Edit
 `static/welcome.dita` and `static/security.dita` in Oxygen like any topic — the

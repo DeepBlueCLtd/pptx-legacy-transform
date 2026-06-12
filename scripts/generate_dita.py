@@ -953,28 +953,59 @@ def _append_map_title(root: ET.Element, base_title: str) -> None:
     ph.text = " — Instructor Version"
 
 
-def _append_chapter_navtitle(topichead: ET.Element, raw_chapter: str) -> None:
-    """Append ``<topicmeta><navtitle>…</navtitle></topicmeta>`` to ``topichead``.
+def _chapter_topic_stem(slug: str) -> str:
+    """Topic filename stem (and topic ``id``) for a chapter slug.
 
-    The visible text is decomposed by ``_normalise_chapter``. When the
-    raw chapter name began with "Instructor " (case-insensitive), the
-    prefix is emitted inside ``<ph audience="-trainee">`` so the
-    trainee filter strips it; otherwise the navtitle is plain text
-    with no ``<ph>`` wrapper.
-
-    The ``<topicmeta>/<navtitle>`` *child* element replaces the legacy
-    ``navtitle=`` attribute on ``<topichead>`` so inline markup can
-    carry the audience tag.
+    Mirrors the gram convention (folders hyphenated, topic files
+    underscored): slug ``week-2`` → stem ``week_2`` → ``week-2/week_2.dita``
+    with ``id="week_2"``. Slugs never contain underscores (``slugify`` maps
+    every non-alphanumeric run to a hyphen), so the substitution is
+    collision-free. A stem that would start with a digit is prefixed so the
+    topic ``id`` stays a valid XML ID.
     """
-    audience_prefix, display_remainder, _ = _normalise_chapter(raw_chapter)
-    topicmeta = ET.SubElement(topichead, "topicmeta")
-    navtitle = ET.SubElement(topicmeta, "navtitle")
-    if audience_prefix is None:
-        navtitle.text = display_remainder
-    else:
-        ph = ET.SubElement(navtitle, "ph", {"audience": "-trainee"})
-        ph.text = audience_prefix
-        ph.tail = display_remainder
+    stem = slug.replace("-", "_")
+    if not stem[:1].isalpha():
+        stem = f"chapter_{stem}"
+    return stem
+
+
+def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
+    """Write one chapter topic — a navigable *sub-document* — per effective
+    ``main`` chapter, at ``main/<slug>/<stem>.dita``, and return the paths.
+
+    The ditamap nests each week's gram topicrefs under a ``<topicref>`` to
+    this topic (not a nav-only ``<topichead>``), so every renderer gives the
+    week its own page one tier below the Grams folder — the publication
+    index lists the weeks, and each week page lists its grams (DITA-OT and
+    Oxygen both auto-generate child links for a topic with topicref
+    children). The topic body is intentionally empty: the title is the
+    content, the children are the point.
+
+    The title is decomposed by ``_normalise_chapter``: a leading
+    "Instructor " (case-insensitive) is wrapped in ``<ph audience="-trainee">``
+    so the trainee filter strips it, exactly as the chapter navtitles did.
+    Chapterless rows (empty slug) get no chapter topic — their gram
+    topicrefs sit directly under the Grams folder.
+    """
+    written: list[Path] = []
+    for slug, (raw_chapter, _) in _main_chapters(rows).items():
+        if not slug:
+            continue
+        audience_prefix, display_remainder, _ = _normalise_chapter(raw_chapter)
+        topic = ET.Element("topic", {"id": _chapter_topic_stem(slug)})
+        title = ET.SubElement(topic, "title")
+        if audience_prefix is None:
+            title.text = display_remainder
+        else:
+            ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
+            ph.text = audience_prefix
+            ph.tail = display_remainder
+        chapter_dir = out_dir / "main" / slug
+        chapter_dir.mkdir(parents=True, exist_ok=True)
+        path = chapter_dir / f"{_chapter_topic_stem(slug)}.dita"
+        _write_text(path, _serialise(topic, TOPIC_DOCTYPE))
+        written.append(path)
+    return written
 
 
 def discover_static_pages(static_root: Path) -> list[str]:
@@ -1022,16 +1053,15 @@ def copy_static_tree(static_root: Path, pub_dir: Path) -> list[Path]:
 
 
 def _append_static_topicrefs(
-    root: ET.Element, publication: str, static_pages: Iterable[str],
+    root: ET.Element, static_pages: Iterable[str],
 ) -> None:
     """Prepend the common static pages as the first top-level ``<topicref>``s.
 
-    Each href is ``{publication}/{name}`` — the same ``<publication>/`` prefix
-    the publish stager strips, so after staging it resolves to a bare local
-    filename beside the relocated ditamap (feature 010).
+    Each href is the bare filename: the ditamap lives *inside* its
+    publication folder, right beside the copied static pages (feature 010).
     """
     for name in static_pages:
-        ET.SubElement(root, "topicref", {"href": f"{publication}/{name}"})
+        ET.SubElement(root, "topicref", {"href": name})
 
 
 def _append_grams_topichead(root: ET.Element) -> ET.Element:
@@ -1047,19 +1077,14 @@ def _append_grams_topichead(root: ET.Element) -> ET.Element:
     return topichead
 
 
-def emit_main_ditamap(
-    rows: list[dict], out_dir: Path, static_pages: Iterable[str] = (),
-) -> Path:
-    """Write ``main.ditamap`` at the output root with ``<topichead>`` per chapter.
+def _main_chapters(rows: list[dict]) -> "OrderedDict[str, tuple[str, list[dict]]]":
+    """Group the ``main`` rows by effective-chapter slug, preserving CSV order.
 
     Chapters are grouped by the *effective* chapter (feature 008: the week
-    number a row lands in, ``target_chapter`` else ``chapter``), so the map's
-    ``<topichead>`` per week (``Week 1`` … ``Week 4``) matches the on-disk
-    ``main/week-N/`` tree, and topic hrefs use the effective gram number.
+    number a row lands in, ``target_chapter`` else ``chapter``). Maps each
+    slug to ``(raw effective chapter, its rows)``; shared by the chapter-topic
+    and ditamap emitters so the two always agree on the chapter set.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    map_path = out_dir / "main.ditamap"
-
     chapters: OrderedDict[str, tuple[str, list[dict]]] = OrderedDict()
     for row in rows:
         if row["publication"] != "main":
@@ -1069,15 +1094,48 @@ def emit_main_ditamap(
         if slug not in chapters:
             chapters[slug] = (eff_chapter, [])
         chapters[slug][1].append(row)
+    return chapters
+
+
+def emit_main_ditamap(
+    rows: list[dict], out_dir: Path, static_pages: Iterable[str] = (),
+) -> Path:
+    """Write ``main/main.ditamap`` — inside the publication folder — with one
+    chapter-topic ``<topicref>`` per week under the Grams folder.
+
+    The map lives beside the content it references, so every href is
+    folder-relative (``welcome.dita``, ``week-2/gram-07/gram_07.dita``) and
+    the publication folder is self-contained: open the map in Oxygen from
+    ``dita/main/`` and publish, no path rewriting required. Nothing is
+    written at the output root.
+
+    Each chapter (``Week 1`` … ``Week 4``, per feature 008's effective
+    chapter) is a real sub-document: a ``<topicref>`` to the chapter topic
+    written by ``emit_main_chapter_topics``, with the week's gram topicrefs
+    nested one tier below it in ascending gram-number order. (CSV order
+    interleaves decks — a week's native grams first, then the even-sliced
+    no-week decks' renumbered grams — which read as a jumble when
+    rendered.) Rows with an empty chapter slug have no sub-document to
+    nest under, so their gram topicrefs sit directly under the Grams
+    folder, equally number-ordered.
+    """
+    pub_dir = out_dir / "main"
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    map_path = pub_dir / "main.ditamap"
 
     root = ET.Element("map")
     _append_map_title(root, "Main")
-    _append_static_topicrefs(root, "main", static_pages)
+    _append_static_topicrefs(root, static_pages)
     grams_head = _append_grams_topichead(root)
-    for slug, (title, chapter_rows) in chapters.items():
-        topichead = ET.SubElement(grams_head, "topichead")
-        _append_chapter_navtitle(topichead, title)
+    for slug, (_, chapter_rows) in _main_chapters(rows).items():
+        if slug:
+            chapter_ref = ET.SubElement(grams_head, "topicref", {
+                "href": f"{slug}/{_chapter_topic_stem(slug)}.dita",
+            })
+        else:
+            chapter_ref = grams_head
         seen: set[str] = set()
+        gram_refs: list[tuple[int, str]] = []
         for row in chapter_rows:
             doc_slug = _doc_slug(_effective_doc(row))
             gram_dir = _gram_folder_name(_effective_gram_id(row))
@@ -1090,15 +1148,16 @@ def emit_main_ditamap(
             # pathlib-based on-disk layout (_publication_root, which drops
             # empty path parts). A bare-integer week gives slug "week-N"; a
             # no-week deck (e.g. Pub10 with a blank target_chapter) gives an
-            # EMPTY slug. Interpolating an empty slug as "main/{slug}/..."
-            # would emit "main//..." — which the publish stager's
-            # `replace('href="main/', ...)` then turns into a leading-slash
-            # "/..." (absolute) href that DITA-OT cannot resolve, silently
-            # dropping the topic under --processing-mode=lax (a 404 in the
-            # rendered output). Filtering empties keeps href == file path.
-            href = "/".join([s for s in ("main", slug, doc_slug, gram_dir) if s]
+            # EMPTY slug — interpolating it as "{slug}/..." would emit a
+            # leading-slash "/..." (absolute) href that DITA-OT cannot
+            # resolve, silently dropping the topic under
+            # --processing-mode=lax (a 404 in the rendered output).
+            # Filtering empties keeps href == path relative to the map.
+            href = "/".join([s for s in (slug, doc_slug, gram_dir) if s]
                             + [topic_file])
-            ET.SubElement(topichead, "topicref", {"href": href})
+            gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
+        for _, href in sorted(gram_refs):
+            ET.SubElement(chapter_ref, "topicref", {"href": href})
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
@@ -1124,19 +1183,23 @@ def emit_test_ditamap(
     publication: str, rows: list[dict], out_dir: Path,
     static_pages: Iterable[str] = (),
 ) -> Path:
-    """Write ``<publication>.ditamap`` at the output root.
+    """Write ``<publication>/<publication>.ditamap`` inside the publication
+    folder, with folder-relative hrefs (no ``<publication>/`` prefix).
 
     The common static pages lead (feature 010); the per-gram topicrefs are
     grouped under a single ``<topichead>`` (navtitle ``Grams``) so they sit one
-    level below the ditamap root rather than flooding it as direct children.
+    level below the ditamap root rather than flooding it as direct children,
+    in ascending gram-number order regardless of CSV row order.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    map_path = out_dir / f"{publication}.ditamap"
+    pub_dir = out_dir / publication
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    map_path = pub_dir / f"{publication}.ditamap"
     root = ET.Element("map")
     _append_map_title(root, _flat_publication_title(publication))
-    _append_static_topicrefs(root, publication, static_pages)
+    _append_static_topicrefs(root, static_pages)
     grams_head = _append_grams_topichead(root)
     seen: set[str] = set()
+    gram_refs: list[tuple[int, str]] = []
     for row in rows:
         if row["publication"] != publication:
             continue
@@ -1148,7 +1211,9 @@ def emit_test_ditamap(
         seen.add(uniq)
         topic_file = _topic_filename(_effective_gram_id(row))
         prefix = f"{doc_slug}/" if doc_slug else ""
-        href = f"{publication}/{prefix}{gram_dir}/{topic_file}"
+        href = f"{prefix}{gram_dir}/{topic_file}"
+        gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
+    for _, href in sorted(gram_refs):
         ET.SubElement(grams_head, "topicref", {"href": href})
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
@@ -1308,6 +1373,13 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     ditamap_paths: list[Path] = []
     if any(r["publication"] == "main" for r in rows):
+        # Week sub-documents: one chapter topic per effective main chapter,
+        # referenced (not topichead-ed) by the main ditamap so each week is
+        # its own page one tier below the Grams folder.
+        chapter_topics = emit_main_chapter_topics(rows, args.out)
+        for path in chapter_topics:
+            written.append(path)
+            LOGGER.info("Wrote %s", path)
         ditamap_paths.append(emit_main_ditamap(rows, args.out, static_pages))
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:

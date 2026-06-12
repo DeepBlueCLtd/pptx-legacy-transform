@@ -5,9 +5,12 @@ on:
     branches: [main]
     paths:
       - 'source/**'
-      - 'source.csv'
+      - 'static/**'
+      - 'scripts/extract_to_csv.py'
+      - 'scripts/deduplicate_csv.py'
       - 'scripts/generate_dita.py'
       - 'scripts/publish_html.py'
+      - 'scripts/vendor/**'
       - 'requirements.txt'
       - '.github/workflows/regenerate-html.yml'
   workflow_dispatch:
@@ -62,18 +65,39 @@ jobs:
           rm dita-ot.zip
           chmod +x "dita-ot-${DITA_OT_VERSION}/bin/dita"
 
-      - name: Generate DITA from source.csv
+      # source.csv was dropped from VCS (it is a pipeline intermediate);
+      # regenerate it from the committed mock corpus instead.
+      - name: Extract CSV from the mock corpus
+        working-directory: main-checkout
+        run: |
+          python scripts/extract_to_csv.py \
+            --input-root source/ \
+            --out source.csv
+
+      - name: Renumber within-week gram collisions
+        working-directory: main-checkout
+        run: |
+          python scripts/deduplicate_csv.py \
+            --csv source.csv \
+            --image-root source/ \
+            --out source.dedup.csv
+
+      - name: Generate DITA
         working-directory: main-checkout
         run: |
           python scripts/generate_dita.py \
-            --csv source.csv \
+            --csv source.dedup.csv \
             --out dita/ \
             --image-root source/ \
             --clean
 
       - name: Publish DITA tree to HTML
         working-directory: main-checkout
+        # SOURCE_DATE_EPOCH pins the landing-page timestamp to the source
+        # commit, so re-running the workflow over an unchanged tree produces
+        # byte-identical HTML and the gh-pages sync commits nothing.
         run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
           python scripts/publish_html.py \
             --dita-ot "${GITHUB_WORKSPACE}/dita-ot-${DITA_OT_VERSION}"
 

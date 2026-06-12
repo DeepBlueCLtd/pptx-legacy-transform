@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="gram_74">
+  <title>Gram 74<ph audience="-trainee" outputclass="vessel-name"> - Star Destroyer contact bearing 169, codename Bespin</ph></title>
+  <body>
+    <section audience="-trainee" outputclass="analysis-sheet">
+      <title>Analysis Sheet</title>
+      <image href="analysis-sheet.png" placement="break" align="center" />
+    </section>
+    <section outputclass="lofar-stage">
+      <title>Lofar 1</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-1-loop-1.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>240</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>800</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    <section outputclass="lofar-stage">
+      <title>Lofar 2</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-2-a.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>360</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>200</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+  </body>
+</topic>

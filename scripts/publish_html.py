@@ -1,10 +1,9 @@
 """Publish the generated DITA tree to HTML using DITA-OT.
 
-The DITA source files in ``dita/`` deliberately omit DOCTYPE declarations
-(contract: Oxygen handles DTD validation at publish time). DITA-OT,
-however, needs DOCTYPEs to classify the elements. This script stages a
-build copy of ``dita/`` with DOCTYPEs injected, runs DITA-OT once per
-ditamap, and writes the results under ``html/``.
+This script stages a build copy of ``dita/`` (injecting the OASIS
+DOCTYPEs DITA-OT needs where a file lacks them, and relocating any
+legacy root-level ditamap into its publication folder), runs DITA-OT
+once per ditamap, and writes the results under ``html/``.
 
 After DITA-OT runs, every generated ``*.html`` file is reformatted in
 place so reviewers can read it. DITA-OT emits topic pages on a single
@@ -113,25 +112,25 @@ def _with_doctype(body: str, doctype: str) -> str:
 
 
 def stage(src: Path, dst: Path) -> None:
-    """Copy ``src`` to ``dst``, add DOCTYPEs, and tuck each ditamap inside
-    its publication folder with hrefs rewritten relative to it.
+    """Copy ``src`` to ``dst`` ready for DITA-OT: inject DOCTYPEs and ensure
+    each ditamap sits at ``<dst>/<stem>/<stem>.ditamap`` with hrefs relative
+    to that folder.
 
-    The source ``dita/`` tree keeps a single root with the ditamaps as
-    siblings of the publication folders — that shape makes it easy for
-    a human author to scan the corpus. But DITA-OT mirrors the topic
-    paths it sees in the ditamap below the output directory, so a map
-    at ``dita/progress-test-5.ditamap`` referencing
-    ``progress-test-5/gram-01/gram_01.dita`` produces
-    ``html/.../progress-test-5/progress-test-5/gram-01/gram_01.html``
-    — a duplicated ``progress-test-5/`` segment that's visually
-    confusing.
+    ``generate_dita.py`` now emits exactly that shape — the map lives inside
+    its publication folder with folder-relative hrefs — so for a current
+    tree staging is a plain copy plus belt-and-braces DOCTYPE injection
+    (``_with_doctype`` no-ops on files that already carry the preamble).
+    The placement matters because DITA-OT mirrors the topic paths it sees in
+    the ditamap below the output directory: an in-folder map referencing
+    ``gram-01/gram_01.dita`` publishes to
+    ``html/<edition>/<stem>/gram-01/...`` with no duplicated ``<stem>/``
+    segment.
 
-    Staging restructures the build-only copy so each ditamap lives at
-    ``<staged>/<stem>/<stem>.ditamap`` with topic hrefs of the form
-    ``<gram-folder>/<gram>.dita`` (no leading ``<stem>/``). DITA-OT
-    then publishes into ``html/<edition>/<stem>/<gram-folder>/...``
-    with no duplicated segment, and the original ``dita/`` tree is
-    untouched.
+    Older generated trees kept the ditamaps at the source root with
+    ``<stem>/``-prefixed hrefs; any root-level map found here is still
+    relocated into its ``<stem>/`` folder with the leading ``<stem>/``
+    stripped from its hrefs, so a pre-relocation tree publishes
+    identically. The original ``dita/`` tree is never modified.
     """
     if dst.exists():
         shutil.rmtree(dst)
@@ -139,14 +138,17 @@ def stage(src: Path, dst: Path) -> None:
     for path in dst.rglob("*.dita"):
         body = path.read_text(encoding="utf-8")
         _write_text(path, _with_doctype(body, TOPIC_DOCTYPE))
+    for path in dst.rglob("*.ditamap"):
+        body = path.read_text(encoding="utf-8")
+        _write_text(path, _with_doctype(body, MAP_DOCTYPE))
+    # Legacy layout: relocate any root-level map into its publication folder.
     for path in sorted(dst.glob("*.ditamap")):
         stem = path.stem
         body = path.read_text(encoding="utf-8")
         body = body.replace(f'href="{stem}/', 'href="')
         new_dir = dst / stem
         new_dir.mkdir(parents=True, exist_ok=True)
-        new_path = new_dir / path.name
-        _write_text(new_path, _with_doctype(body, MAP_DOCTYPE))
+        _write_text(new_dir / path.name, body)
         path.unlink()
 
 
@@ -296,21 +298,11 @@ def _emit(buf: list, node, depth: int, indent: str) -> None:
     buf.append("\n" + indent * depth + f"</{node.tag}>")
 
 
-def prettify_html(source: str, indent: str = "  ") -> str:
-    """Re-emit ``source`` with block elements on their own indented line.
-
-    Elements whose entire subtree is inline (``<a>``, ``<span>``,
-    ``<strong>``, plain text…) stay flat — splitting them would change
-    rendered whitespace. ``<pre>`` / ``<script>`` / ``<style>`` content
-    is preserved verbatim. Void elements (``<meta>``, ``<br>``, ``<img>``,
-    ``<link>``) are emitted HTML5-style with no trailing slash.
-    """
-    builder = _TreeBuilder()
-    builder.feed(source)
-    builder.close()
+def _emit_document(root: "_Element", indent: str = "  ") -> str:
+    """Serialise a parsed ``_TreeBuilder`` root back to an HTML string."""
     buf: list = []
     first = True
-    for c in builder.root.children:
+    for c in root.children:
         if isinstance(c, _Text):
             stripped = c.data.strip()
             if not stripped:
@@ -327,12 +319,134 @@ def prettify_html(source: str, indent: str = "  ") -> str:
     return "".join(buf)
 
 
+def prettify_html(source: str, indent: str = "  ") -> str:
+    """Re-emit ``source`` with block elements on their own indented line.
+
+    Elements whose entire subtree is inline (``<a>``, ``<span>``,
+    ``<strong>``, plain text…) stay flat — splitting them would change
+    rendered whitespace. ``<pre>`` / ``<script>`` / ``<style>`` content
+    is preserved verbatim. Void elements (``<meta>``, ``<br>``, ``<img>``,
+    ``<link>``) are emitted HTML5-style with no trailing slash.
+    """
+    builder = _TreeBuilder()
+    builder.feed(source)
+    builder.close()
+    return _emit_document(builder.root, indent)
+
+
 def prettify_tree(root: Path) -> int:
     count = 0
     for path in root.rglob("*.html"):
         original = path.read_text(encoding="utf-8")
         _write_text(path, prettify_html(original))
         count += 1
+    return count
+
+
+# -----------------------------------------------------------------------------
+# Publication index nav pruning
+# -----------------------------------------------------------------------------
+#
+# DITA-OT's html5 transtype renders a publication's index.html nav
+# (``<ul class="map">``) as the *entire* merged map tree, so the main
+# publication's index page listed every gram in the corpus — one really,
+# really long page. The generator now gives each week its own chapter
+# topic ("sub-document") whose page lists its grams, so the index only
+# needs to reach the nodes that own pages: any nav branch whose <li>
+# carries its own link is collapsed to just that link. Branches under a
+# *link-less* <li> (a topichead, e.g. the Grams folder — and the flat
+# progress tests' grams beneath it) are untouched, because removing them
+# would orphan their topics from the nav entirely.
+
+
+def _find_map_navs(node: "_Element") -> "list[_Element]":
+    """Return every ``<ul class="… map …">`` element under ``node``."""
+    if node.tag == "ul" and any(
+        name == "class" and value and "map" in value.split()
+        for name, value in node.attrs
+    ):
+        return [node]
+    found: "list[_Element]" = []
+    for child in node.children:
+        if isinstance(child, _Element):
+            found.extend(_find_map_navs(child))
+    return found
+
+
+def _prune_linked_nav_branches(node: "_Element") -> int:
+    """Drop every direct ``<ul>`` child of an ``<li>`` that also carries a
+    direct ``<a>`` — the linked page itself lists those children. Returns
+    the number of removed ``<ul>`` subtrees.
+
+    A collapsed ``<li>`` gains the class token ``subdoc`` so the theme can
+    style these entries (the week sub-documents) as section tiles, distinct
+    from plain gram tiles. The indentation text framing the removed ``<ul>``
+    is dropped too, so the entry re-emits flat.
+    """
+    pruned = 0
+    has_link = node.tag == "li" and any(
+        isinstance(c, _Element) and c.tag == "a" for c in node.children
+    )
+    kept: list = []
+    for child in node.children:
+        if has_link and isinstance(child, _Element) and child.tag == "ul":
+            pruned += 1
+            continue
+        kept.append(child)
+        if isinstance(child, _Element):
+            pruned += _prune_linked_nav_branches(child)
+    if has_link and pruned:
+        kept = [c for c in kept
+                if not (isinstance(c, _Text) and not c.data.strip())]
+        _add_class(node, "subdoc")
+    node.children = kept
+    return pruned
+
+
+def _add_class(node: "_Element", token: str) -> None:
+    """Append ``token`` to ``node``'s ``class`` attribute (idempotent)."""
+    for i, (name, value) in enumerate(node.attrs):
+        if name == "class":
+            if token not in (value or "").split():
+                node.attrs[i] = (name, f"{value} {token}" if value else token)
+            return
+    node.attrs.append(("class", token))
+
+
+def prune_map_index_nav(source: str, indent: str = "  ") -> "tuple[str, int]":
+    """Collapse a publication index page's ``ul.map`` nav to the nodes that
+    own pages.
+
+    Returns ``(new_source, removed_branches)``; the source is re-emitted
+    (prettified) only when something was pruned.
+    """
+    builder = _TreeBuilder()
+    builder.feed(source)
+    builder.close()
+    pruned = 0
+    for nav in _find_map_navs(builder.root):
+        pruned += _prune_linked_nav_branches(nav)
+    if not pruned:
+        return source, 0
+    return _emit_document(builder.root, indent), pruned
+
+
+def prune_index_navs(
+    out_root: Path, editions: "tuple[Edition, ...]" = EDITIONS,
+) -> int:
+    """Apply ``prune_map_index_nav`` to every ``<edition>/<pub>/index.html``
+    under ``out_root`` (the DITA-OT-rendered publication indexes — the only
+    pages carrying the full-map nav). Returns the number of files changed.
+    Idempotent: a pruned page has no linked branches left to remove.
+    """
+    count = 0
+    for edition in editions:
+        for path in sorted(out_root.glob(f"{edition.output_subdir}/*/index.html")):
+            original = path.read_text(encoding="utf-8")
+            new_body, pruned = prune_map_index_nav(original)
+            if pruned:
+                _write_text(path, new_body)
+                count += 1
     return count
 
 
@@ -958,6 +1072,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         landing = write_shared_landing(args.out, EDITIONS, generated_at)
         print(f"[index] wrote {landing} (shared landing)")
+        pruned = prune_index_navs(args.out)
+        print(
+            f"[nav] pruned linked sub-branches from {pruned} publication "
+            "index page(s) — children are listed on their own pages"
+        )
         formatted = prettify_tree(args.out)
         print(f"[prettify] reformatted {formatted} HTML file(s) under {args.out}")
         scrubbed = scrub_nondeterministic_metadata(args.out)

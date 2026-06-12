@@ -57,6 +57,23 @@ body::before {
   padding: 10px 12px;
   text-transform: uppercase;
 }
+body:not(:has(.ph))::before {
+  content: "┄ STUDENT ┄ TRAINING ┄";
+  background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
+  border-bottom-color: rgba(77,208,225,0.35);
+  color: var(--student);
+}
+/* When publish_html.py stamped the edition on <body>, trust it over the
+   :has(.ph) heuristic. The heuristic misreads pages that legitimately carry
+   no audience-tagged <ph> in either edition — the week sub-document pages
+   ("Week 1" title, plain child links) — as student pages. Oxygen-published
+   output carries no data-edition attribute and keeps the heuristic. */
+body[data-edition="instructor"]::before {
+  content: "┄ INSTRUCTOR ┄ TRAINING USE ONLY ┄ CLASS-RESTRICTED ┄";
+  background: linear-gradient(90deg, transparent, rgba(255,138,61,0.15) 10%, rgba(255,138,61,0.15) 90%, transparent);
+  border-bottom-color: rgba(255,138,61,0.35);
+  color: var(--instructor);
+}
 body[data-edition="student"]::before {
   content: "┄ STUDENT ┄ TRAINING ┄";
   background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
@@ -274,15 +291,21 @@ article a:focus { color: var(--amber-bright); }
   padding: 4px 10px;
   border-radius: 2px;
 }
-body[data-edition="student"] .instructor-only { display: none; }
+/* Hiding of instructor-only content is done by the DITAVAL audience filter
+   at publish time, not by CSS. The student edition simply doesn't ship the
+   markup, so no display:none override is needed here. */
 
-/* ---------- Related links → back pill ---------- */
+/* ---------- Related links → back pill ----------
+   Gram pages carry a familylinks block ("Parent topic: Week N"): hide the
+   label and render the parent link as a back pill. The strong-hiding is
+   scoped to familylinks — the week pages' generated child links (ullinks,
+   below) also wrap their anchors in <strong> and must stay visible. */
 nav.related-links {
   margin-top: 48px;
   padding-top: 18px;
   border-top: 1px dashed var(--rule);
 }
-nav.related-links strong { display: none; }
+nav.related-links .familylinks strong { display: none; }
 nav.related-links ul.linklist { list-style: none; padding: 0; margin: 0; }
 nav.related-links a.link {
   display: inline-block;
@@ -300,6 +323,64 @@ nav.related-links a.link::before { content: "◂◂ "; color: var(--amber); }
 nav.related-links a.link:hover {
   background: rgba(77,208,225,0.14);
   border-color: var(--cyan);
+}
+
+/* ---------- Week sub-document pages: child-link tile grid ----------
+   A week chapter topic has no body of its own; DITA-OT renders its gram
+   children as <ul class="ullinks"> child links. Lay them out as the same
+   dense tile grid the publication index uses for grams, replacing the
+   browser-default bold list (whose <strong> wrapper the familylinks rule
+   used to hide page-wide — the bug that left week pages looking empty). */
+nav.related-links:has(ul.ullinks) {
+  /* The child-link grid IS the page content here — no separator rule. */
+  margin-top: 28px;
+  padding-top: 0;
+  border-top: 0;
+}
+nav.related-links ul.ullinks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+nav.related-links ul.ullinks strong { font-weight: inherit; }
+nav.related-links ul.ullinks li.ulchildlink { margin: 0; }
+nav.related-links ul.ullinks br { display: none; }
+nav.related-links ul.ullinks a,
+nav.related-links ul.ullinks a:link,
+nav.related-links ul.ullinks a:visited {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  min-height: 38px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  font: 500 12px/1.3 "Inter", sans-serif;
+  font-feature-settings: "tnum";
+  transition: border-color 0.12s, background 0.12s;
+}
+nav.related-links ul.ullinks a:hover,
+nav.related-links ul.ullinks a:focus {
+  color: var(--ink);
+  border-color: var(--cyan);
+  background: var(--panel-2);
+}
+/* Student edition: short "Gram NN" labels — tight, centred number cards.
+   Keyed on the publisher-stamped edition attribute (the week pages carry
+   no <ph> in either edition, so the :has(.ph) heuristic can't tell). */
+body[data-edition="student"] nav.related-links ul.ullinks {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+body[data-edition="student"] nav.related-links ul.ullinks a {
+  justify-content: center;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.06em;
 }
 
 /* ---------- Landing / index pages (publish_html.py output) ---------- */
@@ -382,24 +463,39 @@ body.edition-index ul.deliverables .meta {
 
 /* =====================================================================
    DITA-OT index pages (ditamap → HTML)
-   Structure DITA-OT emits:
+
+   Structure DITA-OT emits (post feature 010 + week sub-documents):
      body
        h1.topictitle1
        nav
-         ul.map
-           li.topicref.topichead            <- section heading text
+         ul.map                             <- only present on index pages
+           li.topicref > a                  <- common page link (Welcome, Security)
+           li.topicref.topichead            <- the "Grams" section card
              ul
-               li.topicref > a              <- gram link
+               li.topicref.subdoc > a       <- week sub-document link (main;
+                                               .subdoc added by the publisher's
+                                               index-nav prune)
+               li.topicref > a              <- gram link (progress tests)
 
-   Strategy for a long index:
-   - Render each .topichead as a card with a colour-coded tab and a count.
-   - Inside, lay the grams out as a dense grid of identifier tiles.
-   - On the instructor edition, the link text is "Gram NN - vessel info"; we
-     split it on the en-dash via a CSS-only trick (the part before " - " is
-     boosted, the part after is dimmed and clamped to one line).
+   How we detect "this is an index page" without help from Python or a
+   DITA-OT plugin: ul.map only exists on ditamap-rendered pages, so
+   `body:has(ul.map)` is the page-type selector. The audience filter is
+   the only thing distinguishing instructor from student output, so
+   `body:has(.ph)` detects the instructor edition (every <ph> in the
+   source is audience-tagged "-trainee" — map-title suffix, vessel-name
+   decoration — and DITAVAL strips them all from the student edition).
+
+   Strategy:
+   - Welcome / Security render as a compact pill row above the card.
+   - The Grams .topichead is a full-width card.
+   - main: the week sub-documents render as colour-coded section tiles
+     (the prune collapsed their gram lists onto the week pages).
+   - progress tests: grams render as a dense grid of identifier tiles.
+     Instructor edition gets wider tiles + 2-line layout (long labels);
+     student edition gets tighter centred tiles (short labels).
 ===================================================================== */
 
-body.ditamap-index {
+body:has(ul.map) {
   background:
     radial-gradient(ellipse at top, #0d1c2a 0%, var(--bg) 60%),
     linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0 / 100% 32px,
@@ -408,13 +504,13 @@ body.ditamap-index {
   background-attachment: fixed;
 }
 
-body.ditamap-index main[role="main"] {
+body:has(ul.map) main[role="main"] {
   max-width: 1280px;
   padding: 32px 32px 80px;
 }
 
 /* Topic title at the very top of the index */
-body.ditamap-index h1.topictitle1 {
+body:has(ul.map) h1.topictitle1 {
   font-family: "JetBrains Mono", monospace;
   font-size: 30px;
   color: var(--cyan);
@@ -422,9 +518,9 @@ body.ditamap-index h1.topictitle1 {
   padding-bottom: 0;
   border-bottom: 0;
 }
-body.ditamap-index h1.topictitle1::before { content: "» "; color: var(--amber); }
-body.ditamap-index h1.topictitle1::after { content: none; }
-body.ditamap-index h1.topictitle1 .ph {
+body:has(ul.map) h1.topictitle1::before { content: "» "; color: var(--amber); }
+body:has(ul.map) h1.topictitle1::after { content: none; }
+body:has(ul.map) h1.topictitle1 .ph {
   display: inline;
   margin: 0 0 0 8px;
   background: none;
@@ -435,31 +531,50 @@ body.ditamap-index h1.topictitle1 .ph {
   text-transform: uppercase;
   color: var(--ink-faint);
 }
-body.ditamap-index h1.topictitle1 .ph::before { content: "· "; }
+body:has(ul.map) h1.topictitle1 .ph::before { content: "· "; }
 
-/* nav + outer list */
-body.ditamap-index nav { margin-top: 28px; }
-body.ditamap-index ul.map,
-body.ditamap-index ul.map ul {
+/* nav + outer list. Row-flex so the common page links share one line;
+   the Grams card spans the full width below them. */
+body:has(ul.map) nav { margin-top: 28px; }
+body:has(ul.map) ul.map,
+body:has(ul.map) ul.map ul {
   list-style: none;
   padding: 0;
   margin: 0;
 }
-body.ditamap-index ul.map { display: flex; flex-direction: column; gap: 22px; }
-
-/* Flat ditamaps (progress tests, final assessment) put grams directly
-   under ul.map with no enclosing li.topichead. The default column flex
-   above produces a long single-column list that's slow to scan. When
-   the map only contains bare topicrefs, switch to the same dense tile
-   grid used for the nested case below. */
-body.ditamap-index ul.map:has(> li.topicref:not(.topichead)) {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 6px;
+body:has(ul.map) ul.map {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 18px 10px;
 }
 
-/* Section card (li.topichead) */
-body.ditamap-index li.topichead {
+/* Common page links (Welcome, Security) — compact pill row */
+body:has(ul.map) ul.map > li.topicref:not(.topichead) { flex: 0 0 auto; margin: 0; }
+body:has(ul.map) ul.map > li.topicref:not(.topichead) a {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--cyan);
+  background: rgba(77,208,225,0.06);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 8px 16px;
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+body:has(ul.map) ul.map > li.topicref:not(.topichead) a::before {
+  content: "▪ ";
+  color: var(--amber);
+}
+body:has(ul.map) ul.map > li.topicref:not(.topichead) a:hover {
+  background: rgba(77,208,225,0.14);
+  border-color: var(--cyan);
+}
+
+/* Section card (li.topichead — the Grams folder) */
+body:has(ul.map) li.topichead {
+  flex: 1 1 100%;
   background: var(--panel);
   border: 1px solid var(--rule);
   border-left: 3px solid var(--cyan);
@@ -471,35 +586,23 @@ body.ditamap-index li.topichead {
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-/* Colour-code the five sections by position. Pub10 = amber, Week 1..4 = cyan tints */
-body.ditamap-index li.topichead:nth-child(1) { border-left-color: var(--amber); color: var(--amber); }
-body.ditamap-index li.topichead:nth-child(2) { border-left-color: #4dd0e1; color: #4dd0e1; }
-body.ditamap-index li.topichead:nth-child(3) { border-left-color: #66bb6a; color: #66bb6a; }
-body.ditamap-index li.topichead:nth-child(4) { border-left-color: #ba68c8; color: #ba68c8; }
-body.ditamap-index li.topichead:nth-child(5) { border-left-color: #ef5350; color: #ef5350; }
 
-/* The text node "Instructor Week 1 Grams" is a bare text inside li.topichead.
-   Give it the look of a section title. */
-body.ditamap-index li.topichead {
-  /* trick: turn the li into a flex column so the inner ul drops to a row below */
-}
-
-/* Inner gram list — dense tile grid */
-body.ditamap-index li.topichead > ul {
+/* Inner list — dense tile grid (grams; week tiles override per-entry) */
+body:has(ul.map) li.topichead > ul {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 6px;
   margin-top: 14px;
 }
 
-body.ditamap-index li.topicref:not(.topichead) {
+body:has(ul.map) li.topichead li.topicref {
   margin: 0;
   font: 500 12px/1.3 "Inter", sans-serif;
   letter-spacing: 0;
   text-transform: none;
   color: var(--ink);
 }
-body.ditamap-index li.topicref:not(.topichead) a {
+body:has(ul.map) li.topichead li.topicref a {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -512,55 +615,79 @@ body.ditamap-index li.topicref:not(.topichead) a {
   min-height: 38px;
   transition: border-color 0.12s, background 0.12s, transform 0.12s;
 }
-body.ditamap-index li.topicref:not(.topichead) a:hover {
+body:has(ul.map) li.topichead li.topicref a:hover {
   border-color: var(--cyan);
   background: var(--panel-2);
 }
 
-/* Split "Gram 20 - FR Stargazer, Category 4, Gandalf" via the ::first-line
-   trick won't work for inline split — but DITA-OT emits the whole label as
-   a single text node, so we use a CSS truncation + a left-aligned mono prefix.
-   For the instructor edition we want the prefix ("Gram NN") to look like a
-   stable identifier.  We can't split via CSS alone reliably, so we just
-   render the whole label in a single line and clamp it; the "Gram NN" stays
-   left-aligned and visible. */
-body.ditamap-index li.topicref:not(.topichead) a {
+/* Default tile shape: one-line label, ellipsis-clamped, monospace tabular
+   digits so "Gram 04 / Gram 14 / Gram 24" align vertically across the
+   grid. The instructor edition overrides this lower down with a two-line
+   tile that lets the long descriptor wrap. */
+body:has(ul.map) li.topichead li.topicref a {
   font-feature-settings: "tnum";
 }
-body.ditamap-index li.topicref:not(.topichead) a::before {
+body:has(ul.map) li.topichead li.topicref a::before {
   content: "▸";
   color: var(--amber);
   font: 12px/1 "JetBrains Mono", monospace;
 }
-body.ditamap-index li.topicref:not(.topichead) a {
+body:has(ul.map) li.topichead li.topicref a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Week sub-documents (main) — the publisher's index-nav prune marks each
+   collapsed week entry with .subdoc. Render them as colour-coded section
+   tiles (the palette the per-week cards used before the weeks became
+   sub-documents), identical in both editions: the label is just "Week N". */
+body:has(ul.map) li.topichead li.topicref.subdoc a,
+body:has(ul.map):has(.ph) li.topichead li.topicref.subdoc a,
+body:has(ul.map):not(:has(.ph)) li.topichead li.topicref.subdoc a {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  min-height: 64px;
+  padding: 9px 12px;
+  white-space: nowrap;
+  font: 600 14px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+body:has(ul.map) li.topichead li.topicref.subdoc a::before { content: none; }
+body:has(ul.map) li.topichead li.topicref.subdoc a::after {
+  content: " ▸";
+  font: 12px/1 "JetBrains Mono", monospace;
+}
+body:has(ul.map) li.topichead li.topicref.subdoc:nth-child(1) a { border-left-color: var(--amber); color: var(--amber); }
+body:has(ul.map) li.topichead li.topicref.subdoc:nth-child(2) a { border-left-color: #4dd0e1; color: #4dd0e1; }
+body:has(ul.map) li.topichead li.topicref.subdoc:nth-child(3) a { border-left-color: #66bb6a; color: #66bb6a; }
+body:has(ul.map) li.topichead li.topicref.subdoc:nth-child(4) a { border-left-color: #ba68c8; color: #ba68c8; }
+body:has(ul.map) li.topichead li.topicref.subdoc:nth-child(5) a { border-left-color: #ef5350; color: #ef5350; }
+
 /* Student edition: labels are short ("Gram 20") so center them and turn the
-   tiles into a tight number-card grid */
-body[data-edition="student"].ditamap-index li.topichead > ul {
+   tiles into a tight number-card grid. */
+body:has(ul.map):not(:has(.ph)) li.topichead > ul:not(:has(> li.subdoc)) {
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }
-body[data-edition="student"].ditamap-index li.topicref:not(.topichead) a {
+body:has(ul.map):not(:has(.ph)) li.topichead li.topicref:not(.subdoc) a {
   justify-content: center;
   font-family: "JetBrains Mono", monospace;
   letter-spacing: 0.06em;
 }
-body[data-edition="student"].ditamap-index li.topicref:not(.topichead) a::before { content: none; }
+body:has(ul.map):not(:has(.ph)) li.topichead li.topicref:not(.subdoc) a::before { content: none; }
 
-/* --- Instructor: 2-line tile when the descriptor is split out into spans ---
-   In the mockup this is done via a screenshot-time JS that splits the link
-   text at " - " into <span.gram-id>…</span><span.gram-desc>…</span>.
-   In production we'd surface those as separate elements by adjusting the
-   DITA topicmeta / navtitle structure or via a custom plugin so DITA-OT
-   emits them directly. */
-body[data-edition="instructor"].ditamap-index li.topichead > ul {
+/* Instructor edition: gram labels are long ("Gram NN - vessel info"); give
+   the tile more room and let the label wrap to two lines instead of being
+   ellipsis-clamped. */
+body:has(ul.map):has(.ph) li.topichead > ul {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
 }
-body[data-edition="instructor"].ditamap-index li.topicref:not(.topichead) a {
+body:has(ul.map):has(.ph) li.topichead li.topicref:not(.subdoc) a {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
@@ -568,18 +695,4 @@ body[data-edition="instructor"].ditamap-index li.topicref:not(.topichead) a {
   min-height: 56px;
   padding: 9px 12px;
 }
-body[data-edition="instructor"].ditamap-index li.topicref:not(.topichead) a::before { content: none; }
-body[data-edition="instructor"].ditamap-index .gram-id {
-  font: 600 13px/1.1 "JetBrains Mono", monospace;
-  color: var(--cyan-bright);
-  letter-spacing: 0.06em;
-}
-body[data-edition="instructor"].ditamap-index .gram-desc {
-  font: 11px/1.3 "Inter", sans-serif;
-  color: var(--ink-dim);
-  letter-spacing: 0.02em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+body:has(ul.map):has(.ph) li.topichead li.topicref:not(.subdoc) a::before { content: none; }

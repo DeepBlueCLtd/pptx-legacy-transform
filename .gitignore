@@ -228,6 +228,7 @@ mock_instructor.pptx
 mock_corpus/
 extracted.csv
 source.csv
+source.dedup.csv
 
 
 # DITA-OT staging directory (publish_html.py)

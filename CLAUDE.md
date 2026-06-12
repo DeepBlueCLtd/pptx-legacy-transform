@@ -153,7 +153,12 @@ the bare integer into the editable `target_chapter` column (immutable `chapter`
 keeps the full title); `target_doc` is left empty so a week's grams share one
 folder. Decks with no week token (Pub10) get a blank `target_chapter` for an
 **analyst** to fill in. The generator expands a bare-integer effective chapter
-to navtitle `Week N` / slug `week-N` (in `_normalise_chapter`).
+to heading `Week N` / slug `week-N` (in `_normalise_chapter`) and emits each
+week as a **chapter sub-document**: a real `main/week-N/week_N.dita` topic
+(`emit_main_chapter_topics`) that the main ditamap references with the week's
+gram topicrefs nested one tier below it, **sorted by effective gram number**
+(CSV order interleaves decks) — so renderers give every week its own page
+listing its grams in order, instead of one enormous flat page of grams.
 
 Because several decks now share a week, two grams can claim the same number.
 `deduplicate_csv.py` **renumbers** the collision: per `(publication, effective
@@ -179,21 +184,27 @@ across a gram's rows is enforced fail-fast in the generator.
 
 Oxygen's webhelp renders every **direct child of a ditamap** as both a
 header-bar tab and a welcome-page tile, so a flat list of grams floods the nav.
-The generator therefore reshapes every ditamap:
+The generator therefore shapes every ditamap:
 
+- **Each ditamap lives inside its publication folder** —
+  `dita/<pub>/<pub>.ditamap`, never at the `dita/` root — so every href is
+  folder-relative and the publication folder is self-contained: open it in
+  Oxygen and publish, no path rewriting. `publish_html.py`'s stager copies this
+  shape straight through (it still relocates a legacy root-level map and strips
+  its `<pub>/` href prefix, for older trees).
 - **Grams are demoted** under a single `<topichead>` (navtitle `Grams`) — one nav
-  entry instead of N. For `main` the per-week chapter topicheads nest inside
-  Grams; for the progress tests the gram topicrefs sit flat under it.
+  entry instead of N. For `main`, each per-week **chapter sub-document topicref**
+  nests inside Grams with its gram topicrefs one tier below; for the progress
+  tests the gram topicrefs sit flat under it.
 - **Common static pages** (`welcome.dita`, `security.dita`, then any further
   top-level `*.dita` alphabetically) are prepended as the first topicrefs, so
   every publication opens **Welcome · Security · Grams**.
 
 The pages live in `static/` at the repo root (`--static-root`, default
 `static/`): top-level `*.dita` plus their image subfolders. The generator
-**copies the whole tree into each publication folder** and references it as
-`<publication>/<name>` — the same prefix `publish_html.py`'s stager strips, so
-after staging the pages resolve as bare local filenames beside the relocated
-ditamap (matching the self-contained-publication, no-`../` invariant). A missing
+**copies the whole tree into each publication folder** and references it by
+bare filename beside the in-folder ditamap (matching the
+self-contained-publication, no-`../` invariant). A missing
 `static/` degrades gracefully (warn, no pages) per the dangling-asset rule.
 Per-publication duplication is intentional: Oxygen publishes each ditamap
 independently, so each must be self-contained.

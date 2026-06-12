@@ -1,22 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
 <topic id="gram_07">
-  <title>Gram 07<ph audience="-trainee" outputclass="vessel-name"> - FR Rebel One, Category 1, Naboo</ph></title>
+  <title>Gram 07<ph audience="-trainee" outputclass="vessel-name"> - FR Defiant, Category 1, Vulcan</ph></title>
   <body>
     <section audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
-      <p>
-        <xref href="analysis-sheet.docx" format="docx" scope="local">Analysis Sheet</xref>
-      </p>
+      <image href="analysis.png" placement="break" align="center" />
     </section>
     <section outputclass="lofar-stage">
       <title>Lofar 1</title>
       <p>
-        <xref href="lofar-1-i.glc" format="glc" scope="local">Lofar 1</xref>
-      </p>
-    </section>
-    <section outputclass="lofar-stage">
-      <title>Lofar 2</title>
-      <p>
-        <xref href="lofar-2.glc" format="glc" scope="local">Lofar 2</xref>
+        <xref href="lofar-1.glc" format="glc" scope="local">Lofar 1</xref>
       </p>
     </section>
   </body>
