@@ -53,6 +53,12 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn("stock.wav", names)
         self.assertIn("requirements.txt", names)
         self.assertIn("README.md", names)
+        # The wrapper templates (and the pipeline.py orchestrator) ship under
+        # wrappers/, so an extract-over-ROOT\ upgrade delivers a new wrapper
+        # without clobbering the operator's tuned root-level copies.
+        for wrapper in ("extract.py", "dedupe.py", "write.py", "publish.py",
+                        "introspect.py", "snapshot.py", "pipeline.py"):
+            self.assertIn("wrappers/" + wrapper, names)
 
     def test_archive_carries_only_deliverables(self):
         with zipfile.ZipFile(self._build("only.zip")) as archive:
@@ -61,19 +67,20 @@ class PackageReleaseTests(unittest.TestCase):
             allowed = (
                 name.startswith("scripts/")
                 or name.startswith("static/")
+                or name.startswith("wrappers/")
                 or name in self.module.ROOT_FILES
             )
             self.assertTrue(allowed, f"unexpected archive entry: {name}")
         self.assertNotIn("run_pipeline.bat", names)
         # Dev-only mock tooling stays out of the deliverable.
         self.assertNotIn("scripts/generate_mock_analysis_sheet.py", names)
-        # The root wrappers and the pipeline orchestrator are committed
-        # templates, never shipped: an upgrade extracted over ROOT\ must
-        # not clobber the operator's tuned copies.
+        # The wrappers ship under wrappers/, never at the archive root, so an
+        # extract-over-ROOT\ upgrade can't overwrite the operator's tuned copies.
         for wrapper in ("extract.py", "dedupe.py", "write.py",
                         "publish.py", "introspect.py", "snapshot.py",
                         "pipeline.py"):
             self.assertNotIn(wrapper, names)
+            self.assertNotIn("scripts/" + wrapper, names)
         # vendor assets sit beside publish_html.py in the repo but are
         # not part of the archive contract.
         self.assertFalse(any(n.startswith("scripts/vendor/") for n in names),

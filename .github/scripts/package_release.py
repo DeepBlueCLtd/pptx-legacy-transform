@@ -5,10 +5,16 @@ The archive mirrors "Project layout on the target" (README.md), the
 layout the repo itself now follows: the canonical scripts ship from
 ``scripts/`` as-is; ``static/``, ``stock.wav``, ``requirements.txt`` and
 ``README.md`` sit at the archive root. The operator extracts it straight
-over ``ROOT\\`` on the target — the root-level wrapper templates
-(``extract.py`` … ``snapshot.py``), the dev-only mock tooling, ``source\\``
-and ``reports\\`` are not in the archive, so an upgrade never touches the
-operator's tuned wrappers or data.
+over ``ROOT\\`` on the target — the dev-only mock tooling, ``source\\``
+and ``reports\\`` are not in the archive.
+
+The root-level wrapper templates (``extract.py`` … ``snapshot.py`` plus
+the ``pipeline.py`` orchestrator) ship under a ``wrappers/`` subfolder,
+**not** at the archive root: an extract-over-``ROOT\\`` upgrade lands them
+in ``ROOT\\wrappers\\`` and so never clobbers the operator's tuned
+root-level copies. The operator copies up any new or missing wrapper (a
+fresh ``pipeline.py``, say) by hand and tunes its Config block once — see
+README.md, "Getting pipeline updates onto the target".
 
 Determinism: entries are sorted, every zip timestamp comes from
 ``--timestamp`` (CI passes the commit date), and the permission/platform
@@ -32,6 +38,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # deliberately absent: it is a dev-host orchestrator, never used on target.
 ROOT_FILES = ("README.md", "requirements.txt", "stock.wav")
 
+# Root-level wrapper templates (and the pipeline.py orchestrator). They ship
+# under wrappers/ in the archive, never at the root, so an extract-over-ROOT\
+# upgrade can't overwrite the operator's tuned root-level copies; the operator
+# copies up any new/missing wrapper by hand. These are the only repo-root *.py
+# files, so the set is discovered rather than hand-listed.
+WRAPPERS = tuple(sorted(p.name for p in REPO_ROOT.glob("*.py")))
+
 # Dev-host-only helpers living in scripts/ that must not ship; every other
 # scripts/*.py is a canonical pipeline stage.
 DEV_ONLY_SCRIPTS = frozenset({"generate_mock_analysis_sheet.py"})
@@ -54,6 +67,10 @@ def collect_entries():
             entries.append((path, name))
         else:
             print(f"WARNING: expected root file missing: {name}", file=sys.stderr)
+    for name in WRAPPERS:
+        path = REPO_ROOT / name
+        if path.is_file():
+            entries.append((path, "wrappers/" + name))
     static_root = REPO_ROOT / "static"
     if static_root.is_dir():
         for path in static_root.rglob("*"):
