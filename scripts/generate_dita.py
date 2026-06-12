@@ -1081,9 +1081,12 @@ def emit_main_ditamap(
     Each chapter (``Week 1`` … ``Week 4``, per feature 008's effective
     chapter) is a real sub-document: a ``<topicref>`` to the chapter topic
     written by ``emit_main_chapter_topics``, with the week's gram topicrefs
-    nested one tier below it. Rows with an empty chapter slug have no
-    sub-document to nest under, so their gram topicrefs sit directly under
-    the Grams folder.
+    nested one tier below it in ascending gram-number order. (CSV order
+    interleaves decks — a week's native grams first, then the even-sliced
+    no-week decks' renumbered grams — which read as a jumble when
+    rendered.) Rows with an empty chapter slug have no sub-document to
+    nest under, so their gram topicrefs sit directly under the Grams
+    folder, equally number-ordered.
     """
     pub_dir = out_dir / "main"
     pub_dir.mkdir(parents=True, exist_ok=True)
@@ -1101,6 +1104,7 @@ def emit_main_ditamap(
         else:
             chapter_ref = grams_head
         seen: set[str] = set()
+        gram_refs: list[tuple[int, str]] = []
         for row in chapter_rows:
             doc_slug = _doc_slug(_effective_doc(row))
             gram_dir = _gram_folder_name(_effective_gram_id(row))
@@ -1120,6 +1124,8 @@ def emit_main_ditamap(
             # Filtering empties keeps href == path relative to the map.
             href = "/".join([s for s in (slug, doc_slug, gram_dir) if s]
                             + [topic_file])
+            gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
+        for _, href in sorted(gram_refs):
             ET.SubElement(chapter_ref, "topicref", {"href": href})
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
@@ -1151,7 +1157,8 @@ def emit_test_ditamap(
 
     The common static pages lead (feature 010); the per-gram topicrefs are
     grouped under a single ``<topichead>`` (navtitle ``Grams``) so they sit one
-    level below the ditamap root rather than flooding it as direct children.
+    level below the ditamap root rather than flooding it as direct children,
+    in ascending gram-number order regardless of CSV row order.
     """
     pub_dir = out_dir / publication
     pub_dir.mkdir(parents=True, exist_ok=True)
@@ -1161,6 +1168,7 @@ def emit_test_ditamap(
     _append_static_topicrefs(root, static_pages)
     grams_head = _append_grams_topichead(root)
     seen: set[str] = set()
+    gram_refs: list[tuple[int, str]] = []
     for row in rows:
         if row["publication"] != publication:
             continue
@@ -1173,6 +1181,8 @@ def emit_test_ditamap(
         topic_file = _topic_filename(_effective_gram_id(row))
         prefix = f"{doc_slug}/" if doc_slug else ""
         href = f"{prefix}{gram_dir}/{topic_file}"
+        gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
+    for _, href in sorted(gram_refs):
         ET.SubElement(grams_head, "topicref", {"href": href})
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path

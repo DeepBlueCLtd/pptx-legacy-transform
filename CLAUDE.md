@@ -153,8 +153,9 @@ folder. Decks with no week token (Pub10) get a blank `target_chapter` for an
 to heading `Week N` / slug `week-N` (in `_normalise_chapter`) and emits each
 week as a **chapter sub-document**: a real `main/week-N/week_N.dita` topic
 (`emit_main_chapter_topics`) that the main ditamap references with the week's
-gram topicrefs nested one tier below it — so renderers give every week its own
-page listing its grams, instead of one enormous flat page of grams.
+gram topicrefs nested one tier below it, **sorted by effective gram number**
+(CSV order interleaves decks) — so renderers give every week its own page
+listing its grams in order, instead of one enormous flat page of grams.
 
 Because several decks now share a week, two grams can claim the same number.
 `deduplicate_csv.py` **renumbers** the collision: per `(publication, effective

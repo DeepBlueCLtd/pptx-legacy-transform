@@ -354,6 +354,51 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertFalse(hrefs[0].startswith("/"),
                          "an empty chapter slug must not yield an absolute href")
 
+    def test_main_ditamap_grams_sorted_by_effective_number(self) -> None:
+        """Within a week, gram topicrefs are emitted in ascending numeric
+        order — not CSV row order, which interleaves a week's native deck
+        with the even-sliced no-week decks' renumbered grams. The sort is
+        numeric (102 follows 23), and the effective number (target_gram_id)
+        is what's ordered."""
+        def row(gram_id, target="", chapter="2"):
+            r = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
+            r.update({
+                "publication": "main", "chapter": "Some Deck",
+                "target_chapter": chapter, "gram_id": gram_id,
+                "topic_type": "glc", "sequence": "1",
+                "topic_filename": "x.dita", "target_gram_id": target,
+            })
+            return r
+
+        rows = [row("23"), row("7", target="102"), row("7")]
+        ditamap = generate_dita.emit_main_ditamap(rows, self.out)
+        hrefs = [tr.get("href")
+                 for tr in ET.parse(ditamap).getroot().iter("topicref")
+                 if "gram-" in (tr.get("href") or "")]
+        self.assertEqual(hrefs, [
+            "week-2/gram-07/gram_07.dita",
+            "week-2/gram-23/gram_23.dita",
+            "week-2/gram-102/gram_102.dita",
+        ], "grams must sort by effective number, numerically")
+
+    def test_test_ditamap_grams_sorted_by_effective_number(self) -> None:
+        """The flat publications' gram topicrefs are number-ordered too,
+        regardless of CSV row order."""
+        def row(gram_id):
+            r = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
+            r.update({
+                "publication": "progress-test-9", "gram_id": gram_id,
+                "topic_type": "glc", "sequence": "1", "topic_filename": "x.dita",
+            })
+            return r
+
+        ditamap = generate_dita.emit_test_ditamap(
+            "progress-test-9", [row("10"), row("2")], self.out)
+        hrefs = [tr.get("href")
+                 for tr in ET.parse(ditamap).getroot().iter("topicref")
+                 if "gram-" in (tr.get("href") or "")]
+        self.assertEqual(hrefs, ["gram-02/gram_02.dita", "gram-10/gram_10.dita"])
+
     def test_test_ditamap_grams_under_grams_folder(self) -> None:
         """Feature 010: a progress-test ditamap's root children are the <title>,
         the common static <topicref>s, then a single "Grams" <topichead> holding
