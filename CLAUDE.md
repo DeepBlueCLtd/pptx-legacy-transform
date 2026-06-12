@@ -48,8 +48,11 @@ WinPython 3.9.4 box the operator drives the pipeline from the **WinPython
 interpreter (REPL)** by `exec()`-ing the thin **wrapper scripts** at the
 project root. The wrappers are **committed templates** — the repo mirrors
 the target layout; only the target paths in each wrapper's Config block
-are tuned per machine, and the release zip deliberately excludes the
-wrappers so updates never overwrite that tuning. Full detail is in
+are tuned per machine, and the release zip ships the wrapper templates
+under `wrappers\` (not at the archive root) so an extract-over-`ROOT\`
+upgrade never overwrites the operator's tuned root-level copies — the
+operator copies a new/changed wrapper up out of `ROOT\wrappers\` and
+tunes it once. Full detail is in
 README.md — "Running on the air-gapped target machine" and "Project
 layout on the target".
 

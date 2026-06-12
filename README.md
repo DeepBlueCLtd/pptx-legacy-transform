@@ -179,8 +179,11 @@ REPL plus wrappers are the interface.
 The repository follows the same layout: the wrappers are **committed
 templates** at the repo root. Their Config blocks carry illustrative
 target paths (`C:\dev\AAAC`, `Z:\dita`, …) that the operator tunes once
-per machine; pipeline updates never overwrite them (the release zip
-deliberately excludes the wrappers).
+per machine; pipeline updates never overwrite the tuned root-level copies
+— the release zip ships the wrapper templates under `wrappers\`, so an
+extract-over-`ROOT\` upgrade lands them in `ROOT\wrappers\`, never on top
+of `ROOT\extract.py` (etc.). See "Getting pipeline updates onto the
+target".
 
 ### Cold start — every session
 
@@ -270,21 +273,29 @@ caches, sets `sys.argv`, then `runpy.run_path`s the canonical script.
 ### Getting pipeline updates onto the target — GitHub releases
 
 Every merge to `main` that touches a deliverable file (canonical
-`scripts/*.py`, `static/`, `stock.wav`, `requirements.txt`, this README)
-runs the *Package release* workflow, which publishes a GitHub release
-carrying `aaac-pipeline-vYYYY.MM.DD-N.zip` and a matching `.sha256` file.
-The zip mirrors the target layout above — the canonical `scripts\` tree,
-`static\` and `stock.wav` at the root — so an update is:
+`scripts/*.py`, the root wrapper templates, `static/`, `stock.wav`,
+`requirements.txt`, this README) runs the *Package release* workflow,
+which publishes a GitHub release carrying `aaac-pipeline-vYYYY.MM.DD-N.zip`
+and a matching `.sha256` file. The zip mirrors the target layout above —
+the canonical `scripts\` tree, `static\` and `stock.wav` at the root, and
+the wrapper templates under `wrappers\` — so an update is:
 
 1. On a connected host, download both assets from the latest release
    (far smaller than the full repository zip).
 2. After the removable-media transfer, verify on the target:
    `certutil -hashfile aaac-pipeline-….zip SHA256` and compare against the
    `.sha256` file.
-3. Extract over `ROOT\` (e.g. `C:\dev\aaac`), overwriting. The wrappers
-   (committed templates in the repo, deliberately absent from the archive),
-   `source\`, and `reports\` are never touched — your tuned Config blocks
-   survive every update.
+3. Extract over `ROOT\` (e.g. `C:\dev\aaac`), overwriting. Your tuned
+   root-level wrappers, `source\`, and `reports\` are never touched — the
+   archive carries the wrappers under `wrappers\`, not at the root, so the
+   update lands fresh templates in `ROOT\wrappers\` and leaves your tuned
+   `ROOT\extract.py` (etc.) and their Config blocks alone.
+4. **When a wrapper is new or has changed** — most often a brand-new
+   `pipeline.py` — copy it up out of `ROOT\wrappers\` to `ROOT\` and tune
+   its Config block once. `fc ROOT\wrappers\extract.py ROOT\extract.py`
+   shows whether an existing wrapper template gained anything worth
+   merging; the canonical `scripts\` it drives has already updated
+   underneath it either way.
 
 The unittest suite gates the publish, so a red `main` never cuts a release.
 If a deliverable change ever slips through without touching one of the
