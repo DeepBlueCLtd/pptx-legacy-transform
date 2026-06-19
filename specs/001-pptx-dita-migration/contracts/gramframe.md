@@ -61,7 +61,7 @@ DITA must therefore be:
       </row>
       <row><entry>time-start</entry><entry>0</entry></row>
       <row><entry>time-end</entry><entry>{time_end}</entry></row>
-      <row><entry>freq-start</entry><entry>0</entry></row>
+      <row><entry>freq-start</entry><entry>{freq_start}</entry></row>
       <row><entry>freq-end</entry><entry>{freq_end}</entry></row>
     </tbody>
   </tgroup>
@@ -76,9 +76,16 @@ Notes:
   `colspan="N"` on an `<entry namest=… nameend=…>` when the columns it
   spans are declared as colspecs by name. Without them the image cell
   renders with `colspan="1"` and GramFrame rejects the table.
-- `time-start` and `freq-start` are always `0` for content migrated
-  from the legacy PowerPoint corpus (the legacy player anchored every
-  spectrogram at the origin).
+- `time-start` is always `0`. `freq-start` and `freq-end` are **derived**
+  from the GLC band settings (issue #87): `freq_start = bandcentre -
+  bandwidth/2`, `freq_end = bandcentre + bandwidth/2`. The legacy assumption
+  that `freq-start` is always `0` holds only when the band is centred at
+  `bandwidth/2`; off-centre bands produce a non-zero (and possibly negative)
+  `freq-start`. Limits are formatted deterministically: integer results carry
+  no decimal point, non-integer results are trailing-zero-stripped. When
+  `bandcentre` is blank the generator falls back to the legacy
+  `freq-start=0`/`freq-end=bandwidth`; when `bandwidth` is also blank the
+  limits are emitted blank rather than crashing.
 - The image `href` is the bare local filename of the slugified asset
   copy that the generator places in the same per-gram folder as the
   topic (see `dita-topic-schema.md` §10).

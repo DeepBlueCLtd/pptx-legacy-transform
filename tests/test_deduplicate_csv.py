@@ -95,7 +95,7 @@ class DeduplicateCsvTests(unittest.TestCase):
     # -- issue #78: same .wav bytes, different .glc views --------------------
     def test_same_wav_different_view_not_redirected(self) -> None:
         """Gram 23's two .glc rows window the same .wav differently (the
-        issue-78 shape): the bytes match but (time_end, freq_end) do not,
+        issue-78 shape): the bytes match but (time_end, bandwidth, bandcentre) do not,
         so neither row is redirected and both views survive."""
         _, rows = _read(self._run())
         pair = [r for r in rows if r["png_path"] == "dedup/audio/twoview.wav"]
@@ -106,13 +106,43 @@ class DeduplicateCsvTests(unittest.TestCase):
         m = self._by_png(rows)
         self.assertEqual(m["dedup/audio/dup1.wav"], "dedup/audio/master.wav")
 
+    def test_same_bandwidth_different_bandcentre_not_merged(self) -> None:
+        """Issue #87: equal bandwidth but different bandcentre is a different
+        frequency view, so byte-identical .wav rows must not merge."""
+        diffcentre = self.tmp / "diffcentre.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "display_text", "link_href",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path",
+                "file_size", "wav_treatment", "warnings"]
+        with diffcentre.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            # master.wav and dup1.wav are byte-identical on disk; same bandwidth
+            # but a different band centre -> genuinely different views.
+            for gid, glc, png, bc in (
+                ("40", "dedup/audio/master.glc", "dedup/audio/master.wav", "200"),
+                ("41", "dedup/audio/dup1.glc", "dedup/audio/dup1.wav", "300"),
+            ):
+                w.writerow({c: "" for c in cols} | {
+                    "publication": "main", "chapter": "X", "gram_id": gid,
+                    "topic_type": "glc", "sequence": "1", "glc_path": glc,
+                    "png_path": png, "file_size": "11000000",
+                    "time_end": "271", "bandwidth": "400", "bandcentre": bc,
+                })
+        out = self.tmp / "diffcentre_out.csv"
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(diffcentre), "--image-root", str(FIXTURES), "--out", str(out)]), 0)
+        _, rows = _read(out)
+        self.assertTrue(all(r["master_png_path"] == "" for r in rows))
+
     def test_wav_missing_view_never_merged(self) -> None:
-        """A byte-identical .wav row with a blank time_end or freq_end has
+        """A byte-identical .wav row with a blank time_end or bandwidth has
         no confirmable view -> left non-redirected with a WARNING."""
         noview = self.tmp / "noview.csv"
         cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
                 "sequence", "topic_filename", "display_text", "link_href",
-                "glc_path", "time_end", "freq_end", "png_path", "file_size",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path", "file_size",
                 "wav_treatment", "warnings"]
         with noview.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
@@ -143,7 +173,7 @@ class DeduplicateCsvTests(unittest.TestCase):
         bad = self.tmp / "bad.csv"
         cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
                 "sequence", "topic_filename", "display_text", "link_href",
-                "glc_path", "time_end", "freq_end", "png_path", "file_size",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path", "file_size",
                 "wav_treatment", "warnings"]
         with bad.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,

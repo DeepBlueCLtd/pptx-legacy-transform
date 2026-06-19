@@ -25,7 +25,8 @@ class GlcParserTests(unittest.TestCase):
     def test_parse_minimal_glc_returns_expected_fields(self) -> None:
         doc = extract_to_csv.parse_glc(FIXTURES / "minimal.glc")
         self.assertEqual(doc.time_end, "271")
-        self.assertEqual(doc.freq_end, "400")
+        self.assertEqual(doc.bandwidth, "400")
+        self.assertEqual(doc.bandcentre, "200")
         self.assertEqual(doc.image_filename, "gram12.PNG")
         self.assertEqual(doc.warnings, [])
 
@@ -33,7 +34,8 @@ class GlcParserTests(unittest.TestCase):
         doc = extract_to_csv.parse_glc(FIXTURES / "malformed.glc")
         self.assertEqual(doc.image_filename, "")
         self.assertEqual(doc.time_end, "")
-        self.assertEqual(doc.freq_end, "")
+        self.assertEqual(doc.bandwidth, "")
+        self.assertEqual(doc.bandcentre, "")
         self.assertEqual(len(doc.warnings), 1)
         self.assertTrue(doc.warnings[0].startswith("GLC malformed:"))
 
@@ -64,6 +66,43 @@ class GlcParserTests(unittest.TestCase):
         self.assertIn("GLC missing filename", doc.warnings)
         self.assertIn("GLC missing bottom_crop", doc.warnings)
         self.assertIn("GLC missing bandwidth", doc.warnings)
+        self.assertIn("GLC missing bandcentre", doc.warnings)
+
+    def test_parse_glc_reads_bandcentre(self) -> None:
+        """The frequency band is bandwidth + bandcentre (issue #87)."""
+        path = TMP / "off_centre.glc"
+        path.write_text(
+            "<GAPS_Lite_configuration>"
+            "<data_source><filename>g.png</filename>"
+            "<bitmap_crop_values><bottom_crop>300</bottom_crop></bitmap_crop_values>"
+            "</data_source>"
+            "<settings><lofar>"
+            "<bandwidth>400</bandwidth><bandcentre>600</bandcentre>"
+            "</lofar></settings>"
+            "</GAPS_Lite_configuration>",
+            encoding="utf-8",
+        )
+        doc = extract_to_csv.parse_glc(path)
+        self.assertEqual(doc.bandwidth, "400")
+        self.assertEqual(doc.bandcentre, "600")
+        self.assertEqual(doc.warnings, [])
+
+    def test_parse_glc_missing_bandcentre_warns_keeps_bandwidth(self) -> None:
+        path = TMP / "no_centre.glc"
+        path.write_text(
+            "<GAPS_Lite_configuration>"
+            "<data_source><filename>g.png</filename>"
+            "<bitmap_crop_values><bottom_crop>300</bottom_crop></bitmap_crop_values>"
+            "</data_source>"
+            "<settings><lofar><bandwidth>400</bandwidth></lofar></settings>"
+            "</GAPS_Lite_configuration>",
+            encoding="utf-8",
+        )
+        doc = extract_to_csv.parse_glc(path)
+        self.assertEqual(doc.bandwidth, "400")
+        self.assertEqual(doc.bandcentre, "")
+        self.assertIn("GLC missing bandcentre", doc.warnings)
+        self.assertNotIn("GLC missing bandwidth", doc.warnings)
 
 
 if __name__ == "__main__":

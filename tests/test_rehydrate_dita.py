@@ -73,7 +73,7 @@ class RehydrateDitaTests(unittest.TestCase):
                 "publication": "main", "chapter": "Images", "gram_id": gid,
                 "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
                 "topic_filename": f"gram_{gid}.dita", "display_text": "Image",
-                "time_end": "271", "freq_end": "400", "png_path": png,
+                "time_end": "271", "bandwidth": "400", "bandcentre": "200", "png_path": png,
                 "master_png_path": master,
             }
         return [

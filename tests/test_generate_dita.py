@@ -69,6 +69,8 @@ class GenerateDitaTests(unittest.TestCase):
                 for r in table.findall(".//tbody/row")
                 if len(r.findall("entry")) == 2}
         self.assertEqual(rows.get("time-end"), "271")
+        # bandwidth=400, bandcentre=200 -> band [0, 400] (issue #87).
+        self.assertEqual(rows.get("freq-start"), "0")
         self.assertEqual(rows.get("freq-end"), "400")
         ph = root.find("./title/ph[@audience='-trainee']")
         self.assertIsNotNone(ph, "vessel name should be wrapped in <ph audience='-trainee'>")
@@ -128,7 +130,7 @@ class GenerateDitaTests(unittest.TestCase):
             "topic_filename": "gram_12.dita",
             "link_href": "supporting/gram12/config_1.glc",
             "glc_path": "supporting/gram12/config_1.glc",
-            "time_end": "271", "freq_end": "400",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "images/gram12.png",
         })
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
@@ -241,7 +243,7 @@ class GenerateDitaTests(unittest.TestCase):
             "topic_filename": "gram_12.dita",
             "link_href": "supporting/gram12/config_1.glc",
             "glc_path": "supporting/gram12/config_1.glc",
-            "time_end": "271", "freq_end": "400",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "images/gram12.png",
         })
         rows[1].update({
@@ -963,7 +965,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
              "topic_filename": "gram_12.dita", "display_text": "LOFAR 1",
              "link_href": "supporting/gram12/c.glc",
              "glc_path": "supporting/gram12/c.glc",
-             "time_end": "271", "freq_end": "400",
+             "time_end": "271", "bandwidth": "400", "bandcentre": "200",
              "png_path": "images/gram12.png"},
             {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 12",
              "vessel_name": "FR Foo", "topic_type": "analysis", "sequence": "1",
@@ -983,7 +985,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
              "display_text": "LOFAR 1",
              "link_href": "supporting/gram12/config_1.glc",
              "glc_path": "supporting/gram12/config_1.glc",
-             "time_end": "271", "freq_end": "400",
+             "time_end": "271", "bandwidth": "400", "bandcentre": "200",
              "png_path": "images/gram12.png"},
             {"publication": "main", "chapter": "Nordic Fishing Vessels",
              "gram_id": "12", "vessel_name": "Nordik Jockey",
@@ -1041,7 +1043,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
          "vessel_name": "Vessel A", "topic_type": "glc", "sequence": "1",
          "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
          "link_href": "supporting/a/c.glc", "glc_path": "supporting/a/c.glc",
-         "time_end": "180", "freq_end": "400", "png_path": "images/a.png"},
+         "time_end": "180", "bandwidth": "400", "bandcentre": "200", "png_path": "images/a.png"},
         {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "5",
          "vessel_name": "Vessel A", "topic_type": "analysis", "sequence": "1",
          "topic_filename": "gram_05.dita", "png_path": "images/a_an.png"},
@@ -1050,7 +1052,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
          "vessel_name": "Vessel B", "topic_type": "glc", "sequence": "1",
          "topic_filename": "gram_05.dita", "display_text": "LOFAR 1",
          "link_href": "supporting/b/c.glc", "glc_path": "supporting/b/c.glc",
-         "time_end": "271", "freq_end": "400", "png_path": "images/b.png"},
+         "time_end": "271", "bandwidth": "400", "bandcentre": "200", "png_path": "images/b.png"},
         {"publication": "main", "chapter": "Week 2 Grams", "gram_id": "Gram 05",
          "vessel_name": "Vessel B", "topic_type": "analysis", "sequence": "1",
          "topic_filename": "gram_05.dita", "png_path": "images/b_an.png"},
@@ -1126,7 +1128,7 @@ class CsvRefactoringSupportTests(unittest.TestCase):
                  "target_chapter": "2", "gram_id": "7", "vessel_name": "Nordik",
                  "topic_type": "glc", "sequence": "1", "topic_filename": "gram_07.dita",
                  "display_text": "LOFAR 1", "link_href": "supporting/g/c.glc",
-                 "glc_path": "supporting/g/c.glc", "time_end": "271", "freq_end": "400",
+                 "glc_path": "supporting/g/c.glc", "time_end": "271", "bandwidth": "400", "bandcentre": "200",
                  "png_path": "images/g.png"},
                 {"publication": "main", "chapter": "Instructor Pub10_Ed22B_Updated",
                  "target_chapter": "2", "gram_id": "7", "vessel_name": "Nordik",
@@ -1199,18 +1201,18 @@ class DedupGenerateDitaTests(unittest.TestCase):
             "publication": "main", "chapter": "Images", "gram_id": gid,
             "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
             "topic_filename": f"gram_{gid}.dita", "display_text": "Image",
-            "time_end": "271", "freq_end": "400", "png_path": png,
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200", "png_path": png,
             "master_png_path": master,
         }
 
     def _audio_glc_row(self, gid, vessel, wav, glc, master="",
-                       time_end="", freq_end="") -> dict:
+                       time_end="", bandwidth="", bandcentre="") -> dict:
         return {
             "publication": "main", "chapter": "Audio", "gram_id": gid,
             "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
             "topic_filename": f"gram_{gid}.dita", "display_text": "Audio",
             "link_href": glc, "glc_path": glc, "png_path": wav,
-            "time_end": time_end, "freq_end": freq_end,
+            "time_end": time_end, "bandwidth": bandwidth, "bandcentre": bandcentre,
             "master_png_path": master,
         }
 
@@ -1365,21 +1367,21 @@ class DedupGenerateDitaTests(unittest.TestCase):
     # -- issue #78: .wav redirects are gated on the (time, freq) view --------
     def test_wav_redirect_view_mismatch_falls_back_locally(self) -> None:
         """A stale or hand-edited redirect onto a master whose .glc presents
-        a different (time_end, freq_end) window must not resolve: the row
+        a different (time_end, bandwidth, bandcentre) window must not resolve: the row
         falls back to its own local .glc/.wav pair with a WARNING, so the
         distinct student view is never dropped (issue #78)."""
         rows = [
             self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
                                 "dedup/audio/master.glc",
-                                time_end="271", freq_end="400"),
+                                time_end="271", bandwidth="400", bandcentre="200"),
             self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
                                 "dedup/audio/dup1.glc",
                                 master="dedup/audio/master.wav",
-                                time_end="271", freq_end="800"),
+                                time_end="271", bandwidth="800", bandcentre="400"),
         ]
         out = self._generate(self._write_csv(rows))
         log_text = Path("generate.log").read_text(encoding="utf-8")
-        self.assertIn("matching (time_end, freq_end) view", log_text)
+        self.assertIn("matching (time_end, bandwidth, bandcentre) view", log_text)
         g21 = out / "main" / "audio" / "gram-21"
         self.assertTrue((g21 / "dup1.glc").is_file())
         self.assertTrue((g21 / "dup1.wav").is_file())
@@ -1390,6 +1392,26 @@ class DedupGenerateDitaTests(unittest.TestCase):
         # Fell back to a local pair; no provenance <data> emitted.
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
 
+    def test_wav_redirect_same_bandwidth_different_bandcentre_not_resolved(self) -> None:
+        """Issue #87: equal bandwidth but a different bandcentre is a different
+        frequency view, so a redirect across that boundary must not resolve."""
+        rows = [
+            self._audio_glc_row("20", "Alpha", "dedup/audio/master.wav",
+                                "dedup/audio/master.glc",
+                                time_end="271", bandwidth="400", bandcentre="200"),
+            self._audio_glc_row("21", "Bravo", "dedup/audio/dup1.wav",
+                                "dedup/audio/dup1.glc",
+                                master="dedup/audio/master.wav",
+                                time_end="271", bandwidth="400", bandcentre="300"),
+        ]
+        out = self._generate(self._write_csv(rows))
+        log_text = Path("generate.log").read_text(encoding="utf-8")
+        self.assertIn("matching (time_end, bandwidth, bandcentre) view", log_text)
+        g21 = out / "main" / "audio" / "gram-21"
+        # Different band centre -> fell back to its own local pair.
+        self.assertTrue((g21 / "dup1.glc").is_file())
+        self.assertTrue((g21 / "dup1.wav").is_file())
+
     def test_wav_redirect_resolves_view_matching_master(self) -> None:
         """Two masters share one .wav path with different .glc views; a
         redirected row must link the master whose view matches its own,
@@ -1399,14 +1421,14 @@ class DedupGenerateDitaTests(unittest.TestCase):
             # (which the mismatched master would overwrite) gets this wrong.
             self._audio_glc_row("21", "Bravo", "dedup/audio/twoview.wav",
                                 "dedup/audio/twoview_b.glc",
-                                time_end="271", freq_end="800"),
+                                time_end="271", bandwidth="800", bandcentre="400"),
             self._audio_glc_row("20", "Alpha", "dedup/audio/twoview.wav",
                                 "dedup/audio/twoview_a.glc",
-                                time_end="271", freq_end="400"),
+                                time_end="271", bandwidth="400", bandcentre="200"),
             self._audio_glc_row("22", "Charlie", "dedup/audio/twoview.wav",
                                 "dedup/audio/dup2.glc",
                                 master="dedup/audio/twoview.wav",
-                                time_end="271", freq_end="800"),
+                                time_end="271", bandwidth="800", bandcentre="400"),
         ]
         out = self._generate(self._write_csv(rows))
         topic = ET.parse(
@@ -1424,7 +1446,7 @@ class DedupGenerateDitaTests(unittest.TestCase):
             self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
                                  master="dedup/img/shared.png"),
         ]
-        rows[1]["time_end"], rows[1]["freq_end"] = "999", "888"
+        rows[1]["time_end"], rows[1]["bandwidth"], rows[1]["bandcentre"] = "999", "888", "444"
         out = self._generate(self._write_csv(rows))
         g31 = out / "main" / "images" / "gram-31"
         topic = ET.parse(g31 / "gram_31.dita").getroot()
@@ -1458,6 +1480,53 @@ class DedupGenerateDitaTests(unittest.TestCase):
                 _assert_identical(a / sub, b / sub)
 
         _assert_identical(first, second)
+
+
+class FreqBandDerivationTests(unittest.TestCase):
+    """Issue #87: freq_start/freq_end derived from bandwidth + bandcentre."""
+
+    def test_spot_checks(self) -> None:
+        cases = [
+            # (bandwidth, bandcentre, freq_start, freq_end)
+            ("400", "200", "0", "400"),     # centred -> starts at zero
+            ("400", "600", "400", "800"),   # off-centre, high
+            ("100", "250", "200", "300"),   # narrow off-centre band
+            ("401", "200.5", "0", "401"),   # odd bandwidth -> integer limits
+        ]
+        for bw, bc, fs, fe in cases:
+            with self.subTest(bandwidth=bw, bandcentre=bc):
+                self.assertEqual(generate_dita._derive_freq_band(bw, bc), (fs, fe))
+
+    def test_non_integer_limits_are_trailing_zero_stripped(self) -> None:
+        # bandwidth 401, centred -> half = 200.5
+        self.assertEqual(
+            generate_dita._derive_freq_band("401", "300"), ("99.5", "500.5"))
+
+    def test_negative_freq_start_emitted_not_clamped(self) -> None:
+        # bandcentre below bandwidth/2 -> negative lower limit, surfaced as-is.
+        self.assertEqual(
+            generate_dita._derive_freq_band("400", "100"), ("-100", "300"))
+
+    def test_blank_bandcentre_falls_back_to_legacy(self) -> None:
+        # No bandcentre -> band starts at zero, ends at bandwidth.
+        self.assertEqual(generate_dita._derive_freq_band("400", ""), ("0", "400"))
+
+    def test_blank_bandwidth_yields_blank_limits(self) -> None:
+        self.assertEqual(generate_dita._derive_freq_band("", "200"), ("", ""))
+
+    def test_non_numeric_inputs_degrade(self) -> None:
+        self.assertEqual(generate_dita._derive_freq_band("abc", "x"), ("", ""))
+
+    def test_gramframe_table_renders_off_centre_band(self) -> None:
+        """An off-centre band produces a non-zero freq-start in the table."""
+        parent = ET.Element("body")
+        generate_dita._append_gramframe_table(
+            parent, "lofar-1.png", "271", "400", "600", "Lofar 1")
+        rows = {r.find("entry").text: r.findall("entry")[1].text
+                for r in parent.findall(".//tbody/row")
+                if len(r.findall("entry")) == 2}
+        self.assertEqual(rows.get("freq-start"), "400")
+        self.assertEqual(rows.get("freq-end"), "800")
 
 
 if __name__ == "__main__":

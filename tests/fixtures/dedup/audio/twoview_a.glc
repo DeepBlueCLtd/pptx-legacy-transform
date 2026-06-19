@@ -9,6 +9,7 @@
   <settings>
     <lofar>
       <bandwidth>400</bandwidth>
+      <bandcentre>200</bandcentre>
     </lofar>
   </settings>
 </GAPS_Lite_configuration>

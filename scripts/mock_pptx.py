@@ -183,7 +183,10 @@ def add_text_run_hyperlink(run, target: str) -> None:
 # Asset emitters (stdlib only; reverse-spec §5)
 # -----------------------------------------------------------------------------
 
-def emit_glc(path: Path, *, image_filename: str, time_end: int, freq_end: int) -> None:
+def emit_glc(
+    path: Path, *, image_filename: str, time_end: int,
+    bandwidth: int, bandcentre: int,
+) -> None:
     """Write a GAPS_Lite_configuration XML file per contracts/glc-schema.md."""
     root = ET.Element("GAPS_Lite_configuration")
     ds = ET.SubElement(root, "data_source")
@@ -195,7 +198,8 @@ def emit_glc(path: Path, *, image_filename: str, time_end: int, freq_end: int) -
     ET.SubElement(pb, "time_offset").text = "0"
     settings = ET.SubElement(root, "settings")
     lofar = ET.SubElement(settings, "lofar")
-    ET.SubElement(lofar, "bandwidth").text = str(freq_end)
+    ET.SubElement(lofar, "bandwidth").text = str(bandwidth)
+    ET.SubElement(lofar, "bandcentre").text = str(bandcentre)
     tree = ET.ElementTree(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     tree.write(path, encoding="utf-8", xml_declaration=True)
@@ -382,14 +386,15 @@ class SharedLofar:
     label: str
     media_kind: str  # "png" or "wav"
     time_end: int
-    freq_end: int
+    bandwidth: int
+    bandcentre: int
 
 
 @dataclass(frozen=True)
 class SharedGram:
     """A gram emitted byte-identically into two publications.
 
-    Same gram_num, same lofar layout, same time_end / freq_end values, same
+    Same gram_num, same lofar layout, same time_end / bandwidth / bandcentre values, same
     analysis-sheet kind, so every emitted asset (GLC, PNG, WAV, Analysis.png)
     is byte-for-byte identical across the two publications. The PPTX
     descriptor may differ between publications — that's the realistic case
@@ -410,8 +415,8 @@ SHARED_GRAMS_WEEK1_TEST1: tuple[SharedGram, ...] = (
         descriptor_week1="Gram 3: FR Constitution-class, Category 2, Endor",
         descriptor_test1="Gram 3: FR Constitution-class, Category 2, Endor",
         lofars=(
-            SharedLofar(label="Lofar 1", media_kind="png", time_end=300, freq_end=400),
-            SharedLofar(label="Lofar 2", media_kind="png", time_end=240, freq_end=200),
+            SharedLofar(label="Lofar 1", media_kind="png", time_end=300, bandwidth=400, bandcentre=200),
+            SharedLofar(label="Lofar 2", media_kind="png", time_end=240, bandwidth=200, bandcentre=300),
         ),
     ),
     # Identical descriptors in both publications, but a wav-rendered lofar.
@@ -420,7 +425,7 @@ SHARED_GRAMS_WEEK1_TEST1: tuple[SharedGram, ...] = (
         descriptor_week1="Gram 7: FR Defiant, Category 1, Vulcan",
         descriptor_test1="Gram 7: FR Defiant, Category 1, Vulcan",
         lofars=(
-            SharedLofar(label="Lofar 1", media_kind="wav", time_end=271, freq_end=100),
+            SharedLofar(label="Lofar 1", media_kind="wav", time_end=271, bandwidth=100, bandcentre=150),
         ),
     ),
     # Slightly different descriptor across publications — same assets, drifted
@@ -432,9 +437,9 @@ SHARED_GRAMS_WEEK1_TEST1: tuple[SharedGram, ...] = (
         descriptor_week1="Gram 11: FR Voyager, Category 3, Risa",
         descriptor_test1="Gram 11: FR Voyager, Category 3, Risa (mark II)",
         lofars=(
-            SharedLofar(label="Lofar 1", media_kind="png", time_end=180, freq_end=800),
-            SharedLofar(label="Lofar 2", media_kind="png", time_end=240, freq_end=400),
-            SharedLofar(label="Lofar 3", media_kind="png", time_end=360, freq_end=200),
+            SharedLofar(label="Lofar 1", media_kind="png", time_end=180, bandwidth=800, bandcentre=400),
+            SharedLofar(label="Lofar 2", media_kind="png", time_end=240, bandwidth=400, bandcentre=200),
+            SharedLofar(label="Lofar 3", media_kind="png", time_end=360, bandwidth=200, bandcentre=300),
         ),
     ),
 )
@@ -491,10 +496,14 @@ def _build_lofars(
         glc_path = gram_folder / f"{media_stem}.glc"
         media_path = gram_folder / f"{media_stem}.{media_kind}"
         time_end = rng.choice((180, 240, 271, 300, 360))
-        freq_end = rng.choice((100, 200, 400, 800))
+        bandwidth = rng.choice((100, 200, 400, 800))
+        # Frequency band = bandwidth + bandcentre (issue #87). Mix centred bands
+        # (centre == bandwidth/2 → starts at 0) with off-centre bands so the
+        # synthetic corpus exercises the non-zero freq_start path.
+        bandcentre = rng.choice((bandwidth // 2, bandwidth))
         # GLC references the sibling media file by basename (matches real-corpus convention).
         emit_glc(glc_path, image_filename=media_path.name,
-                 time_end=time_end, freq_end=freq_end)
+                 time_end=time_end, bandwidth=bandwidth, bandcentre=bandcentre)
         if media_kind == "png":
             emit_spectrogram(media_path)
         else:
@@ -772,7 +781,7 @@ def _emit_shared_gram(
         glc_path = folder_path / f"{media_stem}.glc"
         media_path = folder_path / f"{media_stem}.{lf.media_kind}"
         emit_glc(glc_path, image_filename=media_path.name,
-                 time_end=lf.time_end, freq_end=lf.freq_end)
+                 time_end=lf.time_end, bandwidth=lf.bandwidth, bandcentre=lf.bandcentre)
         if lf.media_kind == "png":
             emit_spectrogram(media_path)
         else:
