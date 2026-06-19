@@ -268,8 +268,10 @@ ROOT\  (e.g. C:\dev\aaac)
 fragment) the operator installs once into the Oxygen WebHelp template so the
 **production** publish renders interactive grams, mirroring what
 `publish_html.py` already does for the dev preview — see that folder's
-`README.md`. Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the
-release zip.
+`README.md`. `theme\oxygen-hide-search\` is a second overlay (one CSS rule)
+that hides the useless search box in the **student** edition only, wired in
+through the student transformation scenario — see that folder's `README.md`.
+Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
 (installed per-target) and the corpus.
