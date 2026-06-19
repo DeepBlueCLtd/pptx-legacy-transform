@@ -1,0 +1,17 @@
+/*
+ * Hide the WebHelp Responsive search field in the STUDENT edition.
+ *
+ * The student edition is the trainee-filtered DITA-OT/Oxygen pass: once the
+ * instructor-only content (Analysis Sheets, vessel names) is stripped, the
+ * remaining grams are images with no text body, so full-text search returns
+ * nothing useful. This rule hides the search widget without touching any
+ * pipeline source or XSL — it is wired in purely through the student
+ * transformation scenario (see theme/oxygen-hide-search/README.md).
+ *
+ * #searchForm is the stable id Oxygen WebHelp Responsive gives the search
+ * input widget on every generated page (index, topic, and search-results).
+ * Hiding the form leaves the surrounding header/background untouched.
+ */
+#searchForm {
+    display: none !important;
+}
