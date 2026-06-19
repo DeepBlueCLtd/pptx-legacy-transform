@@ -66,6 +66,7 @@ os.chdir(r"C:\dev\aaac")     # project ROOT on the target (illustrative path)
 os.getcwd()                   # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): analysis sheets -> PNGs
+exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc -> image
 exec(open(r"extract.py").read())     # Stage 3: source\  -> extract.csv at ROOT
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
 exec(open(r"write.py").read())       # Stage 5: signed-off CSV -> dita\
@@ -80,7 +81,7 @@ level *above* the canonical scripts:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (set sys.argv, runpy the canonical script)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py   ← thin wrappers (set sys.argv, runpy the canonical script)
 ├── pipeline.py          ← orchestrator: runs the four core stages in sequence, fail-fast
 ├── stock.wav            ← silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus

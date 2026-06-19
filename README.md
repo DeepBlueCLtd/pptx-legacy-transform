@@ -123,13 +123,46 @@ end-of-run summary, and the analysis row's `warnings` column — the image
 then dangles as an intended local `<image>` href, resolved by dropping
 the PNG in and re-running.
 
+### Relinking `.wav` grams to pre-rendered images
+
+Some legacy grams are *live-render*: their `.glc` config points at a `.wav`
+that the on-PC GLC viewer renders on demand, so the generator surfaces them as
+a click-to-open link rather than an inline spectrogram. A **prep-time** stage,
+`relink_glc_to_image.py` (wrapper `relink.py`), migrates these to embedded
+images. The author exports a replacement image for each gram and **copies it
+into the same folder** as the existing `.glc`/`.wav` pair, naming it
+`Image <N>-…` (e.g. `Image 1-45 - 99 Hz.jpg`); the script then rewrites every
+`.glc` that still points at a `.wav` to reference the matching image. That one
+edit is the whole conversion — the generator dispatches purely on the `.glc`'s
+inner asset extension, so a `.jpg` target embeds inline where the `.wav` linked
+out.
+
+The image is matched to its `.wav` by filename, using whichever of two observed
+conventions the wav's own name implies:
+
+- **Numbered wav** — a wav named `WAV <n>` matches the candidate image whose
+  number equals `n` (`WAV 1.wav` → `Image 1-0-110 Hz.jpg`).
+- **Descriptive wav** — otherwise the image whose name *ends with* the wav's
+  name (`45 - 99 Hz.wav` → `Image 1-45 - 99 Hz.jpg`).
+
+Only `Image <N>-…` files are treated as conversion candidates, so pre-existing
+topic images (e.g. `lofar-1-i.png`) are never mistaken for replacements. On a
+unique match the `.glc` is rewritten and the old `.wav` is moved aside to
+`<name>.wav.bak`; a zero or ambiguous match logs a warning and leaves the pair
+untouched (drop the right image in and re-run). A `.glc` that already points at
+an image is skipped, so the stage is idempotent — safe to re-run as you work
+through the corpus folder by folder, verifying each batch with `git diff` since
+the sources are versioned. `--dry-run` previews matches without changing
+anything; activity is logged to `relink.log`.
+
 ## Folder structure
 
 | Path | Role |
 |---|---|
-| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
+| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` `relink.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
 | `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
 | `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
+| `scripts/relink_glc_to_image.py` | **Prep-time** stage: rewrite each `.glc` that still points at a `.wav` to reference the matching author-supplied `Image <N>-…` image in the same folder, moving the old `.wav` aside to `.wav.bak`; idempotent and re-runnable. See [Relinking `.wav` grams to pre-rendered images](#relinking-wav-grams-to-pre-rendered-images). |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
@@ -197,6 +230,7 @@ os.chdir(r"C:\dev\aaac")         # the project root on the target — raw string
 os.getcwd()                       # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): render analysis sheets -> sibling PNGs
+exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc at the image
 exec(open(r"extract.py").read())     # Stage 3: walk source\ -> extract.csv at ROOT
 #   -> open extract.csv in Excel, resolve warnings, save as UTF-8 CSV
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions -> extract.dedupe.csv
@@ -252,7 +286,7 @@ restarting the interpreter:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py   ← thin wrappers (committed templates)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py   ← thin wrappers (committed templates)
 ├── pipeline.py          ← orchestrator: extract -> dedupe -> write -> publish, fail-fast (committed template)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
