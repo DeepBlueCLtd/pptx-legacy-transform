@@ -54,7 +54,11 @@ RELAXED_DEFAULT: str = "100"
 # Inner-asset extensions a GLC-backed gram actually renders (and so needs its
 # view fields for). A GLC row with no resolved asset (target_ext == "") dangles
 # per the missing-asset rule and is not subject to the check.
-RENDERABLE_GLC_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".wav")
+# Mirrors the generator's dispatch (generate_dita.py): .png/.jpg/.jpeg/.gif are
+# embedded inline, .wav is surfaced as a link -- both render and need the view
+# fields.
+RENDERABLE_GLC_EXTENSIONS: tuple[str, ...] = (
+    ".png", ".jpg", ".jpeg", ".gif", ".wav")
 
 # Prefixes that identify the welcome / exit framing slides emitted by
 # ``mock_pptx.py``. These slides carry no gram content and must not
