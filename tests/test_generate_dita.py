@@ -720,6 +720,19 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertNotIn("spectrogram", skipped.read_text(encoding="utf-8"),
                              "a .gif Lofar must not be skipped")
 
+    def test_stale_tree_wiped_without_clean_flag(self) -> None:
+        """The output tree is always rebuilt from scratch (clean is now the
+        default, not opt-in): a leftover file from a previous document's build
+        must not survive a run, even when ``--clean`` isn't passed."""
+        self.out.mkdir(parents=True, exist_ok=True)
+        stale = self.out / "stale_from_other_document.dita"
+        stale.write_text("<topic/>", encoding="utf-8")
+        # _run defaults to clean=False here so only the generator's own wipe acts.
+        rc = _run(self.out, clean=False)
+        self.assertEqual(rc, 0)
+        self.assertFalse(stale.exists(),
+                         "a stale file must be wiped even without --clean")
+
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)
         self.assertEqual(rc1, 0)
