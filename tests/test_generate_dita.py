@@ -102,54 +102,60 @@ class GenerateDitaTests(unittest.TestCase):
             "expected at least one gram-stage section with outputclass='lofar-stage'",
         )
 
-    def test_glc_section_carries_display_text_title(self) -> None:
-        """Each GLC section in a gram topic carries a ``<title>`` set to the
-        PPTX link label (``display_text``) so multi-gram pages render a
-        clear heading per spectrogram. The minimal fixture's Gram 12 row
-        has ``display_text="LOFAR 1"``."""
+    def test_glc_section_carries_incremental_lofar_title_and_anchor(self) -> None:
+        """Each spectrogram section is numbered incrementally — ``Lofar N``
+        — regardless of the source deck's inconsistent link labels, and
+        carries the matching ``id="lofar-N"`` anchor so the floating nav
+        panel can target it. The minimal fixture's Gram 12 has one Lofar."""
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
         section = root.find(".//body/section[table]")
         self.assertIsNotNone(section, "expected a section wrapping the gramframe table")
         title = section.find("title")
-        self.assertIsNotNone(title,
-                             "GLC section must carry a <title> taken from display_text")
-        self.assertEqual(title.text, "LOFAR 1")
+        self.assertIsNotNone(title, "Lofar section must carry a numbered <title>")
+        self.assertEqual(title.text, "Lofar 1")
+        self.assertEqual(section.get("id"), "lofar-1",
+                         "Lofar section must carry its incremental anchor id")
 
-    def test_glc_section_omits_title_when_display_text_blank(self) -> None:
-        """When ``display_text`` is empty, the section emits no ``<title>``
-        — we don't want a blank heading polluting the page."""
+    def test_lofar_sections_numbered_incrementally(self) -> None:
+        """Two spectrogram rows on one gram become Lofar 1 / Lofar 2 with
+        anchors lofar-1 / lofar-2, in CSV ``sequence`` order — even when the
+        source labels are inconsistent (one "Lofar", one blank here)."""
         csv_path = TMP / f"{self._testMethodName}.csv"
         cols = generate_dita.CSV_COLUMNS
-        rows = [{c: "" for c in cols}]
-        rows[0].update({
+        base = {c: "" for c in cols}
+        base.update({
             "publication": "main", "chapter": "Nordic Fishing Vessels",
             "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
-            "topic_type": "glc", "sequence": "1",
-            "topic_filename": "gram_12.dita",
-            "link_href": "supporting/gram12/config_1.glc",
-            "glc_path": "supporting/gram12/config_1.glc",
+            "topic_type": "glc", "topic_filename": "gram_12.dita",
+            "glc_path": "supporting/gram12/config.glc",
+            "link_href": "supporting/gram12/config.glc",
             "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "images/gram12.png",
         })
+        r1 = dict(base, sequence="1", display_text="Lofar")
+        r2 = dict(base, sequence="2", display_text="")
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(cols),
                                quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
             w.writeheader()
-            w.writerow(rows[0])
+            w.writerow(r1)
+            w.writerow(r2)
         _run(self.out, csv_path=csv_path)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
-        section = root.find(".//body/section[table]")
-        self.assertIsNotNone(section)
-        self.assertIsNone(section.find("title"),
-                          "section must not emit an empty <title>")
+        sections = [s for s in root.findall(".//body/section")
+                    if s.get("outputclass") == "lofar-stage"]
+        self.assertEqual(
+            [(s.get("id"), s.find("title").text) for s in sections],
+            [("lofar-1", "Lofar 1"), ("lofar-2", "Lofar 2")],
+        )
 
-    def test_wav_glc_section_carries_display_text_title(self) -> None:
-        """The §1.3 GLC-viewer-link section also carries the display_text
-        as its ``<title>`` (in addition to the xref's link text), so the
-        section heading identifies the link on multi-gram pages."""
+    def test_wav_glc_section_numbered_as_lofar(self) -> None:
+        """A ``.wav``-backed GLC section is a Lofar too: it joins the
+        numbering with a ``Lofar N`` title and a ``lofar-N`` anchor, while
+        the PPTX label survives as the inner xref text. Gram 05 has one."""
         _run(self.out)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
         root = ET.parse(topic).getroot()
@@ -160,9 +166,11 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(xref_section,
                              "expected a section wrapping the GLC-viewer xref")
         title = xref_section.find("title")
-        self.assertIsNotNone(title,
-                             "WAV-typed GLC section must carry a <title> from display_text")
-        self.assertEqual(title.text, "Audio sample")
+        self.assertIsNotNone(title, "WAV-typed Lofar section must carry a numbered <title>")
+        self.assertEqual(title.text, "Lofar 1")
+        self.assertEqual(xref_section.get("id"), "lofar-1")
+        self.assertEqual(xref_section.find("p/xref").text, "Audio sample",
+                         "the audio xref keeps the PPTX link label")
 
     def test_gramframe_table_has_named_colspecs(self) -> None:
         """DITA-OT needs named colspecs so the image cell renders with
@@ -227,41 +235,48 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(image, "PNG analysis assets render as <image>")
         self.assertEqual(image.get("href"), "gram12-analysis.png")
 
-    def test_analysis_jump_link_is_instructor_only_and_targets_section(self) -> None:
-        """Issue #91: a gram with an analysis sheet carries a floating
-        in-page jump link. It is instructor-only (``audience="-trainee"``),
-        rendered as ``<p class="analysis-jump">`` by the theme, and its
-        ``<xref>`` targets the analysis-sheet section by id within the
-        same topic. The target section must carry that id."""
+    def test_gram_nav_panel_links_lofars_for_all_and_analysis_instructor_only(self) -> None:
+        """A gram carries a single floating nav panel (``<p class="gram-nav">``).
+        It lists one in-page xref per Lofar (unfiltered — both editions) plus,
+        for a gram with an analysis sheet, a trailing instructor-only
+        (``audience="-trainee"``) xref to the analysis-sheet section. Every
+        xref targets a real anchor within the same topic."""
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
+        topic_id = root.get("id")
 
-        jump = root.find(".//body/p[@outputclass='analysis-jump']")
-        self.assertIsNotNone(jump, "gram with an analysis sheet must emit a jump link")
-        self.assertEqual(jump.get("audience"), "-trainee",
-                         "the jump link must be instructor-only")
-        xref = jump.find("xref")
-        self.assertIsNotNone(xref)
+        panel = root.find(".//body/p[@outputclass='gram-nav']")
+        self.assertIsNotNone(panel, "gram page must carry the floating nav panel")
 
-        section = root.find(".//body/section[@outputclass='analysis-sheet']")
-        self.assertIsNotNone(section)
-        self.assertEqual(section.get("id"), "analysis-sheet",
-                         "the analysis section must carry the jump target id")
-        self.assertEqual(xref.get("href"), f"#{root.get('id')}/{section.get('id')}",
-                         "the jump xref must point at the analysis-sheet section")
+        xrefs = panel.findall("xref")
+        # Gram 12: one Lofar + an analysis sheet => two panel entries.
+        self.assertEqual(
+            [(x.text, x.get("href"), x.get("audience")) for x in xrefs],
+            [
+                ("Lofar 1", f"#{topic_id}/lofar-1", None),
+                ("Analysis Sheet", f"#{topic_id}/analysis-sheet", "-trainee"),
+            ],
+        )
+        # Each anchor resolves to a section that actually carries that id.
+        ids = {s.get("id") for s in root.findall(".//body/section")}
+        self.assertIn("lofar-1", ids)
+        self.assertIn("analysis-sheet", ids)
 
-    def test_no_analysis_jump_link_without_analysis_section(self) -> None:
-        """A gram with no analysis sheet (e.g. a progress-test gram) emits
-        no jump link — both link and target are instructor-only, so there
-        is nothing to scroll to."""
+    def test_gram_nav_panel_without_analysis_omits_instructor_entry(self) -> None:
+        """A gram with no analysis sheet (e.g. a progress-test gram) still
+        gets the nav panel — students navigate Lofars too — but with no
+        instructor-only analysis entry to strip."""
         _run(self.out)
         topic = self.out / "progress-test-1" / "gram-03" / "gram_03.dita"
         root = ET.parse(topic).getroot()
-        self.assertIsNone(
-            root.find(".//p[@outputclass='analysis-jump']"),
-            "no analysis section means no jump link",
-        )
+        panel = root.find(".//body/p[@outputclass='gram-nav']")
+        self.assertIsNotNone(panel, "a gram page must carry the nav panel for students too")
+        xrefs = panel.findall("xref")
+        self.assertEqual([x.text for x in xrefs], ["Lofar 1"],
+                         "only the Lofar entry — no analysis sheet on this gram")
+        self.assertIsNone(panel.find("xref[@audience]"),
+                          "no instructor-only entry without an analysis sheet")
 
     def test_docx_analysis_renders_as_xref(self) -> None:
         """When the analysis asset is a .docx, the section emits an <xref>
@@ -1606,7 +1621,7 @@ class FreqBandDerivationTests(unittest.TestCase):
         """An off-centre band produces a non-zero freq-start in the table."""
         parent = ET.Element("body")
         generate_dita._append_gramframe_table(
-            parent, "lofar-1.png", "271", "400", "600", "Lofar 1")
+            parent, "lofar-1.png", "271", "400", "600", 1)
         rows = {r.find("entry").text: r.findall("entry")[1].text
                 for r in parent.findall(".//tbody/row")
                 if len(r.findall("entry")) == 2}
