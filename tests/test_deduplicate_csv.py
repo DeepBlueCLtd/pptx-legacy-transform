@@ -192,6 +192,43 @@ class DeduplicateCsvTests(unittest.TestCase):
         self.assertFalse(out.exists(), "no CSV written when the run aborts")
         self.assertIn("missing or blank", Path("dedup.log").read_text(encoding="utf-8"))
 
+    # -- stale-output removal: a failed run leaves nothing behind ------------
+    def test_stale_output_removed_when_run_aborts(self) -> None:
+        """A pre-existing output CSV is wiped at the start, so an aborting
+        run can't leave a previous document's deduped CSV for generate_dita to
+        silently consume."""
+        out = self.tmp / "stale_out.csv"
+        out.write_text("STALE,FROM,A,DIFFERENT,DOCUMENT\r\n", encoding="utf-8-sig")
+        # blank gram_id -> PipelineDataError -> abort (return 1).
+        bad = self.tmp / "blank_id.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "png_path"]
+        with bad.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            w.writerow({c: "" for c in cols} | {
+                "publication": "main", "chapter": "X", "gram_id": "",
+                "topic_type": "glc", "sequence": "1", "png_path": "images/a.png",
+            })
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(bad), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
+        self.assertFalse(out.exists(),
+                         "stale output must be removed even when the run aborts")
+
+    def test_in_place_rewrite_not_destroyed(self) -> None:
+        """When --out equals --csv (rewrite in place), the up-front removal is
+        skipped so the input isn't deleted before it's processed."""
+        import shutil
+        inplace = self.tmp / "inplace.csv"
+        shutil.copyfile(SOURCE, inplace)
+        rc = deduplicate_csv.main(
+            ["--csv", str(inplace), "--image-root", str(FIXTURES), "--out", str(inplace)])
+        self.assertEqual(rc, 0)
+        self.assertTrue(inplace.exists(), "in-place rewrite must not delete its input")
+        _, rows = _read(inplace)
+        self.assertGreater(len(rows), 0, "in-place rewrite produced an empty CSV")
+
     # -- T033: missing asset left unredirected with WARNING -----------------
     def test_missing_asset_left_unredirected_with_warning(self) -> None:
         # Build a CSV whose only candidate pair points at a non-existent file.

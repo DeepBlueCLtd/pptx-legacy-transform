@@ -847,9 +847,15 @@ committed copies are mock development content. See [`static/README.md`](static/R
 - **WAV `TBD` rows are skipped, not failed (R8).** They are recorded in
   `skipped.txt`. The pipeline never infers `wav_treatment` — the
   technical author is the sole authority.
-- **No automatic output cleanup.** `generate_dita.py` overwrites files
-  it produces but does not delete unrelated files in the output tree.
-  Use `--clean` to wipe the output tree before generation.
+- **Output is always rebuilt from scratch.** `extract_to_csv.py`,
+  `deduplicate_csv.py`, and `generate_dita.py` each clear their target
+  (the output CSV, the deduped CSV, and the DITA tree respectively) at
+  the start of a run. This verifies the target isn't locked (e.g. open
+  in Excel or Oxygen) and guarantees a failed or re-pointed run can't
+  leave a previous document's output behind for a later stage to
+  silently consume. `generate_dita.py`'s `--clean` flag is now a
+  deprecated no-op (cleaning is unconditional); `deduplicate_csv.py`
+  skips the wipe when `--out` rewrites `--csv` in place.
 - **Windows orchestrator only.** `run_pipeline.bat` is a Windows batch
   file; on POSIX systems run the Python scripts directly.
 - **One third-party dependency.** Only `python-pptx` is required at

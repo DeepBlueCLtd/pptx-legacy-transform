@@ -1431,7 +1431,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--csv", required=True, type=Path, dest="csv_path")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
-    parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--clean", action="store_true",
+        help="Deprecated no-op: the output tree is now always wiped and rebuilt "
+             "from scratch. Accepted only so existing wrappers keep parsing.")
     parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
@@ -1462,7 +1465,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    if args.clean and args.out.exists():
+    # Always rebuild the output tree from scratch. Wiping it up-front verifies
+    # it isn't locked (e.g. a publication folder open in Oxygen) and guarantees
+    # a run can never blend fresh topics with a previous document's leftovers —
+    # the failure mode where a stale dita/ tree silently survives a switch of
+    # input CSV. (``--clean`` is now the default and the flag is a deprecated
+    # no-op, retained only so existing tuned wrappers keep parsing.)
+    if args.out.exists():
         LOGGER.info("Cleaning existing output tree at %s", args.out)
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True, exist_ok=True)

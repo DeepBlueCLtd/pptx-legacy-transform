@@ -527,6 +527,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         if column not in fieldnames:
             fieldnames = fieldnames + [column]
 
+    # Clear any prior output up-front, now that the input is safely in memory.
+    # This verifies the target isn't locked and stops a failed run leaving a
+    # previous document's deduped CSV behind for generate_dita to consume.
+    # Skip the removal when --out rewrites --csv in place (same file) — there
+    # the output *is* the input, so there's no stale-reuse hazard to guard.
+    if args.out.resolve() != args.csv_path.resolve() and args.out.exists():
+        LOGGER.info("Removing existing output CSV %s", args.out)
+        args.out.unlink()
+
     # A blank Zone-A identity column or ``.wav`` view aborts here rather than
     # emitting a CSV the generator would reject (constitution VII).
     try:
