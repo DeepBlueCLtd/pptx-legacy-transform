@@ -374,6 +374,79 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(analysis["file_size"], "")
 
 
+# Issue #92: a live-render .wav gram needs its time period for GramFrame.
+_WAV_GLC_MISSING_TIME = """<?xml version="1.0" encoding="UTF-8"?>
+<GAPS_Lite_configuration>
+  <data_source>
+    <filename>W:\\AAAC\\Nordik\\audio_clip.wav</filename>
+    <bitmap_crop_values>
+      <top_crop>1</top_crop>
+    </bitmap_crop_values>
+  </data_source>
+  <settings>
+    <lofar>
+    </lofar>
+  </settings>
+</GAPS_Lite_configuration>
+"""
+
+
+class WavViewFieldTests(unittest.TestCase):
+    """A live-render .wav gram (inner asset .wav) must carry the three view
+    fields; extract identifies a blank rather than deferring to dedupe (#92)."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "wav_view"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+        glc = self.tmp / "supporting/gram12/config_1.glc"
+        glc.parent.mkdir(parents=True)
+        glc.write_text(_WAV_GLC_MISSING_TIME, encoding="utf-8")
+
+    def _wav_rows(self, relaxed: bool) -> list[dict]:
+        gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
+        return extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp, relaxed=relaxed,
+        )
+
+    def test_strict_leaves_blanks_and_warns_per_field(self) -> None:
+        wav_row = self._wav_rows(relaxed=False)[0]
+        self.assertEqual(wav_row["target_ext"], ".wav")
+        for field_name in extract_to_csv.WAV_VIEW_FIELDS:
+            self.assertEqual(wav_row[field_name], "")
+            self.assertIn(
+                f"wav gram missing {field_name} — GramFrame cannot render",
+                wav_row["warnings"])
+
+    def test_relaxed_defaults_each_field_and_notes_it(self) -> None:
+        wav_row = self._wav_rows(relaxed=True)[0]
+        for field_name in extract_to_csv.WAV_VIEW_FIELDS:
+            self.assertEqual(wav_row[field_name], extract_to_csv.RELAXED_DEFAULT)
+            self.assertIn(
+                f"wav gram missing {field_name} — defaulted to "
+                f"{extract_to_csv.RELAXED_DEFAULT} (--relaxed)",
+                wav_row["warnings"])
+
+    def test_wav_view_problems_flags_each_missing_field(self) -> None:
+        problems = extract_to_csv.wav_view_problems(self._wav_rows(relaxed=False))
+        self.assertEqual(
+            sorted(field for _, field in problems),
+            sorted(extract_to_csv.WAV_VIEW_FIELDS))
+        # Relaxed run fills the blanks, so nothing is flagged.
+        self.assertEqual(
+            extract_to_csv.wav_view_problems(self._wav_rows(relaxed=True)), [])
+
+    def test_png_gram_is_never_flagged(self) -> None:
+        # A pre-rendered (.png inner asset) gram with no measurements is fine —
+        # only .wav grams need the view fields (test_wav_link_target row too).
+        png_rows = [{"target_ext": ".png", "gram_id": "5",
+                     "time_end": "", "bandwidth": "", "bandcentre": ""}]
+        self.assertEqual(extract_to_csv.wav_view_problems(png_rows), [])
+
+
 class GroupingAgainstMockCorpusTests(unittest.TestCase):
     """T105 — exercise the real grouping logic against a small mock corpus.
 
@@ -570,6 +643,71 @@ class OnlyChapterScopingTests(unittest.TestCase):
         joined = "\n".join(cm.output)
         self.assertIn("No Such Chapter", joined)
         self.assertIn("matched no PPTXs", joined)
+
+
+class WavViewFieldMainTests(unittest.TestCase):
+    """End-to-end: a corpus whose .wav grams lack a time period makes extract
+    fail-fast (#92) — but --relaxed substitutes the default and completes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import xml.etree.ElementTree as ET
+
+        TMP.mkdir(parents=True, exist_ok=True)
+        corpus = conftest_helpers.make_mock_corpus(TMP / "extract_wav_corpus")
+        cls.week1_dir = corpus / "Instructor Week 1 Grams"
+        # Turn every referenced GLC into a live-render .wav GLC with no time
+        # period (and no band fields), guaranteeing triggering rows.
+        for glc_path in cls.week1_dir.rglob("*.glc"):
+            tree = ET.parse(glc_path)
+            root = tree.getroot()
+            ds = root.find("data_source")
+            ds.find("filename").text = "audio_clip.wav"
+            crops = ds.find("bitmap_crop_values")
+            bottom = crops.find("bottom_crop")
+            if bottom is not None:
+                crops.remove(bottom)
+            lofar = root.find("settings/lofar")
+            for tag in ("bandwidth", "bandcentre"):
+                el = lofar.find(tag)
+                if el is not None:
+                    lofar.remove(el)
+            tree.write(glc_path, encoding="utf-8", xml_declaration=True)
+
+    def test_strict_run_fails_but_writes_csv_with_warning(self) -> None:
+        out_csv = TMP / "extract_wav_strict.csv"
+        with self.assertLogs(extract_to_csv.LOGGER, level="ERROR") as cm:
+            rc = extract_to_csv.main([
+                "--input-root", str(self.week1_dir),
+                "--out", str(out_csv),
+            ])
+        self.assertEqual(rc, 1)
+        self.assertIn("GramFrame", "\n".join(cm.output))
+        # The CSV is still written so its warnings column is inspectable.
+        self.assertTrue(out_csv.exists())
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        wav_rows = [r for r in rows if r["target_ext"] == ".wav"]
+        self.assertTrue(wav_rows)
+        self.assertTrue(all(r["time_end"] == "" for r in wav_rows))
+        self.assertTrue(any("GramFrame cannot render" in r["warnings"]
+                            for r in wav_rows))
+
+    def test_relaxed_run_defaults_fields_and_succeeds(self) -> None:
+        out_csv = TMP / "extract_wav_relaxed.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.week1_dir),
+            "--out", str(out_csv),
+            "--relaxed",
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        wav_rows = [r for r in rows if r["target_ext"] == ".wav"]
+        self.assertTrue(wav_rows)
+        for r in wav_rows:
+            for field_name in extract_to_csv.WAV_VIEW_FIELDS:
+                self.assertEqual(r[field_name], extract_to_csv.RELAXED_DEFAULT)
 
 
 if __name__ == "__main__":
