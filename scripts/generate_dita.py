@@ -856,7 +856,7 @@ def _derive_freq_band(bandwidth: str, bandcentre: str) -> tuple[str, str]:
 def _append_gramframe_table(
     parent: ET.Element, image_href: str, time_end: str,
     bandwidth: str, bandcentre: str,
-    display_text: str = "",
+    lofar_index: int,
 ) -> ET.Element:
     """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
 
@@ -870,13 +870,17 @@ def _append_gramframe_table(
     ``colspan="2"`` on the image row — without them the image cell
     renders with ``colspan="1"`` and GramFrame rejects the table.
 
-    When ``display_text`` is supplied (the link label from the source
-    PPTX, e.g. ``"Lofar 1"``), a ``<title>`` is emitted inside the
-    section so multi-gram pages get a clear heading per spectrogram.
+    ``lofar_index`` is the 1-based position of this Lofar within its gram
+    (assigned in render order, see ``emit_gram_topic``). It drives a stable
+    ``<title>`` (``Lofar N``) and section ``id`` (``lofar-N``) so the source
+    decks' inconsistent labels (some "Lofar 1/2", some bare "Lofar", some a
+    single numbered one) become a uniform incremental sequence, and so the
+    floating nav panel can target each Lofar with an in-page anchor.
     """
-    section = ET.SubElement(parent, "section", {"outputclass": "lofar-stage"})
-    if display_text:
-        ET.SubElement(section, "title").text = display_text
+    section = ET.SubElement(parent, "section", {
+        "id": _lofar_anchor_id(lofar_index), "outputclass": "lofar-stage",
+    })
+    ET.SubElement(section, "title").text = f"Lofar {lofar_index}"
     table = ET.SubElement(section, "table", {"outputclass": "gram-config"})
     tgroup = ET.SubElement(table, "tgroup", {"cols": "2"})
     ET.SubElement(tgroup, "colspec", {"colname": "c1", "colnum": "1"})
@@ -900,9 +904,19 @@ def _append_gramframe_table(
     return section
 
 
-# Stable id on the analysis-sheet section so the instructor-only floating
-# jump link (issue #91) can target it with an in-page ``<xref>``.
+# Stable id on the analysis-sheet section so the floating nav panel's
+# instructor-only entry can target it with an in-page ``<xref>``.
 ANALYSIS_SECTION_ID = "analysis-sheet"
+
+
+def _lofar_anchor_id(index: int) -> str:
+    """Stable id for the *index*-th Lofar section within a gram.
+
+    Each gram's Lofars are numbered incrementally in render order
+    (``Lofar 1`` … ``Lofar N``); this anchors section ``id="lofar-N"`` so
+    the floating nav panel's ``#topic/lofar-N`` xref scrolls straight to it.
+    """
+    return f"lofar-{index}"
 
 
 def _append_edition_marker(body: ET.Element) -> None:
@@ -992,24 +1006,41 @@ def _inject_static_edition_marker(text: str, source: Path) -> str:
     return new_text
 
 
-def _append_analysis_jump_link(parent: ET.Element, topic_id: str) -> None:
-    """Append the instructor-only floating "jump to Analysis Sheet" link.
+def _append_gram_nav_panel(
+    parent: ET.Element, topic_id: str, lofar_count: int, has_analysis: bool,
+) -> None:
+    """Append the floating gram navigation panel.
 
-    Issue #91: on a long gram page the instructor wants to reach the
-    analysis image fast from anywhere. We emit a single in-page
-    ``<xref>`` (rendered ``<p class="analysis-jump">`` → a fixed pill by
-    the theme CSS) that scrolls to the analysis-sheet section. The link
-    carries ``audience="-trainee"`` so the trainee profile elides it
-    entirely — both the link and its target are instructor-only, so the
-    student edition never ships a dangling anchor.
+    On a long gram page the reader wants to jump straight to a numbered
+    Lofar — and, for the instructor, the Analysis Sheet — from anywhere.
+    We emit a single ``<p outputclass="gram-nav">`` carrying one in-page
+    ``<xref>`` per Lofar section (``#topic/lofar-N``, label ``Lofar N``),
+    which the theme pins as a fixed panel.
+
+    The Lofar links are unfiltered, so the panel ships in *both* the
+    instructor and student editions. A final ``<xref audience="-trainee">``
+    to the analysis-sheet section is appended only when the gram has one;
+    the trainee profile elides just that entry (its target section is
+    instructor-only too, so the student edition never ships a dangling
+    anchor). Earlier this panel was the instructor-only Analysis-Sheet pill
+    (issue #91); it now serves students and instructors alike.
+
+    Emitted only when there is something to jump to.
     """
-    p = ET.SubElement(parent, "p", {
-        "audience": "-trainee", "outputclass": "analysis-jump",
-    })
-    xref = ET.SubElement(p, "xref", {
-        "href": f"#{topic_id}/{ANALYSIS_SECTION_ID}",
-    })
-    xref.text = "Analysis Sheet"
+    if lofar_count == 0 and not has_analysis:
+        return
+    panel = ET.SubElement(parent, "p", {"outputclass": "gram-nav"})
+    for n in range(1, lofar_count + 1):
+        xref = ET.SubElement(panel, "xref", {
+            "href": f"#{topic_id}/{_lofar_anchor_id(n)}",
+        })
+        xref.text = f"Lofar {n}"
+    if has_analysis:
+        xref = ET.SubElement(panel, "xref", {
+            "audience": "-trainee",
+            "href": f"#{topic_id}/{ANALYSIS_SECTION_ID}",
+        })
+        xref.text = "Analysis Sheet"
 
 
 def _append_analysis_section(
@@ -1044,7 +1075,8 @@ def _append_analysis_section(
 
 
 def _append_glc_viewer_link(
-    parent: ET.Element, glc_href: str, display_text: str,
+    parent: ET.Element, glc_href: str, lofar_index: int,
+    display_text: str = "",
 ) -> ET.Element:
     """Append a GLC-viewer link block (§1.3) to the gram body.
 
@@ -1055,13 +1087,16 @@ def _append_glc_viewer_link(
     ``.wav`` for live aural analysis. The companion ``.wav`` is copied
     next to the ``.glc`` by the caller.
 
-    When ``display_text`` is supplied (the link label from the source
-    PPTX), a ``<title>`` is emitted inside the section so multi-gram
-    pages get a clear heading per audio link.
+    A ``.wav``-backed GLC is still a Lofar, so it joins the gram's
+    incremental Lofar numbering: ``lofar_index`` drives the section
+    ``<title>`` (``Lofar N``) and ``id`` (``lofar-N``), matching the
+    spectrogram sections. The PPTX link label (``display_text``) survives
+    as the inner ``<xref>`` text so the audio link itself stays labelled.
     """
-    section = ET.SubElement(parent, "section", {"outputclass": "lofar-stage"})
-    if display_text:
-        ET.SubElement(section, "title").text = display_text
+    section = ET.SubElement(parent, "section", {
+        "id": _lofar_anchor_id(lofar_index), "outputclass": "lofar-stage",
+    })
+    ET.SubElement(section, "title").text = f"Lofar {lofar_index}"
     p = ET.SubElement(section, "p")
     xref = ET.SubElement(p, "xref", {
         "href": glc_href, "format": "glc", "scope": "local",
@@ -1160,9 +1195,9 @@ def emit_gram_topic(
         )
         if copied is not None:
             written.append(copied)
-        _append_analysis_jump_link(body, topic_id)
         _append_analysis_section(body, href)
 
+    lofar_index = 0
     for row in glc_rows:
         png_path = row.get("png_path", "") or ""
         asset_suffix = Path(png_path).suffix.lower()
@@ -1173,11 +1208,12 @@ def emit_gram_topic(
                 # Redirected: link to the master copy, copy nothing locally,
                 # and record the original local path for reversal (feature 006).
                 href = _relpath_posix(master.topic_dir / master.link_basename, topic_dir)
+                lofar_index += 1
                 section = _append_gramframe_table(
                     body, href,
                     row.get("time_end", ""),
                     row.get("bandwidth", ""), row.get("bandcentre", ""),
-                    row.get("display_text", ""),
+                    lofar_index,
                 )
                 _append_provenance_data(section, png_path)
                 redirected += 1
@@ -1185,11 +1221,12 @@ def emit_gram_topic(
             image_href, copied = copy_asset(png_path, image_root, topic_dir)
             if copied is not None:
                 written.append(copied)
+            lofar_index += 1
             _append_gramframe_table(
                 body, image_href,
                 row.get("time_end", ""),
                 row.get("bandwidth", ""), row.get("bandcentre", ""),
-                row.get("display_text", ""),
+                lofar_index,
             )
             continue
 
@@ -1213,8 +1250,9 @@ def emit_gram_topic(
                 glc_href = _relpath_posix(
                     master.topic_dir / master.link_basename, topic_dir,
                 )
+                lofar_index += 1
                 section = _append_glc_viewer_link(
-                    body, glc_href, row.get("display_text", ""),
+                    body, glc_href, lofar_index, row.get("display_text", ""),
                 )
                 _append_provenance_data(section, glc_path)
                 redirected += 1
@@ -1225,7 +1263,10 @@ def emit_gram_topic(
                 written.append(glc_copied)
             if wav_copied is not None:
                 written.append(wav_copied)
-            _append_glc_viewer_link(body, glc_href, row.get("display_text", ""))
+            lofar_index += 1
+            _append_glc_viewer_link(
+                body, glc_href, lofar_index, row.get("display_text", ""),
+            )
             continue
 
         if not png_path:
@@ -1238,6 +1279,12 @@ def emit_gram_topic(
             row["sequence"], reason,
         )
         skipped.append(_skip_record(row, reason))
+
+    # Floating nav panel: one in-page jump per rendered Lofar (both editions)
+    # plus an instructor-only Analysis Sheet link. Appended last so it counts
+    # only the Lofars that actually rendered (a skipped row claims no number);
+    # position:fixed in the theme means DOM order doesn't affect placement.
+    _append_gram_nav_panel(body, topic_id, lofar_index, bool(analysis_rows))
 
     # Navigation back to the publication index is delivered by the page
     # chrome (a future custom header bar), not by per-topic related-links:
