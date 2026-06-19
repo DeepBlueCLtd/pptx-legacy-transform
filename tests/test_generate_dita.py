@@ -508,17 +508,29 @@ class GenerateDitaTests(unittest.TestCase):
                            "main: Week sub-documents follow the static pages")
 
     def test_static_tree_copied_into_each_publication(self) -> None:
-        """The whole static tree (pages + image subfolder) is copied verbatim,
-        byte-for-byte, into every publication folder."""
+        """The whole static tree (pages + image subfolder) is copied into every
+        publication folder: non-DITA files byte-for-byte; ``.dita`` pages with
+        the hidden instructor-only edition marker stamped into their body."""
         _run(self.out)
         for pub in ("main", "progress-test-1"):
-            for rel in ("welcome.dita", "security.dita", "images/welcome-banner.png"):
-                dst = self.out / pub / rel
-                self.assertTrue(dst.is_file(), f"missing copied static file {dst}")
-                self.assertTrue(
-                    filecmp.cmp(STATIC_ROOT / rel, dst, shallow=False),
-                    f"{dst} must be a byte-for-byte copy of the static source",
-                )
+            # Images (and any other non-DITA asset) are copied verbatim.
+            dst = self.out / pub / "images" / "welcome-banner.png"
+            self.assertTrue(dst.is_file(), f"missing copied static file {dst}")
+            self.assertTrue(
+                filecmp.cmp(STATIC_ROOT / "images" / "welcome-banner.png",
+                            dst, shallow=False),
+                f"{dst} must be a byte-for-byte copy of the static source",
+            )
+            # Each static .dita page carries the edition marker as the first
+            # body child, audience-tagged so the trainee filter strips it.
+            for name in ("welcome.dita", "security.dita"):
+                dst = self.out / pub / name
+                self.assertTrue(dst.is_file(), f"missing copied static page {dst}")
+                root = ET.parse(dst).getroot()
+                marker = root.find("body")[0]
+                self.assertEqual(marker.tag, "p")
+                self.assertEqual(marker.get("outputclass"), "edition-instructor")
+                self.assertEqual(marker.get("audience"), "-trainee")
 
     def test_missing_static_root_degrades_gracefully(self) -> None:
         """An absent static root omits the common pages (no root topicref) but
@@ -532,6 +544,28 @@ class GenerateDitaTests(unittest.TestCase):
         grams = root.find("topichead")
         self.assertIsNotNone(grams, "grams are still demoted under a Grams folder")
         self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
+
+    def test_every_topic_carries_instructor_edition_marker(self) -> None:
+        """Every ``<topic>`` page — grams, chapter sub-documents, and the copied
+        static common pages — carries the hidden instructor-only edition marker
+        as the first body child, so the shared stylesheet can tell the editions
+        apart on every rendered page. The marker is audience-tagged, so the
+        trainee filter strips it for the student edition (keeping SC-002's "no
+        instructor" leakage check clean).
+        """
+        _run(self.out)
+        topics = [p for p in self.out.rglob("*.dita")
+                  if ET.parse(p).getroot().tag == "topic"]
+        # Grams + chapter sub-documents + static pages across publications.
+        self.assertGreater(len(topics), 3, "expected several topic pages")
+        for topic in topics:
+            root = ET.parse(topic).getroot()
+            body = root.find("body")
+            self.assertIsNotNone(body, f"{topic} has no body to mark")
+            marker = body[0]
+            self.assertEqual(marker.tag, "p", f"{topic} marker is not first")
+            self.assertEqual(marker.get("outputclass"), "edition-instructor", topic)
+            self.assertEqual(marker.get("audience"), "-trainee", topic)
 
     def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
         """A GLC row whose inner asset is a .wav renders as a §1.3

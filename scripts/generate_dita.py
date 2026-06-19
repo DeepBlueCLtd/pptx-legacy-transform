@@ -80,6 +80,23 @@ STATIC_PAGE_ORDER: tuple[str, ...] = ("welcome.dita", "security.dita")
 # ditamap root into a single nav entry (feature 010).
 GRAMS_NAVTITLE = "Grams"
 
+# Hidden, instructor-only per-page edition marker. The trainee DITAVAL strips
+# audience="-trainee", so this element survives only in the *instructor* build;
+# its outputclass surfaces it as ``<p class="edition-instructor">`` in the
+# rendered HTML. A single shared stylesheet keys the Oxygen WebHelp search box
+# (and the classification banner) off it — present means instructor, absent
+# means student — so both transformation scenarios can run the *same*
+# publishing template instead of a student-only variant whose only job is to
+# hide the (useless) search box. The class name only ever appears in instructor
+# output, so it never trips the student "no instructor" leakage check (SC-002).
+EDITION_MARKER_OUTPUTCLASS = "edition-instructor"
+
+# Topic body-group open tags into which a static page's edition marker is
+# inserted (string surgery, so the author's formatting is preserved elsewhere).
+_STATIC_BODY_OPEN_RE = re.compile(
+    r"<(?:body|conbody|taskbody|refbody|glossbody)\b[^>]*>"
+)
+
 LOGGER = logging.getLogger(__name__)
 
 # Optional testing aid: when set via ``--stub-wav``, every .wav copy in
@@ -814,6 +831,44 @@ def _append_gramframe_table(
 ANALYSIS_SECTION_ID = "analysis-sheet"
 
 
+def _append_edition_marker(body: ET.Element) -> None:
+    """Prepend the hidden instructor-only edition marker as the first child of a
+    topic body, so every rendered page carries the per-edition signal the shared
+    stylesheet reads (see ``EDITION_MARKER_OUTPUTCLASS``). The empty ``<p>``
+    renders nothing useful on its own — the theme hides ``.edition-instructor``
+    — its presence/absence is the whole payload.
+    """
+    body.insert(0, ET.Element("p", {
+        "audience": "-trainee", "outputclass": EDITION_MARKER_OUTPUTCLASS,
+    }))
+
+
+def _inject_static_edition_marker(text: str, source: Path) -> str:
+    """Return *text* (a static DITA page) with the instructor-only edition
+    marker inserted as the first child of its topic body.
+
+    String surgery (not an XML round-trip) keeps the author's formatting
+    byte-for-byte everywhere except the one inserted line. A page with no
+    recognised body-group element is returned unchanged with a warning — its
+    rendered page then can't drive the shared edition stylesheet, but
+    generation still succeeds (graceful degradation).
+    """
+    marker = (
+        f'\n    <p audience="-trainee" '
+        f'outputclass="{EDITION_MARKER_OUTPUTCLASS}"/>'
+    )
+    new_text, count = _STATIC_BODY_OPEN_RE.subn(
+        lambda m: m.group(0) + marker, text, count=1,
+    )
+    if count == 0:
+        LOGGER.warning(
+            "Static page %s has no topic body; edition marker not stamped "
+            "(its page can't drive the shared edition stylesheet).", source,
+        )
+        return text
+    return new_text
+
+
 def _append_analysis_jump_link(parent: ET.Element, topic_id: str) -> None:
     """Append the instructor-only floating "jump to Analysis Sheet" link.
 
@@ -938,6 +993,7 @@ def emit_gram_topic(
         })
         ph.text = f" - {first['vessel_name']}"
     body = ET.SubElement(topic, "body")
+    _append_edition_marker(body)
 
     written: list[Path] = []
     skipped: list[dict] = []
@@ -1156,7 +1212,9 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
     lists the weeks, and each week page lists its grams (DITA-OT and Oxygen
     both auto-generate child links for a topic with topicref children). The
     topic body is intentionally empty: the title is the content, the
-    children are the point.
+    children are the point — apart from the hidden instructor-only edition
+    marker, which every page carries so the shared stylesheet can tell the
+    editions apart (see ``EDITION_MARKER_OUTPUTCLASS``).
 
     The title is decomposed by ``_normalise_chapter``: a leading
     "Instructor " (case-insensitive) is wrapped in ``<ph audience="-trainee">``
@@ -1177,6 +1235,7 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
             ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
             ph.text = audience_prefix
             ph.tail = display_remainder
+        _append_edition_marker(ET.SubElement(topic, "body"))
         chapter_dir = out_dir / "main" / slug
         chapter_dir.mkdir(parents=True, exist_ok=True)
         path = chapter_dir / f"{_chapter_topic_stem(slug)}.dita"
@@ -1213,8 +1272,13 @@ def copy_static_tree(static_root: Path, pub_dir: Path) -> list[Path]:
     The static author keeps each page self-contained with relative hrefs;
     copying the tree verbatim beside the ditamap preserves them — the publish
     stager rewrites only the leading ``<publication>/`` map prefix, never a
-    topic-internal href. ``.md`` files (folder docs like README) are skipped;
-    copies are byte-for-byte for the determinism contract.
+    topic-internal href. ``.md`` files (folder docs like README) are skipped.
+
+    Each ``.dita`` page is stamped with the hidden instructor-only edition
+    marker (so its rendered page can drive the shared edition stylesheet, like
+    every generated topic); the insertion is the only deviation from a verbatim
+    copy, and is deterministic. Every other file (images, …) is copied
+    byte-for-byte for the determinism contract.
     """
     if not static_root.is_dir():
         return []
@@ -1224,7 +1288,12 @@ def copy_static_tree(static_root: Path, pub_dir: Path) -> list[Path]:
             continue
         dst = pub_dir / src.relative_to(static_root)
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dst)
+        if src.suffix.lower() == ".dita":
+            _write_text(dst, _inject_static_edition_marker(
+                src.read_text(encoding="utf-8"), src,
+            ))
+        else:
+            shutil.copyfile(src, dst)
         copied.append(dst)
     return copied
 
