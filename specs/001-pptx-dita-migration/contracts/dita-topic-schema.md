@@ -53,7 +53,11 @@ only and is ignored by the generator (see csv-schema.md §column 15).
 <topic id="gram_NN">
   <title>Gram NN<ph audience="-trainee"> - {vessel_name}</ph></title>
   <body>
-    <section audience="-trainee">       <!-- §1.1 analysis sheet -->
+    <p audience="-trainee" outputclass="analysis-jump">   <!-- §1.1a jump link, when an analysis sheet exists -->
+      <xref href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
+    </p>
+
+    <section id="analysis-sheet" audience="-trainee">     <!-- §1.1 analysis sheet -->
       <title>Analysis Sheet</title>
       <!-- one of: -->
       <image href="{slug}.png" placement="break" align="center"/>
@@ -107,6 +111,28 @@ entirely; only the instructor build includes the analysis sheet.
 
 The `slug` is the slug of the *source* filename (e.g. `Analysis Sheet.docx`
 → `analysis-sheet.docx`); see §10.
+
+The section carries a stable `id="analysis-sheet"` so the floating jump
+link (§1.1a) can target it with an in-page `<xref>`.
+
+### 1.1a Analysis-sheet jump link (issue #91)
+
+When (and only when) a gram has an analysis sheet, the body opens with a
+single instructor-only in-page link to it:
+
+```xml
+<p audience="-trainee" outputclass="analysis-jump">
+  <xref href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
+</p>
+```
+
+It carries `audience="-trainee"` — both the link and its target are
+instructor-only, so the trainee profile elides both and the student
+edition never ships a dangling anchor. DITA-OT renders it as
+`<p class="analysis-jump">`; the publisher theme pins it as a fixed
+"jump to Analysis Sheet" pill so the instructor can reach the analysis
+image fast from anywhere on a long gram page (instead of the
+related-links list the f13ldman template uses, we just scroll in-page).
 
 ### 1.2 GramFrame table block
 
