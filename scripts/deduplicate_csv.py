@@ -73,6 +73,48 @@ def setup_logging(log_path: Path) -> None:
 
 
 # -----------------------------------------------------------------------------
+# Trust boundary: fail-fast on our own artifacts (constitution VII)
+# -----------------------------------------------------------------------------
+#
+# Duplicated verbatim from ``generate_dita.py`` (like ``setup_logging``) so each
+# air-gapped stage script reads as one self-contained shape. Be ruthless with
+# data this pipeline produces and forbids editing; a blank value in one of our
+# required identity columns — or in a ``.wav`` view field whose emptiness would
+# silently mis-pair audio in dedup — is a defect we fail loud on, not the messy
+# *source* value Principle IV defers.
+
+class PipelineDataError(Exception):
+    """A blank/missing Zone-A required field in an artifact we produced.
+
+    Raised by ``require_field``; aborts the run loudly rather than emitting a
+    CSV the generator would silently mis-handle. See constitution VII.
+    """
+
+
+def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
+    """Return ``row[field]`` stripped, hard-failing if absent or blank.
+
+    For the CSV identity columns (``publication``, ``gram_id``, ``topic_type``,
+    ``sequence``) and for the ``.wav`` dedup view fields promoted to Zone A
+    because an empty one would mis-pair audio. ``chapter`` and ``vessel_name``
+    are *not* passed here — the schema marks them empty-allowed.
+    """
+    value = (row.get(field) or "").strip()
+    if value:
+        return value
+    where = f" at CSV line {line_no}" if line_no is not None else ""
+    raise PipelineDataError(
+        f"Required field {field!r} is missing or blank{where} "
+        f"(publication={row.get('publication', '')!r}, "
+        f"gram_id={row.get('gram_id', '')!r}, "
+        f"topic_type={row.get('topic_type', '')!r}, "
+        f"sequence={row.get('sequence', '')!r}). This is identity data our "
+        f"own pipeline produces and must never be empty — fix the offending "
+        f"row rather than leaving the cell blank (constitution VII)."
+    )
+
+
+# -----------------------------------------------------------------------------
 # CSV I/O — preserve the file-level contract (utf-8-sig, CRLF, QUOTE_MINIMAL)
 # -----------------------------------------------------------------------------
 
@@ -115,11 +157,15 @@ def _identity_key(row: dict) -> tuple:
 
     ``(publication, chapter, gram_id, topic_type, sequence)`` — the first
     occurrence in this order within a duplicate group is the master.
+
+    The four always-required identity columns are validated here (constitution
+    VII); ``chapter`` stays a forgiving ``.get`` because the schema allows it
+    empty for the progress tests.
     """
     return (
-        row.get("publication", ""), row.get("chapter", ""),
-        row.get("gram_id", ""), row.get("topic_type", ""),
-        row.get("sequence", ""),
+        require_field(row, "publication"), row.get("chapter", ""),
+        require_field(row, "gram_id"), require_field(row, "topic_type"),
+        require_field(row, "sequence"),
     )
 
 
@@ -142,23 +188,25 @@ def _view_key(row: dict) -> tuple:
     differently. Byte-identical ``.wav`` rows are therefore
     interchangeable only when the extracted view matches: they merge only
     on equal ``(time_end, bandwidth, bandcentre)`` (issues #78, #87 — the
-    frequency view is the band pair, not a single upper limit). A ``.wav``
-    row missing ``time_end`` or ``bandwidth`` gets a unique key and is never
-    merged — dropping a distinct student view is worse than missing a
-    reclamation. A blank ``bandcentre`` is a legitimate value (legacy band
-    centred at ``bandwidth/2``) and participates in the key as-is. Non-wav
+    frequency view is the band pair, not a single upper limit). Non-wav
     assets carry their view in the row itself (the gram-config table), so
     byte-identity alone suffices and they share one key.
+
+    Promotion clause (constitution VII): for a ``.wav`` row these three view
+    fields *are* the dedup key — an empty one would silently mis-pair distinct
+    audio views, so a blank is hard-failed here rather than falling back to a
+    tolerant unique key. The generator's ``_master_index_key`` enforces the
+    same contract, so this step never emits a CSV the generator would reject.
     """
     png = (row.get("png_path", "") or "").strip()
     if Path(png).suffix.lower() != ".wav":
         return ("any",)
-    time_end = (row.get("time_end", "") or "").strip()
-    bandwidth = (row.get("bandwidth", "") or "").strip()
-    bandcentre = (row.get("bandcentre", "") or "").strip()
-    if not time_end or not bandwidth:
-        return ("wav-view-unknown",) + _identity_key(row)
-    return ("wav-view", time_end, bandwidth, bandcentre)
+    return (
+        "wav-view",
+        require_field(row, "time_end"),
+        require_field(row, "bandwidth"),
+        require_field(row, "bandcentre"),
+    )
 
 
 def _hash_file(image_root: Path, png_path: str) -> str | None:
@@ -232,16 +280,9 @@ def deduplicate(
                 continue
             by_view: dict[tuple, list[dict]] = defaultdict(list)
             for row in members:
-                key = _view_key(row)
-                if key[0] == "wav-view-unknown":
-                    LOGGER.warning(
-                        "Byte-identical .wav left non-redirected: %s "
-                        "(gram %s seq %s) is missing time_end/bandwidth, so "
-                        "its .glc view cannot be confirmed to match",
-                        row.get("png_path", ""), row.get("gram_id", ""),
-                        row.get("sequence", ""),
-                    )
-                by_view[key].append(row)
+                # A blank ``.wav`` view hard-fails inside ``_view_key``
+                # (constitution VII) rather than being tolerated as before.
+                by_view[_view_key(row)].append(row)
             for view in sorted(by_view):
                 group = by_view[view]
                 if len(group) < 2:
@@ -313,7 +354,8 @@ def _renumber_buckets(rows: list[dict], indices) -> int:
     buckets: dict[tuple, list[int]] = defaultdict(list)
     for idx in indices:
         row = rows[idx]
-        bucket = (row.get("publication", ""), _effective_chapter(row), _effective_doc(row))
+        bucket = (require_field(row, "publication"),  # Zone-A; constitution VII
+                  _effective_chapter(row), _effective_doc(row))
         buckets[bucket].append(idx)
 
     renumbered = 0
@@ -325,7 +367,7 @@ def _renumber_buckets(rows: list[dict], indices) -> int:
         for idx in buckets[bucket]:
             row = rows[idx]
             ident = (
-                row.get("chapter", ""), row.get("gram_id", ""),
+                row.get("chapter", ""), require_field(row, "gram_id"),
                 row.get("vessel_name", ""),
             )
             if ident not in gram_rows:
@@ -485,8 +527,14 @@ def main(argv: Iterable[str] | None = None) -> int:
         if column not in fieldnames:
             fieldnames = fieldnames + [column]
 
-    renumber_grams(rows, main_numbering=args.main_numbering)
-    deduplicate(rows, args.image_root, args.threshold_bytes)
+    # A blank Zone-A identity column or ``.wav`` view aborts here rather than
+    # emitting a CSV the generator would reject (constitution VII).
+    try:
+        renumber_grams(rows, main_numbering=args.main_numbering)
+        deduplicate(rows, args.image_root, args.threshold_bytes)
+    except PipelineDataError as exc:
+        LOGGER.error("Aborting: %s", exc)
+        return 1
 
     try:
         write_csv(args.out, fieldnames, rows)

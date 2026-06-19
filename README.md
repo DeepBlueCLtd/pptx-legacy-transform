@@ -420,6 +420,15 @@ Reviewers should not edit the identity columns
 (`publication`, `chapter`, `gram_id`, `topic_type`, `sequence`,
 `topic_filename`); the others are author-editable.
 
+Because these columns are pipeline-authored, the tools treat a blank value in a
+*required* identity column — `publication`, `gram_id`, `topic_type`, `sequence`,
+`topic_filename` (`chapter` is empty-allowed for the progress tests) — as a
+hard error rather than coercing it to empty, so a defect surfaces loudly instead
+of producing a malformed topic (constitution principle VII, "Strict on
+Self-Authored Data"). The `.wav` dedup view fields
+(`time_end`/`bandwidth`/`bandcentre`) are likewise required on an audio row,
+since they are the key that decides whether two audio grams share a view.
+
 | # | Column | Editable? | Notes |
 |---|---|---|---|
 | 1 | `publication` | no | `main` or `progress-test-N`. |

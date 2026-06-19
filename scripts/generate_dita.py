@@ -117,6 +117,54 @@ def setup_logging(log_path: Path) -> None:
 
 
 # -----------------------------------------------------------------------------
+# Trust boundary: fail-fast on our own artifacts (constitution VII)
+# -----------------------------------------------------------------------------
+#
+# Be ruthless with data this pipeline produces and forbids editing; stay
+# forgiving only at the boundary with input we do not control (the legacy
+# .pptx corpus, the .glc files) and with uncertain *author* judgement (those
+# are warned-and-deferred per Principle IV, not crashed). A blank value in one
+# of *our* required identity columns, or in a field whose emptiness would
+# silently corrupt one of our own invariants, is a defect in our pipeline — so
+# we fail loud at the point of use rather than coercing it to "".
+
+class PipelineDataError(Exception):
+    """A blank/missing Zone-A required field in an artifact we produced.
+
+    Raised by ``require_field``. Distinct from the warn-and-defer treatment of
+    uncertain *source* data (constitution Principle IV): this is our own bug to
+    fix, so it aborts the run loudly instead of silently emitting a malformed
+    topic. See constitution VII ("Strict on Self-Authored Data").
+    """
+
+
+def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
+    """Return ``row[field]`` stripped, hard-failing if absent or blank.
+
+    For the CSV identity columns (``csv-schema.md`` marks them *Empty allowed?
+    = no*: ``publication``, ``gram_id``, ``topic_type``, ``sequence``,
+    ``topic_filename``) and for any value promoted to Zone A because an empty
+    one would break our own logic (the ``.wav`` dedup view fields). These are
+    data our extractor produces and the author must not edit, so a blank one is
+    a pipeline defect we fail loud on (constitution VII) — not the messy
+    *source* value that ``copy_asset`` dangles or that Principle IV defers.
+    """
+    value = (row.get(field) or "").strip()
+    if value:
+        return value
+    where = f" at CSV line {line_no}" if line_no is not None else ""
+    raise PipelineDataError(
+        f"Required field {field!r} is missing or blank{where} "
+        f"(publication={row.get('publication', '')!r}, "
+        f"gram_id={row.get('gram_id', '')!r}, "
+        f"topic_type={row.get('topic_type', '')!r}, "
+        f"sequence={row.get('sequence', '')!r}). This is identity data our "
+        f"own pipeline produces and must never be empty — fix the offending "
+        f"row rather than leaving the cell blank (constitution VII)."
+    )
+
+
+# -----------------------------------------------------------------------------
 # CSV reader
 # -----------------------------------------------------------------------------
 
@@ -193,10 +241,21 @@ def check_row_identity(rows: list[dict]) -> list[str]:
         # sequence. Two rows sharing it mean two distinct grams resolve to
         # the same week + number without renumbering (feature 008) — the
         # generator would otherwise silently merge them into one topic.
+        #
+        # The identity columns are Zone-A data our extractor produces and the
+        # author must not edit (constitution VII): a blank one builds a key
+        # with an empty component that silently collides, so we fail loud here
+        # rather than coerce to "". (``read_csv`` guarantees the columns are
+        # *present*; ``require_field`` guards their *values*.) ``gram_id`` is
+        # required too — validated explicitly since it reaches the key via
+        # ``_effective_gram_id``.
+        require_field(row, "gram_id", line_no=line_no)
         key = (
-            row.get("publication", ""), _effective_chapter(row),
+            require_field(row, "publication", line_no=line_no),
+            _effective_chapter(row),
             _effective_doc(row), _gram_num(_effective_gram_id(row)),
-            row.get("topic_type", ""), row.get("sequence", ""),
+            require_field(row, "topic_type", line_no=line_no),
+            require_field(row, "sequence", line_no=line_no),
         )
         if key in first_seen:
             anchor_line, anchor = first_seen[key]
@@ -542,10 +601,17 @@ def _master_index_key(png_path: str, asset_suffix: str, row: dict) -> tuple:
     views.
     """
     if asset_suffix == ".wav":
+        # Promotion clause (constitution VII): for a ``.wav`` row these three
+        # view fields *are* the dedup key — an empty one silently mis-pairs two
+        # genuinely different audio views, corrupting our own logic. So even
+        # though the values originate in the external ``.glc`` (nominally
+        # forgiving), a blank on a ``.wav`` row is a defect we fail loud on.
+        # Analysis/image/GLC-missing rows never reach this branch, so their
+        # legitimately-empty views are unaffected.
         return ("wav", png_path,
-                (row.get("time_end", "") or "").strip(),
-                (row.get("bandwidth", "") or "").strip(),
-                (row.get("bandcentre", "") or "").strip())
+                require_field(row, "time_end"),
+                require_field(row, "bandwidth"),
+                require_field(row, "bandcentre"))
     return ("img", png_path)
 
 
@@ -997,7 +1063,7 @@ def _gram_groups(rows: list[dict]) -> "OrderedDict[tuple, list[dict]]":
     groups: OrderedDict[tuple, list[dict]] = OrderedDict()
     for row in rows:
         key = (
-            row.get("publication", ""),
+            require_field(row, "publication"),  # Zone-A; constitution VII
             _effective_chapter(row),
             _effective_doc(row),
             _gram_num(_effective_gram_id(row)),
@@ -1419,7 +1485,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         return 1
 
-    duplicates = check_row_identity(rows)
+    # A blank Zone-A identity column aborts here (constitution VII): a defect
+    # in our own artifact, distinct from the duplicate-identity *warning* below.
+    try:
+        duplicates = check_row_identity(rows)
+    except PipelineDataError as exc:
+        LOGGER.error("Aborting: %s", exc)
+        return 1
     if duplicates:
         for msg in duplicates:
             LOGGER.warning(msg)
@@ -1437,8 +1509,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     redirected_total = 0
     # Index pass (feature 006): map each master row's png_path to its output
     # location so redirected rows can link to it. Inert when no row redirects.
-    master_index = build_master_index(rows, args.out)
-    for key, gram_rows in _gram_groups(rows).items():
+    # A blank ``.wav`` view field is hard-failed here (constitution VII).
+    try:
+        master_index = build_master_index(rows, args.out)
+        gram_groups = _gram_groups(rows)
+    except PipelineDataError as exc:
+        LOGGER.error("Aborting: %s", exc)
+        return 1
+    for key, gram_rows in gram_groups.items():
         try:
             paths, skips, redirected = emit_gram_topic(
                 gram_rows, args.out, args.image_root,
