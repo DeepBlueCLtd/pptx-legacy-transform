@@ -374,6 +374,98 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(analysis["file_size"], "")
 
 
+# Issue #92: every GLC-backed gram (image or live-render .wav) needs its time +
+# frequency view fields for GramFrame. These GLCs carry none of the three.
+def _glc_missing_view_fields(inner_asset: str) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<GAPS_Lite_configuration>
+  <data_source>
+    <filename>W:\\AAAC\\Nordik\\{inner_asset}</filename>
+    <bitmap_crop_values>
+      <top_crop>1</top_crop>
+    </bitmap_crop_values>
+  </data_source>
+  <settings>
+    <lofar>
+    </lofar>
+  </settings>
+</GAPS_Lite_configuration>
+"""
+
+
+class GlcViewFieldTests(unittest.TestCase):
+    """Every GLC-backed gram (image or .wav) must carry the three view fields;
+    extract identifies a blank rather than deferring to dedupe (#92)."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "glc_view"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _rows(self, inner_asset: str, relaxed: bool) -> list[dict]:
+        glc = self.tmp / "supporting/gram12/config_1.glc"
+        glc.parent.mkdir(parents=True, exist_ok=True)
+        glc.write_text(_glc_missing_view_fields(inner_asset), encoding="utf-8")
+        gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
+        return extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp, relaxed=relaxed,
+        )
+
+    def test_strict_leaves_blanks_and_warns_per_field(self) -> None:
+        for inner, ext in (("audio_clip.wav", ".wav"), ("spectro.png", ".png")):
+            with self.subTest(inner=inner):
+                row = self._rows(inner, relaxed=False)[0]
+                self.assertEqual(row["target_ext"], ext)
+                for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+                    self.assertEqual(row[field_name], "")
+                    self.assertIn(
+                        f"gram missing {field_name} — GramFrame cannot render",
+                        row["warnings"])
+
+    def test_relaxed_defaults_each_field_and_notes_it(self) -> None:
+        for inner in ("audio_clip.wav", "spectro.png"):
+            with self.subTest(inner=inner):
+                row = self._rows(inner, relaxed=True)[0]
+                for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+                    self.assertEqual(
+                        row[field_name], extract_to_csv.RELAXED_DEFAULT)
+                    self.assertIn(
+                        f"gram missing {field_name} — defaulted to "
+                        f"{extract_to_csv.RELAXED_DEFAULT} (--relaxed)",
+                        row["warnings"])
+
+    def test_glc_view_problems_flags_each_missing_field(self) -> None:
+        for inner in ("audio_clip.wav", "spectro.png"):
+            with self.subTest(inner=inner):
+                problems = extract_to_csv.glc_view_problems(
+                    self._rows(inner, relaxed=False))
+                self.assertEqual(
+                    sorted(field for _, field in problems),
+                    sorted(extract_to_csv.GLC_VIEW_FIELDS))
+                # Relaxed run fills the blanks, so nothing is flagged.
+                self.assertEqual(
+                    extract_to_csv.glc_view_problems(
+                        self._rows(inner, relaxed=True)), [])
+
+    def test_analysis_row_is_never_flagged(self) -> None:
+        # An analysis sheet (.png, but topic_type "analysis") legitimately
+        # carries no view fields — only GLC gram rows need them.
+        analysis_rows = [{"topic_type": "analysis", "target_ext": ".png",
+                          "gram_id": "5", "time_end": "", "bandwidth": "",
+                          "bandcentre": ""}]
+        self.assertEqual(extract_to_csv.glc_view_problems(analysis_rows), [])
+
+    def test_dangling_glc_row_is_never_flagged(self) -> None:
+        # A GLC row with no resolved asset (target_ext "") dangles per the
+        # missing-asset rule; it is exempt from the view-field requirement.
+        dangling = [{"topic_type": "glc", "target_ext": "", "gram_id": "5",
+                     "time_end": "", "bandwidth": "", "bandcentre": ""}]
+        self.assertEqual(extract_to_csv.glc_view_problems(dangling), [])
+
+
 class GroupingAgainstMockCorpusTests(unittest.TestCase):
     """T105 — exercise the real grouping logic against a small mock corpus.
 
@@ -585,6 +677,73 @@ class OnlyChapterScopingTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertFalse(out_csv.exists(),
                          "stale output must be removed even when the run aborts")
+
+
+class GlcViewFieldMainTests(unittest.TestCase):
+    """End-to-end: a corpus whose GLC grams lack their view fields makes extract
+    fail-fast (#92) — but --relaxed substitutes the default and completes. The
+    GLCs keep their original (image) inner asset, exercising the broadened
+    image-GLC requirement, not just .wav."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import xml.etree.ElementTree as ET
+
+        TMP.mkdir(parents=True, exist_ok=True)
+        corpus = conftest_helpers.make_mock_corpus(TMP / "extract_glcview_corpus")
+        cls.week1_dir = corpus / "Instructor Week 1 Grams"
+        # Strip the time + band view fields from every referenced GLC (keeping
+        # its original image inner asset) so each GLC gram row triggers.
+        for glc_path in cls.week1_dir.rglob("*.glc"):
+            tree = ET.parse(glc_path)
+            root = tree.getroot()
+            crops = root.find("data_source/bitmap_crop_values")
+            bottom = crops.find("bottom_crop")
+            if bottom is not None:
+                crops.remove(bottom)
+            lofar = root.find("settings/lofar")
+            for tag in ("bandwidth", "bandcentre"):
+                el = lofar.find(tag)
+                if el is not None:
+                    lofar.remove(el)
+            tree.write(glc_path, encoding="utf-8", xml_declaration=True)
+
+    def test_strict_run_fails_but_writes_csv_with_warning(self) -> None:
+        out_csv = TMP / "extract_glcview_strict.csv"
+        with self.assertLogs(extract_to_csv.LOGGER, level="ERROR") as cm:
+            rc = extract_to_csv.main([
+                "--input-root", str(self.week1_dir),
+                "--out", str(out_csv),
+            ])
+        self.assertEqual(rc, 1)
+        self.assertIn("GramFrame", "\n".join(cm.output))
+        # The CSV is still written so its warnings column is inspectable.
+        self.assertTrue(out_csv.exists())
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        glc_rows = [r for r in rows if r["topic_type"] == "glc"
+                    and r["target_ext"]]
+        self.assertTrue(glc_rows)
+        self.assertTrue(all(r["time_end"] == "" for r in glc_rows))
+        self.assertTrue(any("GramFrame cannot render" in r["warnings"]
+                            for r in glc_rows))
+
+    def test_relaxed_run_defaults_fields_and_succeeds(self) -> None:
+        out_csv = TMP / "extract_glcview_relaxed.csv"
+        rc = extract_to_csv.main([
+            "--input-root", str(self.week1_dir),
+            "--out", str(out_csv),
+            "--relaxed",
+        ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        glc_rows = [r for r in rows if r["topic_type"] == "glc"
+                    and r["target_ext"]]
+        self.assertTrue(glc_rows)
+        for r in glc_rows:
+            for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+                self.assertEqual(r[field_name], extract_to_csv.RELAXED_DEFAULT)
 
 
 if __name__ == "__main__":

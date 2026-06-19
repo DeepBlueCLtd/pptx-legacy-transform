@@ -380,6 +380,19 @@ installs, not the user-folder install.
    whole corpus but drops every progress-test and final-assessment deck,
    emitting only the `main` publication. It composes with `--only`.
 
+   GramFrame needs the full time + frequency coordinate system to render a
+   gram, so **every GLC-backed gram** — whether its inner asset is a
+   pre-rendered image (`.png`/`.jpg`) or a live-render `.wav` — requires its
+   `time_end`, `bandwidth`, and `bandcentre` view fields. Extraction now
+   **fails fast** (writing the CSV first so its `warnings` column is
+   inspectable, then exiting non-zero) when any GLC gram is missing one of them
+   — surfacing the problem here rather than late and cryptically in
+   `deduplicate_csv.py`. (Assetless/dangling GLC rows and analysis-sheet rows
+   are exempt.) Fix the offending GLC(s) and re-run. For dev/exploration
+   against an incomplete corpus, pass `--relaxed` to substitute the default
+   `100` for each missing field and complete the run; this is not for
+   deliverable output (GramFrame needs the real values).
+
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,
@@ -623,7 +636,8 @@ canonical air-gapped test surface.
 | `extract_to_csv.py` exits 0 with empty CSV. | `--input-root` does not contain any `.pptx`. | Verify the path; the walker is recursive. |
 | CSV opens with garbled non-ASCII vessel names in Excel. | The file lost its BOM during Save As. | Re-export from Excel via *File → Save As → CSV UTF-8*. |
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
-| `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `bandwidth` / `bandcentre` directly or accept the empty defaults (a blank `bandcentre` falls back to a band starting at zero). |
+| `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Every GLC-backed gram (image or `.wav`) needs `time_end` / `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (Analysis-sheet rows and dangling GLC rows are exempt.) |
+| `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | A GLC-backed gram's GLC has no time period and/or band fields; GramFrame can't render without them. | Fix the offending GLC(s) listed in the error so they carry `time_end`, `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
 | Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 
