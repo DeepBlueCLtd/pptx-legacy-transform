@@ -1132,6 +1132,16 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("Input root does not exist or is not a directory: %s", args.input_root)
         return 1
 
+    # Clear any prior output up-front. The input root is validated above (a
+    # typo there must not destroy a good CSV), but past that point we commit
+    # to producing fresh output: removing the target both verifies it isn't
+    # locked (e.g. open in Excel) and guarantees a failed or zero-match run
+    # can't leave a previous document's extract.csv behind for the downstream
+    # dedupe/generate steps to silently consume.
+    if args.out.exists():
+        LOGGER.info("Removing existing output CSV %s", args.out)
+        args.out.unlink()
+
     rows: list[dict] = []
     pptx_count = 0
     warning_counter: Counter[str] = Counter()

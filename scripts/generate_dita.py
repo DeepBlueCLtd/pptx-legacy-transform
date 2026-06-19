@@ -809,6 +809,31 @@ def _append_gramframe_table(
     return section
 
 
+# Stable id on the analysis-sheet section so the instructor-only floating
+# jump link (issue #91) can target it with an in-page ``<xref>``.
+ANALYSIS_SECTION_ID = "analysis-sheet"
+
+
+def _append_analysis_jump_link(parent: ET.Element, topic_id: str) -> None:
+    """Append the instructor-only floating "jump to Analysis Sheet" link.
+
+    Issue #91: on a long gram page the instructor wants to reach the
+    analysis image fast from anywhere. We emit a single in-page
+    ``<xref>`` (rendered ``<p class="analysis-jump">`` → a fixed pill by
+    the theme CSS) that scrolls to the analysis-sheet section. The link
+    carries ``audience="-trainee"`` so the trainee profile elides it
+    entirely — both the link and its target are instructor-only, so the
+    student edition never ships a dangling anchor.
+    """
+    p = ET.SubElement(parent, "p", {
+        "audience": "-trainee", "outputclass": "analysis-jump",
+    })
+    xref = ET.SubElement(p, "xref", {
+        "href": f"#{topic_id}/{ANALYSIS_SECTION_ID}",
+    })
+    xref.text = "Analysis Sheet"
+
+
 def _append_analysis_section(
     parent: ET.Element, href: str,
 ) -> None:
@@ -820,6 +845,7 @@ def _append_analysis_section(
     analysis sheet entirely.
     """
     section = ET.SubElement(parent, "section", {
+        "id": ANALYSIS_SECTION_ID,
         "audience": "-trainee", "outputclass": "analysis-sheet",
     })
     title = ET.SubElement(section, "title")
@@ -902,7 +928,8 @@ def emit_gram_topic(
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / _topic_filename(eff_gram_id)
 
-    topic = ET.Element("topic", {"id": _topic_id(eff_gram_id)})
+    topic_id = _topic_id(eff_gram_id)
+    topic = ET.Element("topic", {"id": topic_id})
     title = ET.SubElement(topic, "title")
     title.text = f"Gram {gram_num}"
     if first.get("vessel_name"):
@@ -952,6 +979,7 @@ def emit_gram_topic(
         )
         if copied is not None:
             written.append(copied)
+        _append_analysis_jump_link(body, topic_id)
         _append_analysis_section(body, href)
 
     for row in glc_rows:
@@ -1431,7 +1459,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--csv", required=True, type=Path, dest="csv_path")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
-    parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--clean", action="store_true",
+        help="Deprecated no-op: the output tree is now always wiped and rebuilt "
+             "from scratch. Accepted only so existing wrappers keep parsing.")
     parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
@@ -1462,7 +1493,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    if args.clean and args.out.exists():
+    # Always rebuild the output tree from scratch. Wiping it up-front verifies
+    # it isn't locked (e.g. a publication folder open in Oxygen) and guarantees
+    # a run can never blend fresh topics with a previous document's leftovers —
+    # the failure mode where a stale dita/ tree silently survives a switch of
+    # input CSV. (``--clean`` is now the default and the flag is a deprecated
+    # no-op, retained only so existing tuned wrappers keep parsing.)
+    if args.out.exists():
         LOGGER.info("Cleaning existing output tree at %s", args.out)
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True, exist_ok=True)

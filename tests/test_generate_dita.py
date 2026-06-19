@@ -227,6 +227,42 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(image, "PNG analysis assets render as <image>")
         self.assertEqual(image.get("href"), "gram12-analysis.png")
 
+    def test_analysis_jump_link_is_instructor_only_and_targets_section(self) -> None:
+        """Issue #91: a gram with an analysis sheet carries a floating
+        in-page jump link. It is instructor-only (``audience="-trainee"``),
+        rendered as ``<p class="analysis-jump">`` by the theme, and its
+        ``<xref>`` targets the analysis-sheet section by id within the
+        same topic. The target section must carry that id."""
+        _run(self.out)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+
+        jump = root.find(".//body/p[@outputclass='analysis-jump']")
+        self.assertIsNotNone(jump, "gram with an analysis sheet must emit a jump link")
+        self.assertEqual(jump.get("audience"), "-trainee",
+                         "the jump link must be instructor-only")
+        xref = jump.find("xref")
+        self.assertIsNotNone(xref)
+
+        section = root.find(".//body/section[@outputclass='analysis-sheet']")
+        self.assertIsNotNone(section)
+        self.assertEqual(section.get("id"), "analysis-sheet",
+                         "the analysis section must carry the jump target id")
+        self.assertEqual(xref.get("href"), f"#{root.get('id')}/{section.get('id')}",
+                         "the jump xref must point at the analysis-sheet section")
+
+    def test_no_analysis_jump_link_without_analysis_section(self) -> None:
+        """A gram with no analysis sheet (e.g. a progress-test gram) emits
+        no jump link — both link and target are instructor-only, so there
+        is nothing to scroll to."""
+        _run(self.out)
+        topic = self.out / "progress-test-1" / "gram-03" / "gram_03.dita"
+        root = ET.parse(topic).getroot()
+        self.assertIsNone(
+            root.find(".//p[@outputclass='analysis-jump']"),
+            "no analysis section means no jump link",
+        )
+
     def test_docx_analysis_renders_as_xref(self) -> None:
         """When the analysis asset is a .docx, the section emits an <xref>
         instead of an embedded <image>."""
@@ -719,6 +755,19 @@ class GenerateDitaTests(unittest.TestCase):
         if skipped.is_file():
             self.assertNotIn("spectrogram", skipped.read_text(encoding="utf-8"),
                              "a .gif Lofar must not be skipped")
+
+    def test_stale_tree_wiped_without_clean_flag(self) -> None:
+        """The output tree is always rebuilt from scratch (clean is now the
+        default, not opt-in): a leftover file from a previous document's build
+        must not survive a run, even when ``--clean`` isn't passed."""
+        self.out.mkdir(parents=True, exist_ok=True)
+        stale = self.out / "stale_from_other_document.dita"
+        stale.write_text("<topic/>", encoding="utf-8")
+        # _run defaults to clean=False here so only the generator's own wipe acts.
+        rc = _run(self.out, clean=False)
+        self.assertEqual(rc, 0)
+        self.assertFalse(stale.exists(),
+                         "a stale file must be wiped even without --clean")
 
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)

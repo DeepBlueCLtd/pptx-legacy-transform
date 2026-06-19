@@ -663,6 +663,21 @@ class OnlyChapterScopingTests(unittest.TestCase):
         self.assertIn("No Such Chapter", joined)
         self.assertIn("matched no PPTXs", joined)
 
+    def test_stale_output_removed_when_run_aborts(self) -> None:
+        """A pre-existing CSV is wiped at the start, so a zero-match (or any
+        failing) run can't leave a previous document's extract.csv behind for
+        the downstream dedupe/generate steps to silently consume."""
+        out_csv = TMP / "extract_stale.csv"
+        out_csv.write_text("STALE,FROM,A,DIFFERENT,DOCUMENT\r\n", encoding="utf-8-sig")
+        rc = extract_to_csv.main([
+            "--input-root", str(self.corpus),
+            "--out", str(out_csv),
+            "--only", "No Such Chapter",
+        ])
+        self.assertEqual(rc, 1)
+        self.assertFalse(out_csv.exists(),
+                         "stale output must be removed even when the run aborts")
+
 
 class GlcViewFieldMainTests(unittest.TestCase):
     """End-to-end: a corpus whose GLC grams lack their view fields makes extract
