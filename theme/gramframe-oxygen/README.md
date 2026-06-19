@@ -52,16 +52,29 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
      other `template/resources/*.js` scripts.
 
    - **Or wire the fragment file.** Copy `gramframe.xml` into your template's
-     `page-templates-fragments/libraries/` and map it in your `.opt`, mirroring
-     the existing fragment entry:
+     `page-templates-fragments/libraries/` and map it in your `.opt`. The
+     `<fragment>` goes inside an `<html-fragments>` wrapper, which itself sits
+     inside the `<webhelp>` output element — add the `<html-fragments>` block if
+     your `.opt` doesn't already have one:
 
      ```xml
-     <fragment file="page-templates-fragments/libraries/gramframe.xml"
-               placeholder="webhelp.fragment.head.topic.page"/>
+     <publishing-template>
+       ...
+       <webhelp>
+         <html-fragments>
+           <fragment file="page-templates-fragments/libraries/gramframe.xml"
+                     placeholder="webhelp.fragment.head.topic.page"/>
+         </html-fragments>
+         ...
+       </webhelp>
+     </publishing-template>
      ```
 
-     Use a head placeholder that is **not already taken** by another fragment
-     (Oxygen binds one fragment per placeholder).
+     The wrapper element is `html-fragments`, **not** `fragments` — Oxygen's
+     schema rejects a bare `<fragments>` (or a `<fragment>` placed directly
+     under `<webhelp>`), failing the publish with `Build failed with an
+     exception: null`. Also use a head placeholder that is **not already taken**
+     by another fragment (Oxygen binds one fragment per placeholder).
 
 3. **Publish a deck with at least one spectrogram gram, open the topic in a
    browser, and confirm** the static gram image upgrades to the interactive
