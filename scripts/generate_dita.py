@@ -809,6 +809,31 @@ def _append_gramframe_table(
     return section
 
 
+# Stable id on the analysis-sheet section so the instructor-only floating
+# jump link (issue #91) can target it with an in-page ``<xref>``.
+ANALYSIS_SECTION_ID = "analysis-sheet"
+
+
+def _append_analysis_jump_link(parent: ET.Element, topic_id: str) -> None:
+    """Append the instructor-only floating "jump to Analysis Sheet" link.
+
+    Issue #91: on a long gram page the instructor wants to reach the
+    analysis image fast from anywhere. We emit a single in-page
+    ``<xref>`` (rendered ``<p class="analysis-jump">`` → a fixed pill by
+    the theme CSS) that scrolls to the analysis-sheet section. The link
+    carries ``audience="-trainee"`` so the trainee profile elides it
+    entirely — both the link and its target are instructor-only, so the
+    student edition never ships a dangling anchor.
+    """
+    p = ET.SubElement(parent, "p", {
+        "audience": "-trainee", "outputclass": "analysis-jump",
+    })
+    xref = ET.SubElement(p, "xref", {
+        "href": f"#{topic_id}/{ANALYSIS_SECTION_ID}",
+    })
+    xref.text = "Analysis Sheet"
+
+
 def _append_analysis_section(
     parent: ET.Element, href: str,
 ) -> None:
@@ -820,6 +845,7 @@ def _append_analysis_section(
     analysis sheet entirely.
     """
     section = ET.SubElement(parent, "section", {
+        "id": ANALYSIS_SECTION_ID,
         "audience": "-trainee", "outputclass": "analysis-sheet",
     })
     title = ET.SubElement(section, "title")
@@ -902,7 +928,8 @@ def emit_gram_topic(
     topic_dir.mkdir(parents=True, exist_ok=True)
     topic_path = topic_dir / _topic_filename(eff_gram_id)
 
-    topic = ET.Element("topic", {"id": _topic_id(eff_gram_id)})
+    topic_id = _topic_id(eff_gram_id)
+    topic = ET.Element("topic", {"id": topic_id})
     title = ET.SubElement(topic, "title")
     title.text = f"Gram {gram_num}"
     if first.get("vessel_name"):
@@ -952,6 +979,7 @@ def emit_gram_topic(
         )
         if copied is not None:
             written.append(copied)
+        _append_analysis_jump_link(body, topic_id)
         _append_analysis_section(body, href)
 
     for row in glc_rows:
