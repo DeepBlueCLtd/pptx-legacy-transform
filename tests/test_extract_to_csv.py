@@ -108,6 +108,25 @@ class CsvWriteReadTests(unittest.TestCase):
     def setUp(self) -> None:
         TMP.mkdir(parents=True, exist_ok=True)
 
+    def test_csv_columns_have_band_pair_not_freq_end(self) -> None:
+        """Issue #87: freq_end is swapped in place for bandwidth, bandcentre."""
+        cols = extract_to_csv.CSV_COLUMNS
+        self.assertNotIn("freq_end", cols)
+        self.assertIn("bandwidth", cols)
+        self.assertIn("bandcentre", cols)
+        # bandwidth then bandcentre, sitting where freq_end used to (after time_end).
+        self.assertEqual(cols.index("bandwidth"), cols.index("time_end") + 1)
+        self.assertEqual(cols.index("bandcentre"), cols.index("bandwidth") + 1)
+
+    def test_csv_header_written_with_band_columns(self) -> None:
+        out = TMP / "band_header.csv"
+        extract_to_csv.write_csv([], out)
+        with out.open("r", encoding="utf-8-sig", newline="") as fh:
+            header = fh.readline().strip().split(",")
+        self.assertIn("bandwidth", header)
+        self.assertIn("bandcentre", header)
+        self.assertNotIn("freq_end", header)
+
     def test_csv_round_trip_invariant(self) -> None:
         out = TMP / "round_trip.csv"
         rows = [{c: "" for c in extract_to_csv.CSV_COLUMNS} for _ in range(2)]
@@ -117,7 +136,7 @@ class CsvWriteReadTests(unittest.TestCase):
             "topic_type": "glc", "sequence": "1",
             "topic_filename": "gram_12_lofar1.dita",
             "glc_path": "supporting/gram12/config_1.glc",
-            "time_end": "271", "freq_end": "400",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "images/gram12.png",
         })
         rows[1].update({
@@ -150,7 +169,7 @@ class CsvWriteReadTests(unittest.TestCase):
             "display_text": "LOFAR 1",
             "link_href": "supporting/gram12/config_1.glc",
             "glc_path": "supporting/gram12/config_1.glc",
-            "time_end": "271", "freq_end": "400",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "images/gram12.png",
         })
         rows[1].update({
@@ -264,7 +283,8 @@ class GramToRowsTests(unittest.TestCase):
             content_root=self.tmp, source_dir=self.tmp,
         )
         self.assertEqual(rows[0]["time_end"], "271")
-        self.assertEqual(rows[0]["freq_end"], "400")
+        self.assertEqual(rows[0]["bandwidth"], "400")
+        self.assertEqual(rows[0]["bandcentre"], "200")
         self.assertEqual(rows[0]["png_path"], "gram12.PNG")
         self.assertEqual(rows[0]["link_href"], "supporting/gram12/config_1.glc")
 
@@ -293,7 +313,8 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(wav_row["png_path"], "",
                          "no asset is extracted from a .wav link target")
         self.assertEqual(wav_row["time_end"], "")
-        self.assertEqual(wav_row["freq_end"], "")
+        self.assertEqual(wav_row["bandwidth"], "")
+        self.assertEqual(wav_row["bandcentre"], "")
         self.assertEqual(wav_row["wav_treatment"], "")
         self.assertIn("GLC not found", wav_row["warnings"])
 
@@ -424,7 +445,7 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
                     if r["topic_type"] == "glc" and r["link_href"].lower().endswith(".glc")]
         self.assertGreater(len(glc_rows), 0)
         # Every .glc-link row should have produced a resolved glc_path and
-        # populated time_end/freq_end via the parser.
+        # populated time_end/bandwidth/bandcentre via the parser.
         unresolved = [r for r in glc_rows if not r["glc_path"]]
         self.assertEqual(len(unresolved), 0,
                          f"Unresolved GLC links: {[r['link_href'] for r in unresolved][:5]}")

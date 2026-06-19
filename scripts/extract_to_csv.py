@@ -34,7 +34,7 @@ from pptx.oxml.ns import qn
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "target_doc", "target_chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
+    "time_end", "bandwidth", "bandcentre", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
@@ -85,7 +85,8 @@ def setup_logging(log_path: Path) -> None:
 class GlcDocument:
     image_filename: str = ""
     time_end: str = ""
-    freq_end: str = ""
+    bandwidth: str = ""
+    bandcentre: str = ""
     warnings: list[str] = field(default_factory=list)
 
 
@@ -134,9 +135,19 @@ def parse_glc(path: Path) -> GlcDocument:
     bandwidth = root.findtext("settings/lofar/bandwidth")
     if bandwidth is None or not bandwidth.strip():
         doc.warnings.append("GLC missing bandwidth")
-        doc.freq_end = ""
+        doc.bandwidth = ""
     else:
-        doc.freq_end = bandwidth.strip()
+        doc.bandwidth = bandwidth.strip()
+
+    # The frequency band is defined by bandwidth + bandcentre (issue #87):
+    # the band spans bandwidth/2 either side of bandcentre. freq_start and
+    # freq_end are derived downstream by the generator, not stored here.
+    bandcentre = root.findtext("settings/lofar/bandcentre")
+    if bandcentre is None or not bandcentre.strip():
+        doc.warnings.append("GLC missing bandcentre")
+        doc.bandcentre = ""
+    else:
+        doc.bandcentre = bandcentre.strip()
 
     return doc
 
@@ -902,7 +913,8 @@ def gram_to_rows(
         href = link.href
         glc_path = ""
         time_end = ""
-        freq_end = ""
+        bandwidth = ""
+        bandcentre = ""
         png_path = ""
         display_text = link.display_text
         resolved = resolve_glc_path(href, content_root, source_dir=source_dir)
@@ -914,7 +926,8 @@ def gram_to_rows(
             glc = parse_glc(resolved)
             warnings.extend(glc.warnings)
             time_end = glc.time_end
-            freq_end = glc.freq_end
+            bandwidth = glc.bandwidth
+            bandcentre = glc.bandcentre
             if glc.image_filename:
                 # The inner asset (.png/.jpg pre-rendered spectrogram, or
                 # .wav for live render) sits next to the GLC on disk.
@@ -940,7 +953,8 @@ def gram_to_rows(
             "link_href": href,
             "glc_path": glc_path,
             "time_end": time_end,
-            "freq_end": freq_end,
+            "bandwidth": bandwidth,
+            "bandcentre": bandcentre,
             "png_path": png_path,
             "target_ext": Path(png_path).suffix.lower(),
             "file_size": _png_file_size(png_path, content_root),
@@ -982,7 +996,8 @@ def gram_to_rows(
         "link_href": "",
         "glc_path": "",
         "time_end": "",
-        "freq_end": "",
+        "bandwidth": "",
+        "bandcentre": "",
         "png_path": analysis_png_resolved,
         "target_ext": Path(analysis_png_resolved).suffix.lower(),
         "file_size": _png_file_size(analysis_png_resolved, content_root),

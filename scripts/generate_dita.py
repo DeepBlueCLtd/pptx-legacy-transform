@@ -34,7 +34,7 @@ from typing import Iterable
 CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
-    "time_end", "freq_end", "png_path", "file_size", "wav_treatment", "warnings",
+    "time_end", "bandwidth", "bandcentre", "png_path", "file_size", "wav_treatment", "warnings",
 )
 
 # Optional refactoring-planning columns the extractor now writes. Their
@@ -530,18 +530,22 @@ def _master_index_key(png_path: str, asset_suffix: str, row: dict) -> tuple:
 
     Audio rows are keyed by view as well as path (issue #78): a redirected
     ``.wav`` row links to the *master's* ``.glc``, so it must resolve only
-    to a master presenting the same ``(time_end, freq_end)`` window —
-    ``deduplicate_csv.py`` only pairs rows whose views match, so building
-    the lookup key from the redirector's own values makes key equality
-    exactly view equality (and lets two masters share one ``.wav`` path
-    with different views). Image redirects stay path-only: the row's own
-    time/freq ride in its gram-config table, so byte-identical images are
-    interchangeable across views.
+    to a master presenting the same ``(time_end, bandwidth, bandcentre)``
+    window — ``deduplicate_csv.py`` only pairs rows whose views match, so
+    building the lookup key from the redirector's own values makes key
+    equality exactly view equality (and lets two masters share one ``.wav``
+    path with different views). The frequency view is the band pair
+    ``(bandwidth, bandcentre)`` (issue #87): two grams with equal bandwidth
+    but a different band centre are genuinely different views. Image
+    redirects stay path-only: the row's own time/freq ride in its
+    gram-config table, so byte-identical images are interchangeable across
+    views.
     """
     if asset_suffix == ".wav":
         return ("wav", png_path,
                 (row.get("time_end", "") or "").strip(),
-                (row.get("freq_end", "") or "").strip())
+                (row.get("bandwidth", "") or "").strip(),
+                (row.get("bandcentre", "") or "").strip())
     return ("img", png_path)
 
 
@@ -652,8 +656,49 @@ def _append_provenance_data(section: ET.Element, original_path: str) -> None:
     })
 
 
+def _parse_freq_num(value: str) -> float | None:
+    """Parse a numeric frequency string, or ``None`` when blank/non-numeric."""
+    try:
+        return float((value or "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_freq_num(value: float) -> str:
+    """Format a frequency value deterministically.
+
+    Integer-valued results render with no decimal point (``400``, ``0``);
+    non-integer results (from an odd ``bandwidth``) render with trailing
+    zeros stripped (``200.5``). Keeps output stable for the determinism diff.
+    """
+    if value == int(value):
+        return str(int(value))
+    return ("%f" % value).rstrip("0").rstrip(".")
+
+
+def _derive_freq_band(bandwidth: str, bandcentre: str) -> tuple[str, str]:
+    """Derive ``(freq_start, freq_end)`` from a band's width and centre (issue #87).
+
+    The band spans ``bandwidth/2`` either side of ``bandcentre``:
+    ``freq_start = bandcentre - bandwidth/2``, ``freq_end = bandcentre +
+    bandwidth/2``. Degrades gracefully (research R3): a blank/non-numeric
+    ``bandcentre`` falls back to the legacy interpretation (band starts at
+    zero, ends at ``bandwidth`` — i.e. ``bandcentre == bandwidth/2``); a
+    blank/non-numeric ``bandwidth`` yields blank limits rather than crashing.
+    """
+    bw = _parse_freq_num(bandwidth)
+    if bw is None:
+        return "", ""
+    bc = _parse_freq_num(bandcentre)
+    if bc is None:
+        return "0", _format_freq_num(bw)
+    half = bw / 2
+    return _format_freq_num(bc - half), _format_freq_num(bc + half)
+
+
 def _append_gramframe_table(
-    parent: ET.Element, image_href: str, time_end: str, freq_end: str,
+    parent: ET.Element, image_href: str, time_end: str,
+    bandwidth: str, bandcentre: str,
     display_text: str = "",
 ) -> ET.Element:
     """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
@@ -685,10 +730,11 @@ def _append_gramframe_table(
     ET.SubElement(image_entry, "image", {
         "href": image_href, "placement": "break", "align": "center",
     })
+    freq_start, freq_end = _derive_freq_band(bandwidth, bandcentre)
     for label, value in (
         ("time-start", "0"),
         ("time-end", time_end),
-        ("freq-start", "0"),
+        ("freq-start", freq_start),
         ("freq-end", freq_end),
     ):
         r = ET.SubElement(tbody, "row")
@@ -810,9 +856,9 @@ def emit_gram_topic(
 
         A row is redirected iff ``master_png_path`` is non-empty *and*
         resolves in the master index. For a ``.wav`` row the lookup key
-        also carries the row's own ``(time_end, freq_end)`` view, so the
-        redirect only resolves to a master whose ``.glc`` presents the
-        same window (issue #78). A non-empty-but-unresolvable target
+        also carries the row's own ``(time_end, bandwidth, bandcentre)``
+        view, so the redirect only resolves to a master whose ``.glc``
+        presents the same window (issue #78, #87). A non-empty-but-unresolvable target
         (missing/blank master, or no master with the matching view) is
         logged as a WARNING and treated as non-redirected so the asset is
         copied locally instead (FR-014).
@@ -828,7 +874,7 @@ def emit_gram_topic(
                 "master_png_path=%r %s; copying asset locally instead.",
                 r["publication"], r["gram_id"], r["topic_type"],
                 r["sequence"], key,
-                "has no master row with a matching (time_end, freq_end) view"
+                "has no master row with a matching (time_end, bandwidth, bandcentre) view"
                 if suffix == ".wav" else "not found",
             )
         return target
@@ -854,7 +900,8 @@ def emit_gram_topic(
                 href = _relpath_posix(master.topic_dir / master.link_basename, topic_dir)
                 section = _append_gramframe_table(
                     body, href,
-                    row.get("time_end", ""), row.get("freq_end", ""),
+                    row.get("time_end", ""),
+                    row.get("bandwidth", ""), row.get("bandcentre", ""),
                     row.get("display_text", ""),
                 )
                 _append_provenance_data(section, png_path)
@@ -865,7 +912,8 @@ def emit_gram_topic(
                 written.append(copied)
             _append_gramframe_table(
                 body, image_href,
-                row.get("time_end", ""), row.get("freq_end", ""),
+                row.get("time_end", ""),
+                row.get("bandwidth", ""), row.get("bandcentre", ""),
                 row.get("display_text", ""),
             )
             continue

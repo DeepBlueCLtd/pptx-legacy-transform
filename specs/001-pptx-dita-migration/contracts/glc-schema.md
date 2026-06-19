@@ -22,7 +22,8 @@ the parser never raises.
   </playback>
   <settings>
     <lofar>
-      <bandwidth>...</bandwidth>        <!-- → freq_end -->
+      <bandwidth>...</bandwidth>        <!-- band width  -->
+      <bandcentre>...</bandcentre>      <!-- band centre frequency -->
     </lofar>
   </settings>
 </GAPS_Lite_configuration>
@@ -34,10 +35,15 @@ the parser never raises.
 |---|---|---|---|
 | `data_source/filename` | `image_filename` | string | strip path with `pathlib.PureWindowsPath(raw).name`; if `raw` is empty, return empty |
 | `data_source/bitmap_crop_values/bottom_crop` | `time_end` | string | trim whitespace; empty if missing |
-| `settings/lofar/bandwidth` | `freq_end` | string | trim whitespace; empty if missing |
+| `settings/lofar/bandwidth` | `bandwidth` | string | trim whitespace; empty if missing |
+| `settings/lofar/bandcentre` | `bandcentre` | string | trim whitespace; empty if missing |
 
-`time-start` and `freq-start` are always literally `"0"` in DITA output
-and are not read from GLC.
+The frequency band is **bandwidth + bandcentre** (issue #87): the band spans
+`bandwidth/2` either side of `bandcentre`, so `freq_start = bandcentre -
+bandwidth/2` and `freq_end = bandcentre + bandwidth/2`. The generator derives
+these for the DITA gram-config table; the GLC carries the two raw settings, not
+the derived limits. `time-start` is always literally `"0"` in DITA output and is
+not read from GLC.
 
 ## Asset extension contract
 
@@ -80,6 +86,7 @@ The parser emits these exact warning strings into the row's
 - `"GLC missing filename"` — `<filename>` element absent or empty
 - `"GLC missing bottom_crop"` — `<bottom_crop>` element absent or empty
 - `"GLC missing bandwidth"` — `<bandwidth>` element absent or empty
+- `"GLC missing bandcentre"` — `<bandcentre>` element absent or empty
 - `"GLC duplicate filename"` — `<filename>` appears more than once
 
 ## Worked example
@@ -101,6 +108,7 @@ Input:
   <settings>
     <lofar>
       <bandwidth>400</bandwidth>
+      <bandcentre>200</bandcentre>
     </lofar>
   </settings>
 </GAPS_Lite_configuration>
@@ -112,7 +120,8 @@ Output:
 GlcDocument(
     image_filename="gram12.PNG",
     time_end="271",
-    freq_end="400",
+    bandwidth="400",
+    bandcentre="200",
     warnings=[],
 )
 ```
@@ -131,7 +140,8 @@ Output:
 GlcDocument(
     image_filename="",
     time_end="",
-    freq_end="",
+    bandwidth="",
+    bandcentre="",
     warnings=["GLC malformed: not well-formed (invalid token): line 3, column ..."],
 )
 ```

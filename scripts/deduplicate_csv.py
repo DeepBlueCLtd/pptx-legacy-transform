@@ -12,8 +12,8 @@ Byte-identity alone is not sufficient for ``.wav`` rows (issue #78): an
 audio lofar's link target is its ``.glc``, and two ``.glc`` files can
 present different time/frequency windows onto the same recording. A
 ``.wav`` row therefore only joins a duplicate group when its extracted
-``(time_end, freq_end)`` view also matches; rows sharing the bytes but
-not the view each keep their own ``.glc``/``.wav`` pair.
+``(time_end, bandwidth, bandcentre)`` view also matches; rows sharing the
+bytes but not the view each keep their own ``.glc``/``.wav`` pair.
 
 This step is **opt-in** and **inert-safe**: assets at or below the
 threshold, or used only once, are never redirected, and a CSV the operator
@@ -141,9 +141,12 @@ def _view_key(row: dict) -> tuple:
     names (FR-009), and two ``.glc`` files can window the same recording
     differently. Byte-identical ``.wav`` rows are therefore
     interchangeable only when the extracted view matches: they merge only
-    on equal ``(time_end, freq_end)`` (issue #78). A ``.wav`` row missing
-    either value gets a unique key and is never merged — dropping a
-    distinct student view is worse than missing a reclamation. Non-wav
+    on equal ``(time_end, bandwidth, bandcentre)`` (issues #78, #87 — the
+    frequency view is the band pair, not a single upper limit). A ``.wav``
+    row missing ``time_end`` or ``bandwidth`` gets a unique key and is never
+    merged — dropping a distinct student view is worse than missing a
+    reclamation. A blank ``bandcentre`` is a legitimate value (legacy band
+    centred at ``bandwidth/2``) and participates in the key as-is. Non-wav
     assets carry their view in the row itself (the gram-config table), so
     byte-identity alone suffices and they share one key.
     """
@@ -151,10 +154,11 @@ def _view_key(row: dict) -> tuple:
     if Path(png).suffix.lower() != ".wav":
         return ("any",)
     time_end = (row.get("time_end", "") or "").strip()
-    freq_end = (row.get("freq_end", "") or "").strip()
-    if not time_end or not freq_end:
+    bandwidth = (row.get("bandwidth", "") or "").strip()
+    bandcentre = (row.get("bandcentre", "") or "").strip()
+    if not time_end or not bandwidth:
         return ("wav-view-unknown",) + _identity_key(row)
-    return ("wav-view", time_end, freq_end)
+    return ("wav-view", time_end, bandwidth, bandcentre)
 
 
 def _hash_file(image_root: Path, png_path: str) -> str | None:
@@ -187,7 +191,8 @@ def deduplicate(
     size-collision group of >=2 is content confirmed by ``sha256`` (a
     unique-size large file is never hashed). Confirmed byte-identical
     rows are then split by ``_view_key`` so ``.wav`` rows merge only when
-    their ``(time_end, freq_end)`` view also matches (issue #78). Within
+    their ``(time_end, bandwidth, bandcentre)`` view also matches (issues
+    #78, #87). Within
     each resulting group of >=2, the first row by ``_identity_key`` is
     the master (empty ``master_png_path``); the rest carry the master's
     ``png_path``.
@@ -220,7 +225,7 @@ def deduplicate(
                 by_hash[digest].append(row)
         # 3) Nominate master + redirect within each confirmed group. A
         #    byte-identical set is split by view first: .wav rows merge
-        #    only when (time_end, freq_end) also match (issue #78).
+        #    only when (time_end, bandwidth, bandcentre) also match (#78, #87).
         for digest in sorted(by_hash):
             members = by_hash[digest]
             if len(members) < 2:
@@ -231,7 +236,7 @@ def deduplicate(
                 if key[0] == "wav-view-unknown":
                     LOGGER.warning(
                         "Byte-identical .wav left non-redirected: %s "
-                        "(gram %s seq %s) is missing time_end/freq_end, so "
+                        "(gram %s seq %s) is missing time_end/bandwidth, so "
                         "its .glc view cannot be confirmed to match",
                         row.get("png_path", ""), row.get("gram_id", ""),
                         row.get("sequence", ""),
@@ -254,7 +259,7 @@ def deduplicate(
                 LOGGER.info(
                     "Duplicate group: master=%s%s redirected=%d bytes_reclaimed=%d",
                     master_png,
-                    " view=%s/%s" % (view[1], view[2]) if view[0] == "wav-view" else "",
+                    " view=%s/%s/%s" % (view[1], view[2], view[3]) if view[0] == "wav-view" else "",
                     count, reclaimed,
                 )
 

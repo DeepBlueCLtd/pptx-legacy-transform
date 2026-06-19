@@ -965,7 +965,7 @@ class StagedHrefsResolveTests(unittest.TestCase):
             base.update(
                 topic_type="glc", sequence="1",
                 link_href="supporting/c.glc", glc_path="supporting/c.glc",
-                png_path="images/g.png", time_end="1", freq_end="1",
+                png_path="images/g.png", time_end="1", bandwidth="2", bandcentre="1",
             )
             base.update(kw)
             return base
