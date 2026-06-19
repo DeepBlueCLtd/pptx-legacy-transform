@@ -154,6 +154,42 @@ section.analysis-sheet .imagecenter img {
   filter: brightness(1.05) saturate(1.1);
 }
 
+/* ---------- Analysis-sheet floating jump (instructor only) ----------
+   Issue #91: the instructor wants to reach the analysis image fast from
+   anywhere on a long gram page. The generator emits an audience-tagged
+   in-page link (<p class="analysis-jump"> → <a href="#…analysis-sheet">);
+   pin it as a fixed pill in the lower-right corner. It carries
+   audience="-trainee", so the student edition never ships the markup. */
+article p.analysis-jump {
+  position: fixed;
+  right: 22px;
+  bottom: 24px;
+  z-index: 1000;
+  margin: 0;
+}
+article p.analysis-jump a,
+article p.analysis-jump a:link,
+article p.analysis-jump a:visited {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--instructor);
+  background: rgba(255,138,61,0.12);
+  border: 1px solid rgba(255,138,61,0.5);
+  border-radius: 4px;
+  padding: 10px 16px;
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+}
+article p.analysis-jump a::before { content: "▤ "; color: var(--amber); }
+article p.analysis-jump a:hover,
+article p.analysis-jump a:focus {
+  color: var(--amber-bright);
+  background: rgba(255,138,61,0.2);
+  border-color: var(--amber);
+}
+
 /* ---------- LOFAR stage: faux instrument trace ---------- */
 section.lofar-stage {
   background: var(--panel);
