@@ -1,0 +1,168 @@
+name: PR preview
+
+# Builds the full HTML output for a PR with DITA-OT (the same render the
+# `web` test job already performs) and *keeps* it: the result is deployed to
+# the gh-pages branch under previews/pr-NN/ and surfaced as a sticky PR
+# comment with a live, browsable link. The preview is rebuilt on every push
+# to the PR and removed when the PR is closed.
+#
+# Only PRs from branches in this repo get a preview: a fork PR's GITHUB_TOKEN
+# is read-only, so it cannot push to gh-pages or comment — the build-preview
+# job self-skips for forks, and the cleanup job no-ops (a fork never created a
+# preview folder to remove).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+# Serialise with the main gh-pages deploy (regenerate-html.yml) so concurrent
+# pushes to the gh-pages branch don't race.
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  DITA_OT_VERSION: 4.2.4
+
+jobs:
+  build-preview:
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up Java (for DITA-OT)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache DITA-OT
+        id: cache-dita-ot
+        uses: actions/cache@v4
+        with:
+          path: dita-ot-${{ env.DITA_OT_VERSION }}
+          key: dita-ot-${{ env.DITA_OT_VERSION }}
+
+      - name: Download DITA-OT
+        if: steps.cache-dita-ot.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -fSL -o dita-ot.zip \
+            "https://github.com/dita-ot/dita-ot/releases/download/${DITA_OT_VERSION}/dita-ot-${DITA_OT_VERSION}.zip"
+          unzip -q dita-ot.zip
+          rm dita-ot.zip
+          chmod +x "dita-ot-${DITA_OT_VERSION}/bin/dita"
+
+      # source.csv is a pipeline intermediate, not committed; regenerate it
+      # from the committed mock corpus (same path the web/regenerate jobs use).
+      - name: Build html/ from the mock corpus
+        run: |
+          set -euo pipefail
+          python scripts/extract_to_csv.py --input-root source/ --out source.csv
+          python scripts/deduplicate_csv.py --csv source.csv --image-root source/ --out source.dedup.csv
+          python scripts/generate_dita.py --csv source.dedup.csv --out dita/ --image-root source/ --clean
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          python scripts/publish_html.py --dita-ot "dita-ot-${DITA_OT_VERSION}"
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-checkout
+
+      - name: Sync preview into gh-pages
+        run: |
+          set -euo pipefail
+          dest="gh-pages-checkout/previews/pr-${{ github.event.number }}"
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          cp -R html/. "$dest/"
+
+      - name: Commit and push preview
+        run: |
+          set -euo pipefail
+          cd gh-pages-checkout
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No preview changes to commit"
+          else
+            git commit -m "Preview for PR #${{ github.event.number }} (${GITHUB_SHA::7})"
+            for attempt in 1 2 3 4; do
+              git push origin gh-pages && break
+              sleep $((2 ** attempt))
+              git pull --rebase origin gh-pages
+            done
+          fi
+
+      - name: Post or update preview comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          repo_name="${GITHUB_REPOSITORY##*/}"
+          url="https://${owner_lc}.github.io/${repo_name}/previews/pr-${PR}/"
+          marker="<!-- pr-preview -->"
+          body=$(printf '%s\n' \
+            "$marker" \
+            "📄 **HTML preview** for this PR is live:" \
+            "" \
+            "- **Landing page:** ${url}" \
+            "- Instructor edition: ${url}instructor/" \
+            "- Student edition: ${url}student/" \
+            "" \
+            "_Rebuilt on every push to this PR; removed when the PR closes. (May take a minute for GitHub Pages to refresh.)_")
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            --jq "[.[] | select(.body | startswith(\"${marker}\")) | .id] | first // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" -f body="$body" >/dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -f body="$body" >/dev/null
+          fi
+
+  cleanup-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-checkout
+
+      - name: Remove preview folder
+        run: |
+          set -euo pipefail
+          cd gh-pages-checkout
+          dest="previews/pr-${{ github.event.number }}"
+          if [ -d "$dest" ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git rm -r --quiet "$dest"
+            git commit -m "Remove preview for closed PR #${{ github.event.number }}"
+            for attempt in 1 2 3 4; do
+              git push origin gh-pages && break
+              sleep $((2 ** attempt))
+              git pull --rebase origin gh-pages
+            done
+          else
+            echo "No preview folder for PR #${{ github.event.number }}; nothing to remove."
+          fi
