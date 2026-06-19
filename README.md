@@ -257,11 +257,19 @@ ROOT\  (e.g. C:\dev\aaac)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
 ├── reports\             ← per-deck introspect reports and scratch output
+├── theme\               ← Oxygen overlays for the production publisher (e.g. the GramFrame plugin)
 └── scripts\
     ├── pylib\           ← pip install --target lives here (see setup below)
     ├── vendor\          ← publish assets (GramFrame bundle, theme), resolved beside publish_html.py
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
+
+`theme\gramframe-oxygen\` is a drop-in overlay (plugin bundle + a `<head>`
+fragment) the operator installs once into the Oxygen WebHelp template so the
+**production** publish renders interactive grams, mirroring what
+`publish_html.py` already does for the dev preview — see that folder's
+`README.md`. Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the
+release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
 (installed per-target) and the corpus.
@@ -273,12 +281,12 @@ caches, sets `sys.argv`, then `runpy.run_path`s the canonical script.
 ### Getting pipeline updates onto the target — GitHub releases
 
 Every merge to `main` that touches a deliverable file (canonical
-`scripts/*.py`, the root wrapper templates, `static/`, `stock.wav`,
+`scripts/*.py`, the root wrapper templates, `static/`, `theme/`, `stock.wav`,
 `requirements.txt`, this README) runs the *Package release* workflow,
 which publishes a GitHub release carrying `aaac-pipeline-vYYYY.MM.DD-N.zip`
 and a matching `.sha256` file. The zip mirrors the target layout above —
-the canonical `scripts\` tree, `static\` and `stock.wav` at the root, and
-the wrapper templates under `wrappers\` — so an update is:
+the canonical `scripts\` tree, `static\`, `theme\` and `stock.wav` at the
+root, and the wrapper templates under `wrappers\` — so an update is:
 
 1. On a connected host, download both assets from the latest release
    (far smaller than the full repository zip).

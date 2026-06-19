@@ -85,9 +85,10 @@ ROOT\  (e.g. C:\dev\aaac)
 ├── stock.wav            ← silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
 ├── reports\             ← per-deck introspect reports, scratch output
+├── theme\               ← Oxygen overlays for the production publisher (GramFrame plugin: theme\gramframe-oxygen\); ships in the release zip
 └── scripts\
     ├── pylib\           ← pip install --target python-pptx (WinPython sets ENABLE_USER_SITE = False)
-    ├── vendor\          ← publish assets (GramFrame bundle, theme.css), resolved beside publish_html.py
+    ├── vendor\          ← publish assets (GramFrame bundle, theme.css), resolved beside publish_html.py (dev/CI-only, not shipped)
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
 

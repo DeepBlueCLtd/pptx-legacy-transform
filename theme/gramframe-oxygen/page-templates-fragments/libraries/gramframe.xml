@@ -1,0 +1,22 @@
+<!-- <head> is ignored - only its children are copied into the output page head. -->
+<!--
+    GramFrame plugin loader for the Oxygen WebHelp Responsive template.
+
+    Loading gramframe.bundle.js upgrades every <table class="gram-config"> on
+    the page into an interactive spectrogram viewer; it no-ops on pages that
+    have none. The gram-config class arrives from the DITA outputclass that
+    generate_dita.py emits, which Oxygen passes through to the HTML @class.
+
+    The bundle ships beside this fragment under resources/gramframe.bundle.js;
+    Oxygen's custom-resources fileset copies resources/** into the output at
+    ${oxygen-webhelp-assets-dir}/template/resources/, so the src below mirrors
+    the path convention the template's other custom scripts already use.
+
+    Pin this bundle to the SAME GramFrame release as scripts/vendor/gramframe/
+    (see resources/VERSION) so the Oxygen production output and the
+    publish_html.py dev preview render grams identically.
+-->
+<head xmlns:whc="http://www.oxygenxml.com/webhelp/components" whc:version="22.0">
+    <script defer="defer"
+        src="${oxygen-webhelp-assets-dir}/template/resources/gramframe.bundle.js?buildId=${oxygen-webhelp-build-number}"></script>
+</head>
