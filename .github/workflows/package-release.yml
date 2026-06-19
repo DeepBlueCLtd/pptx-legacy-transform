@@ -17,6 +17,7 @@ on:
       - 'scripts/*.py'
       - '*.py'
       - 'static/**'
+      - 'theme/**'
       - 'stock.wav'
       - 'requirements.txt'
       - 'README.md'
