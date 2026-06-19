@@ -45,6 +45,7 @@ SCRIPTS = (
     "deduplicate_csv.py",
     "rehydrate_dita.py",
     "snapshot_analysis_docs.py",
+    "relink_glc_to_image.py",
 )
 
 # Thin REPL wrappers at the repo root plus the pipeline orchestrator
@@ -59,6 +60,7 @@ WRAPPERS = (
     "publish.py",
     "introspect.py",
     "snapshot.py",
+    "relink.py",
     "pipeline.py",
 )
 
