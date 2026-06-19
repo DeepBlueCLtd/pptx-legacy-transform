@@ -89,6 +89,7 @@ class RehydrateDitaTests(unittest.TestCase):
                 "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
                 "topic_filename": f"gram_{gid}.dita", "display_text": "Audio",
                 "link_href": glc, "glc_path": glc, "png_path": wav,
+                "time_end": "271", "bandwidth": "400", "bandcentre": "200",
                 "master_png_path": master,
             }
         return [

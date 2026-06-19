@@ -580,6 +580,7 @@ class GenerateDitaTests(unittest.TestCase):
             "display_text": "Lofar 1",
             "link_href": "supporting/gram07/config.glc",
             "glc_path": "supporting/gram07/config.glc",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "supporting/gram07/audio_clip.wav",
         })
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
@@ -628,6 +629,7 @@ class GenerateDitaTests(unittest.TestCase):
             "display_text": "Lofar 1",
             "link_href": "supporting/gram08/config.glc",
             "glc_path": "supporting/gram08/config.glc",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "supporting/gram08/audio_clip.wav",
         })
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
@@ -1206,7 +1208,7 @@ class DedupGenerateDitaTests(unittest.TestCase):
         }
 
     def _audio_glc_row(self, gid, vessel, wav, glc, master="",
-                       time_end="", bandwidth="", bandcentre="") -> dict:
+                       time_end="271", bandwidth="400", bandcentre="200") -> dict:
         return {
             "publication": "main", "chapter": "Audio", "gram_id": gid,
             "vessel_name": vessel, "topic_type": "glc", "sequence": "1",
@@ -1527,6 +1529,96 @@ class FreqBandDerivationTests(unittest.TestCase):
                 if len(r.findall("entry")) == 2}
         self.assertEqual(rows.get("freq-start"), "400")
         self.assertEqual(rows.get("freq-end"), "800")
+
+
+class TrustBoundaryTests(unittest.TestCase):
+    """Fail-fast on our own artifacts (constitution VII).
+
+    A blank Zone-A identity column, or a blank ``.wav`` view field (promoted to
+    Zone A because it is the dedup key), is a defect in data our pipeline
+    produces — the generator aborts loudly rather than coercing it to "" and
+    emitting a malformed topic.
+    """
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.tmp = TMP / f"trust_{self._testMethodName}"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _csv(self, rows: list[dict]) -> Path:
+        cols = generate_dita.CSV_COLUMNS
+        path = self.tmp / "in.csv"
+        with path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+            w.writeheader()
+            for r in rows:
+                w.writerow({c: r.get(c, "") for c in cols})
+        return path
+
+    def _gram_row(self, **over) -> dict:
+        row = {c: "" for c in generate_dita.CSV_COLUMNS}
+        row.update({
+            "publication": "main", "chapter": "Arctic Survey", "gram_id": "5",
+            "topic_type": "glc", "sequence": "1", "topic_filename": "gram_05.dita",
+            "display_text": "Lofar 1", "link_href": "g/c.glc", "glc_path": "g/c.glc",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+            "png_path": "images/gram12.png",
+        })
+        row.update(over)
+        return row
+
+    # -- require_field unit behaviour --------------------------------------
+    def test_require_field_raises_on_blank_and_whitespace(self) -> None:
+        with self.assertRaises(generate_dita.PipelineDataError):
+            generate_dita.require_field({"publication": ""}, "publication")
+        with self.assertRaises(generate_dita.PipelineDataError):
+            generate_dita.require_field({"publication": "   "}, "publication")
+        # Absent column is also a hard-fail (not a silent default).
+        with self.assertRaises(generate_dita.PipelineDataError):
+            generate_dita.require_field({}, "sequence")
+        # A present value is returned stripped.
+        self.assertEqual(
+            generate_dita.require_field({"publication": " main "}, "publication"),
+            "main")
+
+    # -- blank identity column aborts the run ------------------------------
+    def test_blank_identity_column_aborts(self) -> None:
+        for field in ("publication", "topic_type", "sequence"):
+            with self.subTest(field=field):
+                csv_path = self._csv([self._gram_row(**{field: ""})])
+                rc = generate_dita.main([
+                    "--csv", str(csv_path), "--out", str(self.tmp / field),
+                    "--image-root", str(FIXTURES),
+                ])
+                self.assertEqual(rc, 1, f"blank {field} must abort")
+
+    # -- blank .wav view field aborts (promotion clause) -------------------
+    def test_blank_wav_view_field_aborts(self) -> None:
+        for field in ("time_end", "bandwidth", "bandcentre"):
+            with self.subTest(field=field):
+                row = self._gram_row(png_path="g/audio.wav", **{field: ""})
+                csv_path = self._csv([row])
+                rc = generate_dita.main([
+                    "--csv", str(csv_path), "--out", str(self.tmp / f"wav_{field}"),
+                    "--image-root", str(FIXTURES),
+                ])
+                self.assertEqual(rc, 1, f"blank .wav {field} must abort")
+
+    # -- the same blank view on a NON-wav row is fine ----------------------
+    def test_blank_view_on_image_row_is_allowed(self) -> None:
+        # An image row legitimately carries empty view fields; it must not
+        # trip the .wav promotion clause.
+        row = self._gram_row(png_path="images/gram12.png",
+                             time_end="", bandwidth="", bandcentre="")
+        csv_path = self._csv([row])
+        rc = generate_dita.main([
+            "--csv", str(csv_path), "--out", str(self.tmp / "img"),
+            "--image-root", str(FIXTURES),
+        ])
+        self.assertEqual(rc, 0, "blank views on an image row are allowed")
 
 
 if __name__ == "__main__":

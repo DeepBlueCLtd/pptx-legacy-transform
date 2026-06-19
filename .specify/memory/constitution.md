@@ -1,17 +1,18 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.1.0 → 1.2.0 (amendment; see "Amendment 1.2.0" below).
+Version change: 1.2.0 → 1.3.0 (amendment; see "Amendment 1.3.0" below).
 1.0.0 was the first concrete ratification, replacing the unmodified Spec Kit
 placeholder template (initial adoption, not an amendment).
 
-Principles defined (6):
+Principles defined (7):
   I.   Air-Gapped, Self-Sufficient Operation
   II.  Single-Purpose Scripts, Minimal Surface
   III. Test-First Discipline
   IV.  Human-in-the-Loop Authority
   V.   Deterministic, Idempotent Output (quality goal)
   VI.  Honest Limitations
+  VII. Strict on Self-Authored Data (fail-fast at the trust boundary)
 
 Added sections:
   - Development-Phase Posture (pre-production, no backward-compatibility binding)
@@ -59,6 +60,26 @@ Amendment 1.2.0 (2026-06-11):
   - Consistency: CLAUDE.md (Commands, Architecture, target layout), README
     (folder structure, quickstart, target/release sections), HANDOVER.md
     paths, and the packaging workflow updated to match.
+
+Amendment 1.3.0 (2026-06-19):
+  - Added Principle VII — "Strict on Self-Authored Data (fail-fast at the
+    trust boundary)". Be ruthless with values this pipeline produces and
+    forbids editing (the CSV identity columns), and with any value whose
+    emptiness would silently corrupt one of our own invariants (the .wav
+    dedup view fields): a blank one is a defect we fail loud on at the point
+    of use (`require_field` → `PipelineDataError`), not a value we coerce to
+    "". This is the complement of Principle IV, not a loosening of it: VII
+    governs *our* data, IV governs *uncertain source* data, and the
+    dangling-asset rule still governs *external assets*.
+  - Bump rationale: MINOR. A new principle is added; no principle is removed
+    or redefined. One documented behaviour changed direction (a blank .wav
+    view in deduplicate_csv.py was tolerated, now hard-fails) — legitimate
+    under the pre-production posture (no backward-compatibility binding) and
+    covered by an updated regression test.
+  - Consistency: generate_dita.py + deduplicate_csv.py grow `require_field`/
+    `PipelineDataError`; CLAUDE.md "Invariants to preserve" and README's CSV
+    identity-column note gain the trust-boundary rule; the test suite asserts
+    the hard-fail.
 
 Deferred TODOs: none. Ratification date set to first concrete adoption
 (2026-05-29).
@@ -177,6 +198,41 @@ optimistic defaults.
 Rationale: an honest, written record of where the tool stops is what lets the
 next person — without the authors — pick it up safely.
 
+### VII. Strict on Self-Authored Data (fail-fast at the trust boundary)
+
+There is a trust boundary between data this pipeline produces (and forbids
+editing) and input it does not control. The pipeline MUST be **ruthless** on
+its own side of that boundary and **forgiving** only on the far side:
+
+- **Zone A — our data and our invariants (hard-fail).** The CSV identity
+  columns the schema marks *Empty allowed? = no* (`publication`, `gram_id`,
+  `topic_type`, `sequence`, `topic_filename`) and any value whose emptiness
+  would silently corrupt one of our own invariants. A blank or missing Zone-A
+  value is a defect in *our* pipeline: it MUST fail loud at the point of use
+  (`require_field` raising `PipelineDataError`), never be coerced to `""` and
+  carried forward into a malformed topic.
+- **Zone B — uncertain author judgement (warn and defer).** Governed by
+  Principle IV: human-editable cells and ambiguous source values are
+  warned-and-deferred or skipped-and-reported, not crashed.
+- **Zone C — external legacy artifacts (warn and dangle).** The `.pptx`
+  corpus, the `.glc` files, and on-disk assets: a missing or malformed one is
+  logged and the topic still emits with its intended local href (the
+  dangling-asset rule), so dropping the asset in and re-running resolves it.
+
+This principle is the **complement** of Principle IV, not a loosening of it:
+IV protects the author from confident wrong guesses about *messy source*;
+VII protects the output from silent defects in *data we authored*. Where an
+externally-sourced value (Zone C) is consumed as the key to one of our own
+invariants — e.g. a `.wav` row's `(time_end, bandwidth, bandcentre)` view,
+which is the audio-dedup key — it is **promoted to Zone A** and hard-fails on
+blank, because being forgiving at the boundary must never extend to corrupting
+our own logic.
+
+Rationale: the highest-risk failure for this tooling is a *silent* miscoercion
+on the real, unit-test-thin corpus — a wrong but plausible publication shipped
+without anyone noticing. A loud abort on our own malformed data is always
+preferable to a quiet, plausible-looking wrong answer.
+
 ## Development-Phase Posture
 
 The project is **pre-production**: it owns all of its artifacts and has no
@@ -224,4 +280,4 @@ deviation. Unjustified complexity is grounds for rejection.
 humans) provide day-to-day guidance and MUST remain consistent with this
 constitution.
 
-**Version**: 1.2.0 | **Ratified**: 2026-05-29 | **Last Amended**: 2026-06-11
+**Version**: 1.3.0 | **Ratified**: 2026-05-29 | **Last Amended**: 2026-06-19

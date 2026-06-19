@@ -241,6 +241,18 @@ independently, so each must be self-contained.
 - **Missing assets dangle, they don't crash.** If a referenced asset is absent,
   the generator logs a warning and still emits the topic with its intended local
   href; dropping the asset in and re-running resolves it without churning the XML.
+- **Strict on our own data; forgiving only at the boundary (constitution VII).**
+  Be ruthless with data the pipeline produces and forbids editing — the CSV
+  *identity* columns (`publication`, `gram_id`, `topic_type`, `sequence`,
+  `topic_filename`) and any value whose emptiness would corrupt one of our own
+  invariants (the `.wav` dedup view fields `time_end`/`bandwidth`/`bandcentre`).
+  A blank one hard-fails at the point of use via `require_field` →
+  `PipelineDataError`, never a silent `.get(field, "")` coercion. This is the
+  *complement* of the rule above, not a contradiction: missing external assets
+  still dangle (Zone C) and uncertain *author* cells are still warned-and-
+  deferred per Human-in-the-Loop (Zone B); only our own malformed data crashes.
+  Schema-`Empty allowed?=yes` columns (`chapter` on a test, `vessel_name`, …)
+  stay forgiving — don't pass them to `require_field`.
 - **Dual logging.** Stages write a DEBUG log at the repo root
   (`generate.log`, `extract.log`, `introspect.log`) alongside console output —
   the primary debugging surface on the air-gapped network.

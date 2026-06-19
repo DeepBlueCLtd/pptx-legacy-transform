@@ -136,9 +136,11 @@ class DeduplicateCsvTests(unittest.TestCase):
         _, rows = _read(out)
         self.assertTrue(all(r["master_png_path"] == "" for r in rows))
 
-    def test_wav_missing_view_never_merged(self) -> None:
-        """A byte-identical .wav row with a blank time_end or bandwidth has
-        no confirmable view -> left non-redirected with a WARNING."""
+    def test_wav_missing_view_hard_fails(self) -> None:
+        """A byte-identical .wav row with a blank view field hard-fails
+        (constitution VII): the view is the dedup key, so a blank one would
+        silently mis-pair audio. The run aborts with a PipelineDataError
+        rather than the old tolerant 'left non-redirected' behaviour."""
         noview = self.tmp / "noview.csv"
         cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
                 "sequence", "topic_filename", "display_text", "link_href",
@@ -149,7 +151,7 @@ class DeduplicateCsvTests(unittest.TestCase):
                                lineterminator="\r\n")
             w.writeheader()
             # master.wav and dup1.wav are byte-identical on disk; the view
-            # cells are blank so the merge cannot be confirmed.
+            # cells are blank, which is now a hard-fail rather than tolerated.
             for gid, glc, png in (
                 ("40", "dedup/audio/master.glc", "dedup/audio/master.wav"),
                 ("41", "dedup/audio/dup1.glc", "dedup/audio/dup1.wav"),
@@ -161,11 +163,34 @@ class DeduplicateCsvTests(unittest.TestCase):
                 })
         out = self.tmp / "noview_out.csv"
         self.assertEqual(deduplicate_csv.main(
-            ["--csv", str(noview), "--image-root", str(FIXTURES), "--out", str(out)]), 0)
-        _, rows = _read(out)
-        self.assertTrue(all(r["master_png_path"] == "" for r in rows))
+            ["--csv", str(noview), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
+        self.assertFalse(out.exists(), "no CSV written when the run aborts")
         log = Path("dedup.log").read_text(encoding="utf-8")
-        self.assertIn("view cannot be confirmed", log)
+        self.assertIn("missing or blank", log)
+        self.assertIn("time_end", log)
+
+    def test_blank_identity_column_aborts(self) -> None:
+        """A blank required identity column (gram_id) is a defect in our own
+        artifact and aborts the run (constitution VII), rather than being
+        renumbered/deduped past silently."""
+        bad = self.tmp / "blank_id.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "display_text", "link_href",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path", "file_size",
+                "wav_treatment", "warnings"]
+        with bad.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            w.writerow({c: "" for c in cols} | {
+                "publication": "main", "chapter": "X", "gram_id": "",
+                "topic_type": "glc", "sequence": "1", "png_path": "images/a.png",
+            })
+        out = self.tmp / "blank_id_out.csv"
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(bad), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
+        self.assertFalse(out.exists(), "no CSV written when the run aborts")
+        self.assertIn("missing or blank", Path("dedup.log").read_text(encoding="utf-8"))
 
     # -- T033: missing asset left unredirected with WARNING -----------------
     def test_missing_asset_left_unredirected_with_warning(self) -> None:
