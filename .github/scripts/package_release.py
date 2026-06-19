@@ -3,8 +3,9 @@
 
 The archive mirrors "Project layout on the target" (README.md), the
 layout the repo itself now follows: the canonical scripts ship from
-``scripts/`` as-is; ``static/``, ``stock.wav``, ``requirements.txt`` and
-``README.md`` sit at the archive root. The operator extracts it straight
+``scripts/`` as-is; ``static/``, ``theme/`` (Oxygen overlays such as the
+GramFrame plugin), ``stock.wav``, ``requirements.txt`` and ``README.md``
+sit at the archive root. The operator extracts it straight
 over ``ROOT\\`` on the target — the dev-only mock tooling, ``source\\``
 and ``reports\\`` are not in the archive.
 
@@ -78,6 +79,16 @@ def collect_entries():
                 entries.append((path, path.relative_to(REPO_ROOT).as_posix()))
     else:
         print("WARNING: static/ missing; archive carries no common pages", file=sys.stderr)
+    # theme/ carries the Oxygen overlay(s) the operator installs into the
+    # production publisher (e.g. the GramFrame plugin bundle + head fragment).
+    # Unlike scripts/vendor/ (dev/CI-only), these must reach the air-gapped box.
+    theme_root = REPO_ROOT / "theme"
+    if theme_root.is_dir():
+        for path in theme_root.rglob("*"):
+            if path.is_file():
+                entries.append((path, path.relative_to(REPO_ROOT).as_posix()))
+    else:
+        print("WARNING: theme/ missing; archive carries no Oxygen overlays", file=sys.stderr)
     return sorted(entries, key=lambda entry: entry[1])
 
 

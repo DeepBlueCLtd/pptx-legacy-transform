@@ -50,6 +50,13 @@ class PackageReleaseTests(unittest.TestCase):
             self.assertIn("scripts/" + canonical, names)
         self.assertIn("static/welcome.dita", names)
         self.assertIn("static/security.dita", names)
+        # The Oxygen GramFrame overlay travels under theme/ so the production
+        # publisher on the air-gapped box can render interactive grams.
+        self.assertIn(
+            "theme/gramframe-oxygen/resources/gramframe.bundle.js", names)
+        self.assertIn(
+            "theme/gramframe-oxygen/page-templates-fragments/libraries/gramframe.xml",
+            names)
         self.assertIn("stock.wav", names)
         self.assertIn("requirements.txt", names)
         self.assertIn("README.md", names)
@@ -67,6 +74,7 @@ class PackageReleaseTests(unittest.TestCase):
             allowed = (
                 name.startswith("scripts/")
                 or name.startswith("static/")
+                or name.startswith("theme/")
                 or name.startswith("wrappers/")
                 or name in self.module.ROOT_FILES
             )
@@ -85,6 +93,20 @@ class PackageReleaseTests(unittest.TestCase):
         # not part of the archive contract.
         self.assertFalse(any(n.startswith("scripts/vendor/") for n in names),
                          "vendor assets must not ship in the archive")
+
+    def test_theme_bundle_matches_vendored_bundle(self):
+        # The Oxygen overlay's GramFrame bundle must stay byte-identical to the
+        # one publish_html.py vendors, so the production publish and the dev
+        # preview render grams the same way.
+        vendored = REPO_ROOT / "scripts" / "vendor" / "gramframe" / "gramframe.bundle.js"
+        overlay = (REPO_ROOT / "theme" / "gramframe-oxygen" / "resources"
+                   / "gramframe.bundle.js")
+        self.assertTrue(vendored.is_file(), "vendored GramFrame bundle missing")
+        self.assertTrue(overlay.is_file(), "overlay GramFrame bundle missing")
+        self.assertEqual(
+            vendored.read_bytes(), overlay.read_bytes(),
+            "theme/ GramFrame bundle has drifted from scripts/vendor/gramframe/; "
+            "update both copies (and their VERSION files) together")
 
     def test_rebuild_is_byte_identical(self):
         first = self._build("first.zip")
