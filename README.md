@@ -441,10 +441,11 @@ Reviewers should not edit the identity columns
 | 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run; always a `.glc` in the audited corpus. |
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
 | 11 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
-| 12 | `freq_end` | yes | From GLC `bandwidth`; numeric string. |
-| 13 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg`/`.gif` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
-| 14 | `wav_treatment` | yes | Deprecated; left blank. Retained only for CSV round-trip compatibility. |
-| 15 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
+| 12 | `bandwidth` | yes | From GLC `bandwidth`; numeric string. Width of the frequency band. |
+| 13 | `bandcentre` | yes | From GLC `bandcentre`; numeric string. Centre of the band. The frequency axis is derived from the pair: `freq_start = bandcentre − bandwidth/2`, `freq_end = bandcentre + bandwidth/2` (issue #87). Replaces the former single `freq_end` column. |
+| 14 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg`/`.gif` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
+| 15 | `wav_treatment` | yes | Deprecated; left blank. Retained only for CSV round-trip compatibility. |
+| 16 | `warnings` | yes (clear after fix) | Comma-joined recoverable issues. |
 
 Optional, additive columns are appended at the right edge and read with an
 empty default, so a CSV without them behaves exactly as before:
@@ -452,7 +453,7 @@ empty default, so a CSV without them behaves exactly as before:
 | Column | Written by | Notes |
 |---|---|---|
 | `target_chapter` | extractor / author | **Feature 008/009:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; for a **no-week** deck (e.g. Pub10, Legacy Pub 10) extraction now **even-slices** the deck's grams across the four weeks (`floor(G/4)` per week, remainder to the earliest weeks, in source order) instead of leaving it blank (feature 009). Remains author-editable. The generator expands a bare integer to heading `Week N` and folder `main/week-N/` (`main` carries no per-document tier). Empty falls back to the source `chapter`. |
-| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected; for `.wav` rows "genuinely duplicate" also requires identical `time_end`/`freq_end` — two `.glc` files windowing the same recording differently are never merged, so neither student view is lost (issue #78). Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected; for `.wav` rows "genuinely duplicate" also requires identical `time_end`/`bandwidth`/`bandcentre` — two `.glc` files windowing the same recording differently are never merged, so neither student view is lost (issues #78, #87). Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
 | `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) keeps numbering unique *within* each week — native numbers are preserved and only genuine collisions are bumped to one past the week's maximum (the feature-008 behaviour; the same number may recur in different weeks); **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-week rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong
@@ -611,7 +612,7 @@ canonical air-gapped test surface.
 | `extract_to_csv.py` exits 0 with empty CSV. | `--input-root` does not contain any `.pptx`. | Verify the path; the walker is recursive. |
 | CSV opens with garbled non-ASCII vessel names in Excel. | The file lost its BOM during Save As. | Re-export from Excel via *File → Save As → CSV UTF-8*. |
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
-| `GLC missing bottom_crop` / `bandwidth` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `freq_end` directly or accept the empty defaults. |
+| `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Author may either fill `time_end` / `bandwidth` / `bandcentre` directly or accept the empty defaults (a blank `bandcentre` falls back to a band starting at zero). |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
 | Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 
