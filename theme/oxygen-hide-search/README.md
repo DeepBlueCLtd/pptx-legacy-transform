@@ -20,13 +20,13 @@ Instead, the **pipeline marks each page with its edition** and one shared
 stylesheet does the hiding:
 
 - `generate_dita` stamps a hidden, instructor-only marker —
-  `<p class="edition-instructor">`, carrying `audience="-trainee"` — onto
+  `<p class="gf-persistent">`, carrying `audience="-trainee"` — onto
   **every** page (every gram topic, every Week sub-document, and the copied
   static Welcome/Security pages).
 - The **trainee DITAVAL strips it in the student build**, so instructor
-  pages carry `.edition-instructor` and student pages carry none.
+  pages carry `.gf-persistent` and student pages carry none.
 - `hide-search.css` hides `#searchForm` on any page that does **not** carry
-  the marker (`body:not(:has(.edition-instructor)) #searchForm`).
+  the marker (`body:not(:has(.gf-persistent)) #searchForm`).
 
 Because the marker only ever survives in instructor output, the student
 "no instructor" leakage check (SC-002) is unaffected — and `:has()` is the
@@ -111,7 +111,7 @@ publishing template:
 This overlay is for the **production Oxygen publish**. The
 `scripts/publish_html.py` DITA-OT dev preview does not emit a WebHelp search
 box at all, so there is nothing to hide there; its theme simply hides the
-marker element (`.edition-instructor`) so the empty paragraph never shows.
+marker element (`.gf-persistent`) so the empty paragraph never shows.
 
 ## Sources
 

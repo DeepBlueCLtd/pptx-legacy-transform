@@ -529,7 +529,7 @@ class GenerateDitaTests(unittest.TestCase):
                 root = ET.parse(dst).getroot()
                 marker = root.find("body")[0]
                 self.assertEqual(marker.tag, "p")
-                self.assertEqual(marker.get("outputclass"), "edition-instructor")
+                self.assertEqual(marker.get("outputclass"), "gf-persistent")
                 self.assertEqual(marker.get("audience"), "-trainee")
 
     def test_missing_static_root_degrades_gracefully(self) -> None:
@@ -564,7 +564,7 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertIsNotNone(body, f"{topic} has no body to mark")
             marker = body[0]
             self.assertEqual(marker.tag, "p", f"{topic} marker is not first")
-            self.assertEqual(marker.get("outputclass"), "edition-instructor", topic)
+            self.assertEqual(marker.get("outputclass"), "gf-persistent", topic)
             self.assertEqual(marker.get("audience"), "-trainee", topic)
 
     def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
