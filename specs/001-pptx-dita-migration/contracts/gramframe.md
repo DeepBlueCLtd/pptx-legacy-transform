@@ -135,3 +135,42 @@ the `.wav` next to it, and renders the spectrogram interactively.
 The bundle ignores anything that is not a `table.gram-config`, so the
 GLC-viewer-link blocks render as plain HTML next to the GramFrame
 viewers without interference.
+
+## 6. Persistent annotations: instructor vs student (GramFrame >= v0.1.10)
+
+From v0.1.10 GramFrame persists each viewer's annotations (markers,
+harmonics, the control-panel table) to browser storage and restores
+them on reload. **Which storage it uses depends on a per-page context
+it auto-detects.** On every save/load GramFrame calls
+`document.getElementById("gf-persistent")`:
+
+- **Trainer (instructor) context** — when an element with
+  `id="gf-persistent"` is present (or, as a fallback heuristic, an
+  `<a>` whose trimmed text is exactly `ANALYSIS`). Annotations are
+  written to `localStorage`, so they **survive across reloads and
+  browser sessions**.
+- **Student context** — when neither is present. Annotations go to
+  `sessionStorage` and are **cleared when the tab closes**.
+
+Storage keys are namespaced per page path (`gramframe::<pathname>`,
+suffixed `::<n>` for the n-th viewer on a multi-gram page), so grams on
+different pages never collide.
+
+The generator satisfies this contract by rendering the marker id as the
+HTML `id` of the **instructor-only edition marker** it already stamps on
+every topic body (`GF_PERSISTENT_MARKER_ID` in `generate_dita.py`):
+
+```xml
+<p audience="-trainee" id="gf-persistent" outputclass="edition-instructor"/>
+```
+
+Because the marker carries `audience="-trainee"`, the trainee DITAVAL
+strips it from the student build. The instructor edition therefore ships
+`id="gf-persistent"` (→ `localStorage`, annotations persist) while the
+student editions ship neither the id nor an `ANALYSIS` link (→
+`sessionStorage`, annotations are ephemeral). No new element and no new
+profiling axis are introduced — the persistence opt-in rides the exact
+same instructor-only DITAVAL filtering as the edition stylesheet signal.
+DITA-OT and Oxygen both pass an explicit `@id` straight through to the
+rendered HTML `id` (the in-page analysis-sheet jump link relies on the
+same passthrough), so `getElementById` finds it.

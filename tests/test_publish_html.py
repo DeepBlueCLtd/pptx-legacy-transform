@@ -670,7 +670,7 @@ class InjectGramframePluginTests(unittest.TestCase):
                 )
 
     def test_vendored_bundle_is_present_in_repo(self):
-        """The v0.1.9 bundle must be committed alongside the publisher."""
+        """The v0.1.10 bundle must be committed alongside the publisher."""
         self.assertTrue(
             publish_html.GRAMFRAME_BUNDLE_SRC.is_file(),
             f"Vendor the GramFrame bundle at "

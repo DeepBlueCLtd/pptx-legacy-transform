@@ -91,6 +91,18 @@ GRAMS_NAVTITLE = "Grams"
 # output, so it never trips the student "no instructor" leakage check (SC-002).
 EDITION_MARKER_OUTPUTCLASS = "edition-instructor"
 
+# The same per-page marker doubles as GramFrame's persistence opt-in (GramFrame
+# >= v0.1.10). On every save/load GramFrame calls
+# ``document.getElementById("gf-persistent")``: when that element is present it
+# treats the page as the *trainer* (instructor) context and persists spectrogram
+# annotations to ``localStorage`` (survives reloads); when absent it falls back
+# to ``sessionStorage`` (cleared when the tab closes). We render the id as the
+# HTML ``id`` of the audience="-trainee" edition marker, so it survives only in
+# the instructor build — instructor annotations persist, student annotations
+# stay ephemeral — riding the exact same DITAVAL profiling, no new element. See
+# ``specs/001-pptx-dita-migration/contracts/gramframe.md`` §6.
+GF_PERSISTENT_MARKER_ID = "gf-persistent"
+
 # Topic body-group open tags into which a static page's edition marker is
 # inserted (string surgery, so the author's formatting is preserved elsewhere).
 _STATIC_BODY_OPEN_RE = re.compile(
@@ -837,9 +849,15 @@ def _append_edition_marker(body: ET.Element) -> None:
     stylesheet reads (see ``EDITION_MARKER_OUTPUTCLASS``). The empty ``<p>``
     renders nothing useful on its own — the theme hides ``.edition-instructor``
     — its presence/absence is the whole payload.
+
+    The marker's HTML ``id`` (``gf-persistent``) is also GramFrame's persistence
+    opt-in: present only in the instructor build, it makes GramFrame persist this
+    page's spectrogram annotations to ``localStorage`` (see
+    ``GF_PERSISTENT_MARKER_ID``).
     """
     body.insert(0, ET.Element("p", {
         "audience": "-trainee", "outputclass": EDITION_MARKER_OUTPUTCLASS,
+        "id": GF_PERSISTENT_MARKER_ID,
     }))
 
 
@@ -854,7 +872,7 @@ def _inject_static_edition_marker(text: str, source: Path) -> str:
     generation still succeeds (graceful degradation).
     """
     marker = (
-        f'\n    <p audience="-trainee" '
+        f'\n    <p audience="-trainee" id="{GF_PERSISTENT_MARKER_ID}" '
         f'outputclass="{EDITION_MARKER_OUTPUTCLASS}"/>'
     )
     new_text, count = _STATIC_BODY_OPEN_RE.subn(

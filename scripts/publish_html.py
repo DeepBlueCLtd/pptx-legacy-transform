@@ -511,7 +511,7 @@ def inject_gramframe_plugin(
     if not bundle_src.is_file():
         raise FileNotFoundError(
             f"GramFrame bundle missing at {bundle_src}. "
-            "Vendor the v0.1.9 release asset before publishing."
+            "Vendor the v0.1.10 release asset before publishing."
         )
     bundle_dest = out_root / GRAMFRAME_BUNDLE_NAME
     bundle_dest.parent.mkdir(parents=True, exist_ok=True)

@@ -16,6 +16,15 @@ interactive viewer; it no-ops on pages with no `gram-config` table. This is the
 same contract `scripts/vendor/themes/operator-console-v2/README.md` calls out
 under *"What the host must still do"*, item 3.
 
+From **v0.1.10** the bundle also persists spectrogram annotations to browser
+storage. `generate_dita.py` stamps an instructor-only `id="gf-persistent"`
+marker on every page (`audience="-trainee"`, so the trainee DITAVAL strips it
+from the student build), which switches the bundle into its *trainer* context:
+the instructor edition persists annotations to `localStorage` (they survive
+reloads), while the student editions fall back to ephemeral `sessionStorage`.
+Nothing extra to install — Oxygen passes the marker through to the rendered
+page. See `specs/001-pptx-dita-migration/contracts/gramframe.md` §6.
+
 ## Layout
 
 ```text
@@ -83,7 +92,7 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
 ## Keep the bundle in sync
 
 The bundle here is a copy of `scripts/vendor/gramframe/gramframe.bundle.js`
-(see `resources/VERSION` — currently **v0.1.9**). They must stay byte-identical
+(see `resources/VERSION` — currently **v0.1.10**). They must stay byte-identical
 so the Oxygen production output and the `publish_html.py` dev preview render
 grams the same way; `tests/test_package_release.py` enforces this. When you bump
 GramFrame, update **both** copies and the `VERSION` files together.

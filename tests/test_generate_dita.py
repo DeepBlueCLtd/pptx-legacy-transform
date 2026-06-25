@@ -531,6 +531,7 @@ class GenerateDitaTests(unittest.TestCase):
                 self.assertEqual(marker.tag, "p")
                 self.assertEqual(marker.get("outputclass"), "edition-instructor")
                 self.assertEqual(marker.get("audience"), "-trainee")
+                self.assertEqual(marker.get("id"), "gf-persistent")
 
     def test_missing_static_root_degrades_gracefully(self) -> None:
         """An absent static root omits the common pages (no root topicref) but
@@ -566,6 +567,30 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertEqual(marker.tag, "p", f"{topic} marker is not first")
             self.assertEqual(marker.get("outputclass"), "edition-instructor", topic)
             self.assertEqual(marker.get("audience"), "-trainee", topic)
+
+    def test_edition_marker_carries_gramframe_persistence_id(self) -> None:
+        """The instructor-only edition marker doubles as GramFrame's persistence
+        opt-in: it carries the HTML ``id="gf-persistent"`` that makes GramFrame
+        (>= v0.1.10) persist annotations to ``localStorage`` for the instructor.
+        Because the marker is ``audience="-trainee"``, the trainee DITAVAL strips
+        it from the student build, so students fall back to ephemeral
+        ``sessionStorage`` — exactly the asymmetry we want.
+        """
+        _run(self.out)
+        topics = [p for p in self.out.rglob("*.dita")
+                  if ET.parse(p).getroot().tag == "topic"]
+        self.assertGreater(len(topics), 3, "expected several topic pages")
+        for topic in topics:
+            marker = ET.parse(topic).getroot().find("body")[0]
+            self.assertEqual(marker.get("id"), "gf-persistent", topic)
+            # The id rides the instructor-only profiling — never unguarded.
+            self.assertEqual(marker.get("audience"), "-trainee", topic)
+            # Exactly one marker per page: a second gf-persistent id would be a
+            # duplicate HTML id (getElementById only needs one, but duplicates
+            # are invalid HTML).
+            ids = [e.get("id") for e in ET.parse(topic).getroot().iter()
+                   if e.get("id") == "gf-persistent"]
+            self.assertEqual(len(ids), 1, f"{topic}: exactly one gf-persistent id")
 
     def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
         """A GLC row whose inner asset is a .wav renders as a §1.3

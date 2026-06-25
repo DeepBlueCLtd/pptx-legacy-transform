@@ -190,6 +190,15 @@ once per edition, producing `html/instructor/`, `html/student-own/`, and
 `html/student-other/` plus a shared `html/index.html`. Audience consistency
 across a gram's rows is enforced fail-fast in the generator.
 
+The same instructor/student split drives **GramFrame annotation persistence**
+(bundle >= v0.1.10). The generator stamps `id="gf-persistent"` on the
+instructor-only edition marker (`GF_PERSISTENT_MARKER_ID`, riding the existing
+`audience="-trainee"` profiling), which switches GramFrame into its *trainer*
+context: the instructor edition persists spectrogram annotations to
+`localStorage` (survives reloads) while the student editions, lacking the
+marker, fall back to ephemeral `sessionStorage`. See
+`specs/001-pptx-dita-migration/contracts/gramframe.md` §6.
+
 ### Static common pages and the publication nav (feature 010)
 
 Oxygen's webhelp renders every **direct child of a ditamap** as both a
