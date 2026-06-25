@@ -533,6 +533,38 @@ def inject_gramframe_plugin(
     return count
 
 
+# GramFrame >= v0.1.10 switches into its annotation-persisting *trainer* context
+# (localStorage instead of ephemeral sessionStorage) when the page carries an
+# element with the literal HTML id ``gf-persistent``. generate_dita.py stamps
+# that id on the instructor-only edition marker, but DITA-OT topic-scopes every
+# element id (``id="gram_01__gf-persistent"``), so ``getElementById`` would never
+# match. We normalise the topic-prefixed id back to the bare literal here, in the
+# rendered output. Only instructor pages carry the marker (the trainee DITAVAL
+# strips it from the student build), so this is a no-op on student pages — they
+# keep ephemeral storage, exactly as intended.
+_GF_PERSISTENT_ID = "gf-persistent"
+_GF_PERSISTENT_MANGLED_RE = re.compile(r'id="[^"]*' + _GF_PERSISTENT_ID + '"')
+
+
+def normalize_persistence_marker(out_root: Path) -> int:
+    """Rewrite DITA-OT's topic-prefixed ``…__gf-persistent`` id to the bare
+    ``gf-persistent`` literal GramFrame's trainer detection looks up.
+
+    Idempotent (the bare id still matches the pattern and rewrites to itself)
+    and deterministic. Returns the number of HTML files rewritten.
+    """
+    count = 0
+    for path in sorted(out_root.rglob("*.html")):
+        body = path.read_text(encoding="utf-8")
+        new_body, replaced = _GF_PERSISTENT_MANGLED_RE.subn(
+            f'id="{_GF_PERSISTENT_ID}"', body,
+        )
+        if replaced and new_body != body:
+            _write_text(path, new_body)
+            count += 1
+    return count
+
+
 # -----------------------------------------------------------------------------
 # Operator Console v2 dark theme
 # -----------------------------------------------------------------------------
@@ -1086,6 +1118,11 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[gramframe] vendored {GRAMFRAME_BUNDLE_NAME} into {args.out} "
             f"and linked it from {injected} HTML file(s)"
+        )
+        persisted = normalize_persistence_marker(args.out)
+        print(
+            f"[gramframe] normalised the gf-persistent marker id on "
+            f"{persisted} instructor HTML file(s)"
         )
         themed = inject_operator_console_theme(args.out)
         print(

@@ -17,13 +17,19 @@ same contract `scripts/vendor/themes/operator-console-v2/README.md` calls out
 under *"What the host must still do"*, item 3.
 
 From **v0.1.10** the bundle also persists spectrogram annotations to browser
-storage. `generate_dita.py` stamps an instructor-only `id="gf-persistent"`
-marker on every page (`audience="-trainee"`, so the trainee DITAVAL strips it
-from the student build), which switches the bundle into its *trainer* context:
-the instructor edition persists annotations to `localStorage` (they survive
-reloads), while the student editions fall back to ephemeral `sessionStorage`.
-Nothing extra to install — Oxygen passes the marker through to the rendered
-page. See `specs/001-pptx-dita-migration/contracts/gramframe.md` §6.
+storage, choosing `localStorage` (persistent) over `sessionStorage` (ephemeral)
+when the page carries an element with the literal id `gf-persistent`.
+`generate_dita.py` stamps that id on the instructor-only edition marker
+(`audience="-trainee"`, so the trainee DITAVAL strips it from the student
+build) — but DITA-OT/Oxygen topic-scope element ids (`gram_01__gf-persistent`),
+so `getElementById` would miss it. The `gramframe.xml` head fragment therefore
+includes a tiny inline `<script>` that normalises the prefixed id back to the
+bare literal client-side (keyed off the `.edition-instructor` marker) before the
+bundle initialises. Result: the instructor edition persists annotations across
+reloads, the student editions stay ephemeral. `publish_html.py` does the same
+normalisation statically for the dev preview
+(`normalize_persistence_marker`) — keep the two in sync. See
+`specs/001-pptx-dita-migration/contracts/gramframe.md` §6.
 
 ## Layout
 

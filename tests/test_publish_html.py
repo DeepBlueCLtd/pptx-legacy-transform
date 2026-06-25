@@ -32,6 +32,7 @@ from publish_html import (  # noqa: E402
     _dita_ot_command,
     inject_gramframe_plugin,
     inject_operator_console_theme,
+    normalize_persistence_marker,
     prettify_html,
     prettify_tree,
     publish,
@@ -681,6 +682,67 @@ class InjectGramframePluginTests(unittest.TestCase):
 # -----------------------------------------------------------------------------
 # Operator Console v2 dark-theme injection
 # -----------------------------------------------------------------------------
+
+
+class NormalizePersistenceMarkerTests(unittest.TestCase):
+    """``normalize_persistence_marker`` rewrites DITA-OT's topic-prefixed
+    ``…__gf-persistent`` id to the bare literal GramFrame's trainer detection
+    looks up — only on instructor pages (the trainee DITAVAL strips the marker
+    from the student build), so students keep ephemeral sessionStorage."""
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _page(marker_id: str | None) -> str:
+        marker = (
+            f'<p class="p edition-instructor" id="{marker_id}"></p>'
+            if marker_id is not None else ""
+        )
+        return (
+            '<!DOCTYPE html>\n<html lang="en">\n  <head><title>G</title></head>\n'
+            f'  <body>\n    {marker}\n'
+            '    <table class="gram-config"></table>\n'
+            '  </body>\n</html>\n'
+        )
+
+    def test_rewrites_topic_prefixed_id_to_bare_literal(self):
+        with TemporaryDirectory() as tmp_str:
+            out = Path(tmp_str) / "html"
+            instr = out / "instructor" / "main" / "gram-01" / "gram_01.html"
+            self._write(instr, self._page("gram_01__gf-persistent"))
+            count = normalize_persistence_marker(out)
+            self.assertEqual(count, 1)
+            body = instr.read_text(encoding="utf-8")
+            self.assertIn('id="gf-persistent"', body)
+            self.assertNotIn('gram_01__gf-persistent', body)
+
+    def test_student_page_without_marker_is_untouched(self):
+        with TemporaryDirectory() as tmp_str:
+            out = Path(tmp_str) / "html"
+            student = out / "student" / "main" / "gram-01" / "gram_01.html"
+            original = self._page(None)
+            self._write(student, original)
+            count = normalize_persistence_marker(out)
+            self.assertEqual(count, 0)
+            self.assertNotIn('gf-persistent',
+                             student.read_text(encoding="utf-8"))
+            self.assertEqual(student.read_text(encoding="utf-8"), original)
+
+    def test_is_idempotent(self):
+        with TemporaryDirectory() as tmp_str:
+            out = Path(tmp_str) / "html"
+            instr = out / "instructor" / "g.html"
+            self._write(instr, self._page("topic__gf-persistent"))
+            normalize_persistence_marker(out)
+            once = instr.read_text(encoding="utf-8")
+            second = normalize_persistence_marker(out)
+            twice = instr.read_text(encoding="utf-8")
+            self.assertEqual(second, 0)
+            self.assertEqual(once, twice)
+            self.assertEqual(once.count('id="gf-persistent"'), 1)
 
 
 class InjectOperatorConsoleThemeTests(unittest.TestCase):

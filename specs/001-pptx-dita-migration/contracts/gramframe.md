@@ -156,21 +156,41 @@ Storage keys are namespaced per page path (`gramframe::<pathname>`,
 suffixed `::<n>` for the n-th viewer on a multi-gram page), so grams on
 different pages never collide.
 
-The generator satisfies this contract by rendering the marker id as the
-HTML `id` of the **instructor-only edition marker** it already stamps on
-every topic body (`GF_PERSISTENT_MARKER_ID` in `generate_dita.py`):
+The generator stamps the marker id on the **instructor-only edition
+marker** it already places on every topic body
+(`GF_PERSISTENT_MARKER_ID` in `generate_dita.py`):
 
 ```xml
 <p audience="-trainee" id="gf-persistent" outputclass="edition-instructor"/>
 ```
 
 Because the marker carries `audience="-trainee"`, the trainee DITAVAL
-strips it from the student build. The instructor edition therefore ships
-`id="gf-persistent"` (→ `localStorage`, annotations persist) while the
-student editions ship neither the id nor an `ANALYSIS` link (→
-`sessionStorage`, annotations are ephemeral). No new element and no new
-profiling axis are introduced — the persistence opt-in rides the exact
-same instructor-only DITAVAL filtering as the edition stylesheet signal.
-DITA-OT and Oxygen both pass an explicit `@id` straight through to the
-rendered HTML `id` (the in-page analysis-sheet jump link relies on the
-same passthrough), so `getElementById` finds it.
+strips it from the student build, so only the instructor edition carries
+it — riding the exact same instructor-only profiling as the edition
+stylesheet signal, with no new element and no new profiling axis.
+
+### The DITA-OT id-prefix gotcha (why a publish-time normalisation is needed)
+
+DITA-OT (and Oxygen, which builds on it) **topic-scopes every non-topic
+element id**: the `@id="gf-persistent"` above renders as
+`id="gram_01__gf-persistent"`, not the bare literal. (This is *why* the
+in-page analysis-sheet jump link works — its `xref` href is rewritten to
+the same prefixed id — but it means GramFrame's
+`getElementById("gf-persistent")` would never match.) The DITA `@id`
+alone is therefore necessary but not sufficient; the rendered output must
+normalise the prefixed id back to the bare literal:
+
+- **Dev/CI preview** — `publish_html.py`'s `normalize_persistence_marker`
+  rewrites `id="…gf-persistent"` → `id="gf-persistent"` in the rendered
+  HTML. Only instructor pages carry the marker, so it is a no-op on
+  student pages. Static, deterministic, greppable in the output.
+- **Production (Oxygen)** — we can't post-process Oxygen's output, so the
+  `gramframe-oxygen` overlay ships a tiny inline `<script>` (in the topic
+  head fragment) that does the same normalisation client-side, keyed off
+  the `.edition-instructor` marker, before the deferred bundle's
+  `DOMContentLoaded` init runs. The two normalisations must stay in sync.
+
+Net effect: the instructor edition presents a literal `id="gf-persistent"`
+(→ `localStorage`, annotations persist across reloads) while the student
+editions present neither it nor an `ANALYSIS` link (→ `sessionStorage`,
+annotations are ephemeral).

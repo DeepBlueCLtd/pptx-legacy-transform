@@ -15,8 +15,28 @@
     Pin this bundle to the SAME GramFrame release as scripts/vendor/gramframe/
     (see resources/VERSION) so the Oxygen production output and the
     publish_html.py dev preview render grams identically.
+
+    Persistence shim (GramFrame >= v0.1.10): the bundle persists annotations to
+    localStorage (not ephemeral sessionStorage) only when the page has an element
+    with the literal id "gf-persistent". generate_dita.py stamps that id on the
+    instructor-only edition marker, but DITA-OT/Oxygen topic-scope every element
+    id ("gram_01__gf-persistent"), so getElementById would miss it. We can't
+    post-process Oxygen output, so the inline script below normalises the
+    topic-prefixed id back to the bare literal client-side, before the deferred
+    bundle's DOMContentLoaded init runs (the non-deferred inline script registers
+    its listener first). It is keyed off the .edition-instructor marker, which the
+    trainee DITAVAL strips from the student build, so student pages get neither
+    the id nor persistence. publish_html.py does the same rewrite statically for
+    the dev preview (normalize_persistence_marker). Keep the two in sync.
 -->
 <head xmlns:whc="http://www.oxygenxml.com/webhelp/components" whc:version="22.0">
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            if (document.getElementById("gf-persistent")) { return; }
+            var marker = document.querySelector(".edition-instructor");
+            if (marker) { marker.id = "gf-persistent"; }
+        });
+    </script>
     <script defer="defer"
         src="${oxygen-webhelp-assets-dir}/template/resources/gramframe.bundle.js?buildId=${oxygen-webhelp-build-number}"></script>
 </head>

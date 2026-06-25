@@ -193,11 +193,15 @@ across a gram's rows is enforced fail-fast in the generator.
 The same instructor/student split drives **GramFrame annotation persistence**
 (bundle >= v0.1.10). The generator stamps `id="gf-persistent"` on the
 instructor-only edition marker (`GF_PERSISTENT_MARKER_ID`, riding the existing
-`audience="-trainee"` profiling), which switches GramFrame into its *trainer*
-context: the instructor edition persists spectrogram annotations to
-`localStorage` (survives reloads) while the student editions, lacking the
-marker, fall back to ephemeral `sessionStorage`. See
-`specs/001-pptx-dita-migration/contracts/gramframe.md` §6.
+`audience="-trainee"` profiling). GramFrame switches into its *trainer* context
+(persist to `localStorage`, survives reloads) when it finds that literal id, and
+falls back to ephemeral `sessionStorage` otherwise — so the instructor edition
+persists annotations and the student editions don't. **Catch:** DITA-OT/Oxygen
+topic-scope the id (`gram_01__gf-persistent`), so the rendered output must
+normalise it back to the bare literal: `publish_html.py`'s
+`normalize_persistence_marker` does it statically for the dev preview, and the
+`gramframe-oxygen` overlay does it client-side for the Oxygen production build.
+See `specs/001-pptx-dita-migration/contracts/gramframe.md` §6.
 
 ### Static common pages and the publication nav (feature 010)
 
