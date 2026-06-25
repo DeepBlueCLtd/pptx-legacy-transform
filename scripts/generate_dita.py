@@ -82,14 +82,18 @@ GRAMS_NAVTITLE = "Grams"
 
 # Hidden, instructor-only per-page edition marker. The trainee DITAVAL strips
 # audience="-trainee", so this element survives only in the *instructor* build;
-# its outputclass surfaces it as ``<p class="edition-instructor">`` in the
-# rendered HTML. A single shared stylesheet keys the Oxygen WebHelp search box
-# (and the classification banner) off it — present means instructor, absent
-# means student — so both transformation scenarios can run the *same*
-# publishing template instead of a student-only variant whose only job is to
-# hide the (useless) search box. The class name only ever appears in instructor
-# output, so it never trips the student "no instructor" leakage check (SC-002).
-EDITION_MARKER_OUTPUTCLASS = "edition-instructor"
+# its outputclass surfaces it as ``<p class="gf-persistent">`` in the rendered
+# HTML. The class name is GramFrame's DITA-friendly trainer-context signal
+# (v0.1.11+): GramFrame detects ``class="gf-persistent"`` reliably because
+# DITA-OT/Oxygen pass @outputclass through to @class without rewriting it
+# (unlike @id, which they uniquify per-page). A single shared stylesheet also
+# keys the Oxygen WebHelp search box (and the classification banner) off it —
+# present means instructor, absent means student — so both transformation
+# scenarios can run the *same* publishing template instead of a student-only
+# variant whose only job is to hide the (useless) search box. The class name
+# only ever appears in instructor output, so it never trips the student "no
+# instructor" leakage check (SC-002).
+EDITION_MARKER_OUTPUTCLASS = "gf-persistent"
 
 # Topic body-group open tags into which a static page's edition marker is
 # inserted (string surgery, so the author's formatting is preserved elsewhere).
@@ -835,7 +839,7 @@ def _append_edition_marker(body: ET.Element) -> None:
     """Prepend the hidden instructor-only edition marker as the first child of a
     topic body, so every rendered page carries the per-edition signal the shared
     stylesheet reads (see ``EDITION_MARKER_OUTPUTCLASS``). The empty ``<p>``
-    renders nothing useful on its own — the theme hides ``.edition-instructor``
+    renders nothing useful on its own — the theme hides ``.gf-persistent``
     — its presence/absence is the whole payload.
     """
     body.insert(0, ET.Element("p", {

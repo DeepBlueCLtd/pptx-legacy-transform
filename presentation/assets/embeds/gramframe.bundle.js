@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
 (function() {
   // Inject CSS styles
   const style = document.createElement('style');
-  style.textContent = "/**\n * GramFrame Component Styles - Military/Industrial Theme\n */\n\n/* Container that replaces the config table */\n.gram-frame-container {\n  position: relative;\n  width: 100%;\n  max-width: 100%;\n  margin: 0;\n  padding: 0;\n  box-sizing: border-box;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  background: #1a1a1a;\n  transition: box-shadow 0.2s ease, border-color 0.2s ease;\n  margin-bottom: 20px;\n}\n\n/* Focus indicator for multiple instances */\n.gram-frame-container.gram-frame-focused {\n  box-shadow: 0 0 0 3px rgba(66, 139, 202, 0.5);\n  border-radius: 8px;\n}\n\n/* Military-style table layout for proper resizing */\n.gram-frame-table {\n  display: table;\n  width: 100%;\n  height: 100%;\n  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0f0f0f 100%);\n  border: 3px solid #444;\n  border-radius: 8px;\n  box-shadow: \n    inset 0 2px 4px rgba(255,255,255,0.1),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 4px 8px rgba(0,0,0,0.5);\n}\n\n.gram-frame-row {\n  display: table-row;\n}\n\n.gram-frame-row:nth-child(2) {\n  height: 100%; /* Main panel row should stretch */\n}\n\n.gram-frame-cell {\n  display: table-cell;\n  vertical-align: middle;\n  padding: 0;\n}\n\n\n/* Main panel with military frame */\n.gram-frame-main-panel {\n  padding: 15px;\n  background: linear-gradient(135deg, #333 0%, #1a1a1a 50%, #000 100%);\n  border: 3px solid #555;\n  border-radius: 8px;\n  box-shadow: \n    inset 0 3px 6px rgba(0,0,0,0.5),\n    inset 0 -2px 4px rgba(255,255,255,0.1),\n    0 0 10px rgba(0,0,0,0.7);\n  position: relative;\n}\n\n.gram-frame-main-panel:before {\n  content: '';\n  position: absolute;\n  top: 5px;\n  left: 5px;\n  right: 5px;\n  bottom: 5px;\n  border: 1px solid #666;\n  border-radius: 4px;\n  pointer-events: none;\n}\n\n/* SVG container for drawing the spectrogram and overlays */\n.gram-frame-svg {\n  display: block;\n  width: 100%;\n  height: auto;\n  background: #000;\n  border: 2px solid #333;\n  border-radius: 4px;\n  cursor: crosshair;\n  box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);\n}\n\n/* SVG image element for the spectrogram */\n.gram-frame-image {\n  /* Remove width/height CSS to allow SVG attributes to control positioning */\n}\n\n/* SVG axes styling - white on dark background */\n.gram-frame-axis-line {\n  stroke: #fff;\n  stroke-width: 1;\n  fill: none;\n}\n\n.gram-frame-axis-tick {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-major {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-minor {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-label {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 12px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n.gram-frame-axis-label-major {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 10px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n\n\n\n/* Military-style display panel */\n.gram-frame-display-panel {\n  padding: 10px;\n  background: linear-gradient(180deg, #333 0%, #1a1a1a 50%, #000 100%);\n  border-top: 2px solid #555;\n}\n\n.gram-frame-readout {\n  flex: 0 1 auto;\n  padding: 0;\n  background: transparent;\n}\n\n/* Harmonics mode CSS removed - now using unified layout */\n\n/* Harmonics layout container - two columns */\n\n/* Left column for controls - 40% width */\n.gram-frame-harmonics-controls {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n  flex: 0 0 40%;\n  max-width: 40%;\n}\n\n/* Top row in left column */\n.gram-frame-harmonics-top-row {\n  display: flex;\n  gap: 10px;\n  align-items: stretch;\n}\n\n/* Right column for table - 60% width */\n.gram-frame-harmonics-table-column {\n  flex: 0 0 60%;\n  max-width: 60%;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n}\n\n/* Make color picker more compact in harmonics mode */\n.gram-frame-harmonics-mode .gram-frame-color-picker {\n  margin: 0;\n}\n\n/* Harmonic panel layout - always visible in unified layout */\n\n/* Military-style display windows */\n.gram-frame-led {\n  font-family: 'Courier New', monospace;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  color: #00ff00; /* LED green */\n  padding: 6px 0px;\n  border: 0px solid #333;\n  border-radius: 4px;\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  min-width: 100px;\n  text-align: center;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  position: relative;\n  font-size: 11px;\n  height: fit-content;\n}\n\n.gram-frame-led:before {\n  content: '';\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  right: 2px;\n  bottom: 2px;\n  border: 1px solid #444;\n  border-radius: 2px;\n  pointer-events: none;\n}\n\n/* LED label */\n.gram-frame-led-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin-bottom: 4px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n/* LED value */\n.gram-frame-led-value {\n  font-size: 14px;\n  font-weight: bold;\n  text-shadow: 0 0 4px #00ff00;\n}\n\n/* Manual harmonic button */\n.gram-frame-manual-button {\n  padding: 6px 12px;\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  color: #ddd;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n  min-width: 80px;\n}\n\n.gram-frame-manual-button:hover {\n  background: linear-gradient(180deg, #7a7a7a 0%, #5a5a5a 50%, #3a3a3a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-manual-button:active {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n/* Color picker for harmonics */\n.gram-frame-color-picker {\n  margin-top: 0;\n  padding: 8px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  max-width: 200px;\n  flex-shrink: 0;\n}\n\n.gram-frame-color-picker-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin-bottom: 6px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.gram-frame-color-palette {\n  position: relative;\n}\n\n.gram-frame-color-canvas {\n  width: 140px;\n  max-width: 140px;\n  height: 20px;\n  border: 1px solid #555;\n  border-radius: 2px;\n  cursor: pointer;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);\n}\n\n.gram-frame-color-indicator {\n  position: absolute;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 3px;\n  height: 26px;\n  background: #fff;\n  border: 1px solid #000;\n  border-radius: 1px;\n  pointer-events: none;\n  box-shadow: 0 0 2px rgba(0,0,0,0.8);\n}\n\n/* Analysis mode layout styles */\n.gram-frame-analysis-layout {\n  height: 100%;\n}\n\n.gram-frame-analysis-controls {\n  align-self: flex-start;\n}\n\n.gram-frame-analysis-leds {\n  /* Side-by-side LEDs container */\n}\n\n.gram-frame-analysis-leds .gram-frame-led {\n  /* Ensure LEDs in the horizontal container are sized properly */\n  font-size: 9px; /* Slightly smaller to fit side-by-side */\n}\n\n.gram-frame-analysis-leds .gram-frame-led-label {\n  font-size: 8px; /* Smaller label text */\n  color: #00ff00;\n}\n\n.gram-frame-analysis-markers {\n  height: 100%;\n}\n\n/* Unified table styles for both markers and harmonics */\n.gram-frame-table-container {\n  padding: 0;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  min-height: 0;\n}\n\n.gram-frame-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 10px;\n  color: #ccc;\n  table-layout: fixed;\n}\n\n.gram-frame-table th {\n  background: #222;\n  color: #00ff00;\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  font-weight: bold;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.gram-frame-table td {\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  background: #1a1a1a;\n}\n\n.gram-frame-table tbody tr {\n  cursor: pointer;\n  transition: all 0.2s ease;\n  position: relative;\n}\n\n.gram-frame-table tbody tr:hover {\n  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.05),\n    inset 0 -1px 2px rgba(0,0,0,0.2),\n    0 0 4px rgba(255,255,255,0.1);\n}\n\n.gram-frame-table tbody tr:hover td {\n  background: transparent;\n}\n\n/* Legacy markers styles - kept for compatibility */\n.gram-frame-markers-container {\n  padding: 8px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n}\n\n.gram-frame-markers-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin: 0 0 8px 0;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.gram-frame-markers-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 10px;\n  color: #ccc;\n  table-layout: fixed;\n}\n\n.gram-frame-markers-table th {\n  background: #222;\n  color: #00ff00;\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  font-weight: bold;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.gram-frame-markers-table td {\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  background: #1a1a1a;\n}\n\n.gram-frame-color-swatch {\n  margin: 0 auto;\n  display: block;\n}\n\n.gram-frame-marker-delete-btn {\n  padding: 2px 6px;\n  border-radius: 2px;\n  transition: background-color 0.2s;\n}\n\n.gram-frame-marker-delete-btn:hover {\n  background-color: #ff4444 !important;\n  color: #fff !important;\n}\n\n/* Marker rendering styles */\n.gram-frame-marker-line {\n  opacity: 0.8;\n}\n\n.gram-frame-marker-point {\n  opacity: 0.9;\n}\n\n.gram-frame-current-color {\n  border: 1px solid #555;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);\n}\n\n/* Military-style mode selection header */\n.gram-frame-mode-header {\n  background: linear-gradient(180deg, #444 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border-bottom: 2px solid #555;\n  display: flex;\n  align-items: flex-start;\n  justify-content: flex-start;\n}\n\n.gram-frame-modes {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  justify-content: center;\n  align-items: stretch;\n  flex: 0 0 auto;\n  flex-shrink: 0;\n}\n\n.gram-frame-mode-group {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  width: 100%;\n  flex-wrap: nowrap;\n}\n\n/* Simplified left panel - no sub-columns needed */\n\n/* Guidance panel */\n.gram-frame-guidance {\n  flex: 1;\n  padding: 8px 12px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  color: #ccc;\n  font-size: 12px;\n  line-height: 1.4;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n}\n\n.gram-frame-guidance h4 {\n  margin: 0 0 6px 0;\n  font-size: 11px;\n  color: #00ff00;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n.gram-frame-guidance p {\n  margin: 0 0 4px 0;\n}\n\n/* Military-style metal buttons */\n.gram-frame-mode-btn {\n  padding: 8px 6px;\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  color: #ddd;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  flex: 1;\n  min-width: 0;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-command-btn {\n  padding: 8px 10px;\n  background: linear-gradient(180deg, #5a5a5a 0%, #3a3a3a 50%, #1a1a1a 100%);\n  color: #ddd;\n  border: 2px solid #444;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 14px;\n  line-height: 1;\n  flex: 0 0 auto;\n  min-width: 32px;\n  height: 36px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-mode-btn:hover {\n  background: linear-gradient(180deg, #7a7a7a 0%, #5a5a5a 50%, #3a3a3a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-mode-btn.active {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n  border-color: #4a8a4a;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    inset 0 -1px 2px rgba(255,255,255,0.1),\n    0 0 4px rgba(74, 138, 74, 0.3);\n}\n\n.gram-frame-mode-btn:active {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n.gram-frame-mode-btn:disabled,\n.gram-frame-mode-btn.disabled {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  color: #666;\n  border-color: #333;\n  cursor: not-allowed;\n  opacity: 0.6;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n}\n\n.gram-frame-mode-btn:disabled:hover,\n.gram-frame-mode-btn.disabled:hover {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n  transform: none;\n}\n\n.gram-frame-command-btn:hover:not(:disabled) {\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-command-btn:active:not(:disabled) {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n.gram-frame-command-btn:disabled {\n  background: linear-gradient(180deg, #333 0%, #222 50%, #111 100%);\n  color: #666;\n  border-color: #333;\n  cursor: not-allowed;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n}\n\n/* Rate input UI styles removed - backend functionality preserved */\n\n/* SVG cursor styles removed - using CSS cursor only */\n\n/* SVG Harmonic line styles */\n\n\n.gram-frame-harmonic-line {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: none;\n  stroke-linecap: round;\n}\n\n\n.gram-frame-harmonic-number {\n  font-family: Arial, sans-serif;\n  font-size: 12px;\n  font-weight: bold;\n  pointer-events: none;\n  /* Add text shadow for readability */\n  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.5));\n}\n\n/* SVG Harmonic Set styles (new system) */\n\n.gram-frame-harmonic-set-line {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: auto !important;\n  /*cursor: grab !important;*/\n  stroke-linecap: round;\n}\n\n.gram-frame-harmonic-set-line:hover {\n  stroke-width: 3;\n  /* cursor: grab !important; */\n}\n\n.gram-frame-harmonic-set-line:active {\n  cursor: grabbing !important;\n}\n\n/* Legacy harmonic styles (for backward compatibility) */\n.gram-frame-harmonic {\n  position: absolute;\n  height: 1px;\n  background-color: rgba(255, 255, 0, 0.7);\n  pointer-events: none;\n}\n\n\n\n/* Debug grid */\n\n/* Canvas boundary overlay */\n\n/* Message display */\n\n/* Error state */\n.gram-frame-error {\n  padding: 10px;\n  background-color: #f8d7da;\n  color: #721c24;\n  border: 1px solid #f5c6cb;\n  border-radius: 4px;\n  margin: 10px 0;\n}\n\n/* Legacy harmonic panel styles - now using unified table structure */\n\n.gram-frame-harmonic-spacing,\n.gram-frame-harmonic-rate {\n  font-size: 14px;\n  font-weight: bold;\n}\n\n.gram-frame-harmonic-color {\n  width: 20px;\n  height: 12px;\n  border: 1px solid #555;\n  border-radius: 2px;\n  display: inline-block;\n}\n\n.gram-frame-harmonic-delete {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ff6666;\n  border: 1px solid #555;\n  border-radius: 2px;\n  width: 20px;\n  height: 20px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  line-height: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: all 0.1s ease;\n}\n\n.gram-frame-harmonic-delete:hover {\n  background: linear-gradient(180deg, #8a5a5a 0%, #6a3a3a 50%, #4a2a2a 100%);\n  border-color: #777;\n}\n\n.gram-frame-harmonic-delete:active {\n  transform: translateY(1px);\n}\n\n.gram-frame-harmonic-empty {\n  color: #666;\n  font-style: italic;\n  text-align: center;\n  padding: 20px;\n  font-size: 12px;\n}\n\n/* Doppler mode styles */\n.gram-frame-doppler-fPlus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-fMinus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-crosshair {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-curve {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-guide {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-label {\n  pointer-events: none;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;\n}\n\n/* Cursor position readout styles */\n.gram-frame-cursor-readout {\n  display: flex;\n  gap: 15px;\n  margin-bottom: 10px;\n  padding: 8px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 1px solid #444;\n  border-radius: 4px;\n}\n\n.gram-frame-readout-item {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  min-width: 80px;\n}\n\n.gram-frame-readout-label {\n  font-size: 10px;\n  color: #aaa;\n  text-transform: uppercase;\n  margin-bottom: 2px;\n  font-weight: bold;\n}\n\n.gram-frame-readout-value {\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  font-weight: bold;\n  color: #00ff00;\n  background: #000;\n  padding: 4px 8px;\n  border: 1px solid #333;\n  border-radius: 2px;\n  text-align: center;\n  min-width: 60px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.8);\n}\n\n/* Modal dialog styles */\n.gram-frame-modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  background: rgba(0, 0, 0, 0.7);\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  z-index: 1000;\n}\n\n.gram-frame-modal {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border: 2px solid #555;\n  border-radius: 8px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);\n  min-width: 350px;\n  max-width: 500px;\n  color: #ddd;\n}\n\n.gram-frame-modal-header {\n  padding: 15px 20px;\n  border-bottom: 1px solid #444;\n  background: linear-gradient(180deg, #444 0%, #333 100%);\n  border-radius: 6px 6px 0 0;\n}\n\n.gram-frame-modal-header h3 {\n  margin: 0;\n  font-size: 16px;\n  color: #fff;\n  text-align: center;\n}\n\n.gram-frame-modal-body {\n  padding: 20px;\n}\n\n.gram-frame-modal-input-group {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.gram-frame-modal-input-group label {\n  font-weight: bold;\n  color: #ccc;\n  font-size: 14px;\n}\n\n.gram-frame-modal-input-group input {\n  padding: 10px 12px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  color: #fff;\n  font-size: 14px;\n  font-family: 'Courier New', monospace;\n}\n\n.gram-frame-modal-input-group input:focus {\n  outline: none;\n  border-color: #777;\n  box-shadow: 0 0 4px rgba(119, 119, 119, 0.3);\n}\n\n.gram-frame-modal-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin-top: 4px;\n}\n\n.gram-frame-modal-footer {\n  padding: 15px 20px;\n  border-top: 1px solid #444;\n  display: flex;\n  justify-content: flex-end;\n  gap: 10px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  border-radius: 0 0 6px 6px;\n}\n\n.gram-frame-modal-btn {\n  padding: 8px 16px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  transition: all 0.1s ease;\n  min-width: 80px;\n}\n\n.gram-frame-modal-cancel {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ffaaaa;\n}\n\n.gram-frame-modal-cancel:hover {\n  background: linear-gradient(180deg, #7a5a5a 0%, #5a3a3a 50%, #3a2a2a 100%);\n}\n\n.gram-frame-modal-add {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n}\n\n.gram-frame-modal-add:hover {\n  background: linear-gradient(180deg, #5a7a5a 0%, #3a5a3a 50%, #2a3a2a 100%);\n}\n\n.gram-frame-modal-add:disabled {\n  background: linear-gradient(180deg, #444 0%, #333 50%, #222 100%);\n  color: #666;\n  cursor: not-allowed;\n}\n\n.gram-frame-modal-btn:active:not(:disabled) {\n  transform: translateY(1px);\n}\n\n/* Zoom controls removed - now integrated into pan mode command buttons */\n\n/* Unified Layout Styles */\n.gram-frame-unified-layout {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  gap: 2px; /* Match JavaScript gap */\n  width: 100%;\n  height: 100%;\n  overflow: hidden; /* Prevent columns from overflowing container */\n}\n\n.gram-frame-left-column {\n  position: relative; /* Enable absolute positioning for child elements */\n  display: flex;\n  flex-direction: row;\n  gap: 4px;\n  flex: 0 0 600px;\n  width: 600px;\n  overflow: hidden;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n/* Left column sub-columns */\n.gram-frame-mode-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 0 0 130px;\n  width: 130px;\n  padding: 8px;\n  border: none;\n}\n\n.gram-frame-guidance-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 1;\n  min-width: 150px;\n  border: none;\n}\n\n.gram-frame-controls-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 0 0 210px;\n  width: 210px;\n  padding: 0px;\n  border: none;\n}\n\n.gram-frame-middle-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 160px;\n  width: 160px;\n  min-width: 160px;\n  max-width: 160px;\n  padding: 5px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n.gram-frame-right-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 200px;\n  min-width: 200px;\n  width: 200px;\n  padding: 5px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n.gram-frame-cursor-leds {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 6px;\n  align-items: flex-start;\n  flex: 0 0 auto;\n  height: fit-content;\n}\n\n.gram-frame-markers-persistent-container,\n.gram-frame-harmonics-persistent-container {\n  display: flex;\n  flex-direction: column;\n  flex: 1;\n  min-height: 0;\n}\n\n.gram-frame-markers-persistent-container h4,\n.gram-frame-harmonics-persistent-container h4 {\n  margin: 0 0 8px 0;\n  flex-shrink: 0;\n  color: #ddd;\n  font-size: 14px;\n  text-align: center;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  border-bottom: 1px solid #444;\n  padding-bottom: 4px;\n}\n\n.gram-frame-harmonics-button-container {\n  margin-bottom: 8px;\n  display: flex;\n  justify-content: center;\n}\n\n/* Responsive behavior for smaller screens */\n@media (max-width: 1200px) {\n  .gram-frame-unified-layout {\n    flex-direction: column;\n    gap: 8px;\n  }\n  \n  .gram-frame-left-column,\n  .gram-frame-middle-column,\n  .gram-frame-right-column {\n    flex: 0 0 auto;\n    min-height: 200px;\n  }\n}\n\n/* Selection highlighting for keyboard control */\n.gram-frame-selected-row {\n  background: linear-gradient(135deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%) !important;\n  color: #aaffaa !important;\n  outline: 2px solid #4a8a4a !important;\n  outline-offset: -1px;\n  position: relative;\n  z-index: 10;\n  box-shadow: \n    inset 0 2px 4px rgba(255,255,255,0.15),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 0 8px rgba(74, 138, 74, 0.6),\n    0 0 2px rgba(74, 138, 74, 0.8) !important;\n}\n\n.gram-frame-selected-row td {\n  color: #aaffaa !important;\n  border-color: #4a8a4a !important;\n  position: relative;\n  z-index: 11;\n}\n\n/* Enhanced table row interactivity - now handled by unified .gram-frame-table styles */\n\n/* Selected Doppler marker highlighting */\n.gram-frame-selected-doppler-marker {\n  stroke: #4a8a4a !important;\n  stroke-width: 3 !important;\n  filter: drop-shadow(0 0 8px rgba(74, 138, 74, 0.6)) !important;\n}\n\n.gram-frame-selected-doppler-marker[fill] {\n  fill: #4a8a4a !important;\n  stroke: #aaffaa !important;\n}\n\n";
+  style.textContent = "/**\n * GramFrame Component Styles - Military/Industrial Theme\n */\n\n/* Container that replaces the config table */\n.gram-frame-container {\n  position: relative;\n  width: 100%;\n  max-width: 100%;\n  margin: 0;\n  padding: 0;\n  box-sizing: border-box;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  background: #1a1a1a;\n  transition: box-shadow 0.2s ease, border-color 0.2s ease;\n  margin-bottom: 20px;\n}\n\n/* Focus indicator for multiple instances */\n.gram-frame-container.gram-frame-focused {\n  box-shadow: 0 0 0 3px rgba(66, 139, 202, 0.5);\n  border-radius: 8px;\n}\n\n/* Military-style table layout for proper resizing */\n.gram-frame-table {\n  display: table;\n  width: 100%;\n  height: 100%;\n  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0f0f0f 100%);\n  border: 3px solid #444;\n  border-radius: 8px;\n  box-shadow: \n    inset 0 2px 4px rgba(255,255,255,0.1),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 4px 8px rgba(0,0,0,0.5);\n}\n\n.gram-frame-row {\n  display: table-row;\n}\n\n.gram-frame-row:nth-child(2) {\n  height: 100%; /* Main panel row should stretch */\n}\n\n.gram-frame-cell {\n  display: table-cell;\n  vertical-align: middle;\n  padding: 0;\n}\n\n\n/* Main panel with military frame */\n.gram-frame-main-panel {\n  padding: 15px;\n  background: linear-gradient(135deg, #333 0%, #1a1a1a 50%, #000 100%);\n  border: 3px solid #555;\n  border-radius: 8px;\n  box-shadow: \n    inset 0 3px 6px rgba(0,0,0,0.5),\n    inset 0 -2px 4px rgba(255,255,255,0.1),\n    0 0 10px rgba(0,0,0,0.7);\n  position: relative;\n}\n\n.gram-frame-main-panel:before {\n  content: '';\n  position: absolute;\n  top: 5px;\n  left: 5px;\n  right: 5px;\n  bottom: 5px;\n  border: 1px solid #666;\n  border-radius: 4px;\n  pointer-events: none;\n}\n\n/* Expand/collapse image toggle — floats at the top-left of the image region,\n   clear of the time-axis labels (left margin is 60px). Landscape grams only. */\n.gram-frame-expand-toggle {\n  position: absolute;\n  top: 22px;   /* just inside the main-panel padding + SVG top margin */\n  left: 80px;  /* clear of the 60px time-axis margin */\n  z-index: 5;  /* above the SVG overlay */\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 15px;\n  line-height: 1;\n  color: #e6f2ff;\n  background: rgba(20, 30, 45, 0.55);\n  border: 1px solid rgba(180, 200, 230, 0.5);\n  border-radius: 4px;\n  cursor: pointer;\n  transition: background 0.12s ease, border-color 0.12s ease;\n}\n\n.gram-frame-expand-toggle:hover {\n  background: rgba(40, 60, 90, 0.8);\n  border-color: rgba(200, 220, 255, 0.8);\n}\n\n.gram-frame-expand-toggle:active {\n  transform: translateY(1px);\n}\n\n.gram-frame-expand-toggle[aria-pressed=\"true\"] {\n  background: rgba(60, 100, 60, 0.75);\n  border-color: rgba(150, 220, 150, 0.8);\n}\n\n/* SVG container for drawing the spectrogram and overlays */\n.gram-frame-svg {\n  display: block;\n  width: 100%;\n  height: auto;\n  background: #000;\n  border: 2px solid #333;\n  border-radius: 4px;\n  cursor: crosshair;\n  box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);\n}\n\n/* SVG image element for the spectrogram */\n.gram-frame-image {\n  /* Remove width/height CSS to allow SVG attributes to control positioning */\n}\n\n/* SVG axes styling - white on dark background */\n.gram-frame-axis-line {\n  stroke: #fff;\n  stroke-width: 1;\n  fill: none;\n}\n\n.gram-frame-axis-tick {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-major {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-minor {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-label {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 12px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n.gram-frame-axis-label-major {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 10px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n\n\n\n/* Military-style display panel */\n.gram-frame-display-panel {\n  padding: 10px;\n  background: linear-gradient(180deg, #333 0%, #1a1a1a 50%, #000 100%);\n  border-top: 2px solid #555;\n}\n\n.gram-frame-readout {\n  flex: 0 1 auto;\n  padding: 0;\n  background: transparent;\n}\n\n/* Harmonics mode CSS removed - now using unified layout */\n\n/* Harmonics layout container - two columns */\n\n/* Left column for controls - 40% width */\n.gram-frame-harmonics-controls {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n  flex: 0 0 40%;\n  max-width: 40%;\n}\n\n/* Top row in left column */\n.gram-frame-harmonics-top-row {\n  display: flex;\n  gap: 10px;\n  align-items: stretch;\n}\n\n/* Right column for table - 60% width */\n.gram-frame-harmonics-table-column {\n  flex: 0 0 60%;\n  max-width: 60%;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n}\n\n/* Make color picker more compact in harmonics mode */\n.gram-frame-harmonics-mode .gram-frame-color-picker {\n  margin: 0;\n}\n\n/* Harmonic panel layout - always visible in unified layout */\n\n/* Military-style display windows */\n.gram-frame-led {\n  font-family: 'Courier New', monospace;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  color: #00ff00; /* LED green */\n  padding: 6px 0px;\n  border: 0px solid #333;\n  border-radius: 4px;\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  min-width: 100px;\n  text-align: center;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  position: relative;\n  font-size: 11px;\n  height: fit-content;\n}\n\n.gram-frame-led:before {\n  content: '';\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  right: 2px;\n  bottom: 2px;\n  border: 1px solid #444;\n  border-radius: 2px;\n  pointer-events: none;\n}\n\n/* LED label */\n.gram-frame-led-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin-bottom: 4px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n/* LED value */\n.gram-frame-led-value {\n  font-size: 14px;\n  font-weight: bold;\n  text-shadow: 0 0 4px #00ff00;\n}\n\n/* Manual harmonic button */\n.gram-frame-manual-button {\n  padding: 6px 12px;\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  color: #ddd;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n  min-width: 80px;\n}\n\n.gram-frame-manual-button:hover {\n  background: linear-gradient(180deg, #7a7a7a 0%, #5a5a5a 50%, #3a3a3a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-manual-button:active {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n/* Color picker for harmonics */\n.gram-frame-color-picker {\n  margin-top: 0;\n  padding: 8px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  max-width: 200px;\n  flex-shrink: 0;\n}\n\n.gram-frame-color-picker-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin-bottom: 6px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.gram-frame-color-palette {\n  position: relative;\n}\n\n.gram-frame-color-canvas {\n  width: 140px;\n  max-width: 140px;\n  height: 20px;\n  border: 1px solid #555;\n  border-radius: 2px;\n  cursor: pointer;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);\n}\n\n.gram-frame-color-indicator {\n  position: absolute;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 3px;\n  height: 26px;\n  background: #fff;\n  border: 1px solid #000;\n  border-radius: 1px;\n  pointer-events: none;\n  box-shadow: 0 0 2px rgba(0,0,0,0.8);\n}\n\n/* Analysis mode layout styles */\n.gram-frame-analysis-layout {\n  height: 100%;\n}\n\n.gram-frame-analysis-controls {\n  align-self: flex-start;\n}\n\n.gram-frame-analysis-leds {\n  /* Side-by-side LEDs container */\n}\n\n.gram-frame-analysis-leds .gram-frame-led {\n  /* Ensure LEDs in the horizontal container are sized properly */\n  font-size: 9px; /* Slightly smaller to fit side-by-side */\n}\n\n.gram-frame-analysis-leds .gram-frame-led-label {\n  font-size: 8px; /* Smaller label text */\n  color: #00ff00;\n}\n\n.gram-frame-analysis-markers {\n  height: 100%;\n}\n\n/* Unified table styles for both markers and harmonics */\n.gram-frame-table-container {\n  padding: 0;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  min-height: 0;\n}\n\n.gram-frame-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 10px;\n  color: #ccc;\n  table-layout: fixed;\n}\n\n.gram-frame-table th {\n  background: #222;\n  color: #00ff00;\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  font-weight: bold;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.gram-frame-table td {\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  background: #1a1a1a;\n}\n\n.gram-frame-table tbody tr {\n  cursor: pointer;\n  transition: all 0.2s ease;\n  position: relative;\n}\n\n.gram-frame-table tbody tr:hover {\n  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.05),\n    inset 0 -1px 2px rgba(0,0,0,0.2),\n    0 0 4px rgba(255,255,255,0.1);\n}\n\n.gram-frame-table tbody tr:hover td {\n  background: transparent;\n}\n\n/* Legacy markers styles - kept for compatibility */\n.gram-frame-markers-container {\n  padding: 8px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n}\n\n.gram-frame-markers-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin: 0 0 8px 0;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.gram-frame-markers-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 10px;\n  color: #ccc;\n  table-layout: fixed;\n}\n\n.gram-frame-markers-table th {\n  background: #222;\n  color: #00ff00;\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  font-weight: bold;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.gram-frame-markers-table td {\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  background: #1a1a1a;\n}\n\n.gram-frame-color-swatch {\n  margin: 0 auto;\n  display: block;\n}\n\n.gram-frame-marker-delete-btn {\n  padding: 2px 6px;\n  border-radius: 2px;\n  transition: background-color 0.2s;\n}\n\n.gram-frame-marker-delete-btn:hover {\n  background-color: #ff4444 !important;\n  color: #fff !important;\n}\n\n/* Marker rendering styles */\n.gram-frame-marker-line {\n  opacity: 0.8;\n}\n\n.gram-frame-marker-point {\n  opacity: 0.9;\n}\n\n.gram-frame-current-color {\n  border: 1px solid #555;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);\n}\n\n/* Military-style mode selection header */\n.gram-frame-mode-header {\n  background: linear-gradient(180deg, #444 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border-bottom: 2px solid #555;\n  display: flex;\n  align-items: flex-start;\n  justify-content: flex-start;\n}\n\n.gram-frame-modes {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  justify-content: center;\n  align-items: stretch;\n  flex: 0 0 auto;\n  flex-shrink: 0;\n}\n\n.gram-frame-mode-group {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  width: 100%;\n  flex-wrap: nowrap;\n}\n\n/* Simplified left panel - no sub-columns needed */\n\n/* Guidance panel */\n.gram-frame-guidance {\n  flex: 1;\n  padding: 8px 12px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  color: #ccc;\n  font-size: 12px;\n  line-height: 1.4;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n}\n\n.gram-frame-guidance h4 {\n  margin: 0 0 6px 0;\n  font-size: 11px;\n  color: #00ff00;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n.gram-frame-guidance p {\n  margin: 0 0 4px 0;\n}\n\n/* Military-style metal buttons */\n.gram-frame-mode-btn {\n  padding: 8px 6px;\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  color: #ddd;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  flex: 1;\n  min-width: 0;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-command-btn {\n  padding: 8px 10px;\n  background: linear-gradient(180deg, #5a5a5a 0%, #3a3a3a 50%, #1a1a1a 100%);\n  color: #ddd;\n  border: 2px solid #444;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 14px;\n  line-height: 1;\n  flex: 0 0 auto;\n  min-width: 32px;\n  height: 36px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-mode-btn:hover {\n  background: linear-gradient(180deg, #7a7a7a 0%, #5a5a5a 50%, #3a3a3a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-mode-btn.active {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n  border-color: #4a8a4a;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    inset 0 -1px 2px rgba(255,255,255,0.1),\n    0 0 4px rgba(74, 138, 74, 0.3);\n}\n\n.gram-frame-mode-btn:active {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n.gram-frame-mode-btn:disabled,\n.gram-frame-mode-btn.disabled {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  color: #666;\n  border-color: #333;\n  cursor: not-allowed;\n  opacity: 0.6;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n}\n\n.gram-frame-mode-btn:disabled:hover,\n.gram-frame-mode-btn.disabled:hover {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n  transform: none;\n}\n\n.gram-frame-command-btn:hover:not(:disabled) {\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-command-btn:active:not(:disabled) {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n.gram-frame-command-btn:disabled {\n  background: linear-gradient(180deg, #333 0%, #222 50%, #111 100%);\n  color: #666;\n  border-color: #333;\n  cursor: not-allowed;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n}\n\n/* Clear gram button — trainer pages only */\n.gram-frame-clear-btn {\n  margin-top: 8px;\n  padding: 6px 10px;\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ddd;\n  border: 2px solid #6a3a3a;\n  border-radius: 4px;\n  font-family: inherit;\n  font-size: 12px;\n  font-weight: 600;\n  letter-spacing: 0.5px;\n  cursor: pointer;\n  text-transform: uppercase;\n  box-shadow:\n    inset 0 1px 2px rgba(255,255,255,0.15),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n  width: 100%;\n}\n\n.gram-frame-clear-btn:hover {\n  background: linear-gradient(180deg, #8a5a5a 0%, #6a3a3a 50%, #4a2a2a 100%);\n  box-shadow:\n    inset 0 1px 2px rgba(255,255,255,0.25),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-clear-btn:active {\n  transform: translateY(1px);\n  box-shadow:\n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n/* Rate input UI styles removed - backend functionality preserved */\n\n/* SVG cursor styles removed - using CSS cursor only */\n\n/* SVG Harmonic line styles */\n\n\n.gram-frame-harmonic-line {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: none;\n  stroke-linecap: round;\n}\n\n\n.gram-frame-harmonic-number {\n  font-family: Arial, sans-serif;\n  font-size: 12px;\n  font-weight: bold;\n  pointer-events: none;\n  /* Add text shadow for readability */\n  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.5));\n}\n\n/* SVG Harmonic Set styles (new system) */\n\n.gram-frame-harmonic-set-line {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: auto !important;\n  /*cursor: grab !important;*/\n  stroke-linecap: round;\n}\n\n.gram-frame-harmonic-set-line:hover {\n  stroke-width: 3;\n  /* cursor: grab !important; */\n}\n\n.gram-frame-harmonic-set-line:active {\n  cursor: grabbing !important;\n}\n\n/* Legacy harmonic styles (for backward compatibility) */\n.gram-frame-harmonic {\n  position: absolute;\n  height: 1px;\n  background-color: rgba(255, 255, 0, 0.7);\n  pointer-events: none;\n}\n\n\n\n/* Debug grid */\n\n/* Canvas boundary overlay */\n\n/* Message display */\n\n/* Error state */\n.gram-frame-error {\n  padding: 10px;\n  background-color: #f8d7da;\n  color: #721c24;\n  border: 1px solid #f5c6cb;\n  border-radius: 4px;\n  margin: 10px 0;\n}\n\n/* Legacy harmonic panel styles - now using unified table structure */\n\n.gram-frame-harmonic-spacing,\n.gram-frame-harmonic-rate {\n  font-size: 14px;\n  font-weight: bold;\n}\n\n.gram-frame-harmonic-color {\n  width: 20px;\n  height: 12px;\n  border: 1px solid #555;\n  border-radius: 2px;\n  display: inline-block;\n}\n\n.gram-frame-harmonic-delete {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ff6666;\n  border: 1px solid #555;\n  border-radius: 2px;\n  width: 20px;\n  height: 20px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  line-height: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: all 0.1s ease;\n}\n\n.gram-frame-harmonic-delete:hover {\n  background: linear-gradient(180deg, #8a5a5a 0%, #6a3a3a 50%, #4a2a2a 100%);\n  border-color: #777;\n}\n\n.gram-frame-harmonic-delete:active {\n  transform: translateY(1px);\n}\n\n.gram-frame-harmonic-empty {\n  color: #666;\n  font-style: italic;\n  text-align: center;\n  padding: 20px;\n  font-size: 12px;\n}\n\n/* Doppler mode styles */\n.gram-frame-doppler-fPlus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-fMinus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-crosshair {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-curve {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-guide {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-label {\n  pointer-events: none;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;\n}\n\n/* Cursor position readout styles */\n.gram-frame-cursor-readout {\n  display: flex;\n  gap: 15px;\n  margin-bottom: 10px;\n  padding: 8px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 1px solid #444;\n  border-radius: 4px;\n}\n\n.gram-frame-readout-item {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  min-width: 80px;\n}\n\n.gram-frame-readout-label {\n  font-size: 10px;\n  color: #aaa;\n  text-transform: uppercase;\n  margin-bottom: 2px;\n  font-weight: bold;\n}\n\n.gram-frame-readout-value {\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  font-weight: bold;\n  color: #00ff00;\n  background: #000;\n  padding: 4px 8px;\n  border: 1px solid #333;\n  border-radius: 2px;\n  text-align: center;\n  min-width: 60px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.8);\n}\n\n/* Modal dialog styles */\n.gram-frame-modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  background: rgba(0, 0, 0, 0.7);\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  z-index: 1000;\n}\n\n.gram-frame-modal {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border: 2px solid #555;\n  border-radius: 8px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);\n  min-width: 350px;\n  max-width: 500px;\n  color: #ddd;\n}\n\n.gram-frame-modal-header {\n  padding: 15px 20px;\n  border-bottom: 1px solid #444;\n  background: linear-gradient(180deg, #444 0%, #333 100%);\n  border-radius: 6px 6px 0 0;\n}\n\n.gram-frame-modal-header h3 {\n  margin: 0;\n  font-size: 16px;\n  color: #fff;\n  text-align: center;\n}\n\n.gram-frame-modal-body {\n  padding: 20px;\n}\n\n.gram-frame-modal-input-group {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.gram-frame-modal-input-group label {\n  font-weight: bold;\n  color: #ccc;\n  font-size: 14px;\n}\n\n.gram-frame-modal-input-group input {\n  padding: 10px 12px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  color: #fff;\n  font-size: 14px;\n  font-family: 'Courier New', monospace;\n}\n\n.gram-frame-modal-input-group input:focus {\n  outline: none;\n  border-color: #777;\n  box-shadow: 0 0 4px rgba(119, 119, 119, 0.3);\n}\n\n.gram-frame-modal-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin-top: 4px;\n}\n\n.gram-frame-modal-footer {\n  padding: 15px 20px;\n  border-top: 1px solid #444;\n  display: flex;\n  justify-content: flex-end;\n  gap: 10px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  border-radius: 0 0 6px 6px;\n}\n\n.gram-frame-modal-btn {\n  padding: 8px 16px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  transition: all 0.1s ease;\n  min-width: 80px;\n}\n\n.gram-frame-modal-cancel {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ffaaaa;\n}\n\n.gram-frame-modal-cancel:hover {\n  background: linear-gradient(180deg, #7a5a5a 0%, #5a3a3a 50%, #3a2a2a 100%);\n}\n\n.gram-frame-modal-add {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n}\n\n.gram-frame-modal-add:hover {\n  background: linear-gradient(180deg, #5a7a5a 0%, #3a5a3a 50%, #2a3a2a 100%);\n}\n\n.gram-frame-modal-add:disabled {\n  background: linear-gradient(180deg, #444 0%, #333 50%, #222 100%);\n  color: #666;\n  cursor: not-allowed;\n}\n\n.gram-frame-modal-btn:active:not(:disabled) {\n  transform: translateY(1px);\n}\n\n/* Zoom controls removed - now integrated into pan mode command buttons */\n\n/* Unified Layout Styles */\n.gram-frame-unified-layout {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  gap: 2px; /* Match JavaScript gap */\n  width: 100%;\n  height: 100%;\n  overflow: hidden; /* Prevent columns from overflowing container */\n}\n\n.gram-frame-left-column {\n  position: relative; /* Enable absolute positioning for child elements */\n  display: flex;\n  flex-direction: row;\n  gap: 4px;\n  flex: 0 0 600px;\n  width: 600px;\n  overflow: hidden;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n/* Left column sub-columns */\n.gram-frame-mode-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 0 0 130px;\n  width: 130px;\n  padding: 8px;\n  border: none;\n}\n\n.gram-frame-guidance-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 1;\n  min-width: 150px;\n  border: none;\n}\n\n.gram-frame-controls-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 0 0 210px;\n  width: 210px;\n  padding: 0px;\n  border: none;\n}\n\n.gram-frame-middle-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 160px;\n  width: 160px;\n  min-width: 160px;\n  max-width: 160px;\n  padding: 5px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n.gram-frame-right-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 200px;\n  min-width: 200px;\n  width: 200px;\n  padding: 5px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n.gram-frame-cursor-leds {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 6px;\n  align-items: flex-start;\n  flex: 0 0 auto;\n  height: fit-content;\n}\n\n.gram-frame-markers-persistent-container,\n.gram-frame-harmonics-persistent-container {\n  display: flex;\n  flex-direction: column;\n  flex: 1;\n  min-height: 0;\n}\n\n.gram-frame-markers-persistent-container h4,\n.gram-frame-harmonics-persistent-container h4 {\n  margin: 0 0 8px 0;\n  flex-shrink: 0;\n  color: #ddd;\n  font-size: 14px;\n  text-align: center;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  border-bottom: 1px solid #444;\n  padding-bottom: 4px;\n}\n\n.gram-frame-harmonics-button-container {\n  margin-bottom: 8px;\n  display: flex;\n  justify-content: center;\n}\n\n/* Responsive behavior for smaller screens */\n@media (max-width: 1200px) {\n  .gram-frame-unified-layout {\n    flex-direction: column;\n    gap: 8px;\n  }\n  \n  .gram-frame-left-column,\n  .gram-frame-middle-column,\n  .gram-frame-right-column {\n    flex: 0 0 auto;\n    min-height: 200px;\n  }\n}\n\n/* Selection highlighting for keyboard control */\n.gram-frame-selected-row {\n  background: linear-gradient(135deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%) !important;\n  color: #aaffaa !important;\n  outline: 2px solid #4a8a4a !important;\n  outline-offset: -1px;\n  position: relative;\n  z-index: 10;\n  box-shadow: \n    inset 0 2px 4px rgba(255,255,255,0.15),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 0 8px rgba(74, 138, 74, 0.6),\n    0 0 2px rgba(74, 138, 74, 0.8) !important;\n}\n\n.gram-frame-selected-row td {\n  color: #aaffaa !important;\n  border-color: #4a8a4a !important;\n  position: relative;\n  z-index: 11;\n}\n\n/* Enhanced table row interactivity - now handled by unified .gram-frame-table styles */\n\n/* Selected Doppler marker highlighting */\n.gram-frame-selected-doppler-marker {\n  stroke: #4a8a4a !important;\n  stroke-width: 3 !important;\n  filter: drop-shadow(0 0 8px rgba(74, 138, 74, 0.6)) !important;\n}\n\n.gram-frame-selected-doppler-marker[fill] {\n  fill: #4a8a4a !important;\n  stroke: #aaffaa !important;\n}\n\n";
   document.head.appendChild(style);
 
   "use strict";
@@ -179,21 +179,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return `${paddedMinutes}:${paddedSeconds}`;
   }
   function dataToSVG(dataPoint, viewport, spectrogramImage = null) {
-    const { margins, imageDetails, config, zoom } = viewport;
+    const { margins, imageDetails, config } = viewport;
     const { naturalWidth, naturalHeight } = imageDetails;
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
     const { timeMin, timeMax, freqMin, freqMax } = config;
-    const zoomLevel = zoom.level;
     const timeRatio = (dataPoint.time - timeMin) / (timeMax - timeMin);
     const freqRatio = (dataPoint.freq - freqMin) / (freqMax - freqMin);
     let imageLeft = margins.left;
     let imageTop = margins.top;
-    let imageWidth = naturalWidth;
-    let imageHeight = naturalHeight;
-    if (zoomLevel !== 1 && spectrogramImage) {
+    let imageWidth = renderWidth;
+    let imageHeight = renderHeight;
+    if (spectrogramImage) {
       imageLeft = parseFloat(spectrogramImage.getAttribute("x") || String(margins.left));
       imageTop = parseFloat(spectrogramImage.getAttribute("y") || String(margins.top));
-      imageWidth = parseFloat(spectrogramImage.getAttribute("width") || String(naturalWidth));
-      imageHeight = parseFloat(spectrogramImage.getAttribute("height") || String(naturalHeight));
+      imageWidth = parseFloat(spectrogramImage.getAttribute("width") || String(renderWidth));
+      imageHeight = parseFloat(spectrogramImage.getAttribute("height") || String(renderHeight));
     }
     return {
       x: imageLeft + freqRatio * imageWidth,
@@ -204,6 +205,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function calculateZoomAwarePosition(point, viewport, spectrogramImage = null) {
     const { margins, imageDetails, config } = viewport;
     const { naturalWidth, naturalHeight } = imageDetails;
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
     const { timeMin, timeMax, freqMin, freqMax } = config;
     const normalizedX = (point.freq - freqMin) / (freqMax - freqMin);
     const normalizedY = 1 - (point.time - timeMin) / (timeMax - timeMin);
@@ -211,33 +214,34 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (spectrogramImage) {
       const imageLeft = parseFloat(spectrogramImage.getAttribute("x") || String(margins.left));
       const imageTop = parseFloat(spectrogramImage.getAttribute("y") || String(margins.top));
-      const imageWidth = parseFloat(spectrogramImage.getAttribute("width") || String(naturalWidth));
-      const imageHeight = parseFloat(spectrogramImage.getAttribute("height") || String(naturalHeight));
+      const imageWidth = parseFloat(spectrogramImage.getAttribute("width") || String(renderWidth));
+      const imageHeight = parseFloat(spectrogramImage.getAttribute("height") || String(renderHeight));
       currentX = imageLeft + normalizedX * imageWidth;
       currentY = imageTop + normalizedY * imageHeight;
     } else {
-      currentX = margins.left + normalizedX * naturalWidth;
-      currentY = margins.top + normalizedY * naturalHeight;
+      currentX = margins.left + normalizedX * renderWidth;
+      currentY = margins.top + normalizedY * renderHeight;
     }
     return { x: currentX, y: currentY };
   }
   function getImageBounds(viewport, spectrogramImage = null) {
-    const { margins, imageDetails, zoom } = viewport;
+    const { margins, imageDetails } = viewport;
     const { naturalWidth, naturalHeight } = imageDetails;
-    const zoomLevel = zoom.level;
-    if (zoomLevel !== 1 && spectrogramImage) {
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
+    if (spectrogramImage) {
       return {
         left: parseFloat(spectrogramImage.getAttribute("x") || String(margins.left)),
         top: parseFloat(spectrogramImage.getAttribute("y") || String(margins.top)),
-        width: parseFloat(spectrogramImage.getAttribute("width") || String(naturalWidth)),
-        height: parseFloat(spectrogramImage.getAttribute("height") || String(naturalHeight))
+        width: parseFloat(spectrogramImage.getAttribute("width") || String(renderWidth)),
+        height: parseFloat(spectrogramImage.getAttribute("height") || String(renderHeight))
       };
     }
     return {
       left: margins.left,
       top: margins.top,
-      width: naturalWidth,
-      height: naturalHeight
+      width: renderWidth,
+      height: renderHeight
     };
   }
   class BaseDragHandler {
@@ -395,14 +399,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     const { config: dataConfig, imageDetails, zoom } = viewport;
     const { naturalWidth, naturalHeight } = imageDetails;
-    if (!dataConfig || !naturalWidth || !naturalHeight) {
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
+    if (!dataConfig || !renderWidth || !renderHeight) {
       return config.minDataTolerance;
     }
     const timeRange = dataConfig.timeMax - dataConfig.timeMin;
     const freqRange = dataConfig.freqMax - dataConfig.freqMin;
     const effectiveZoom = (zoom == null ? void 0 : zoom.level) || 1;
-    const timeToleranceFromPixels = config.pixelRadius / naturalHeight * timeRange / effectiveZoom;
-    const freqToleranceFromPixels = config.pixelRadius / naturalWidth * freqRange / effectiveZoom;
+    const timeToleranceFromPixels = config.pixelRadius / renderHeight * timeRange / effectiveZoom;
+    const freqToleranceFromPixels = config.pixelRadius / renderWidth * freqRange / effectiveZoom;
     const timeTolerance = Math.max(
       config.minDataTolerance.time,
       Math.min(config.maxDataTolerance.time, timeToleranceFromPixels)
@@ -1054,7 +1060,104 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     createHarmonicPanel,
     updateHarmonicPanelContent
   }, Symbol.toStringTag, { value: "Module" }));
+  const BOTTOM_GAP = 16;
+  function isLandscape(instance) {
+    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
+    return naturalWidth > 0 && naturalHeight > 0 && naturalWidth > naturalHeight;
+  }
+  function computeAvailableRenderSize(instance) {
+    const margins = instance.state.margins;
+    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
+    const cell = instance.mainCell;
+    const svg = instance.svg;
+    if (!cell || !svg) {
+      return { width: naturalWidth, height: naturalHeight };
+    }
+    const cellStyle = window.getComputedStyle(cell);
+    const padL = parseFloat(cellStyle.paddingLeft) || 0;
+    const padR = parseFloat(cellStyle.paddingRight) || 0;
+    const svgStyle = window.getComputedStyle(svg);
+    const svgBorderX = (parseFloat(svgStyle.borderLeftWidth) || 0) + (parseFloat(svgStyle.borderRightWidth) || 0);
+    const width = cell.clientWidth - padL - padR - svgBorderX - margins.left - margins.right;
+    const svgRect = svg.getBoundingClientRect();
+    const imageTopViewport = svgRect.top + margins.top;
+    const height = window.innerHeight - imageTopViewport - margins.bottom - BOTTOM_GAP;
+    return {
+      width: Math.max(naturalWidth, Math.round(width)),
+      height: Math.max(naturalHeight, Math.round(height))
+    };
+  }
+  function applyExpandLayout(instance) {
+    if (instance.state.imageExpanded) {
+      let { width, height } = computeAvailableRenderSize(instance);
+      instance.state.imageDetails.renderWidth = width;
+      instance.state.imageDetails.renderHeight = height;
+      updateSVGLayout(instance);
+      const settled = computeAvailableRenderSize(instance);
+      if (Math.abs(settled.width - width) > 1 || Math.abs(settled.height - height) > 1) {
+        instance.state.imageDetails.renderWidth = settled.width;
+        instance.state.imageDetails.renderHeight = settled.height;
+      }
+    } else {
+      instance.state.imageDetails.renderWidth = instance.state.imageDetails.naturalWidth;
+      instance.state.imageDetails.renderHeight = instance.state.imageDetails.naturalHeight;
+    }
+    updateSVGLayout(instance);
+    renderAxes(instance);
+    if (instance.featureRenderer) {
+      instance.featureRenderer.renderAllPersistentFeatures();
+    }
+    notifyStateListeners(instance.state, instance.stateListeners);
+  }
+  function updateToggleButton(button, expanded) {
+    button.setAttribute("aria-pressed", expanded ? "true" : "false");
+    button.setAttribute("aria-label", expanded ? "Collapse image" : "Expand image");
+    button.title = expanded ? "Collapse image" : "Expand image";
+    button.textContent = expanded ? "⤢" : "⤡";
+  }
+  function setImageExpanded(instance, expanded) {
+    if (!isLandscape(instance)) {
+      return;
+    }
+    instance.state.imageExpanded = !!expanded;
+    applyExpandLayout(instance);
+    if (instance.expandToggleButton) {
+      updateToggleButton(instance.expandToggleButton, instance.state.imageExpanded);
+    }
+  }
+  function refreshExpandedLayout(instance) {
+    if (!instance.state.imageExpanded) {
+      return;
+    }
+    const { width, height } = computeAvailableRenderSize(instance);
+    instance.state.imageDetails.renderWidth = width;
+    instance.state.imageDetails.renderHeight = height;
+  }
+  function createExpandToggle(instance) {
+    if (!isLandscape(instance)) {
+      return null;
+    }
+    const button = document.createElement("button");
+    button.className = "gram-frame-expand-toggle";
+    button.type = "button";
+    updateToggleButton(button, instance.state.imageExpanded);
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setImageExpanded(instance, !instance.state.imageExpanded);
+    });
+    instance.mainCell.appendChild(button);
+    instance.expandToggleButton = button;
+    return button;
+  }
   const MAX_IMAGE_WIDTH = 1200;
+  function getRenderDimensions(instance) {
+    const { naturalWidth, naturalHeight, renderWidth, renderHeight } = instance.state.imageDetails;
+    return {
+      renderWidth: renderWidth || naturalWidth,
+      renderHeight: renderHeight || naturalHeight
+    };
+  }
   function createComponentStructure(instance) {
     instance.container = document.createElement("div");
     instance.container.className = "gram-frame-container";
@@ -1142,8 +1245,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       instance.state.imageDetails.naturalWidth = imageWidth;
       instance.state.imageDetails.naturalHeight = imageHeight;
+      instance.state.imageDetails.renderWidth = imageWidth;
+      instance.state.imageDetails.renderHeight = imageHeight;
       updateSVGLayout(instance);
       renderAxes(instance);
+      createExpandToggle(instance);
       notifyStateListeners(instance.state, instance.stateListeners);
     };
     tempImg.src = imageUrl;
@@ -1154,8 +1260,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (!naturalWidth || !naturalHeight) {
       return;
     }
-    const axesWidth = naturalWidth;
-    const axesHeight = naturalHeight;
+    const { renderWidth, renderHeight } = getRenderDimensions(instance);
+    const axesWidth = renderWidth;
+    const axesHeight = renderHeight;
     const totalWidth = axesWidth + margins.left + margins.right;
     const totalHeight = axesHeight + margins.top + margins.bottom;
     instance.container.style.width = "auto";
@@ -1185,16 +1292,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   }
   function applyZoomTransform(instance) {
     const { level, centerX, centerY } = instance.state.zoom;
-    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
     const margins = instance.state.margins;
+    const { renderWidth, renderHeight } = getRenderDimensions(instance);
     if (!instance.spectrogramImage) {
       return;
     }
     if (level === 1) {
       instance.spectrogramImage.setAttribute("x", String(margins.left));
       instance.spectrogramImage.setAttribute("y", String(margins.top));
-      instance.spectrogramImage.setAttribute("width", String(naturalWidth));
-      instance.spectrogramImage.setAttribute("height", String(naturalHeight));
+      instance.spectrogramImage.setAttribute("width", String(renderWidth));
+      instance.spectrogramImage.setAttribute("height", String(renderHeight));
       instance.spectrogramImage.removeAttribute("transform");
       renderAxes(instance);
       if (instance.featureRenderer) {
@@ -1202,10 +1309,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       return;
     }
-    const centerImageX = centerX * naturalWidth;
-    const centerImageY = centerY * naturalHeight;
-    const zoomedWidth = naturalWidth * level;
-    const zoomedHeight = naturalHeight * level;
+    const centerImageX = centerX * renderWidth;
+    const centerImageY = centerY * renderHeight;
+    const zoomedWidth = renderWidth * level;
+    const zoomedHeight = renderHeight * level;
     const newX = margins.left + centerImageX - centerImageX * level;
     const newY = margins.top + centerImageY - centerImageY * level;
     instance.spectrogramImage.setAttribute("x", String(newX));
@@ -1227,32 +1334,33 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (!naturalWidth || !naturalHeight) {
       return;
     }
+    const { renderWidth, renderHeight } = getRenderDimensions(instance);
     const visibleRange = calculateVisibleDataRange(instance);
-    renderFrequencyAxis(instance, margins, naturalWidth, naturalHeight, visibleRange.freqMin, visibleRange.freqMax);
-    renderTimeAxis(instance, margins, naturalWidth, naturalHeight, visibleRange.timeMin, visibleRange.timeMax);
+    renderFrequencyAxis(instance, margins, renderWidth, renderHeight, visibleRange.freqMin, visibleRange.freqMax);
+    renderTimeAxis(instance, margins, renderWidth, renderHeight, visibleRange.timeMin, visibleRange.timeMax);
   }
   function calculateVisibleDataRange(instance) {
     const { timeMin, timeMax, freqMin, freqMax } = instance.state.config;
-    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
     const margins = instance.state.margins;
     const zoomLevel = instance.state.zoom.level;
+    const { renderWidth, renderHeight } = getRenderDimensions(instance);
     if (zoomLevel === 1) {
       return { timeMin, timeMax, freqMin, freqMax };
     }
     let imageLeft = margins.left;
     let imageTop = margins.top;
-    let imageWidth = naturalWidth;
-    let imageHeight = naturalHeight;
+    let imageWidth = renderWidth;
+    let imageHeight = renderHeight;
     if (instance.spectrogramImage) {
       imageLeft = parseFloat(instance.spectrogramImage.getAttribute("x") || String(margins.left));
       imageTop = parseFloat(instance.spectrogramImage.getAttribute("y") || String(margins.top));
-      imageWidth = parseFloat(instance.spectrogramImage.getAttribute("width") || String(naturalWidth));
-      imageHeight = parseFloat(instance.spectrogramImage.getAttribute("height") || String(naturalHeight));
+      imageWidth = parseFloat(instance.spectrogramImage.getAttribute("width") || String(renderWidth));
+      imageHeight = parseFloat(instance.spectrogramImage.getAttribute("height") || String(renderHeight));
     }
     const visibleLeft = Math.max(0, margins.left - imageLeft);
-    const visibleRight = Math.min(imageWidth, margins.left + naturalWidth - imageLeft);
+    const visibleRight = Math.min(imageWidth, margins.left + renderWidth - imageLeft);
     const visibleTop = Math.max(0, margins.top - imageTop);
-    const visibleBottom = Math.min(imageHeight, margins.top + naturalHeight - imageTop);
+    const visibleBottom = Math.min(imageHeight, margins.top + renderHeight - imageTop);
     const freqRange = freqMax - freqMin;
     const timeRange = timeMax - timeMin;
     const visibleFreqMin = freqMin + visibleLeft / imageWidth * freqRange;
@@ -2001,24 +2109,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {Object} Line dimensions with height and top position
      */
     calculateHarmonicLineDimensions(harmonicSet) {
-      const { naturalHeight } = this.instance.state.imageDetails;
-      const margins = this.instance.state.margins;
-      const zoomLevel = this.instance.state.zoom.level;
-      const { timeMin, timeMax } = this.instance.state.config;
       const lineHeightRatio = 0.2;
-      let lineHeight, lineTop;
-      if (zoomLevel === 1) {
-        lineHeight = naturalHeight * lineHeightRatio;
-        const normalizedAnchorTime = 1 - (harmonicSet.anchorTime - timeMin) / (timeMax - timeMin);
-        const anchorY = margins.top + normalizedAnchorTime * naturalHeight;
-        lineTop = anchorY - lineHeight / 2;
-      } else {
-        const imageBounds = getImageBounds(this.getViewport(), this.instance.spectrogramImage);
-        lineHeight = imageBounds.height * lineHeightRatio;
-        const anchorPoint = { freq: harmonicSet.spacing, time: harmonicSet.anchorTime };
-        const anchorSVG = calculateZoomAwarePosition(anchorPoint, this.getViewport(), this.instance.spectrogramImage);
-        lineTop = anchorSVG.y - lineHeight / 2;
-      }
+      const imageBounds = getImageBounds(this.getViewport(), this.instance.spectrogramImage);
+      const lineHeight = imageBounds.height * lineHeightRatio;
+      const anchorPoint = { freq: harmonicSet.spacing, time: harmonicSet.anchorTime };
+      const anchorSVG = calculateZoomAwarePosition(anchorPoint, this.getViewport(), this.instance.spectrogramImage);
+      const lineTop = anchorSVG.y - lineHeight / 2;
       return { lineHeight, lineTop };
     }
     /**
@@ -2450,6 +2546,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function drawDopplerPreview(instance, startPoint, endPoint) {
     const margins = instance.state.margins;
     const { naturalWidth, naturalHeight } = instance.state.imageDetails;
+    const renderWidth = instance.state.imageDetails.renderWidth || naturalWidth;
+    const renderHeight = instance.state.imageDetails.renderHeight || naturalHeight;
     const { timeMin, timeMax, freqMin, freqMax } = instance.state.config;
     const color = instance.state.selectedColor || "#ff0000";
     let fMinus, fPlus;
@@ -2468,8 +2566,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const timeRatio = (point.time - timeMin) / (timeMax - timeMin);
       const freqRatio = (point.freq - freqMin) / (freqMax - freqMin);
       return {
-        x: margins.left + freqRatio * naturalWidth,
-        y: margins.top + (1 - timeRatio) * naturalHeight
+        x: margins.left + freqRatio * renderWidth,
+        y: margins.top + (1 - timeRatio) * renderHeight
       };
     };
     const minusSVG = convertToSVG(fMinus);
@@ -3076,14 +3174,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.instance.cursorGroup.appendChild(path);
       const margins = this.instance.state.margins;
       const { naturalHeight } = this.instance.state.imageDetails;
-      const zoomLevel = this.instance.state.zoom.level;
+      const renderHeight = this.instance.state.imageDetails.renderHeight || naturalHeight;
       const spectrogramTop = margins.top;
-      const spectrogramBottom = margins.top + naturalHeight;
+      const spectrogramBottom = margins.top + renderHeight;
       let zoomedTop = spectrogramTop;
       let zoomedBottom = spectrogramBottom;
-      if (zoomLevel !== 1 && this.instance.spectrogramImage) {
+      if (this.instance.spectrogramImage) {
         const zoomedImageTop = parseFloat(this.instance.spectrogramImage.getAttribute("y") || String(margins.top));
-        const zoomedImageHeight = parseFloat(this.instance.spectrogramImage.getAttribute("height") || String(naturalHeight));
+        const zoomedImageHeight = parseFloat(this.instance.spectrogramImage.getAttribute("height") || String(renderHeight));
         zoomedTop = zoomedImageTop;
         zoomedBottom = zoomedImageTop + zoomedImageHeight;
       }
@@ -3119,7 +3217,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.renderDopplerFeatures();
     }
   }
-  const VERSION = "0.1.9";
+  const VERSION = "0.1.11";
   function getVersion() {
     return VERSION;
   }
@@ -3187,12 +3285,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const deltaX = event.clientX - this.dragState.lastX;
       const deltaY = event.clientY - this.dragState.lastY;
       const { naturalWidth, naturalHeight } = this.instance.state.imageDetails;
+      const renderWidth = this.instance.state.imageDetails.renderWidth || naturalWidth;
+      const renderHeight = this.instance.state.imageDetails.renderHeight || naturalHeight;
       const margins = this.instance.state.margins;
       const svgRect = this.instance.svg.getBoundingClientRect();
-      const scaleX = (naturalWidth + margins.left + margins.right) / svgRect.width;
-      const scaleY = (naturalHeight + margins.top + margins.bottom) / svgRect.height;
-      const normalizedDeltaX = -(deltaX * scaleX / naturalWidth) / this.instance.state.zoom.level;
-      const normalizedDeltaY = -(deltaY * scaleY / naturalHeight) / this.instance.state.zoom.level;
+      const scaleX = (renderWidth + margins.left + margins.right) / svgRect.width;
+      const scaleY = (renderHeight + margins.top + margins.bottom) / svgRect.height;
+      const normalizedDeltaX = -(deltaX * scaleX / renderWidth) / this.instance.state.zoom.level;
+      const normalizedDeltaY = -(deltaY * scaleY / renderHeight) / this.instance.state.zoom.level;
       this.panImage(normalizedDeltaX, normalizedDeltaY);
       this.dragState.lastX = event.clientX;
       this.dragState.lastY = event.clientY;
@@ -3337,8 +3437,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       url: "",
       naturalWidth: 0,
       // Original dimensions of the image
-      naturalHeight: 0
+      naturalHeight: 0,
+      renderWidth: 0,
+      // Base render width (defaults to naturalWidth on load)
+      renderHeight: 0
+      // Base render height (defaults to naturalHeight on load)
     },
+    // Whether the image is currently expanded to fill available space.
+    // In-memory only, default false, never persisted (independent of feature 155).
+    imageExpanded: false,
     config: {
       timeMin: 0,
       timeMax: 0,
@@ -3762,10 +3869,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function imageToDataCoordinates(imageX, imageY, config, imageDetails, rate) {
     const { freqMin, freqMax, timeMin, timeMax } = config;
     const { naturalWidth, naturalHeight } = imageDetails;
-    const boundedX = Math.max(0, Math.min(imageX, naturalWidth));
-    const boundedY = Math.max(0, Math.min(imageY, naturalHeight));
-    const rawFreq = freqMin + boundedX / naturalWidth * (freqMax - freqMin);
-    const time = timeMax - boundedY / naturalHeight * (timeMax - timeMin);
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
+    const boundedX = Math.max(0, Math.min(imageX, renderWidth));
+    const boundedY = Math.max(0, Math.min(imageY, renderHeight));
+    const rawFreq = freqMin + boundedX / renderWidth * (freqMax - freqMin);
+    const time = timeMax - boundedY / renderHeight * (timeMax - timeMin);
     const freq = rawFreq / rate;
     return { freq, time };
   }
@@ -3827,21 +3936,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     const screenY = event.clientY - svgRect.top;
     const svgCoords = screenToSVGCoordinates(screenX, screenY, instance.svg, instance.state.imageDetails);
     const margins = instance.state.margins;
-    const zoomLevel = instance.state.zoom.level;
     const { naturalWidth, naturalHeight } = instance.state.imageDetails;
+    const renderWidth = instance.state.imageDetails.renderWidth || naturalWidth;
+    const renderHeight = instance.state.imageDetails.renderHeight || naturalHeight;
     let imageLeft = margins.left;
     let imageTop = margins.top;
-    let imageWidth = naturalWidth;
-    let imageHeight = naturalHeight;
-    if (zoomLevel !== 1 && instance.spectrogramImage) {
+    let imageWidth = renderWidth;
+    let imageHeight = renderHeight;
+    if (instance.spectrogramImage) {
       imageLeft = parseFloat(instance.spectrogramImage.getAttribute("x") || String(margins.left));
       imageTop = parseFloat(instance.spectrogramImage.getAttribute("y") || String(margins.top));
-      imageWidth = parseFloat(instance.spectrogramImage.getAttribute("width") || String(naturalWidth));
-      imageHeight = parseFloat(instance.spectrogramImage.getAttribute("height") || String(naturalHeight));
+      imageWidth = parseFloat(instance.spectrogramImage.getAttribute("width") || String(renderWidth));
+      imageHeight = parseFloat(instance.spectrogramImage.getAttribute("height") || String(renderHeight));
     }
-    const imageX = (svgCoords.x - imageLeft) * (naturalWidth / imageWidth);
-    const imageY = (svgCoords.y - imageTop) * (naturalHeight / imageHeight);
-    const withinBounds = svgCoords.x >= imageLeft && svgCoords.x <= imageLeft + imageWidth && svgCoords.y >= imageTop && svgCoords.y <= imageTop + imageHeight && imageX >= 0 && imageX <= naturalWidth && imageY >= 0 && imageY <= naturalHeight;
+    const imageX = (svgCoords.x - imageLeft) * (renderWidth / imageWidth);
+    const imageY = (svgCoords.y - imageTop) * (renderHeight / imageHeight);
+    const withinBounds = svgCoords.x >= imageLeft && svgCoords.x <= imageLeft + imageWidth && svgCoords.y >= imageTop && svgCoords.y <= imageTop + imageHeight && imageX >= 0 && imageX <= renderWidth && imageY >= 0 && imageY <= renderHeight;
     if (!withinBounds) {
       return null;
     }
@@ -4155,20 +4265,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     const updates = {};
     if (movement.dx !== 0) {
       const { naturalWidth } = instance.state.imageDetails;
+      const renderWidth = instance.state.imageDetails.renderWidth || naturalWidth;
       const { freqMin, freqMax } = instance.state.config;
       const freqRange = (freqMax - freqMin) / instance.state.rate;
-      const pixelToFreqRatio = freqRange / naturalWidth;
+      const pixelToFreqRatio = freqRange / renderWidth;
       const spacingChange = movement.dx * pixelToFreqRatio;
       updates.spacing = Math.max(1, harmonicSet.spacing + spacingChange);
     }
     if (movement.dy !== 0) {
       const { naturalHeight } = instance.state.imageDetails;
+      const renderHeight = instance.state.imageDetails.renderHeight || naturalHeight;
       const { timeMin, timeMax } = instance.state.config;
       const margins = instance.state.margins;
       const normalizedTime = 1 - (harmonicSet.anchorTime - timeMin) / (timeMax - timeMin);
-      const currentY = margins.top + normalizedTime * naturalHeight;
+      const currentY = margins.top + normalizedTime * renderHeight;
       const newY = currentY + movement.dy;
-      const newNormalizedTime = (newY - margins.top) / naturalHeight;
+      const newNormalizedTime = (newY - margins.top) / renderHeight;
       updates.anchorTime = timeMax - newNormalizedTime * (timeMax - timeMin);
       updates.anchorTime = Math.max(timeMin, Math.min(timeMax, updates.anchorTime));
     }
@@ -4195,23 +4307,27 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function dataToSVGCoordinates(freq, time, config, imageDetails, rate, margins) {
     const { freqMin, freqMax, timeMin, timeMax } = config;
     const { naturalWidth, naturalHeight } = imageDetails;
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
     const rawFreq = freq * rate;
     const normalizedX = (rawFreq - freqMin) / (freqMax - freqMin);
     const normalizedY = 1 - (time - timeMin) / (timeMax - timeMin);
     return {
-      x: margins.left + normalizedX * naturalWidth,
-      y: margins.top + normalizedY * naturalHeight
+      x: margins.left + normalizedX * renderWidth,
+      y: margins.top + normalizedY * renderHeight
     };
   }
   function svgToDataCoordinates(svgX, svgY, config, imageDetails, rate, margins) {
     const { freqMin, freqMax, timeMin, timeMax } = config;
     const { naturalWidth, naturalHeight } = imageDetails;
+    const renderWidth = imageDetails.renderWidth || naturalWidth;
+    const renderHeight = imageDetails.renderHeight || naturalHeight;
     const imageX = svgX - margins.left;
     const imageY = svgY - margins.top;
-    const boundedX = Math.max(0, Math.min(imageX, naturalWidth));
-    const boundedY = Math.max(0, Math.min(imageY, naturalHeight));
-    const rawFreq = freqMin + boundedX / naturalWidth * (freqMax - freqMin);
-    const time = timeMax - boundedY / naturalHeight * (timeMax - timeMin);
+    const boundedX = Math.max(0, Math.min(imageX, renderWidth));
+    const boundedY = Math.max(0, Math.min(imageY, renderHeight));
+    const rawFreq = freqMin + boundedX / renderWidth * (freqMax - freqMin);
+    const time = timeMax - boundedY / renderHeight * (timeMax - timeMin);
     const freq = rawFreq / rate;
     return { freq, time };
   }
@@ -4466,8 +4582,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   }
   function handleResize(instance) {
     if (instance.svg) {
+      refreshExpandedLayout(instance);
       updateSVGLayout(instance);
       renderAxes(instance);
+      if (instance.featureRenderer) {
+        instance.featureRenderer.renderAllPersistentFeatures();
+      }
     }
   }
   function updateAxes(instance) {
@@ -4602,6 +4722,28 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         });
         return removed;
       },
+      /**
+       * Get the current expand state of the first GramFrame instance.
+       * @returns {boolean} True if the image is currently expanded
+       */
+      getExpandState() {
+        const instances = this._instances || [];
+        const instance = instances[0];
+        return !!(instance && instance.state && instance.state.imageExpanded);
+      },
+      /**
+       * Programmatically expand or collapse all landscape GramFrame instances.
+       * No-op for portrait/square images (mirrors the toggle's landscape gate).
+       * @param {boolean} expanded - Desired expand state
+       */
+      setExpandState(expanded) {
+        const instances = this._instances || [];
+        instances.forEach((instance) => {
+          if (isLandscape(instance)) {
+            setImageExpanded(instance, expanded);
+          }
+        });
+      },
       // Debug and visualization API methods removed - implement when needed
       /**
        * Force update of the component state
@@ -4675,6 +4817,120 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
     };
   }
+  const SCHEMA_VERSION = 1;
+  const KEY_PREFIX = "gramframe::";
+  const TRAINER_FLAG_SELECTOR = "#gf-persistent, .gf-persistent, [data-gf-persistent]";
+  function detectUserContext() {
+    if (document.querySelector(TRAINER_FLAG_SELECTOR)) {
+      return "trainer";
+    }
+    const anchors = document.querySelectorAll("a");
+    for (let i = 0; i < anchors.length; i++) {
+      if (anchors[i].textContent && anchors[i].textContent.trim() === "ANALYSIS") {
+        return "trainer";
+      }
+    }
+    return "student";
+  }
+  function getStorage(context) {
+    try {
+      const storage = context === "trainer" ? localStorage : sessionStorage;
+      const testKey = "__gramframe_test__";
+      storage.setItem(testKey, "1");
+      storage.removeItem(testKey);
+      return storage;
+    } catch {
+      return null;
+    }
+  }
+  function buildStorageKey(instanceIndex) {
+    const pathname = window.location.pathname;
+    if (instanceIndex != null && instanceIndex > 0) {
+      return `${KEY_PREFIX}${pathname}::${instanceIndex}`;
+    }
+    return `${KEY_PREFIX}${pathname}`;
+  }
+  function saveAnnotations(state, instanceIndex) {
+    try {
+      const context = detectUserContext();
+      const storage = getStorage(context);
+      if (!storage) return false;
+      const hasMarkers = state.analysis && state.analysis.markers && state.analysis.markers.length > 0;
+      const hasHarmonics = state.harmonics && state.harmonics.harmonicSets && state.harmonics.harmonicSets.length > 0;
+      const hasDoppler = state.doppler && (state.doppler.fPlus !== null || state.doppler.fMinus !== null);
+      if (!hasMarkers && !hasHarmonics && !hasDoppler) {
+        const key2 = buildStorageKey(instanceIndex);
+        storage.removeItem(key2);
+        return true;
+      }
+      const data = {
+        version: SCHEMA_VERSION,
+        savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        analysis: {
+          markers: (state.analysis && state.analysis.markers || []).map((m) => ({
+            id: m.id,
+            color: m.color,
+            time: m.time,
+            freq: m.freq
+          }))
+        },
+        harmonics: {
+          harmonicSets: (state.harmonics && state.harmonics.harmonicSets || []).map((hs) => ({
+            id: hs.id,
+            color: hs.color,
+            anchorTime: hs.anchorTime,
+            spacing: hs.spacing
+          }))
+        },
+        doppler: {
+          fPlus: state.doppler && state.doppler.fPlus ? { time: state.doppler.fPlus.time, freq: state.doppler.fPlus.freq } : null,
+          fMinus: state.doppler && state.doppler.fMinus ? { time: state.doppler.fMinus.time, freq: state.doppler.fMinus.freq } : null,
+          fZero: state.doppler && state.doppler.fZero ? { time: state.doppler.fZero.time, freq: state.doppler.fZero.freq } : null,
+          color: state.doppler && state.doppler.color || null
+        }
+      };
+      const key = buildStorageKey(instanceIndex);
+      storage.setItem(key, JSON.stringify(data));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  function loadAnnotations(instanceIndex) {
+    try {
+      const context = detectUserContext();
+      const storage = getStorage(context);
+      if (!storage) return null;
+      const key = buildStorageKey(instanceIndex);
+      const raw = storage.getItem(key);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.version !== SCHEMA_VERSION) {
+        console.warn("GramFrame: Discarding stored annotations — unrecognised schema version:", data && data.version);
+        storage.removeItem(key);
+        return null;
+      }
+      return (
+        /** @type {StoredAnnotations} */
+        data
+      );
+    } catch {
+      console.warn("GramFrame: Failed to load stored annotations — data discarded");
+      return null;
+    }
+  }
+  function clearAnnotations(instanceIndex) {
+    try {
+      const context = detectUserContext();
+      const storage = getStorage(context);
+      if (!storage) return false;
+      const key = buildStorageKey(instanceIndex);
+      storage.removeItem(key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   class GramFrame {
     /**
      * Creates a new GramFrame instance
@@ -4714,6 +4970,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       __publicField(this, "harmonicsContainer");
       // Spectrogram image
       __publicField(this, "spectrogramImage");
+      // Expand/collapse toggle button (landscape images only)
+      __publicField(this, "expandToggleButton");
       // Mode switching UI
       __publicField(this, "modesContainer");
       __publicField(this, "modeButtons");
@@ -4731,10 +4989,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       __publicField(this, "resizeObserver");
       // Bound event handlers
       __publicField(this, "_boundHandleResize");
+      // Storage instance index for multi-instance pages
+      __publicField(this, "_storageInstanceIndex");
+      // Whether this instance is a trainer context
+      __publicField(this, "_isTrainerContext");
       this.state = createInitialState();
       this.configTable = configTable;
       this.stateListeners = [];
       this.instanceId = "";
+      this._storageInstanceIndex = document.querySelectorAll(".gram-frame-container").length;
+      this._isTrainerContext = detectUserContext() === "trainer";
       initializeDOMProperties(this);
       setupSpectrogramComponents(this);
       createUnifiedLayoutStructure(this);
@@ -4745,6 +5009,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       updateModeUIWithCommands(this);
       setupAllEventListeners(this);
       setupStateListeners(this);
+      if (this._isTrainerContext) {
+        this._addClearGramButton();
+      }
+      this._restoreAnnotations();
+      updatePersistentPanels(this);
+      if (this.featureRenderer) {
+        this.featureRenderer.renderAllPersistentFeatures();
+      }
+      this._setupStorageSaveListener();
       notifyStateListeners(this.state, this.stateListeners);
     }
     /**
@@ -4795,6 +5068,89 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     _handleResize() {
       handleResize(this);
+    }
+    /**
+     * Add a "Clear gram" button to the controls area (trainer pages only)
+     */
+    _addClearGramButton() {
+      const btn = document.createElement("button");
+      btn.className = "gram-frame-clear-btn";
+      btn.textContent = "Clear gram";
+      btn.title = "Remove all annotations for this gram";
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this._clearGram();
+      });
+      if (this.modeColumn) {
+        this.modeColumn.appendChild(btn);
+      }
+    }
+    /**
+     * Clear all annotations from state and storage
+     */
+    _clearGram() {
+      this.state.analysis.markers = [];
+      this.state.analysis.isDragging = false;
+      this.state.analysis.draggedMarkerId = null;
+      this.state.harmonics.harmonicSets = [];
+      this.state.doppler.fPlus = null;
+      this.state.doppler.fMinus = null;
+      this.state.doppler.fZero = null;
+      this.state.doppler.speed = null;
+      this.state.doppler.color = null;
+      this.state.selection.selectedType = null;
+      this.state.selection.selectedId = null;
+      this.state.selection.selectedIndex = null;
+      clearAnnotations(this._storageInstanceIndex);
+      if (this.featureRenderer) {
+        this.featureRenderer.renderAllPersistentFeatures();
+      }
+      if (this.currentMode && typeof this.currentMode.activate === "function") {
+        this.currentMode.cleanup();
+        this.currentMode.activate();
+      }
+      notifyStateListeners(this.state, this.stateListeners);
+    }
+    /**
+     * Restore saved annotations from browser storage into state
+     */
+    _restoreAnnotations() {
+      const saved = loadAnnotations(this._storageInstanceIndex);
+      if (!saved) return;
+      if (saved.analysis && Array.isArray(saved.analysis.markers)) {
+        this.state.analysis.markers = saved.analysis.markers;
+      }
+      if (saved.harmonics && Array.isArray(saved.harmonics.harmonicSets)) {
+        this.state.harmonics.harmonicSets = saved.harmonics.harmonicSets;
+      }
+      if (saved.doppler) {
+        this.state.doppler.fPlus = saved.doppler.fPlus || null;
+        this.state.doppler.fMinus = saved.doppler.fMinus || null;
+        this.state.doppler.fZero = saved.doppler.fZero || null;
+        if (saved.doppler.color) {
+          this.state.doppler.color = saved.doppler.color;
+        }
+      }
+    }
+    /**
+     * Set up a state listener that saves annotations on relevant state changes
+     */
+    _setupStorageSaveListener() {
+      let lastSerialised = "";
+      this.stateListeners.push((state) => {
+        const annotationSnapshot = JSON.stringify({
+          markers: state.analysis && state.analysis.markers,
+          harmonicSets: state.harmonics && state.harmonics.harmonicSets,
+          fPlus: state.doppler && state.doppler.fPlus,
+          fMinus: state.doppler && state.doppler.fMinus,
+          fZero: state.doppler && state.doppler.fZero,
+          dopplerColor: state.doppler && state.doppler.color
+        });
+        if (annotationSnapshot !== lastSerialised) {
+          lastSerialised = annotationSnapshot;
+          saveAnnotations(this.state, this._storageInstanceIndex);
+        }
+      });
     }
     /**
      * Destroy the component and clean up resources
