@@ -2379,6 +2379,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       instance.rateLED.querySelector(".gram-frame-led-value").textContent = `${state.rate}`;
     }
   }
+  const VERSION = "0.1.13";
+  function getVersion() {
+    return VERSION;
+  }
   function createModeSwitchingUI(modeCell, state, modeSwitchCallback, modes = {}) {
     const modesContainer = document.createElement("div");
     modesContainer.className = "gram-frame-modes";
@@ -2401,6 +2405,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       button.className = "gram-frame-mode-btn";
       button.textContent = getModeDisplayName(modeType);
       button.dataset.mode = modeType;
+      if (modeType === "pan") {
+        button.title = `GramFrame v${getVersion()}`;
+      }
       if (modeType === state.mode) {
         button.classList.add("active");
       }
@@ -3217,10 +3224,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.renderDopplerFeatures();
     }
   }
-  const VERSION = "0.1.11";
-  function getVersion() {
-    return VERSION;
-  }
   class PanMode extends BaseMode {
     /**
      * Constructor for pan mode
@@ -3421,7 +3424,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return Object.assign({}, ...modeStates);
   }
   const initialState = {
-    version: "0.0.1",
+    version: getVersion(),
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     instanceId: "",
     mode: "analysis",
@@ -5109,6 +5112,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         this.currentMode.cleanup();
         this.currentMode.activate();
       }
+      updatePersistentPanels(this);
+      updateLEDDisplays(this, this.state);
       notifyStateListeners(this.state, this.stateListeners);
     }
     /**

@@ -83,7 +83,7 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
 ## Keep the bundle in sync
 
 The bundle here is a copy of `scripts/vendor/gramframe/gramframe.bundle.js`
-(see `resources/VERSION` — currently **v0.1.9**). They must stay byte-identical
+(see `resources/VERSION` — currently **v0.1.13**). They must stay byte-identical
 so the Oxygen production output and the `publish_html.py` dev preview render
 grams the same way; `tests/test_package_release.py` enforces this. When you bump
 GramFrame, update **both** copies and the `VERSION` files together.
