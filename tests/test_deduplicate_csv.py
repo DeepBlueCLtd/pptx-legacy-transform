@@ -488,5 +488,41 @@ class ContinuousNumberingTests(unittest.TestCase):
         self.assertEqual([r["target_gram_id"] for r in rows], first)
 
 
+class CsvEncodingToleranceTests(unittest.TestCase):
+    """The dedupe reader mirrors generate_dita's Excel-encoding tolerance.
+
+    An author may run the dedupe step on a CSV they just edited in Excel and
+    saved with the default *"CSV (Comma delimited)"* (Windows ANSI / cp1252).
+    A strict utf-8 read would crash on the first non-ASCII byte.
+    """
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.tmp = TMP / f"dedup_enc_{self._testMethodName}"
+        if self.tmp.exists():
+            import shutil
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _decode(self, raw: bytes) -> str:
+        p = self.tmp / "in.csv"
+        p.write_bytes(raw)
+        return deduplicate_csv.decode_csv_bytes(
+            p.read_bytes(), p, deduplicate_csv.LOGGER
+        )
+
+    def test_ansi_comma_delimited_is_recovered(self) -> None:
+        text = "publication,vessel_name\r\nmain,\"HMS Hood £5 at 90° N\"\r\n"
+        raw = text.encode("cp1252")
+        with self.assertRaises(UnicodeDecodeError):
+            raw.decode("utf-8")  # the bytes really are not utf-8
+        self.assertIn("HMS Hood £5 at 90° N", self._decode(raw))
+
+    def test_utf8_with_bom_is_read_cleanly(self) -> None:
+        text = "publication,vessel_name\r\nmain,Resolute\r\n"
+        out = self._decode(b"\xef\xbb\xbf" + text.encode("utf-8"))
+        self.assertTrue(out.startswith("publication"), "BOM must be stripped")
+
+
 if __name__ == "__main__":
     unittest.main()

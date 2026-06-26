@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import logging
 import re
 import sys
@@ -129,13 +130,48 @@ def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
 # CSV I/O — preserve the file-level contract (utf-8-sig, CRLF, QUOTE_MINIMAL)
 # -----------------------------------------------------------------------------
 
+def decode_csv_bytes(raw: bytes, path: Path, logger: logging.Logger) -> str:
+    """Decode an Excel-edited CSV, tolerant of whichever encoding Excel chose.
+
+    Mirrors the identical helper in ``generate_dita.py`` so the air-gapped
+    maintainer reads one shape of code in every script. The pipeline writes
+    ``utf-8-sig``, but a technical author who edits the file in Excel and
+    uses *Save As → "CSV (Comma delimited)"* (the convenient default) gets
+    the file back in the Windows ANSI code page (cp1252), **not** UTF-8 — so
+    a strict ``utf-8`` read dies on the first non-ASCII byte (a vessel name,
+    a ``£`` or a ``°``). That is why the operator has had to reach for the
+    awkward *"CSV (MS-DOS)"* option.
+
+    We try UTF-8 first (covering our own output and Excel's *"CSV UTF-8"*),
+    then fall back to cp1252 so the plain *"CSV (Comma delimited)"* save
+    round-trips too. cp1252 maps almost every byte, so this never raises; at
+    worst an exotic glyph is mildly mangled — visible in the cell for the
+    author to fix — rather than crashing the whole run. Boundary-forgiveness
+    (constitution VII): the file came back from a human's Excel, not from our
+    own deterministic writer.
+    """
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        logger.warning(
+            "%s is not UTF-8; decoding as Windows-1252 (cp1252), which is "
+            "what Excel's 'CSV (Comma delimited)' save produces. Re-save as "
+            "'CSV UTF-8' to silence this and guarantee a clean round-trip.",
+            path,
+        )
+        return raw.decode("cp1252")
+
+
 def read_csv(path: Path) -> tuple[list[str], list[dict]]:
     """Return ``(fieldnames, rows)`` from the intermediate CSV.
 
     The header is preserved verbatim so the output can round-trip every
     existing column; only ``master_png_path`` is added if absent.
     """
-    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+    text = decode_csv_bytes(path.read_bytes(), path, LOGGER)
+    with io.StringIO(text, newline="") as fh:
         reader = csv.DictReader(fh)
         fieldnames = list(reader.fieldnames or ())
         rows = []

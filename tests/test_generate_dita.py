@@ -1722,5 +1722,65 @@ class TrustBoundaryTests(unittest.TestCase):
         self.assertEqual(rc, 0, "blank views on an image row are allowed")
 
 
+class CsvEncodingToleranceTests(unittest.TestCase):
+    """``read_csv`` must survive whatever encoding Excel's Save As produces.
+
+    The writer emits ``utf-8-sig``, but a technical author who edits the CSV
+    in Excel and saves with the convenient default *"CSV (Comma delimited)"*
+    gets the file back in Windows ANSI (cp1252). A strict utf-8 read crashes
+    on the first non-ASCII byte — which is why operators had to reach for the
+    awkward *"CSV (MS-DOS)"* option. The decoder now falls back to cp1252.
+    """
+
+    HEADER = "publication,vessel_name"
+    BODY = 'main,"HMS Hood £5 at 90° N"'  # contains £ and °
+
+    def _csv_bytes(self, encoding: str, bom: bool = False) -> bytes:
+        text = f"{self.HEADER}\r\n{self.BODY}\r\n"
+        raw = text.encode(encoding)
+        return (b"\xef\xbb\xbf" + raw) if bom else raw
+
+    def _decode(self, raw: bytes) -> str:
+        tmp = TMP / f"enc_{self._testMethodName}.csv"
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(raw)
+        return generate_dita.decode_csv_bytes(
+            tmp.read_bytes(), tmp, generate_dita.LOGGER
+        )
+
+    def test_utf8_with_bom_is_read_cleanly(self) -> None:
+        """The canonical writer output / Excel 'CSV UTF-8' round-trips."""
+        text = self._decode(self._csv_bytes("utf-8", bom=True))
+        self.assertIn("HMS Hood £5 at 90° N", text)
+        self.assertFalse(text.startswith("﻿"), "BOM must be stripped")
+
+    def test_utf8_without_bom_is_read_cleanly(self) -> None:
+        text = self._decode(self._csv_bytes("utf-8"))
+        self.assertIn("HMS Hood £5 at 90° N", text)
+
+    def test_excel_ansi_comma_delimited_is_recovered(self) -> None:
+        """The painful default save (cp1252) no longer crashes — and the
+        non-ASCII characters survive intact, unlike a strict utf-8 read."""
+        text = self._decode(self._csv_bytes("cp1252"))
+        self.assertIn("HMS Hood £5 at 90° N", text)
+
+    def test_strict_utf8_would_have_crashed(self) -> None:
+        """Guards the regression: the cp1252 bytes are *not* valid utf-8, so
+        the old strict reader genuinely failed on them."""
+        with self.assertRaises(UnicodeDecodeError):
+            self._csv_bytes("cp1252").decode("utf-8")
+
+    def test_full_run_accepts_ansi_saved_csv(self) -> None:
+        """End-to-end: a generator run over a cp1252-saved CSV succeeds."""
+        src = (FIXTURES / "minimal.csv").read_text(encoding="utf-8-sig")
+        out_dir = TMP / f"out_{self._testMethodName}"
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        ansi_csv = TMP / f"ansi_{self._testMethodName}.csv"
+        ansi_csv.write_bytes(src.encode("cp1252"))
+        rc = _run(out_dir, csv_path=ansi_csv)
+        self.assertEqual(rc, 0, "a cp1252-saved CSV must drive a clean run")
+
+
 if __name__ == "__main__":
     unittest.main()
