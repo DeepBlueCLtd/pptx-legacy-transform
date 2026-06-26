@@ -170,14 +170,22 @@ gram under), a `main` row with no week assigned is a **fail-fast** error in
 `check_main_chapter_assigned` instructing the analyst to fill in
 `target_chapter`.
 
-Because several decks now share a week, two grams can claim the same number.
-`deduplicate_csv.py` **renumbers** the collision: per `(publication, effective
-chapter, effective doc)` bucket it walks distinct grams in `(source chapter,
-row-order)` order and bumps a taken number to `max+1`, recording it in the
-additive `target_gram_id` column (empty = use `gram_id`; `gram_id` is never
-mutated). The generator derives every per-gram name from the **effective gram
-number** (`target_gram_id or gram_id`). The old letter-suffix auto-disambiguation
-is **gone**: an un-renumbered within-week collision is a **fail-fast** error in
+Because several decks now share a week, the native source gram numbers within a
+week are gappy and jump across deck boundaries (e.g. the `Week N` deck's numbers
+then the Pub10 slice's much higher numbers) — reading as "missing numbers"
+(issue #102). `deduplicate_csv.py`'s default `--main-numbering per-week` therefore
+**renumbers each week's `main` grams contiguously `1..k`** (no gaps, restart at 1
+per week): per week it walks distinct grams in `(native-week deck first, source
+chapter, row-order)` order — so the deck whose title carries the week's own
+`Week N` token leads and any sliced no-week deck (Pub10) follows as the contiguous
+tail — assigning `1..k` into the additive `target_gram_id` column (empty where
+`gram_id` already equals the assigned number; `gram_id` is never mutated). The
+alternative `--main-numbering continuous` numbers `main` as one `1..N` across all
+weeks. Non-`main` publications keep the per-`(publication, chapter, doc)`
+bump-on-collision rule. The generator derives every per-gram name from the
+**effective gram number** (`target_gram_id or gram_id`); the gh-pages/PR-preview
+builds use the default `per-week`. The old letter-suffix auto-disambiguation is
+**gone**: an un-renumbered within-week collision is a **fail-fast** error in
 `check_row_identity` instructing the operator to run the dedupe step.
 
 ### Audiences and editions (feature 004)

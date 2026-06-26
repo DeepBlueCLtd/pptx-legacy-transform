@@ -13,11 +13,12 @@ python extract_to_csv.py --input-root path/to/content --out extracted.csv
 # 2. (human) review extracted.csv in Excel. Optional: override any auto-sliced
 #    target_chapter; the slice is just the default.
 
-# 3. Renumber — assign collision-free main numbers. Default scheme is continuous.
+# 3. Renumber — assign collision-free main numbers. Default scheme is per-week
+#    (each week numbered contiguous 1..k, restart at 1; issue #102).
 python deduplicate_csv.py --csv extracted.csv --image-root path/to/content \
     --out extracted.dedup.csv
-#    Per-week restart instead (once the author chooses it):
-#    python deduplicate_csv.py ... --main-numbering per-week
+#    One 1..N sequence across all weeks instead:
+#    python deduplicate_csv.py ... --main-numbering continuous
 
 # 4. Generate — main grams land at dita/main/week-N/gram-NN/ (no doc tier).
 python generate_dita.py --csv extracted.dedup.csv --out dita/ \
@@ -42,15 +43,16 @@ python generate_dita.py --csv extracted.dedup.csv --out dita/ \
 - **Determinism**: re-running steps 1, 3, 4 over unchanged input yields
   byte-identical CSV/DITA under either scheme.
 
-## Flip the default scheme (after the author decides)
+## Flip the default scheme
 
-The default is `continuous`. To make `per-week` the default, change the single
-`default=` on the `--main-numbering` argument in `deduplicate_csv.py` (and update
-its tests). No other stage changes — extract and generate are scheme-agnostic.
+The default is `per-week` (issue #102). To make `continuous` the default, change
+the single `default=` on the `--main-numbering` argument in `deduplicate_csv.py`
+(and update its tests). No other stage changes — extract and generate are
+scheme-agnostic.
 
 ## On the air-gapped target
 
 Same as the README cold-start, via the wrappers: `extract.py` → review →
-`dedupe.py` → `write.py` → `publish.py`. Pass the scheme through the dedupe
-wrapper's `sys.argv` (e.g. add `--main-numbering per-week`) if/when the author
-picks per-week; otherwise the continuous default applies with no change.
+`dedupe.py` → `write.py` → `publish.py`. The dedupe wrapper applies the default
+`per-week` scheme; pass `--main-numbering continuous` through the wrapper's
+`sys.argv` only if the author wants one sequence across all weeks.
