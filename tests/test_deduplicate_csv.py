@@ -192,6 +192,33 @@ class DeduplicateCsvTests(unittest.TestCase):
         self.assertFalse(out.exists(), "no CSV written when the run aborts")
         self.assertIn("missing or blank", Path("dedup.log").read_text(encoding="utf-8"))
 
+    def test_abort_names_the_offending_csv_line(self) -> None:
+        """The abort message points at the exact CSV line of the bad row, so
+        the operator can find it in a large extract.csv without scanning. The
+        blank gram_id sits on the third data row -> source line 4 (header is
+        line 1)."""
+        bad = self.tmp / "blank_id_line.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "display_text", "link_href",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path", "file_size",
+                "wav_treatment", "warnings"]
+        with bad.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            # Lines 2 and 3 are well-formed; the blank gram_id lands on line 4.
+            for gid in ("10", "11", ""):
+                w.writerow({c: "" for c in cols} | {
+                    "publication": "main", "chapter": "X", "gram_id": gid,
+                    "topic_type": "glc", "sequence": "1",
+                    "png_path": f"images/{gid or 'blank'}.png",
+                })
+        out = self.tmp / "blank_id_line_out.csv"
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(bad), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
+        log = Path("dedup.log").read_text(encoding="utf-8")
+        self.assertIn("at CSV line 4", log)
+
     # -- stale-output removal: a failed run leaves nothing behind ------------
     def test_stale_output_removed_when_run_aborts(self) -> None:
         """A pre-existing output CSV is wiped at the start, so an aborting

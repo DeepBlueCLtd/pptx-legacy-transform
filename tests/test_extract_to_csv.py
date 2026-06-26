@@ -493,7 +493,7 @@ class GlcViewFieldTests(unittest.TestCase):
                 problems = extract_to_csv.glc_view_problems(
                     self._rows(inner, relaxed=False))
                 self.assertEqual(
-                    sorted(field for _, field in problems),
+                    sorted(field for _, field, _ in problems),
                     sorted(extract_to_csv.GLC_VIEW_FIELDS))
                 # Relaxed run fills the blanks, so nothing is flagged.
                 self.assertEqual(
@@ -767,6 +767,9 @@ class GlcViewFieldMainTests(unittest.TestCase):
             ])
         self.assertEqual(rc, 1)
         self.assertIn("GramFrame", "\n".join(cm.output))
+        # The abort names the offending row's line in the just-written CSV so
+        # the operator can jump straight to it.
+        self.assertIn("CSV line ", "\n".join(cm.output))
         # The CSV is still written so its warnings column is inspectable.
         self.assertTrue(out_csv.exists())
         with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:

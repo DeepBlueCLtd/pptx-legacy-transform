@@ -1064,8 +1064,8 @@ def gram_to_rows(
     return rows
 
 
-def glc_view_problems(rows: list[dict]) -> list[tuple[str, str]]:
-    """Return ``(gram_id, field)`` for every GLC gram row missing a view field.
+def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
+    """Return ``(gram_id, field, line)`` for every GLC gram row missing a view field.
 
     Every GLC-backed gram (a ``glc`` row whose inner asset is a renderable
     image or ``.wav``) must carry ``time_end`` / ``bandwidth`` / ``bandcentre``
@@ -1073,16 +1073,21 @@ def glc_view_problems(rows: list[dict]) -> list[tuple[str, str]]:
     view key for ``.wav`` rows. Analysis rows and assetless (dangling) GLC rows
     are exempt. Under ``--relaxed`` these blanks are already filled with
     ``RELAXED_DEFAULT`` upstream, so this returns empty (issue #92).
+
+    ``line`` is the 1-based line the row occupies in the CSV this run writes
+    (``write_csv`` emits the header then ``rows`` in order, so index ``i`` lands
+    on line ``i + 2``), letting the abort point straight at the offending row.
     """
-    problems: list[tuple[str, str]] = []
-    for row in rows:
+    problems: list[tuple[str, str, int]] = []
+    for index, row in enumerate(rows):
         if row.get("topic_type", "") != "glc":
             continue
         if (row.get("target_ext", "") or "").lower() not in RENDERABLE_GLC_EXTENSIONS:
             continue
+        line_no = index + 2  # +1 header, +1 for 0-based -> 1-based
         for field_name in GLC_VIEW_FIELDS:
             if not (row.get(field_name, "") or "").strip():
-                problems.append((row.get("gram_id", ""), field_name))
+                problems.append((row.get("gram_id", ""), field_name, line_no))
     return problems
 
 
@@ -1238,8 +1243,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     problems = glc_view_problems(rows)
     if problems:
         detail = "; ".join(
-            f"gram_id={gram_id!r} missing {field_name}"
-            for gram_id, field_name in problems)
+            f"CSV line {line_no}: gram_id={gram_id!r} missing {field_name}"
+            for gram_id, field_name, line_no in problems)
         LOGGER.error(
             "Aborting: %d GLC gram view field(s) missing — GramFrame cannot "
             "render without them. Fix the GLC(s) so they carry a time period, "

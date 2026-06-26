@@ -1667,6 +1667,18 @@ class TrustBoundaryTests(unittest.TestCase):
             generate_dita.require_field({"publication": " main "}, "publication"),
             "main")
 
+    def test_require_field_reports_line_no(self) -> None:
+        # Explicit line_no wins.
+        with self.assertRaises(generate_dita.PipelineDataError) as ctx:
+            generate_dita.require_field({"publication": ""}, "publication",
+                                        line_no=42)
+        self.assertIn("at CSV line 42", str(ctx.exception))
+        # Falls back to the line stamped on the row by read_csv when not passed.
+        with self.assertRaises(generate_dita.PipelineDataError) as ctx:
+            generate_dita.require_field(
+                {"publication": "", generate_dita._SOURCE_LINE: 7}, "publication")
+        self.assertIn("at CSV line 7", str(ctx.exception))
+
     # -- blank identity column aborts the run ------------------------------
     def test_blank_identity_column_aborts(self) -> None:
         for field in ("publication", "topic_type", "sequence"):
@@ -1689,6 +1701,12 @@ class TrustBoundaryTests(unittest.TestCase):
                     "--image-root", str(FIXTURES),
                 ])
                 self.assertEqual(rc, 1, f"blank .wav {field} must abort")
+                # This abort comes from a call site that does not pass line_no;
+                # the line stamped by read_csv must still reach the message
+                # (the single bad row is the first data row -> line 2).
+                self.assertIn(
+                    "at CSV line 2",
+                    Path("generate.log").read_text(encoding="utf-8"))
 
     # -- the same blank view on a NON-wav row is fine ----------------------
     def test_blank_view_on_image_row_is_allowed(self) -> None:
