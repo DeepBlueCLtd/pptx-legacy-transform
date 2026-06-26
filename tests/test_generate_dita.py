@@ -1168,12 +1168,12 @@ class CsvRefactoringSupportTests(unittest.TestCase):
                       "the summary warning must surface in logs")
 
     def test_renumbering_resolves_collision_into_unique_folders(self) -> None:
-        """Running the dedupe renumber step assigns the later gram a fresh
-        number (max+1), so the two grams land at distinct gram-NN folders with
-        no letter suffix (feature 008)."""
+        """Running the dedupe renumber step numbers the week's grams contiguously
+        1..k (issue #102, per-week scheme), so two grams that both claimed
+        number 5 land at distinct gram-NN folders with no letter suffix."""
         rows = [dict(r) for r in self._COLLIDING_GRAMS]
         renumbered = deduplicate_csv.renumber_grams(rows)
-        self.assertEqual(renumbered, 1, "exactly the second gram is renumbered")
+        self.assertEqual(renumbered, 2, "both grams take contiguous 1..k slots")
 
         cols = list(generate_dita.CSV_COLUMNS) + ["target_gram_id"]
         csv_path = self.tmp / "renumbered.csv"
@@ -1192,10 +1192,10 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ])
         self.assertEqual(rc, 0, "generator must accept the renumbered CSV")
         chapter_dir = out_dir / "main" / "week-2-grams"
-        self.assertTrue((chapter_dir / "gram-05" / "gram_05.dita").is_file(),
-                        "native gram keeps number 5")
-        self.assertTrue((chapter_dir / "gram-06" / "gram_06.dita").is_file(),
-                        "renumbered gram lands at max+1 = 6, no letter suffix")
+        self.assertTrue((chapter_dir / "gram-01" / "gram_01.dita").is_file(),
+                        "first gram takes contiguous slot 1")
+        self.assertTrue((chapter_dir / "gram-02" / "gram_02.dita").is_file(),
+                        "second gram takes contiguous slot 2, no letter suffix")
         self.assertFalse((chapter_dir / "gram-05a").exists(),
                          "letter-suffix folders must no longer be produced")
 

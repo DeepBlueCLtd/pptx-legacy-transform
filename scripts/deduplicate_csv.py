@@ -371,6 +371,19 @@ def deduplicate(
 
 _DIGITS_RE = re.compile(r"\d+")
 
+# A ``main`` deck whose source ``chapter`` title carries a "Week N" token
+# (e.g. "Instructor Week 4 Grams") natively belongs to that week; a deck with
+# no token (Pub10) is sliced across the weeks by the extractor. Mirrors
+# ``extract_to_csv._WEEK_TOKEN_RE`` — kept local so this single-purpose script
+# stays self-contained on the air-gapped target.
+_WEEK_TOKEN_RE = re.compile(r"\bweek\s*0*(\d+)\b", re.IGNORECASE)
+
+
+def _has_native_week(chapter: str) -> bool:
+    """True when ``chapter`` carries its own "Week N" token (a native-week
+    deck), False for a no-week deck the extractor sliced into the weeks."""
+    return bool(_WEEK_TOKEN_RE.search(chapter or ""))
+
 
 def _effective_chapter(row: dict) -> str:
     """``target_chapter`` when set, else the immutable source ``chapter``."""
@@ -493,20 +506,79 @@ def _renumber_main_continuous(rows: list[dict], indices) -> int:
     return renumbered
 
 
+def _renumber_main_per_week_contiguous(rows: list[dict], indices) -> int:
+    """Per-week contiguous ``main`` numbering (feature 009): each week is numbered
+    independently as ``1..k`` with no gaps, restarting at 1 every week — so a
+    week's grams read 1, 2, 3 … with no holes even when the source gram numbers
+    are gappy or two decks share the week.
+
+    Within a week, grams are ordered ``(native-week-deck first, source chapter,
+    first-row order)``: a deck whose title carries the week's own "Week N" token
+    keeps the low numbers and leads the page, with any sliced no-week deck (Pub10)
+    following as the contiguous tail — preserving the existing reading order while
+    closing the gaps. A gram whose ``gram_id`` already equals its assigned number
+    keeps an empty ``target_gram_id``; ``gram_id`` is never mutated. Returns the
+    count of renumbered grams.
+    """
+    gram_rows: dict[tuple, list[int]] = {}
+    gram_first: dict[tuple, int] = {}
+    gram_week: dict[tuple, tuple] = {}
+    gram_order: dict[tuple, tuple] = {}
+    for idx in indices:
+        row = rows[idx]
+        # A blank gram_id in our own artifact is a defect, not something to
+        # number past silently (constitution VII / Zone-A) — hard-fail here as
+        # the per-week bucket path does.
+        ident = (
+            row.get("chapter", ""), require_field(row, "gram_id"),
+            row.get("vessel_name", ""),
+        )
+        if ident not in gram_rows:
+            gram_rows[ident] = []
+            gram_first[ident] = idx
+            gram_week[ident] = _week_sort_key(_effective_chapter(row))
+            chapter = row.get("chapter", "")
+            # is_no_week_deck sorts native-week decks (0) ahead of sliced ones (1).
+            gram_order[ident] = (0 if _has_native_week(chapter) else 1, chapter)
+        gram_rows[ident].append(idx)
+
+    ordered = sorted(
+        gram_rows,
+        key=lambda ident: (gram_week[ident], gram_order[ident], gram_first[ident]),
+    )
+    renumbered = 0
+    seq = 0
+    current_week: tuple | None = None
+    for ident in ordered:
+        if gram_week[ident] != current_week:
+            current_week = gram_week[ident]
+            seq = 0  # restart numbering at the start of each week
+        seq += 1
+        if _gram_number(ident[1]) == seq:
+            continue  # already this number — leave target_gram_id empty
+        for idx in gram_rows[ident]:
+            rows[idx][TARGET_GRAM_ID] = str(seq)
+        LOGGER.info(
+            "main gram renumbered (per-week): chapter=%s gram_id=%s -> %d",
+            _effective_chapter(rows[gram_first[ident]]), ident[1], seq,
+        )
+        renumbered += 1
+    return renumbered
+
+
 def renumber_grams(rows: list[dict], main_numbering: str = "per-week") -> int:
     """Populate ``target_gram_id`` to give grams collision-free numbers.
 
     ``main_numbering`` (feature 009) selects how the ``main`` publication is
-    numbered; non-``main`` publications always use the per-week rule:
+    numbered; non-``main`` publications always use the per-week bump-on-collision
+    rule (``_renumber_buckets``):
 
-    - ``"per-week"`` (default): every publication, ``main`` included, is numbered
-      **per week** — within each ``(publication, effective_chapter,
-      effective_doc)`` bucket native numbers are preserved and only genuine
-      collisions are bumped (the feature-008 behaviour; unique per week, not
-      globally).
+    - ``"per-week"`` (default): ``main`` is numbered **per week** as contiguous
+      ``1..k`` with no gaps, restarting at 1 every week (issue #102; the
+      feature-009 spec behaviour). Within a week the native-week deck leads and any
+      sliced no-week deck (Pub10) follows as the contiguous tail.
     - ``"continuous"``: ``main`` is numbered as one ``1..N`` sequence across the
-      four weeks (week N starts past week N-1's maximum); non-``main`` keeps the
-      per-week rule.
+      four weeks (week N starts past week N-1's maximum).
 
     Idempotent: ``target_gram_id`` is cleared and recomputed from ``gram_id``
     each run, so re-running over the same inputs and scheme yields a
@@ -517,17 +589,20 @@ def renumber_grams(rows: list[dict], main_numbering: str = "per-week") -> int:
     for row in rows:
         row[TARGET_GRAM_ID] = ""
 
+    main_idx = [i for i, r in enumerate(rows) if r.get("publication", "") == "main"]
+    nonmain_idx = [i for i, r in enumerate(rows) if r.get("publication", "") != "main"]
     if main_numbering == "continuous":
-        main_idx = [i for i, r in enumerate(rows) if r.get("publication", "") == "main"]
-        nonmain_idx = [i for i, r in enumerate(rows) if r.get("publication", "") != "main"]
         renumbered = (
             _renumber_main_continuous(rows, main_idx)
             + _renumber_buckets(rows, nonmain_idx)
         )
     else:
-        # per-week (default): feature-008 behaviour for every publication (main
-        # is per-week because effective_doc is "" for main).
-        renumbered = _renumber_buckets(rows, range(len(rows)))
+        # per-week (default): contiguous 1..k per week for main (issue #102);
+        # non-main keeps the feature-008 bump-on-collision behaviour.
+        renumbered = (
+            _renumber_main_per_week_contiguous(rows, main_idx)
+            + _renumber_buckets(rows, nonmain_idx)
+        )
 
     LOGGER.info(
         "Renumber summary: grams_renumbered=%d (main_numbering=%s)",
@@ -558,11 +633,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--main-numbering", choices=("per-week", "continuous"),
                         default="per-week", dest="main_numbering",
                         help="how the main publication's grams are numbered "
-                             "(feature 009): 'per-week' (default) keeps numbering "
-                             "unique within each week, preserving native numbers "
-                             "and bumping only collisions; 'continuous' numbers "
-                             "main as one 1..N sequence across the four weeks. "
-                             "Non-main publications are unaffected.")
+                             "(feature 009): 'per-week' (default) numbers each "
+                             "week independently as contiguous 1..k (no gaps, "
+                             "restart at 1 per week, native-week deck first); "
+                             "'continuous' numbers main as one 1..N sequence "
+                             "across the four weeks. Non-main publications keep "
+                             "the per-week bump-on-collision rule.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("dedup.log"))

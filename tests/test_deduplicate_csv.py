@@ -311,13 +311,19 @@ class DeduplicateCsvTests(unittest.TestCase):
 
 
 class RenumberGramsTests(unittest.TestCase):
-    """Within-week gram-number renumbering (feature 008)."""
+    """Bump-on-collision renumbering for **non-main** publications (feature 008).
+
+    ``main`` now uses contiguous per-week numbering (issue #102, see
+    ``PerWeekContiguousMainTests``); the per-``(publication, chapter, doc)``
+    bump-to-max+1 rule continues to serve the progress-test / final-assessment
+    publications, which these tests exercise. ``target_chapter`` is used here
+    purely as a bucket discriminator (it stands in for the source chapter)."""
 
     @staticmethod
     def _gram(chapter, gram_id, vessel, target_chapter=""):
         """Two rows (analysis + one glc) sharing one gram's identity."""
         base = {
-            "publication": "main", "chapter": chapter, "gram_id": gram_id,
+            "publication": "progress-test-1", "chapter": chapter, "gram_id": gram_id,
             "vessel_name": vessel, "target_chapter": target_chapter,
             "target_doc": "",
         }
@@ -468,8 +474,12 @@ class ContinuousNumberingTests(unittest.TestCase):
             [r["target_gram_id"] for r in rows_default],
             [r["target_gram_id"] for r in rows_explicit],
         )
-        # per-week keeps the same number in different weeks distinct (feature 008).
-        self.assertTrue(all(r["target_gram_id"] == "" for r in rows_default))
+        # per-week numbers each week as contiguous 1..k: each single-gram week
+        # restarts at 1, so the native gram_id 5 is renumbered to 1 in both weeks.
+        self.assertEqual(self._target(rows_default), {
+            ("W1", "5", "A"): "1",
+            ("W2", "5", "B"): "1",
+        })
 
     def test_non_main_unaffected_by_continuous(self) -> None:
         # Non-main publications keep per-week bump-on-collision under either scheme.
@@ -522,6 +532,93 @@ class CsvEncodingToleranceTests(unittest.TestCase):
         text = "publication,vessel_name\r\nmain,Resolute\r\n"
         out = self._decode(b"\xef\xbb\xbf" + text.encode("utf-8"))
         self.assertTrue(out.startswith("publication"), "BOM must be stripped")
+
+
+class PerWeekContiguousMainTests(unittest.TestCase):
+    """Issue #102: the default ``per-week`` scheme numbers each ``main`` week as
+    contiguous ``1..k`` (no gaps, restart at 1 per week), with the native-week
+    deck ahead of any sliced no-week deck."""
+
+    @staticmethod
+    def _gram(chapter, gram_id, vessel, target_chapter="", publication="main"):
+        base = {
+            "publication": publication, "chapter": chapter, "gram_id": gram_id,
+            "vessel_name": vessel, "target_chapter": target_chapter,
+            "target_doc": "",
+        }
+        return [
+            {**base, "topic_type": "glc", "sequence": "1"},
+            {**base, "topic_type": "analysis", "sequence": "1"},
+        ]
+
+    def _target(self, rows):
+        out = {}
+        for r in rows:
+            out.setdefault(
+                (r["chapter"], r["gram_id"], r["vessel_name"]), r["target_gram_id"],
+            )
+        return out
+
+    def test_gappy_native_numbers_become_contiguous(self) -> None:
+        # One week deck with gappy native numbers 1, 5, 9 → contiguous 1, 2, 3.
+        rows = (
+            self._gram("Instructor Week 4 Grams", "1", "A", "4")
+            + self._gram("Instructor Week 4 Grams", "5", "B", "4")
+            + self._gram("Instructor Week 4 Grams", "9", "C", "4")
+        )
+        deduplicate_csv.renumber_grams(rows)  # default per-week
+        t = self._target(rows)
+        self.assertEqual(t[("Instructor Week 4 Grams", "1", "A")], "")   # 1 == seq 1
+        self.assertEqual(t[("Instructor Week 4 Grams", "5", "B")], "2")
+        self.assertEqual(t[("Instructor Week 4 Grams", "9", "C")], "3")
+
+    def test_each_week_restarts_at_one(self) -> None:
+        # Distinct weeks each restart at 1 (unlike continuous).
+        rows = (
+            self._gram("Instructor Week 1 Grams", "7", "A", "1")
+            + self._gram("Instructor Week 2 Grams", "8", "B", "2")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        t = self._target(rows)
+        self.assertEqual(t[("Instructor Week 1 Grams", "7", "A")], "1")
+        self.assertEqual(t[("Instructor Week 2 Grams", "8", "B")], "1")
+
+    def test_native_week_deck_precedes_sliced_no_week_deck(self) -> None:
+        # A week shared by the native Week-4 deck (grams 1,2) and a sliced Pub10
+        # slice (grams 70,71). The native deck takes 1,2; Pub10 follows 3,4 — even
+        # though "Instructor Pub10" sorts alphabetically before "Instructor Week".
+        rows = (
+            self._gram("Instructor Week 4 Grams", "1", "A", "4")
+            + self._gram("Instructor Week 4 Grams", "2", "B", "4")
+            + self._gram("Instructor Pub10_Ed22B", "70", "P", "4")
+            + self._gram("Instructor Pub10_Ed22B", "71", "Q", "4")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        t = self._target(rows)
+        self.assertEqual(t[("Instructor Week 4 Grams", "1", "A")], "")   # 1
+        self.assertEqual(t[("Instructor Week 4 Grams", "2", "B")], "")   # 2
+        self.assertEqual(t[("Instructor Pub10_Ed22B", "70", "P")], "3")
+        self.assertEqual(t[("Instructor Pub10_Ed22B", "71", "Q")], "4")
+
+    def test_gram_id_never_mutated_and_idempotent(self) -> None:
+        rows = (
+            self._gram("Instructor Week 4 Grams", "9", "A", "4")
+            + self._gram("Instructor Pub10_Ed22B", "70", "P", "4")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        first = [r["target_gram_id"] for r in rows]
+        self.assertEqual([r["gram_id"] for r in rows], ["9", "9", "70", "70"])
+        deduplicate_csv.renumber_grams(rows)  # recompute
+        self.assertEqual([r["target_gram_id"] for r in rows], first)
+
+    def test_non_main_unaffected_by_per_week_contiguous(self) -> None:
+        # Non-main keeps bump-on-collision: native 5 kept, the colliding 5 bumped.
+        rows = (
+            self._gram("PT", "5", "Vp", "", publication="progress-test-1")
+            + self._gram("PT", "5", "Vq", "", publication="progress-test-1")
+        )
+        deduplicate_csv.renumber_grams(rows)  # default per-week
+        self.assertEqual(sorted(self._target(rows).values()), ["", "6"])
 
 
 if __name__ == "__main__":
