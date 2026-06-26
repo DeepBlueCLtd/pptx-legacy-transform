@@ -51,6 +51,14 @@ OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
     "target_gram_id",
 )
 
+# In-memory-only row annotation: the 1-based line number each row occupied in
+# the source CSV (header is line 1, so the first data row is line 2). Stamped
+# by ``read_csv`` and read by ``require_field`` so an abort can point the
+# operator straight at the offending row in a large CSV. Never a CSV column,
+# so it does not round-trip to disk; the double-underscore name keeps it clear
+# of any real column.
+_SOURCE_LINE = "__source_line__"
+
 # The ``@name`` of the DITA ``<data>`` provenance element that flags a
 # redirected (deduplicated) lofar and anchors its reversal (feature 006).
 ORIGINAL_ASSET_PATH = "original-asset-path"
@@ -173,6 +181,8 @@ def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
     value = (row.get(field) or "").strip()
     if value:
         return value
+    if line_no is None:
+        line_no = row.get(_SOURCE_LINE)
     where = f" at CSV line {line_no}" if line_no is not None else ""
     raise PipelineDataError(
         f"Required field {field!r} is missing or blank{where} "
@@ -233,6 +243,11 @@ def read_csv(path: Path) -> list[dict]:
         for row in reader:
             row = dict(row)
             row["gram_id"] = _normalise_gram_id(row.get("gram_id", ""))
+            # Stamp the source-file line (header is line 1) so a downstream
+            # abort can name the exact row. ``reader.line_num`` is correct even
+            # when a quoted cell spans lines. Not a CSV column — purely in
+            # memory; see ``_SOURCE_LINE``.
+            row[_SOURCE_LINE] = reader.line_num
             rows.append(row)
     return rows
 
@@ -257,6 +272,10 @@ def check_row_identity(rows: list[dict]) -> list[str]:
     first_seen: dict[tuple, tuple[int, dict]] = {}
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        # Prefer the line stamped by ``read_csv`` (correct even with quoted
+        # multi-line cells); fall back to the positional index for synthetic
+        # rows that never came through ``read_csv``.
+        line_no = row.get(_SOURCE_LINE, line_no)
         # The key is the path the gram lands at: publication + effective
         # chapter + effective doc + effective gram number + topic_type +
         # sequence. Two rows sharing it mean two distinct grams resolve to
@@ -317,6 +336,7 @@ def check_main_chapter_assigned(rows: list[dict]) -> list[str]:
     """
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        line_no = row.get(_SOURCE_LINE, line_no)  # prefer stamped line
         if row.get("publication", "") != "main":
             continue
         eff_chapter = _effective_chapter(row)

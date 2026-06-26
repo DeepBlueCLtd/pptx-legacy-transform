@@ -48,6 +48,15 @@ MASTER_PNG_PATH = "master_png_path"
 # ``gram_id``"; ``gram_id`` itself is never mutated.
 TARGET_GRAM_ID = "target_gram_id"
 
+# In-memory-only row annotation: the 1-based line number each row occupied in
+# the source CSV (header is line 1, so the first data row is line 2). Stamped
+# by ``read_csv`` and read by ``require_field`` so an abort can point the
+# operator straight at the offending row in a large CSV. It is *not* a CSV
+# column — ``write_csv`` only emits ``fieldnames``, so this sentinel key never
+# round-trips to disk. The double-underscore name keeps it clear of any real
+# column and out of accidental collisions.
+_SOURCE_LINE = "__source_line__"
+
 # Default candidacy cut-off: strictly greater than 10 MiB (FR-003). The
 # mebibyte reading of the user's "10Mb" cut-off; overridable via CLI.
 DEFAULT_THRESHOLD_BYTES = 10 * 1024 * 1024
@@ -102,6 +111,8 @@ def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
     value = (row.get(field) or "").strip()
     if value:
         return value
+    if line_no is None:
+        line_no = row.get(_SOURCE_LINE)
     where = f" at CSV line {line_no}" if line_no is not None else ""
     raise PipelineDataError(
         f"Required field {field!r} is missing or blank{where} "
@@ -127,7 +138,14 @@ def read_csv(path: Path) -> tuple[list[str], list[dict]]:
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         fieldnames = list(reader.fieldnames or ())
-        rows = [dict(r) for r in reader]
+        rows = []
+        for r in reader:
+            row = dict(r)
+            # ``reader.line_num`` is the source-file line the row ended on
+            # (correct even when a quoted cell spans lines), so an abort can
+            # name the exact line the operator sees in Excel / a text editor.
+            row[_SOURCE_LINE] = reader.line_num
+            rows.append(row)
     return fieldnames, rows
 
 
