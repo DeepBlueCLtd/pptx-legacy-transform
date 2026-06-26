@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import logging
 import re
 import shutil
@@ -213,6 +214,38 @@ def _normalise_gram_id(raw: str) -> str:
     return str(int(digits[0]))
 
 
+def decode_csv_bytes(raw: bytes, path: Path, logger: logging.Logger) -> str:
+    """Decode an Excel-edited CSV, tolerant of whichever encoding Excel chose.
+
+    The pipeline writes ``utf-8-sig``, but a technical author who edits the
+    file in Excel and uses *Save As → "CSV (Comma delimited)"* (the
+    convenient default) gets the file back in the Windows ANSI code page
+    (cp1252), **not** UTF-8 — so a strict ``utf-8`` read dies on the first
+    non-ASCII byte (a vessel name, a ``£`` or a ``°``). That is why the
+    operator has had to reach for the awkward *"CSV (MS-DOS)"* option.
+
+    We therefore try UTF-8 first (covering our own output and Excel's
+    *"CSV UTF-8"*), then fall back to cp1252 so the plain *"CSV (Comma
+    delimited)"* save round-trips too. cp1252 maps almost every byte, so
+    this never raises; at worst an exotic glyph is mildly mangled — visible
+    in the cell for the author to fix — rather than crashing the whole run.
+    This is boundary-forgiveness (constitution VII): the file came back
+    from a human's Excel, not from our own deterministic writer.
+    """
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        logger.warning(
+            "%s is not UTF-8; decoding as Windows-1252 (cp1252), which is "
+            "what Excel's 'CSV (Comma delimited)' save produces. Re-save as "
+            "'CSV UTF-8' to silence this and guarantee a clean round-trip.",
+            path,
+        )
+        return raw.decode("cp1252")
+
+
 def read_csv(path: Path) -> list[dict]:
     """Read the intermediate CSV with strict header validation (FR-014).
 
@@ -220,7 +253,8 @@ def read_csv(path: Path) -> list[dict]:
     so downstream grouping treats ``"12"``, ``"Gram 12"``, and ``"Gram 12 "``
     as the same gram.
     """
-    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+    text = decode_csv_bytes(path.read_bytes(), path, LOGGER)
+    with io.StringIO(text, newline="") as fh:
         reader = csv.DictReader(fh)
         actual = tuple(reader.fieldnames or ())
         missing = [c for c in CSV_COLUMNS if c not in actual]
