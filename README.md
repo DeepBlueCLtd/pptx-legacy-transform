@@ -581,6 +581,12 @@ extractor and `introspect_pptx.py` share, so a fix here flows to both.)
 - **Final-assessment routing** — a deck matching `--final-pattern` (default
   `final assessment`) routes to its own `final-assessment-N` publication
   instead of falling through to `main`.
+- **Joining-assessment routing** — a deck matching `--joining-pattern` (default
+  `joining`) routes to its own `joining-assessment-N` publication (the initial
+  joining assessment) instead of falling through to `main`. The joining pattern
+  is checked before the final and test patterns, so a deck deliberately named
+  for the joining assessment never lands in those buckets. As with the other
+  standalone assessments, `--exclude-tests` drops it.
 
 ### Design lessons worth keeping
 

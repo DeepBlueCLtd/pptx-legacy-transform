@@ -87,6 +87,56 @@ class ClassificationTests(unittest.TestCase):
             Path("/root/y/Progress Test Beta.pptx"), "progress test", allocated)
         self.assertEqual((first, second), ("progress-test-1", "progress-test-2"))
 
+    def test_joining_assessment_routing(self) -> None:
+        """A deck whose filename contains the joining pattern routes to its own
+        joining-assessment-N publication, never to main."""
+        joining_allocated: dict[str, int] = {}
+        pub, chapter, slug = extract_to_csv.classify_publication(
+            Path("/root/Joining/Instructor Initial Joining Assessment Grams.pptx"),
+            "progress test", {},
+            extract_to_csv.DEFAULT_FINAL_PATTERN, {},
+            extract_to_csv.DEFAULT_JOINING_PATTERN, joining_allocated)
+        self.assertEqual(pub, "joining-assessment-1")
+        self.assertIsNone(chapter)
+        self.assertIsNone(slug)
+
+    def test_joining_pattern_checked_before_final_and_test(self) -> None:
+        """The joining bucket wins over final/test when a deck name matches more
+        than one pattern, so a deliberately-named joining deck never falls
+        through to those buckets."""
+        joining_allocated: dict[str, int] = {}
+        pub, _, _ = extract_to_csv.classify_publication(
+            Path("/root/x/Joining Final Assessment Progress Test 1.pptx"),
+            "progress test", {},
+            "final assessment", {},
+            "joining", joining_allocated)
+        self.assertEqual(pub, "joining-assessment-1")
+
+    def test_joining_allocation_is_stable_encounter_order(self) -> None:
+        """Distinct joining decks number 1, 2, … in encounter order; the same
+        deck stem keeps its number."""
+        joining_allocated: dict[str, int] = {}
+        first, _, _ = extract_to_csv.classify_publication(
+            Path("/root/a/Joining Assessment Alpha.pptx"),
+            "progress test", {}, "final assessment", {}, "joining", joining_allocated)
+        second, _, _ = extract_to_csv.classify_publication(
+            Path("/root/b/Joining Assessment Beta.pptx"),
+            "progress test", {}, "final assessment", {}, "joining", joining_allocated)
+        first_again, _, _ = extract_to_csv.classify_publication(
+            Path("/root/a/Joining Assessment Alpha.pptx"),
+            "progress test", {}, "final assessment", {}, "joining", joining_allocated)
+        self.assertEqual((first, second, first_again),
+                         ("joining-assessment-1", "joining-assessment-2", "joining-assessment-1"))
+
+    def test_joining_pattern_disabled_when_empty(self) -> None:
+        """An empty joining pattern disables the bucket, so a 'joining' deck
+        falls through to main (back-compat with callers that don't set it)."""
+        pub, chapter, _ = extract_to_csv.classify_publication(
+            Path("/root/Joining Stuff/Joining Stuff.pptx"),
+            "progress test", {}, "final assessment", {}, "", None)
+        self.assertEqual(pub, "main")
+        self.assertEqual(chapter, "Joining Stuff")
+
     def test_week_chapter_number_parses_week_token(self) -> None:
         """Feature 008: a "Week N" deck title yields the bare-integer week."""
         self.assertEqual(extract_to_csv.week_chapter_number("Instructor Week 1 Grams"), "1")
