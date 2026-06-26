@@ -39,6 +39,7 @@ CSV_COLUMNS: tuple[str, ...] = (
 
 DEFAULT_TEST_PATTERN: str = "progress test"
 DEFAULT_FINAL_PATTERN: str = "final assessment"
+DEFAULT_JOINING_PATTERN: str = "joining"
 
 # GramFrame needs the full time + frequency coordinate system to render a gram,
 # so every GLC-backed gram -- whether its inner asset is a pre-rendered image
@@ -344,6 +345,8 @@ def classify_publication(
     allocated: dict[str, int],
     final_pattern: str = "",
     final_allocated: dict[str, int] | None = None,
+    joining_pattern: str = "",
+    joining_allocated: dict[str, int] | None = None,
 ) -> tuple[str, str | None, str | None]:
     """Return ``(publication, chapter, chapter_slug)`` per R2/R3.
 
@@ -358,8 +361,19 @@ def classify_publication(
     their own ``final-assessment-N`` publication prefix. The final
     pattern is checked first so a filename containing both phrases
     routes to the final-assessment bucket.
+
+    Joining-assessment PPTXs (the initial joining assessment, matched
+    against ``joining_pattern`` when non-empty with its own
+    ``joining_allocated`` map) get a ``joining-assessment-N`` prefix.
+    The joining pattern is checked first so a deck deliberately named
+    for the joining assessment never falls through to the final or test
+    buckets.
     """
     name = pptx.name.lower()
+    if joining_pattern and joining_allocated is not None and joining_pattern.lower() in name:
+        if pptx.stem not in joining_allocated:
+            joining_allocated[pptx.stem] = len(joining_allocated) + 1
+        return (f"joining-assessment-{joining_allocated[pptx.stem]}", None, None)
     if final_pattern and final_allocated is not None and final_pattern.lower() in name:
         if pptx.stem not in final_allocated:
             final_allocated[pptx.stem] = len(final_allocated) + 1
@@ -1099,6 +1113,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--test-pattern", default=DEFAULT_TEST_PATTERN, dest="test_pattern")
     parser.add_argument("--final-pattern", default=DEFAULT_FINAL_PATTERN, dest="final_pattern")
+    parser.add_argument("--joining-pattern", default=DEFAULT_JOINING_PATTERN, dest="joining_pattern")
     parser.add_argument(
         "--only", default=None, dest="only",
         help="Scope the walk to PPTXs whose path under --input-root starts with "
@@ -1147,6 +1162,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     warning_counter: Counter[str] = Counter()
     allocated: dict[str, int] = {}
     final_allocated: dict[str, int] = {}
+    joining_allocated: dict[str, int] = {}
 
     try:
         for pptx in walk_pptxs(args.input_root, only_subdir=args.only):
@@ -1155,6 +1171,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             publication, chapter, chapter_slug = classify_publication(
                 pptx, args.test_pattern, allocated,
                 args.final_pattern, final_allocated,
+                args.joining_pattern, joining_allocated,
             )
             if args.exclude_tests and publication != "main":
                 LOGGER.info(
