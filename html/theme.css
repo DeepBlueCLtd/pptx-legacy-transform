@@ -57,7 +57,7 @@ body::before {
   padding: 10px 12px;
   text-transform: uppercase;
 }
-body:not(:has(.edition-instructor))::before {
+body:not(:has(.gf-persistent))::before {
   content: "┄ STUDENT ┄ TRAINING ┄";
   background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
   border-bottom-color: rgba(77,208,225,0.35);
@@ -65,7 +65,7 @@ body:not(:has(.edition-instructor))::before {
 }
 /* Heuristic for Oxygen-published output (which carries no data-edition
    attribute): generate_dita stamps a hidden instructor-only marker
-   (.edition-instructor) on EVERY page, so its absence reliably means the
+   (.gf-persistent) on EVERY page, so its absence reliably means the
    student edition — including the week sub-document pages, which the older
    :has(.ph) heuristic misread as student. When publish_html.py stamped the
    edition on <body>, the data-edition rules below win regardless. */
@@ -84,7 +84,7 @@ body[data-edition="student"]::before {
 
 /* The hidden instructor-only edition marker (stamped by generate_dita on every
    page) is a signal, not content — never render the empty paragraph itself. */
-.edition-instructor { display: none; }
+.gf-persistent { display: none; }
 
 /* ---------- Layout ---------- */
 main[role="main"] {
