@@ -995,6 +995,49 @@ def _asset_file_missing(png_path: str, content_root: Path) -> bool:
     return not (content_root / png_path).is_file()
 
 
+def _gram_folder_missing(
+    gram: GramPlaceholder, content_root: Path, source_dir: Path | None,
+) -> bool:
+    """True when *every* asset folder this gram references is absent on disk.
+
+    A gram whose whole per-gram folder an author has deleted references its
+    assets — the analysis-sheet image and the Lofar ``.glc`` files — out of
+    that now-missing directory. This is deliberately distinct from a single
+    deleted *file* with the folder still present: the latter stays flagged
+    (``ASSET_MISSING_WARNING``) so the author restores the one file, whereas a
+    vanished folder means the gram itself is gone, so the caller drops it from
+    the CSV entirely rather than emit a topic full of dangling references (that
+    would only fail later in Oxygen/DITA-OT).
+
+    Fires only when the gram carries at least one href with a directory
+    component *and none* of those directories resolves on disk (checked under
+    the deck folder then the content root, mirroring ``resolve_glc_path``'s
+    candidate order). A gram whose hrefs are all bare filenames — no folder to
+    test — or any one of whose asset folders still exists returns ``False``, so
+    a merely-deleted individual file continues to be flagged, not dropped.
+    """
+    hrefs = [link.href for link in gram.glc_links if link.href]
+    if gram.png_href:
+        hrefs.append(gram.png_href)
+    referenced_dirs: list[Path] = []
+    for href in hrefs:
+        decoded = urllib.parse.unquote(href.split("?", 1)[0].split("#", 1)[0])
+        rel = Path(decoded.replace("\\", "/"))
+        if rel.parent == Path("."):
+            continue  # bare filename — no folder to test
+        referenced_dirs.append(rel.parent)
+    if not referenced_dirs:
+        return False
+    for rel_dir in referenced_dirs:
+        candidates: list[Path] = []
+        if source_dir is not None:
+            candidates.append(source_dir / rel_dir)
+        candidates.append(content_root / rel_dir)
+        if any(candidate.is_dir() for candidate in candidates):
+            return False
+    return True
+
+
 def gram_to_rows(
     gram: GramPlaceholder,
     publication: str,
@@ -1289,6 +1332,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     rows: list[dict] = []
     pptx_count = 0
+    skipped_deleted_grams = 0
     warning_counter: Counter[str] = Counter()
     allocated: dict[str, int] = {}
     final_allocated: dict[str, int] = {}
@@ -1332,6 +1376,21 @@ def main(argv: Iterable[str] | None = None) -> int:
             target_doc = "" if publication == "main" else pptx.name
             target_chapters = deck_target_chapters(publication, chapter, len(deck_grams))
             for gram, target_chapter in zip(deck_grams, target_chapters):
+                # A gram whose whole asset folder an author has deleted is a
+                # removed gram, not a dangling asset: drop it entirely rather
+                # than emit a topic of references that only fail at publish.
+                # (A single deleted *file* with the folder still present is
+                # left to the per-row missing-asset flag below.)
+                if _gram_folder_missing(
+                        gram, args.input_root, source_dir=pptx.parent):
+                    LOGGER.info(
+                        "Skipping gram %s in %s: its whole asset folder is "
+                        "missing on disk — an author has deleted the gram "
+                        "(dropped from the CSV, not dangled).",
+                        gram.gram_id or "<no gram_id>", pptx.name,
+                    )
+                    skipped_deleted_grams += 1
+                    continue
                 gram_rows = gram_to_rows(
                     gram, publication, chapter, chapter_slug,
                     args.input_root, source_dir=pptx.parent,
@@ -1410,10 +1469,21 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         return 1
 
+    if skipped_deleted_grams:
+        LOGGER.warning(
+            "Skipped %d gram(s) whose whole asset folder is missing on disk "
+            "(author-deleted grams, dropped from the CSV). A single missing "
+            "file with its folder still present is not dropped — it is flagged "
+            "%r instead.",
+            skipped_deleted_grams, ASSET_MISSING_WARNING,
+        )
+
     distinct = ", ".join(f"{w}={c}" for w, c in sorted(warning_counter.items()))
     LOGGER.info(
-        "Extraction summary: pptx=%d rows=%d warnings=%d distinct=[%s]",
-        pptx_count, len(rows), sum(warning_counter.values()), distinct,
+        "Extraction summary: pptx=%d rows=%d skipped_deleted_grams=%d "
+        "warnings=%d distinct=[%s]",
+        pptx_count, len(rows), skipped_deleted_grams,
+        sum(warning_counter.values()), distinct,
     )
     return 0
 

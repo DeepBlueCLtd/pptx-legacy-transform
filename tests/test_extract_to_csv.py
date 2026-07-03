@@ -998,5 +998,124 @@ class MissingAssetMainTests(unittest.TestCase):
         self.assertTrue(out_csv.exists())
 
 
+class DeletedGramFolderDetectionTests(unittest.TestCase):
+    """``_gram_folder_missing`` distinguishes a gram whose *whole folder* an
+    author has deleted (drop the gram) from a single missing *file* with the
+    folder still present (keep flagging that one file)."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "deleted_folder"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.deck = self.tmp / "Deck"
+        (self.deck / "Files" / "Gram 5").mkdir(parents=True)
+
+    def _gram(self, png: str, links: list[tuple[str, str]]):
+        return extract_to_csv.GramPlaceholder(
+            gram_id="Gram 5", vessel_name="V", png_href=png,
+            glc_links=[extract_to_csv.GlcLink(display_text=t, href=h)
+                       for t, h in links])
+
+    def test_folder_present_is_not_missing(self) -> None:
+        # The Gram 5 folder exists (even though the files inside don't) — this
+        # is a deleted *file*, not a deleted gram, so it is not folder-missing.
+        gram = self._gram(
+            "Files/Gram 5/Analysis.png",
+            [("LOFAR 1", "Files/Gram 5/Lofar 1.glc")])
+        self.assertFalse(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+    def test_folder_deleted_is_missing(self) -> None:
+        gram = self._gram(
+            "Files/Gram 9/Analysis.png",           # Gram 9 folder never created
+            [("LOFAR 1", "Files/Gram 9/Lofar 1.glc")])
+        self.assertTrue(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+    def test_bare_filename_hrefs_are_never_folder_missing(self) -> None:
+        # No directory component to test — fall back to per-file flagging.
+        gram = self._gram("Analysis.png", [("LOFAR 1", "Lofar 1.glc")])
+        self.assertFalse(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+    def test_one_surviving_folder_keeps_the_gram(self) -> None:
+        # analysis lives in the present Gram 5 folder, the glc in a gone one:
+        # some assets survive, so it is not a wholesale deletion.
+        gram = self._gram(
+            "Files/Gram 5/Analysis.png",
+            [("LOFAR 1", "Files/Gram 9/Lofar 1.glc")])
+        self.assertFalse(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+
+class DeletedGramFolderMainTests(unittest.TestCase):
+    """End-to-end: deleting a gram's whole folder drops that gram from the CSV
+    (a skip, not a failure), while a single deleted file with its folder still
+    present stays flagged and in the CSV."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(
+            TMP / "extract_deleted_folder_corpus")
+
+    def _extract(self, out_csv: Path, *extra: str) -> int:
+        return extract_to_csv.main(
+            ["--input-root", str(self.corpus), "--out", str(out_csv), *extra])
+
+    def _rows(self, out_csv: Path) -> list[dict]:
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            return list(csv.DictReader(fh))
+
+    def test_deleted_folder_drops_the_gram(self) -> None:
+        out_csv = TMP / "extract_deleted_folder.csv"
+        self.assertEqual(self._extract(out_csv), 0)
+        rows = self._rows(out_csv)
+        # Pick a gram that has a resolved asset, then delete its whole folder.
+        target = next(r for r in rows if r["png_path"] and r["file_size"])
+        gram_id, publication = target["gram_id"], target["publication"]
+        folder = (self.corpus / target["png_path"]).parent
+        self.assertTrue(folder.is_dir())
+        shutil.rmtree(folder)
+
+        with self.assertLogs(extract_to_csv.LOGGER, level="INFO") as cm:
+            rc = self._extract(out_csv)
+        self.assertEqual(rc, 0)                       # a skip, not a failure
+        log = "\n".join(cm.output)
+        self.assertIn("whole asset folder is missing", log)
+
+        after = self._rows(out_csv)
+        self.assertFalse(
+            any(r["gram_id"] == gram_id and r["publication"] == publication
+                for r in after),
+            "the deleted-folder gram must be dropped from the CSV entirely")
+        # No row should carry the per-file missing flag *for that gram* — it was
+        # dropped, not dangled.
+        self.assertFalse(
+            any(extract_to_csv.ASSET_MISSING_WARNING in r["warnings"]
+                and r["gram_id"] == gram_id for r in after))
+
+    def test_single_deleted_file_keeps_the_gram_flagged(self) -> None:
+        out_csv = TMP / "extract_deleted_file.csv"
+        self.assertEqual(self._extract(out_csv), 0)
+        rows = self._rows(out_csv)
+        target = next(r for r in rows if r["png_path"] and r["file_size"])
+        gram_id, publication = target["gram_id"], target["publication"]
+        # Delete only the one file; its folder stays.
+        (self.corpus / target["png_path"]).unlink()
+
+        rc = self._extract(out_csv)
+        self.assertEqual(rc, 0)
+        after = self._rows(out_csv)
+        surviving = [r for r in after
+                     if r["gram_id"] == gram_id
+                     and r["publication"] == publication]
+        self.assertTrue(surviving, "the gram must NOT be dropped")
+        self.assertTrue(
+            any(extract_to_csv.ASSET_MISSING_WARNING in r["warnings"]
+                for r in surviving),
+            "the single missing file must still be flagged")
+
+
 if __name__ == "__main__":
     unittest.main()
