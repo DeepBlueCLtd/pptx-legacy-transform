@@ -81,6 +81,16 @@ FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
 # not a header.
 ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", ".jpeg")
 
+# Tokens that name an analysis sheet on disk, used by the Lofar-folder fallback
+# (``_recover_analysis_sheet``) when a gram's analysis hyperlink is stale. Kept
+# in sync with snapshot_analysis_docs.ANALYSIS_NAME_TOKEN /
+# ANALYSIS_NAME_MISSPELLINGS so the fallback recognises exactly the sheets the
+# snapshotter does. Only image sheets are recovered here — a Word sheet awaiting
+# its snapshot render is a separate flow, left to Feature 007.
+ANALYSIS_NAME_TOKEN = "analysis"
+ANALYSIS_NAME_MISSPELLINGS: tuple[str, ...] = ("analaysis",)
+ANALYSIS_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg")
+
 # Some legacy decks carry navigation buttons labelled like "N Questions"
 # that link to an image (a self-test slide), not a gram. Their shape-level
 # hyperlink targets a ``.png`` so they would otherwise be mistaken for a
@@ -1038,6 +1048,46 @@ def _gram_folder_missing(
     return True
 
 
+def _is_analysis_sheet_image(name: str) -> bool:
+    """True when ``name`` looks like an analysis-sheet image file.
+
+    Matches the ``analysis`` token (or a known misspelling, e.g. ``analaysis``)
+    as a case-insensitive substring of the stem, with an image extension —
+    mirroring ``snapshot_analysis_docs._is_analysis_name`` so the Lofar-folder
+    fallback recognises the same sheets the snapshotter renders.
+    """
+    p = PurePosixPath(name)
+    if p.suffix.lower() not in ANALYSIS_IMAGE_EXTENSIONS:
+        return False
+    stem = p.stem.lower()
+    if ANALYSIS_NAME_TOKEN in stem:
+        return True
+    return any(typo in stem for typo in ANALYSIS_NAME_MISSPELLINGS)
+
+
+def _recover_analysis_sheet(
+    lofar_dirs: list[Path], content_root: Path,
+) -> str | None:
+    """Find an analysis-sheet image sitting in a gram's Lofar folder(s).
+
+    When a gram's analysis hyperlink is stale — a legacy href left pointing at
+    an earlier build's folder — the real analysis sheet often still sits beside
+    the gram's Lofar ``.glc`` files. Search each resolved Lofar directory (in
+    the order the Lofars appear, so the result is deterministic) for an analysis
+    image and return the first match as a ``content_root``-relative POSIX path,
+    or ``None`` when none is found. Directories are scanned non-recursively and
+    their entries sorted so a folder holding two candidate images always yields
+    the same one (the determinism/idempotency invariant).
+    """
+    for lofar_dir in lofar_dirs:
+        if not lofar_dir.is_dir():
+            continue
+        for entry in sorted(lofar_dir.iterdir()):
+            if entry.is_file() and _is_analysis_sheet_image(entry.name):
+                return _rel_to_root(entry, content_root)
+    return None
+
+
 def gram_to_rows(
     gram: GramPlaceholder,
     publication: str,
@@ -1061,6 +1111,9 @@ def gram_to_rows(
     """
     rows: list[dict] = []
     gram_num = _gram_num_from_id(gram.gram_id)
+    # Folders holding this gram's resolved Lofar .glc files, in Lofar order and
+    # de-duplicated — the search space for the analysis-sheet fallback below.
+    lofar_dirs: list[Path] = []
 
     for i, link in enumerate(gram.glc_links, start=1):
         warnings: list[str] = []
@@ -1077,6 +1130,8 @@ def gram_to_rows(
             glc_path = href
         else:
             glc_path = _rel_to_root(resolved, content_root)
+            if resolved.parent not in lofar_dirs:
+                lofar_dirs.append(resolved.parent)
             glc = parse_glc(resolved)
             warnings.extend(glc.warnings)
             time_end = glc.time_end
@@ -1160,14 +1215,41 @@ def gram_to_rows(
                 PurePosixPath(analysis_png_resolved).with_suffix(".png"))
             if not (content_root / analysis_png_resolved).is_file():
                 analysis_warnings.append("analysis image not rendered")
-    # A directly-referenced analysis image (.png/.jpg) whose file is absent
-    # gets the same missing-asset flag as a GLC asset. The Word-sheet path
-    # above already records the more specific "analysis image not rendered"
-    # (snapshot step not run) for the same missing .png, so don't double-flag.
+    # A directly-referenced analysis image (.png/.jpg) whose file is absent —
+    # typically a legacy href left pointing at an earlier build's folder. The
+    # Word-sheet path above already records the more specific "analysis image
+    # not rendered" (snapshot step not run) for the same missing .png, so that
+    # case is excluded here. Otherwise:
+    #   * a gram carrying a vessel_name is real content worth persevering with:
+    #     look for an analysis sheet sitting in the gram's own Lofar folder(s)
+    #     and repoint to it (a stale link whose real target moved). Found ->
+    #     recover silently; not found -> flag ASSET_MISSING_WARNING as before.
+    #   * a gram with no vessel_name is mangled legacy content we can't exploit:
+    #     drop the analysis sheet entirely (no row, no warning), keeping the
+    #     gram's resolved Lofar rows.
     if (analysis_png_resolved
             and "analysis image not rendered" not in analysis_warnings
             and _asset_file_missing(analysis_png_resolved, content_root)):
-        analysis_warnings.append(ASSET_MISSING_WARNING)
+        if gram.vessel_name.strip():
+            recovered = _recover_analysis_sheet(lofar_dirs, content_root)
+            if recovered is not None:
+                LOGGER.info(
+                    "Gram %s (%s): analysis link %r not on disk; recovered "
+                    "analysis sheet from Lofar folder -> %s",
+                    gram.gram_id or "<no gram_id>", gram.vessel_name,
+                    analysis_png, recovered,
+                )
+                analysis_png_resolved = recovered
+            else:
+                analysis_warnings.append(ASSET_MISSING_WARNING)
+        else:
+            LOGGER.info(
+                "Gram %s: no vessel_name and analysis link %r not on disk — "
+                "dropping the analysis sheet (mangled legacy, unrecoverable). "
+                "The gram's Lofar rows are unaffected.",
+                gram.gram_id or "<no gram_id>", analysis_png,
+            )
+            return rows
     rows.append({
         "publication": publication,
         "chapter": chapter or "",

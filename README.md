@@ -461,6 +461,25 @@ installs, not the user-folder install.
    keeps being flagged, not dropped — only a wholesale-deleted folder is
    skipped.
 
+   **Stale analysis-sheet links.** A common legacy artefact is a gram whose
+   analysis-sheet hyperlink still points at an *earlier build's* folder (e.g. a
+   `Working grams week 3\…` href on a deck now filed under week 4), even though
+   the gram's real analysis sheet moved with it and now sits beside the gram's
+   own `.glc` files. When the linked analysis image can't be found on disk,
+   extraction tries to recover before flagging:
+   - if the gram carries a `vessel_name` (it is real, exploitable content), it
+     **looks in the gram's own Lofar folder(s)** for an analysis sheet
+     (`*analysis*` / `*analaysis*`, `.png`/`.jpg`/`.jpeg`) and, if found,
+     **repoints the row at that sibling** — a logged, silent recovery. If no
+     sheet is found there, the row is flagged `asset file missing on disk` as
+     above (nothing is silently lost);
+   - if the gram has **no `vessel_name`**, it is mangled legacy content that
+     can't be exploited, so the analysis sheet is **dropped entirely** (no
+     analysis row, no warning) while the gram's resolved Lofar rows are kept.
+   This recovery only ever fires for an analysis image that isn't on disk; a
+   correctly-linked sheet is untouched, so it can't change output for grams that
+   already resolve.
+
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,
