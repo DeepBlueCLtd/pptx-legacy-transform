@@ -451,6 +451,16 @@ installs, not the user-folder install.
    rule); pass `--strict-assets` for a focused cleanup pass that hard-fails
    (exit 1) until every referenced asset is present or its row dropped.
 
+   A single missing *file* is distinct from a **whole missing folder**. When a
+   gram's entire asset folder is gone — an author deleted the gram, so *every*
+   directory its hyperlinks reference is absent on disk — the gram is not a set
+   of dangling assets to flag but a removed gram: extraction **drops it from the
+   CSV entirely** (a logged skip, `whole asset folder is missing`, counted in
+   the extraction summary), rather than emit a topic whose every reference would
+   fail at publish. The single-missing-file case above (folder still present)
+   keeps being flagged, not dropped — only a wholesale-deleted folder is
+   skipped.
+
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,
