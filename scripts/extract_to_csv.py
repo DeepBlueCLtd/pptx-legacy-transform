@@ -74,7 +74,7 @@ FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
 # not a header.
 ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", ".jpeg")
 
-# Some legacy decks carry navigation buttons labelled like "7 Questions"
+# Some legacy decks carry navigation buttons labelled like "N Questions"
 # that link to an image (a self-test slide), not a gram. Their shape-level
 # hyperlink targets a ``.png`` so they would otherwise be mistaken for a
 # gram header. Any link whose visible label ends in the word "questions"
@@ -417,7 +417,7 @@ class GramPlaceholder:
 def _label_ends_in_questions(label: str) -> bool:
     """True when ``label``'s final word is "questions" (case-insensitive).
 
-    Matches "7 Questions", "Questions", "10 questions" and tolerates
+    Matches "N Questions", "Questions", "10 questions" and tolerates
     trailing whitespace/punctuation; does not match "acquisitions".
     """
     return re.search(
