@@ -946,6 +946,81 @@ class DeletedGramRemnantTests(unittest.TestCase):
                         "a blank-gram_id row survived to CSV output")
 
 
+class OrphanGlcAnalysisRecoveryTests(unittest.TestCase):
+    """A .glc whose ``GramNN/`` folder matches no header on the slide — because
+    that gram's *analysis-sheet* header links to a stale earlier-build folder —
+    is reconnected to its gram (not dropped with a spurious 'no matching header'
+    warning) when the real analysis sheet sits beside the .glc.
+
+    This is the reverse of the PR #125 stale-analysis-link recovery: there the
+    .glc matched but the analysis image was missing; here the analysis header
+    is mis-linked so the .glc itself is folder-orphaned, and the sibling
+    analysis sheet is what proves the gram is real and reconnectable.
+    """
+
+    def setUp(self) -> None:
+        self.root = TMP / "orphan_glc_recovery" / self._testMethodName
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        self.root.mkdir(parents=True)
+        # A real gram folder on disk: the .glc, and (optionally) its sibling
+        # analysis sheet. The folder name is the .glc href's 'Gram 12/' folder.
+        self.gram_dir = self.root / "Working Grams Week 4" / "Gram 12"
+        self.gram_dir.mkdir(parents=True)
+        (self.gram_dir / "Wav 1.glc").write_text("<glc/>", encoding="utf-8")
+
+    def _add_sibling_analysis_sheet(self) -> None:
+        (self.gram_dir / "Analysis Sheet.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    def _slide(self):
+        from pptx import Presentation
+        from pptx.util import Emu
+
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+        # Header captioned "Gram 12" but whose analysis-sheet hyperlink points
+        # at a stale earlier-build folder ('Gram 11'), so its folder key never
+        # matches the gram's own 'Gram 12/' .glc.
+        header = slide.shapes.add_textbox(Emu(0), Emu(0), Emu(100), Emu(50))
+        header.text_frame.text = "Gram 12: Frigate"
+        mock_pptx.add_shape_level_hyperlink(
+            header, "Working Grams Week 3/Gram 11/Analysis%20Sheet.png")
+        lofar = slide.shapes.add_textbox(Emu(0), Emu(60), Emu(100), Emu(30))
+        run = lofar.text_frame.paragraphs[0].add_run()
+        run.text = "Lofar"
+        mock_pptx.add_text_run_hyperlink(
+            run, "Working Grams Week 4/Gram 12/Wav 1.glc")
+        return slide
+
+    def test_orphan_glc_reconnected_when_sibling_sheet_present(self) -> None:
+        self._add_sibling_analysis_sheet()
+        with self.assertLogs(extract_to_csv.LOGGER, level="INFO") as cm:
+            grams = extract_to_csv.extract_grams_from_slide(
+                self._slide(), slide_num=2,
+                content_root=self.root, source_dir=self.root)
+        self.assertEqual([g.gram_id for g in grams], ["12"])
+        self.assertEqual(
+            [link.href for link in grams[0].glc_links],
+            ["Working Grams Week 4/Gram 12/Wav 1.glc"],
+            "the folder-orphaned .glc should be reconnected to its gram")
+        log = "\n".join(cm.output)
+        self.assertIn("reconnected", log)
+        self.assertNotIn("no matching header", log,
+                         "the recovered .glc must not emit the stale warning")
+
+    def test_orphan_glc_still_warns_without_sibling_sheet(self) -> None:
+        # No analysis sheet beside the .glc -> we can't confirm a real gram, so
+        # the .glc is dropped with the 'no matching header' warning, unchanged.
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            grams = extract_to_csv.extract_grams_from_slide(
+                self._slide(), slide_num=2,
+                content_root=self.root, source_dir=self.root)
+        self.assertIn("no matching header", "\n".join(cm.output))
+        self.assertEqual([link.href for link in grams[0].glc_links], [],
+                         "no sibling sheet -> the orphaned .glc stays dropped")
+
+
 class QuestionsLabelFilterTests(unittest.TestCase):
     """A shape-level image link labelled "N Questions" is not a gram."""
 
