@@ -253,20 +253,24 @@ def _view_key(row: dict) -> tuple:
     assets carry their view in the row itself (the gram-config table), so
     byte-identity alone suffices and they share one key.
 
-    Promotion clause (constitution VII): for a ``.wav`` row these three view
-    fields *are* the dedup key — an empty one would silently mis-pair distinct
-    audio views, so a blank is hard-failed here rather than falling back to a
-    tolerant unique key. The generator's ``_master_index_key`` enforces the
-    same contract, so this step never emits a CSV the generator would reject.
+    The view fields only drive GramFrame rendering, which happens for *images*,
+    not ``.wav`` output — a ``.wav`` row is emitted downstream as a plain link
+    to its ``.glc`` and never renders a gram-config table. They are therefore
+    boundary-forgiving here (they originate in the external ``.glc``): a blank
+    one degrades to "" rather than aborting. When the values *are* present they
+    still refine the key, so byte-identical ``.wav`` rows windowing the same
+    recording differently stay unmerged (issues #78, #87); when absent,
+    blank-view rows simply share a key. The generator's ``_master_index_key``
+    reads these fields the same forgiving way.
     """
     png = (row.get("png_path", "") or "").strip()
     if Path(png).suffix.lower() != ".wav":
         return ("any",)
     return (
         "wav-view",
-        require_field(row, "time_end"),
-        require_field(row, "bandwidth"),
-        require_field(row, "bandcentre"),
+        row.get("time_end", "") or "",
+        row.get("bandwidth", "") or "",
+        row.get("bandcentre", "") or "",
     )
 
 
@@ -341,8 +345,9 @@ def deduplicate(
                 continue
             by_view: dict[tuple, list[dict]] = defaultdict(list)
             for row in members:
-                # A blank ``.wav`` view hard-fails inside ``_view_key``
-                # (constitution VII) rather than being tolerated as before.
+                # A blank ``.wav`` view degrades to "" inside ``_view_key``
+                # (the fields only matter for image GramFrame rendering, not
+                # ``.wav`` links) — blank-view rows simply share a key.
                 by_view[_view_key(row)].append(row)
             for view in sorted(by_view):
                 group = by_view[view]

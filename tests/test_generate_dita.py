@@ -1709,10 +1709,12 @@ class FreqBandDerivationTests(unittest.TestCase):
 class TrustBoundaryTests(unittest.TestCase):
     """Fail-fast on our own artifacts (constitution VII).
 
-    A blank Zone-A identity column, or a blank ``.wav`` view field (promoted to
-    Zone A because it is the dedup key), is a defect in data our pipeline
-    produces — the generator aborts loudly rather than coercing it to "" and
-    emitting a malformed topic.
+    A blank Zone-A identity column is a defect in data our pipeline produces —
+    the generator aborts loudly rather than coercing it to "" and emitting a
+    malformed topic. The ``.wav`` view fields (``time_end``/``bandwidth``/
+    ``bandcentre``) are *not* in this set: they only feed the image GramFrame
+    table, so a blank one on a ``.wav`` row is tolerated (see
+    ``test_blank_wav_view_field_is_tolerated``).
     """
 
     def setUp(self) -> None:
@@ -1782,8 +1784,11 @@ class TrustBoundaryTests(unittest.TestCase):
                 ])
                 self.assertEqual(rc, 1, f"blank {field} must abort")
 
-    # -- blank .wav view field aborts (promotion clause) -------------------
-    def test_blank_wav_view_field_aborts(self) -> None:
+    # -- blank .wav view field is tolerated (view fields only feed GramFrame) --
+    def test_blank_wav_view_field_is_tolerated(self) -> None:
+        # A .wav row emits a plain link to its .glc and never renders a
+        # GramFrame table, so its view fields are unused: a blank one degrades
+        # to "" rather than aborting the run.
         for field in ("time_end", "bandwidth", "bandcentre"):
             with self.subTest(field=field):
                 row = self._gram_row(png_path="g/audio.wav", **{field: ""})
@@ -1792,13 +1797,7 @@ class TrustBoundaryTests(unittest.TestCase):
                     "--csv", str(csv_path), "--out", str(self.tmp / f"wav_{field}"),
                     "--image-root", str(FIXTURES),
                 ])
-                self.assertEqual(rc, 1, f"blank .wav {field} must abort")
-                # This abort comes from a call site that does not pass line_no;
-                # the line stamped by read_csv must still reach the message
-                # (the single bad row is the first data row -> line 2).
-                self.assertIn(
-                    "at CSV line 2",
-                    Path("generate.log").read_text(encoding="utf-8"))
+                self.assertEqual(rc, 0, f"blank .wav {field} must be tolerated")
 
     # -- the same blank view on a NON-wav row is fine ----------------------
     def test_blank_view_on_image_row_is_allowed(self) -> None:

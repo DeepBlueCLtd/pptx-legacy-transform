@@ -548,40 +548,49 @@ class GlcViewFieldTests(unittest.TestCase):
         )
 
     def test_strict_leaves_blanks_and_warns_per_field(self) -> None:
-        for inner, ext in (("audio_clip.wav", ".wav"), ("spectro.png", ".png")):
-            with self.subTest(inner=inner):
-                row = self._rows(inner, relaxed=False)[0]
-                self.assertEqual(row["target_ext"], ext)
-                for field_name in extract_to_csv.GLC_VIEW_FIELDS:
-                    self.assertEqual(row[field_name], "")
-                    self.assertIn(
-                        f"gram missing {field_name} — GramFrame cannot render",
-                        row["warnings"])
+        # Only image GLC rows warn: a .wav surfaces as a .glc link (no
+        # GramFrame table), so its blank view fields are legitimate.
+        row = self._rows("spectro.png", relaxed=False)[0]
+        self.assertEqual(row["target_ext"], ".png")
+        for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+            self.assertEqual(row[field_name], "")
+            self.assertIn(
+                f"gram missing {field_name} — GramFrame cannot render",
+                row["warnings"])
+
+    def test_wav_row_is_exempt_from_view_requirement(self) -> None:
+        # A .wav-backed gram never renders a GramFrame table, so a blank view
+        # field is fine: no warning, no default, no flag.
+        row = self._rows("audio_clip.wav", relaxed=False)[0]
+        self.assertEqual(row["target_ext"], ".wav")
+        for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+            self.assertEqual(row[field_name], "")
+        self.assertNotIn("GramFrame cannot render", row["warnings"])
+        self.assertEqual(
+            extract_to_csv.glc_view_problems([row]), [],
+            "a .wav row must never be flagged for a missing view field")
 
     def test_relaxed_defaults_each_field_and_notes_it(self) -> None:
-        for inner in ("audio_clip.wav", "spectro.png"):
-            with self.subTest(inner=inner):
-                row = self._rows(inner, relaxed=True)[0]
-                for field_name in extract_to_csv.GLC_VIEW_FIELDS:
-                    self.assertEqual(
-                        row[field_name], extract_to_csv.RELAXED_DEFAULT)
-                    self.assertIn(
-                        f"gram missing {field_name} — defaulted to "
-                        f"{extract_to_csv.RELAXED_DEFAULT} (--relaxed)",
-                        row["warnings"])
+        # --relaxed only touches image rows (the ones that require the fields).
+        row = self._rows("spectro.png", relaxed=True)[0]
+        for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+            self.assertEqual(
+                row[field_name], extract_to_csv.RELAXED_DEFAULT)
+            self.assertIn(
+                f"gram missing {field_name} — defaulted to "
+                f"{extract_to_csv.RELAXED_DEFAULT} (--relaxed)",
+                row["warnings"])
 
     def test_glc_view_problems_flags_each_missing_field(self) -> None:
-        for inner in ("audio_clip.wav", "spectro.png"):
-            with self.subTest(inner=inner):
-                problems = extract_to_csv.glc_view_problems(
-                    self._rows(inner, relaxed=False))
-                self.assertEqual(
-                    sorted(field for _, field, _ in problems),
-                    sorted(extract_to_csv.GLC_VIEW_FIELDS))
-                # Relaxed run fills the blanks, so nothing is flagged.
-                self.assertEqual(
-                    extract_to_csv.glc_view_problems(
-                        self._rows(inner, relaxed=True)), [])
+        problems = extract_to_csv.glc_view_problems(
+            self._rows("spectro.png", relaxed=False))
+        self.assertEqual(
+            sorted(field for _, field, _ in problems),
+            sorted(extract_to_csv.GLC_VIEW_FIELDS))
+        # Relaxed run fills the blanks, so nothing is flagged.
+        self.assertEqual(
+            extract_to_csv.glc_view_problems(
+                self._rows("spectro.png", relaxed=True)), [])
 
     def test_analysis_row_is_never_flagged(self) -> None:
         # An analysis sheet (.png, but topic_type "analysis") legitimately
@@ -874,10 +883,12 @@ class GlcViewFieldMainTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
-        glc_rows = [r for r in rows if r["topic_type"] == "glc"
-                    and r["target_ext"]]
-        self.assertTrue(glc_rows)
-        for r in glc_rows:
+        # Only image GLC rows are subject to (and so defaulted by) --relaxed;
+        # .wav rows are exempt and keep their blank view fields.
+        image_rows = [r for r in rows if r["topic_type"] == "glc"
+                      and r["target_ext"] in extract_to_csv.GRAMFRAME_GLC_EXTENSIONS]
+        self.assertTrue(image_rows)
+        for r in image_rows:
             for field_name in extract_to_csv.GLC_VIEW_FIELDS:
                 self.assertEqual(r[field_name], extract_to_csv.RELAXED_DEFAULT)
 

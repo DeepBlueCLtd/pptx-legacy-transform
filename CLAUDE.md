@@ -253,15 +253,17 @@ independently, so each must be self-contained.
 - **Strict on our own data; forgiving only at the boundary (constitution VII).**
   Be ruthless with data the pipeline produces and forbids editing — the CSV
   *identity* columns (`publication`, `gram_id`, `topic_type`, `sequence`,
-  `topic_filename`) and any value whose emptiness would corrupt one of our own
-  invariants (the `.wav` dedup view fields `time_end`/`bandwidth`/`bandcentre`).
-  A blank one hard-fails at the point of use via `require_field` →
-  `PipelineDataError`, never a silent `.get(field, "")` coercion. This is the
-  *complement* of the rule above, not a contradiction: missing external assets
-  still dangle (Zone C) and uncertain *author* cells are still warned-and-
-  deferred per Human-in-the-Loop (Zone B); only our own malformed data crashes.
-  Schema-`Empty allowed?=yes` columns (`chapter` on a test, `vessel_name`, …)
-  stay forgiving — don't pass them to `require_field`.
+  `topic_filename`). A blank one hard-fails at the point of use via
+  `require_field` → `PipelineDataError`, never a silent `.get(field, "")`
+  coercion. This is the *complement* of the rule above, not a contradiction:
+  missing external assets still dangle (Zone C) and uncertain *author* cells are
+  still warned-and-deferred per Human-in-the-Loop (Zone B); only our own
+  malformed data crashes. Schema-`Empty allowed?=yes` columns (`chapter` on a
+  test, `vessel_name`, …) stay forgiving — don't pass them to `require_field`.
+  The view fields `time_end`/`bandwidth`/`bandcentre` are **forgiving**: they
+  only feed the image GramFrame table, so a `.wav` row (surfaced as a `.glc`
+  link, never a GramFrame render) may leave them blank without error, and the
+  dedup/generate view key reads them tolerantly (a blank degrades to `""`).
 - **Dual logging.** Stages write a DEBUG log at the repo root
   (`generate.log`, `extract.log`, `introspect.log`) alongside console output —
   the primary debugging surface on the air-gapped network.
