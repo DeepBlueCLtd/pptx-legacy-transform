@@ -425,13 +425,16 @@ installs, not the user-folder install.
    emitting only the `main` publication. It composes with `--only`.
 
    GramFrame needs the full time + frequency coordinate system to render a
-   gram, so **every GLC-backed gram** — whether its inner asset is a
-   pre-rendered image (`.png`/`.jpg`) or a live-render `.wav` — requires its
-   `time_end`, `bandwidth`, and `bandcentre` view fields. Extraction now
-   **fails fast** (writing the CSV first so its `warnings` column is
-   inspectable, then exiting non-zero) when any GLC gram is missing one of them
-   — surfacing the problem here rather than late and cryptically in
-   `deduplicate_csv.py`. (Assetless/dangling GLC rows and analysis-sheet rows
+   gram, so an **image GLC-backed gram** (its inner asset a pre-rendered
+   `.png`/`.jpg` embedded inline) requires its `time_end`, `bandwidth`, and
+   `bandcentre` view fields. A **`.wav`-backed gram is exempt**: it is surfaced
+   as a plain link to its `.glc` (the on-PC GLC viewer renders it live, reading
+   the `.glc` directly), so no GramFrame table is emitted and the view fields
+   are never consumed — a blank one is fine. Extraction **fails fast** (writing
+   the CSV first so its `warnings` column is inspectable, then exiting non-zero)
+   when an **image** GLC gram is missing one of them — surfacing the problem
+   here rather than late and cryptically in `deduplicate_csv.py`.
+   (`.wav`-backed grams, assetless/dangling GLC rows, and analysis-sheet rows
    are exempt.) Fix the offending GLC(s) and re-run. For dev/exploration
    against an incomplete corpus, pass `--relaxed` to substitute the default
    `100` for each missing field and complete the run; this is not for
@@ -529,9 +532,13 @@ Because these columns are pipeline-authored, the tools treat a blank value in a
 `topic_filename` (`chapter` is empty-allowed for the progress tests) — as a
 hard error rather than coercing it to empty, so a defect surfaces loudly instead
 of producing a malformed topic (constitution principle VII, "Strict on
-Self-Authored Data"). The `.wav` dedup view fields
-(`time_end`/`bandwidth`/`bandcentre`) are likewise required on an audio row,
-since they are the key that decides whether two audio grams share a view.
+Self-Authored Data"). The view fields
+(`time_end`/`bandwidth`/`bandcentre`) are **not** in this set: they only feed
+the image GramFrame table, so a `.wav` row — surfaced as a `.glc` link, never a
+GramFrame render — may leave them blank. The dedup/generate view key still uses
+them to keep two audio grams with *different* windows from merging, but reads
+them tolerantly (a blank degrades to empty, so blank-view rows simply share a
+key) rather than hard-failing.
 
 | # | Column | Editable? | Notes |
 |---|---|---|---|
@@ -739,7 +746,7 @@ canonical air-gapped test surface.
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | Oxygen / DITA-OT reports `[DOTX008E] The resource '…analysis-20sheet-20.png' cannot be loaded`. | The topic references an asset (here an analysis sheet PNG) that is not present in the built tree — the source file was missing at generate time, so the generator dangled the href. (`-20` is DITA-OT's rendering of the URL-escaped space `%20` in the original filename.) | Catch it upstream: `extract_to_csv.py` now flags any referenced-but-missing asset with `asset file missing on disk` in the CSV `warnings` column and an enumerated `extract.log` list, so re-run extraction and triage those rows (restore the source file, or drop the row) before publishing. To map a published `week-N/gram-NN` back to the source deck/gram it came from, read the source-provenance block at the top of the gram page (on by default for now; `--no-debug-provenance` suppresses it). |
 | `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Every GLC-backed gram (image or `.wav`) needs `time_end` / `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (Analysis-sheet rows and dangling GLC rows are exempt.) |
-| `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | A GLC-backed gram's GLC has no time period and/or band fields; GramFrame can't render without them. | Fix the offending GLC(s) listed in the error so they carry `time_end`, `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
+| `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | An **image** GLC-backed gram's GLC has no time period and/or band fields; GramFrame can't render without them. (`.wav`-backed grams are exempt — they link to the `.glc` and never render a GramFrame table.) | Fix the offending GLC(s) listed in the error so they carry `time_end`, `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
 | Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 

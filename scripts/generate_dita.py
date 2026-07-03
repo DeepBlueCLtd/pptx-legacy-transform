@@ -708,17 +708,18 @@ def _master_index_key(png_path: str, asset_suffix: str, row: dict) -> tuple:
     views.
     """
     if asset_suffix == ".wav":
-        # Promotion clause (constitution VII): for a ``.wav`` row these three
-        # view fields *are* the dedup key — an empty one silently mis-pairs two
-        # genuinely different audio views, corrupting our own logic. So even
-        # though the values originate in the external ``.glc`` (nominally
-        # forgiving), a blank on a ``.wav`` row is a defect we fail loud on.
-        # Analysis/image/GLC-missing rows never reach this branch, so their
-        # legitimately-empty views are unaffected.
+        # The view fields (``time_end``/``bandwidth``/``bandcentre``) only drive
+        # GramFrame rendering, which happens for *images*, not ``.wav`` output —
+        # a ``.wav`` row emits a plain link to its ``.glc`` and never renders a
+        # gram-config table. So these fields are boundary-forgiving here (they
+        # originate in the external ``.glc``): a blank one degrades to "" rather
+        # than aborting. When the values *are* present they still refine the
+        # key, so two masters windowing one recording differently stay distinct
+        # (issues #78, #87); when absent, blank-view rows simply share a key.
         return ("wav", png_path,
-                require_field(row, "time_end"),
-                require_field(row, "bandwidth"),
-                require_field(row, "bandcentre"))
+                row.get("time_end", "") or "",
+                row.get("bandwidth", "") or "",
+                row.get("bandcentre", "") or "")
     return ("img", png_path)
 
 

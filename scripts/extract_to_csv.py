@@ -42,13 +42,14 @@ DEFAULT_FINAL_PATTERN: str = "final assessment"
 DEFAULT_JOINING_PATTERN: str = "joining"
 
 # GramFrame needs the full time + frequency coordinate system to render a gram,
-# so every GLC-backed gram -- whether its inner asset is a pre-rendered image
-# (.png/.jpg) or a live-render .wav -- requires these three "view" fields. They
-# are also the downstream dedup key for .wav rows (``deduplicate_csv._view_key``
-# and ``generate_dita._master_index_key`` ``require_field`` them). We catch a
-# blank here so the failure surfaces at extraction (issue #92) rather than late
-# and cryptically in dedupe. ``--relaxed`` substitutes ``RELAXED_DEFAULT`` so the
-# rest of the toolchain can still be exercised against an incomplete corpus.
+# so an *image* GLC-backed gram (pre-rendered .png/.jpg embedded inline) requires
+# these three "view" fields. A .wav-backed gram does *not*: it is surfaced
+# downstream as a plain link to its .glc (the on-PC GLC viewer renders it live,
+# reading the .glc directly), so no GramFrame table is emitted and the view
+# fields are never consumed for it -- a blank one is fine. We catch a blank on an
+# image row here so the failure surfaces at extraction (issue #92) rather than
+# late and cryptically in dedupe. ``--relaxed`` substitutes ``RELAXED_DEFAULT``
+# so the rest of the toolchain can still be exercised against an incomplete corpus.
 GLC_VIEW_FIELDS: tuple[str, ...] = ("time_end", "bandwidth", "bandcentre")
 RELAXED_DEFAULT: str = "100"
 
@@ -59,14 +60,14 @@ RELAXED_DEFAULT: str = "100"
 # instances (fix the source file, or drop the row) before publishing.
 ASSET_MISSING_WARNING: str = "asset file missing on disk"
 
-# Inner-asset extensions a GLC-backed gram actually renders (and so needs its
-# view fields for). A GLC row with no resolved asset (target_ext == "") dangles
-# per the missing-asset rule and is not subject to the check.
-# Mirrors the generator's dispatch (generate_dita.py): .png/.jpg/.jpeg/.gif are
-# embedded inline, .wav is surfaced as a link -- both render and need the view
-# fields.
-RENDERABLE_GLC_EXTENSIONS: tuple[str, ...] = (
-    ".png", ".jpg", ".jpeg", ".gif", ".wav")
+# Inner-asset extensions that feed a GramFrame table and so require the view
+# fields. Only the embedded-image extensions qualify: a .wav is surfaced as a
+# link to its .glc, not rendered by GramFrame, so it is exempt (its blank view
+# fields are legitimate, not a defect). A GLC row with no resolved asset
+# (target_ext == "") dangles per the missing-asset rule and is not subject to
+# the check either. Mirrors the generator's dispatch (generate_dita.py).
+GRAMFRAME_GLC_EXTENSIONS: tuple[str, ...] = (
+    ".png", ".jpg", ".jpeg", ".gif")
 
 # Prefixes that identify the welcome / exit framing slides emitted by
 # ``mock_pptx.py``. These slides carry no gram content and must not
@@ -1115,11 +1116,12 @@ def gram_to_rows(
             "wav_treatment": "",
             "warnings": "",
         }
-        # A GLC-backed gram (pre-rendered image or live-render .wav) needs its
-        # time + frequency view fields for GramFrame; flag (or, under --relaxed,
-        # default) any blank one so the issue surfaces here rather than later in
-        # dedupe (issue #92). An assetless GLC row (target_ext "") dangles.
-        if row["target_ext"] in RENDERABLE_GLC_EXTENSIONS:
+        # An *image* GLC-backed gram needs its time + frequency view fields for
+        # GramFrame; flag (or, under --relaxed, default) any blank one so the
+        # issue surfaces here rather than later in dedupe (issue #92). A .wav row
+        # is exempt -- it links to its .glc, no GramFrame table -- as is an
+        # assetless GLC row (target_ext "") which dangles.
+        if row["target_ext"] in GRAMFRAME_GLC_EXTENSIONS:
             for field_name in GLC_VIEW_FIELDS:
                 if not (row[field_name] or "").strip():
                     if relaxed:
@@ -1196,12 +1198,13 @@ def gram_to_rows(
 def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
     """Return ``(gram_id, field, line)`` for every GLC gram row missing a view field.
 
-    Every GLC-backed gram (a ``glc`` row whose inner asset is a renderable
-    image or ``.wav``) must carry ``time_end`` / ``bandwidth`` / ``bandcentre``
-    for GramFrame to render -- and the trio is also the downstream dedup/generate
-    view key for ``.wav`` rows. Analysis rows and assetless (dangling) GLC rows
-    are exempt. Under ``--relaxed`` these blanks are already filled with
-    ``RELAXED_DEFAULT`` upstream, so this returns empty (issue #92).
+    Every *image* GLC-backed gram (a ``glc`` row whose inner asset is a
+    renderable image) must carry ``time_end`` / ``bandwidth`` / ``bandcentre``
+    for GramFrame to render. ``.wav`` rows are exempt -- they surface as a link
+    to the ``.glc``, never a GramFrame table, so their view fields are optional.
+    Analysis rows and assetless (dangling) GLC rows are also exempt. Under
+    ``--relaxed`` the image blanks are already filled with ``RELAXED_DEFAULT``
+    upstream, so this returns empty (issue #92).
 
     ``line`` is the 1-based line the row occupies in the CSV this run writes
     (``write_csv`` emits the header then ``rows`` in order, so index ``i`` lands
@@ -1211,7 +1214,7 @@ def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
     for index, row in enumerate(rows):
         if row.get("topic_type", "") != "glc":
             continue
-        if (row.get("target_ext", "") or "").lower() not in RENDERABLE_GLC_EXTENSIONS:
+        if (row.get("target_ext", "") or "").lower() not in GRAMFRAME_GLC_EXTENSIONS:
             continue
         line_no = index + 2  # +1 header, +1 for 0-based -> 1-based
         for field_name in GLC_VIEW_FIELDS:
@@ -1304,8 +1307,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     parser.add_argument(
         "--relaxed", action="store_true", dest="relaxed",
-        help="Dev/exploration only: instead of hard-failing when a GLC-backed "
-             "gram (pre-rendered image or live-render .wav) is missing a "
+        help="Dev/exploration only: instead of hard-failing when an image "
+             "GLC-backed gram (pre-rendered .png/.jpg) is missing a "
              f"required view field ({', '.join(GLC_VIEW_FIELDS)}), substitute the "
              f"default '{RELAXED_DEFAULT}' so the rest of the toolchain can run "
              "against an incomplete corpus. GramFrame needs the real values, so "
