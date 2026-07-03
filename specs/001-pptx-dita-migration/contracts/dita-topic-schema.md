@@ -53,10 +53,6 @@ only and is ignored by the generator (see csv-schema.md §column 15).
 <topic id="gram_NN">
   <title>Gram NN<ph audience="-trainee"> - {vessel_name}</ph></title>
   <body>
-    <p audience="-trainee" outputclass="analysis-jump">   <!-- §1.1a jump link, when an analysis sheet exists -->
-      <xref href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
-    </p>
-
     <section id="analysis-sheet" audience="-trainee">     <!-- §1.1 analysis sheet -->
       <title>Analysis Sheet</title>
       <!-- one of: -->
@@ -64,8 +60,8 @@ only and is ignored by the generator (see csv-schema.md §column 15).
       <p><xref href="{slug}.docx" format="docx" scope="local">Analysis Sheet</xref></p>
     </section>
 
-    <section>                            <!-- §1.2 GramFrame, when GLC names a PNG/JPG -->
-      <title>{display_text}</title>      <!-- emitted when display_text is non-empty -->
+    <section id="lofar-1" outputclass="lofar-stage">      <!-- §1.2 GramFrame, when GLC names a PNG/JPG -->
+      <title>Lofar 1</title>                              <!-- incremental: Lofar 1, Lofar 2, … -->
       <table outputclass="gram-config">
         <tgroup cols="2">
           <colspec colname="c1" colnum="1"/>
@@ -85,10 +81,16 @@ only and is ignored by the generator (see csv-schema.md §column 15).
       </table>
     </section>
 
-    <section>                            <!-- §1.3 GLC-viewer link, when GLC names a WAV -->
-      <title>{display_text}</title>      <!-- emitted when display_text is non-empty -->
+    <section id="lofar-2" outputclass="lofar-stage">      <!-- §1.3 GLC-viewer link, when GLC names a WAV -->
+      <title>Lofar 2</title>                              <!-- continues the same numbering -->
       <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
     </section>
+
+    <p outputclass="gram-nav">                             <!-- §1.1a floating nav panel, emitted last -->
+      <xref href="#gram_NN/lofar-1">Lofar 1</xref>
+      <xref href="#gram_NN/lofar-2">Lofar 2</xref>
+      <xref audience="-trainee" href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
+    </p>
   </body>
 
   <related-links>
@@ -112,27 +114,38 @@ entirely; only the instructor build includes the analysis sheet.
 The `slug` is the slug of the *source* filename (e.g. `Analysis Sheet.docx`
 → `analysis-sheet.docx`); see §10.
 
-The section carries a stable `id="analysis-sheet"` so the floating jump
-link (§1.1a) can target it with an in-page `<xref>`.
+The section carries a stable `id="analysis-sheet"` so the floating nav
+panel (§1.1a) can target it with an in-page `<xref>`.
 
-### 1.1a Analysis-sheet jump link (issue #91)
+### 1.1a Floating gram nav panel
 
-When (and only when) a gram has an analysis sheet, the body opens with a
-single instructor-only in-page link to it:
+The body ends with a single floating navigation panel — one in-page link
+per Lofar, plus (instructor only) a link to the analysis sheet:
 
 ```xml
-<p audience="-trainee" outputclass="analysis-jump">
-  <xref href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
+<p outputclass="gram-nav">
+  <xref href="#gram_NN/lofar-1">Lofar 1</xref>
+  <xref href="#gram_NN/lofar-2">Lofar 2</xref>
+  <!-- … one xref per Lofar (§1.2 / §1.3), in render order … -->
+  <xref audience="-trainee" href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
 </p>
 ```
 
-It carries `audience="-trainee"` — both the link and its target are
-instructor-only, so the trainee profile elides both and the student
-edition never ships a dangling anchor. DITA-OT renders it as
-`<p class="analysis-jump">`; the publisher theme pins it as a fixed
-"jump to Analysis Sheet" pill so the instructor can reach the analysis
-image fast from anywhere on a long gram page (instead of the
-related-links list the f13ldman template uses, we just scroll in-page).
+Every Lofar section carries an incremental `id="lofar-N"` (§1.2 / §1.3), so
+each panel link scrolls straight to its Lofar. The Lofar links are
+**unfiltered**, so the panel appears in **both** editions — students and
+instructors alike navigate the Lofars. The trailing Analysis Sheet link is
+emitted only when the gram has an analysis sheet, and carries
+`audience="-trainee"`: the trainee profile elides just that one entry (its
+target section is instructor-only too, so the student edition never ships a
+dangling anchor). DITA-OT renders the paragraph as `<p class="gram-nav">`;
+the publisher theme pins it as a fixed panel in the lower-right so a reader
+can reach a numbered Lofar (or, for the instructor, the analysis image) fast
+from anywhere on a long gram page.
+
+Earlier this was the instructor-only "jump to Analysis Sheet" pill
+(`outputclass="analysis-jump"`, issue #91); it now serves both editions and
+links every Lofar.
 
 ### 1.2 GramFrame table block
 
@@ -152,17 +165,28 @@ Placeholders:
 | `image_href` | Slugified copy of the asset, placed in the same per-gram folder as the topic (see §10) |
 | `time_end` | CSV column; if empty, literal `""` is written |
 | `freq_end` | CSV column; if empty, literal `""` is written |
-| `display_text` | CSV column; the PPTX link label (e.g. `"Lofar 1"`). When non-empty, emitted as the section `<title>` so multi-gram pages get a clear heading per spectrogram. Omitted entirely when blank. |
+
+The section is titled and anchored by its **incremental Lofar number**, not
+by the CSV `display_text`. Each `topic_type="glc"` row that renders (image
+or audio) takes the next Lofar number `N` in render order, giving section
+`<title>Lofar N</title>` and `id="lofar-N"`. This makes the source decks'
+inconsistent labels (some "Lofar 1/2", some bare "Lofar", some a single
+numbered one) a uniform sequence, and gives the floating nav panel (§1.1a)
+a stable anchor per Lofar. The `display_text` column is no longer used for
+the spectrogram heading.
 
 ### 1.3 GLC-viewer link block
 
 One `<xref>` block per `topic_type="glc"` row whose inner-GLC asset is
-audio (i.e. `png_path` ends in `.wav`). The block is a single
-paragraph linking to the `.glc` file:
+audio (i.e. `png_path` ends in `.wav`). A `.wav`-backed GLC is still a
+Lofar, so it joins the same incremental numbering (§1.2): the section is
+titled `Lofar N` and anchored `id="lofar-N"`. The block is a single
+paragraph linking to the `.glc` file; the PPTX label (`display_text`)
+survives as the inner `<xref>` text:
 
 ```xml
-<section>
-  <title>{display_text}</title>
+<section id="lofar-N" outputclass="lofar-stage">
+  <title>Lofar N</title>
   <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
 </section>
 ```
