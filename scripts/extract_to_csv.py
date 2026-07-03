@@ -74,6 +74,13 @@ FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
 # not a header.
 ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", ".jpeg")
 
+# Some legacy decks carry navigation buttons labelled like "N Questions"
+# that link to an image (a self-test slide), not a gram. Their shape-level
+# hyperlink targets a ``.png`` so they would otherwise be mistaken for a
+# gram header. Any link whose visible label ends in the word "questions"
+# (case-insensitive; the leading number is irrelevant) is silently ignored.
+QUESTIONS_LABEL_WORD = "questions"
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -407,6 +414,17 @@ class GramPlaceholder:
     glc_links: list[GlcLink]
 
 
+def _label_ends_in_questions(label: str) -> bool:
+    """True when ``label``'s final word is "questions" (case-insensitive).
+
+    Matches "N Questions", "Questions", "10 questions" and tolerates
+    trailing whitespace/punctuation; does not match "acquisitions".
+    """
+    return re.search(
+        rf"\b{QUESTIONS_LABEL_WORD}\b\W*$", label, re.IGNORECASE
+    ) is not None
+
+
 def _shape_level_hyperlink(shape) -> str | None:
     """Return the shape-level hyperlink target, or None.
 
@@ -658,6 +676,15 @@ def extract_grams_from_slide(
         # level on the small .glc-bearing shapes; without this filter
         # those would be mistaken for gram headers.
         if not href.lower().endswith(ANALYSIS_SHEET_EXTENSIONS):
+            continue
+        # Skip self-test navigation buttons labelled "N Questions" — they
+        # link to an image but are not grams (see QUESTIONS_LABEL_WORD).
+        label = " ".join((shape.text_frame.text or "").split())
+        if _label_ends_in_questions(label):
+            LOGGER.info(
+                "Slide %d: ignoring %r link (label ends in %r) — not a gram",
+                slide_num, label, QUESTIONS_LABEL_WORD,
+            )
             continue
         headers.append((shape, href))
 
