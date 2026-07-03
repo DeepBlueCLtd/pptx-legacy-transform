@@ -598,6 +598,20 @@ class InjectGramframePluginTests(unittest.TestCase):
                 "/* gramframe stub */\n",
             )
 
+    def test_drops_bundle_at_root_and_each_edition(self):
+        # Each edition needs its own copy so the edition folder is
+        # self-contained (mirrors the per-edition theme.css placement).
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            inject_gramframe_plugin(out, bundle_src=src)
+            self.assertTrue((out / GRAMFRAME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "instructor" / GRAMFRAME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "student" / GRAMFRAME_BUNDLE_NAME).is_file())
+
     def test_injects_script_into_head_of_every_html_file(self):
         with TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -620,9 +634,12 @@ class InjectGramframePluginTests(unittest.TestCase):
             deep = (
                 out / "instructor" / "main" / "main" / "gram-01" / "gram_01.html"
             ).read_text(encoding="utf-8")
-            # Deep page must reach four levels up to the bundle at out_root.
+            # Deep page links the edition-local bundle
+            # (out/instructor/gramframe.bundle.js), reaching three levels up
+            # to the edition folder — never above it — so instructor/ stays
+            # self-contained.
             self.assertIn(
-                '<script src="../../../../gramframe.bundle.js" defer></script>',
+                '<script src="../../../gramframe.bundle.js" defer></script>',
                 deep,
             )
 
@@ -676,6 +693,97 @@ class InjectGramframePluginTests(unittest.TestCase):
             f"Vendor the GramFrame bundle at "
             f"{publish_html.GRAMFRAME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
         )
+
+
+class EditionStandaloneTests(unittest.TestCase):
+    """Each ``html/<edition>/`` subtree must be self-contained: copy it out
+    on its own and every page still resolves its assets.
+
+    The delivered instructor and student versions are handed over as
+    independent, individually-copyable publications. A page inside an
+    edition must therefore never reference a local asset (``href``/``src``)
+    that resolves *above* its edition folder — every relative path must
+    stay within ``html/<edition>/`` (or reach a sibling under it). This
+    guards against the GramFrame regression where the JS bundle was
+    vendored once at ``html/`` and every gram page linked
+    ``../../../../../gramframe.bundle.js``, breaking the interactive viewer
+    the moment a single edition was copied away from the shared root.
+    """
+
+    _LOCAL_REF_RE = re.compile(r'(?:href|src)="([^"]+)"')
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _page() -> str:
+        return (
+            '<!DOCTYPE html>\n'
+            '<html lang="en">\n'
+            '  <head>\n'
+            '    <meta charset="UTF-8">\n'
+            '    <title>Gram</title>\n'
+            '  </head>\n'
+            '  <body>\n'
+            '    <table class="gram-config"><tr><td colspan="2">'
+            '<img src="lofar-1.png"></td></tr></table>\n'
+            '  </body>\n'
+            '</html>\n'
+        )
+
+    def _build_tree(self, out: Path) -> None:
+        """Lay out a representative two-edition tree and run both injectors."""
+        tmp = out.parent
+        bundle = tmp / "vendor" / "gramframe.bundle.js"
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        bundle.write_text("/* gramframe */\n", encoding="utf-8", newline="\n")
+        theme = tmp / "vendor" / "theme.css"
+        theme.write_text("/* theme */\n", encoding="utf-8", newline="\n")
+
+        # Shared landing + both editions, each with a publication index and a
+        # deep gram topic mirroring what DITA-OT emits for ``main``.
+        self._write(out / "index.html", self._page())
+        for edition in ("instructor", "student"):
+            self._write(out / edition / "index.html", self._page())
+            self._write(out / edition / "main" / "index.html", self._page())
+            self._write(
+                out / edition / "main" / "main" / "week-1-grams"
+                / "gram-01" / "gram_01.html",
+                self._page(),
+            )
+        inject_gramframe_plugin(out, bundle_src=bundle)
+        inject_operator_console_theme(out, bundle_src=theme)
+
+    def test_no_edition_page_references_an_asset_above_its_edition(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._build_tree(out)
+
+            offenders: list[str] = []
+            for edition in ("instructor", "student"):
+                edition_dir = (out / edition).resolve()
+                for page in sorted(edition_dir.rglob("*.html")):
+                    body = page.read_text(encoding="utf-8")
+                    for ref in self._LOCAL_REF_RE.findall(body):
+                        # Skip absolute URLs / anchors — only local paths matter.
+                        if "://" in ref or ref.startswith(("#", "/", "mailto:")):
+                            continue
+                        resolved = (page.parent / ref).resolve()
+                        try:
+                            resolved.relative_to(edition_dir)
+                        except ValueError:
+                            offenders.append(
+                                f"{page.relative_to(out)} -> {ref} "
+                                f"(escapes {edition}/)"
+                            )
+            self.assertEqual(
+                offenders, [],
+                "edition pages must not reference assets above their edition "
+                "folder:\n" + "\n".join(offenders),
+            )
 
 
 # -----------------------------------------------------------------------------
