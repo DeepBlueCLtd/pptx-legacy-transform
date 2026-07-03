@@ -905,6 +905,47 @@ class GenerateDitaTests(unittest.TestCase):
                          "manifest must be sorted")
 
 
+class SlugifyAssetNameTests(unittest.TestCase):
+    """``slugify_asset_name`` URL-safes filenames and corrects known legacy
+    misspellings so the emitted asset name and every href read consistently."""
+
+    def test_slugify_preserves_extension_and_hyphenates(self) -> None:
+        self.assertEqual(
+            generate_dita.slugify_asset_name("Lofar 1 ABC.PNG"), "lofar-1-abc.png")
+
+    def test_misspelled_analysis_name_is_corrected(self) -> None:
+        # The source file is named ``analaysis.png`` (an 'analysis' typo); the
+        # emitted asset name / href must read ``analysis.png``.
+        self.assertEqual(
+            generate_dita.slugify_asset_name("analaysis.png"), "analysis.png")
+        self.assertEqual(
+            generate_dita.slugify_asset_name("Gram 4 analaysis.png"),
+            "gram-4-analysis.png")
+
+    def test_correctly_spelled_name_is_untouched(self) -> None:
+        self.assertEqual(
+            generate_dita.slugify_asset_name("analysis sheet.png"),
+            "analysis-sheet.png")
+
+    def test_copy_asset_reads_misspelled_source_writes_corrected_name(self) -> None:
+        # The on-disk asset keeps its misspelled name; copy_asset reads it
+        # from there but names the copied target ``analysis.png``.
+        tmp = TMP / "copy_misspelled"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        image_root = tmp / "src"
+        topic_dir = tmp / "out" / "gram-04"
+        image_root.mkdir(parents=True)
+        (image_root / "analaysis.png").write_bytes(b"\x89PNG\r\n\x1a\n rendered")
+        href, written = generate_dita.copy_asset("analaysis.png", image_root, topic_dir)
+        self.assertEqual(href, "analysis.png",
+                         "href must use the corrected spelling")
+        self.assertIsNotNone(written)
+        self.assertEqual(written.name, "analysis.png")
+        self.assertTrue((topic_dir / "analysis.png").is_file(),
+                        "copied file must land under the corrected name")
+
+
 class MainFlatLayoutTests(unittest.TestCase):
     """Feature 009 (US2): ``main`` is flat — ``main/week-N/gram-NN/`` with no
     source-document tier — and scoped per ``(main, week)``. This is already true

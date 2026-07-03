@@ -344,6 +344,34 @@ class ExtraNameTests(SnapshotTestBase):
 
 
 # -----------------------------------------------------------------------------
+# Known misspellings of the analysis token (e.g. ``analaysis.doc``)
+# -----------------------------------------------------------------------------
+
+class MisspellingTests(SnapshotTestBase):
+
+    def test_misspelled_analysis_doc_produces_png(self) -> None:
+        # ``analysis`` is not a substring of ``analaysis`` (extra 'a'), so the
+        # plain token match misses it; the known-misspelling list must catch it.
+        doc = self._write_doc("analaysis.doc")
+        rc = self._run()
+        self.assertEqual(rc, 0)
+        self.assertTrue(doc.with_suffix(".png").exists(),
+                        "a misspelled analysis sheet must still gain a .png")
+
+    def test_iter_selects_misspelled_sheet_without_extra_name(self) -> None:
+        self._write_doc("Gram 4 analaysis.doc")
+        self._write_doc("source_data.doc")
+        found = {p.name for p in nas.iter_analysis_sheets(self.root)}
+        self.assertEqual(found, {"Gram 4 analaysis.doc"},
+                         "misspelling is recognised out of the box, no --extra-name")
+
+    def test_is_analysis_name_accepts_known_misspelling(self) -> None:
+        self.assertTrue(nas._is_analysis_name("analaysis"))
+        self.assertTrue(nas._is_analysis_name("Gram 4 ANALAYSIS"))
+        self.assertFalse(nas._is_analysis_name("source_data"))
+
+
+# -----------------------------------------------------------------------------
 # Selection + classification units (Phase 2)
 # -----------------------------------------------------------------------------
 
