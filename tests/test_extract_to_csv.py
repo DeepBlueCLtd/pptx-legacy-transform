@@ -423,6 +423,89 @@ class GramToRowsTests(unittest.TestCase):
         self.assertIn("analysis image not rendered", analysis["warnings"])
         self.assertEqual(analysis["file_size"], "")
 
+    def test_stale_analysis_link_recovered_from_lofar_folder(self) -> None:
+        # A gram whose analysis hyperlink is stale (a legacy href pointing at an
+        # earlier build's folder) but whose real analysis sheet sits beside its
+        # Lofar .glc -> the analysis row is repointed at the sibling sheet and
+        # not flagged. The gram carries a vessel_name, so it is worth recovering.
+        sheet = self.tmp / "supporting/gram12/Analysis Sheet.png"
+        sheet.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="Working grams week 3/Analysis Sheet.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(analysis["topic_type"], "analysis")
+        self.assertEqual(
+            analysis["png_path"], "supporting/gram12/Analysis Sheet.png")
+        self.assertNotIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+        self.assertFalse(
+            extract_to_csv.missing_asset_problems([analysis], self.tmp))
+
+    def test_stale_analysis_link_recovers_misspelled_sheet(self) -> None:
+        # The fallback recognises the known 'analaysis' misspelling too, exactly
+        # as the snapshotter's _is_analysis_name does.
+        sheet = self.tmp / "supporting/gram12/Analaysis Sheet.png"
+        sheet.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(
+            analysis["png_path"], "supporting/gram12/Analaysis Sheet.png")
+        self.assertNotIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+
+    def test_recovery_is_deterministic_with_multiple_sheets(self) -> None:
+        # Two candidate images in the Lofar folder -> the sorted-first one is
+        # always chosen (determinism/idempotency invariant).
+        for name in ("Analysis B.png", "Analysis A.png"):
+            (self.tmp / "supporting/gram12" / name).write_bytes(
+                b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        self.assertEqual(
+            rows[-1]["png_path"], "supporting/gram12/Analysis A.png")
+
+    def test_stale_analysis_link_with_no_sibling_sheet_is_flagged(self) -> None:
+        # vessel_name present but no analysis sheet in the Lofar folder -> keep
+        # the analysis row and flag it, so nothing is silently lost.
+        gram = _gram(png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(analysis["topic_type"], "analysis")
+        self.assertIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+
+    def test_stale_analysis_link_without_vessel_drops_analysis_row(self) -> None:
+        # No vessel_name -> mangled legacy content we can't exploit: the
+        # analysis sheet is dropped entirely (no analysis row) even when a
+        # sibling sheet exists, while the gram's resolved Lofar row survives.
+        sheet = self.tmp / "supporting/gram12/Analysis Sheet.png"
+        sheet.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(vessel="", png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        self.assertEqual([r["topic_type"] for r in rows], ["glc"],
+                         "the Lofar row is kept, the analysis sheet dropped")
+
 
 # Issue #92: every GLC-backed gram (image or live-render .wav) needs its time +
 # frequency view fields for GramFrame. These GLCs carry none of the three.
