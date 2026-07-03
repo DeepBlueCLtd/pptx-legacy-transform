@@ -863,5 +863,21 @@ class DeletedGramRemnantTests(unittest.TestCase):
                         "a blank-gram_id row survived to CSV output")
 
 
+class QuestionsLabelFilterTests(unittest.TestCase):
+    """A shape-level image link labelled "N Questions" is not a gram."""
+
+    def test_matches_questions_labels(self) -> None:
+        for label in ("7 Questions", "Questions", "10 questions",
+                      "7  QUESTIONS", "Questions "):
+            with self.subTest(label=label):
+                self.assertTrue(extract_to_csv._label_ends_in_questions(label))
+
+    def test_ignores_non_questions_labels(self) -> None:
+        for label in ("Gram 12: Nordik Jockey", "Acquisitions",
+                      "Questions and answers", "", "Question"):
+            with self.subTest(label=label):
+                self.assertFalse(extract_to_csv._label_ends_in_questions(label))
+
+
 if __name__ == "__main__":
     unittest.main()
