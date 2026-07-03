@@ -56,6 +56,14 @@ LOGGER = logging.getLogger(__name__)
 # extension are analysis sheets. Selection keys on the corpus naming
 # convention so unrelated ``source_data.doc`` siblings are left untouched.
 ANALYSIS_NAME_TOKEN = "analysis"
+# Known misspellings of the analysis token seen in legacy decks (e.g.
+# ``analaysis.doc``). Matched alongside the correct token so a typo'd sheet
+# still renders and flows through the pipeline instead of being silently
+# skipped. This is a general typo-tolerance for the one selection token, not
+# a corpus-specific opt-in (those stay in ``--extra-name`` per the wrapper).
+# generate_dita.py corrects the same misspellings when it names the emitted
+# asset, so the published href reads ``analysis`` regardless.
+ANALYSIS_NAME_MISSPELLINGS = ("analaysis",)
 WORD_SUFFIXES = (".doc", ".docx")
 
 
@@ -119,13 +127,17 @@ def _normalise_extra_names(extra_names: Iterable[str]) -> tuple[str, ...]:
 def _is_analysis_name(stem: str, extra_names: tuple[str, ...] = ()) -> bool:
     """True iff ``stem`` names an analysis sheet.
 
-    Matches the ``*analysis*`` convention (case-insensitive) or any of the
-    ``extra_names`` tokens, each matched the same way -- as a case-insensitive
-    substring of the stem (research R7: deviating corpus sheets are opted in
-    by name, the hyperlink-driven alternative stays rejected).
+    Matches the ``*analysis*`` convention (case-insensitive), a known
+    misspelling of that token (``ANALYSIS_NAME_MISSPELLINGS``, e.g.
+    ``analaysis``), or any of the ``extra_names`` tokens, each matched the
+    same way -- as a case-insensitive substring of the stem (research R7:
+    deviating corpus sheets are opted in by name, the hyperlink-driven
+    alternative stays rejected).
     """
     lowered = stem.lower()
     if ANALYSIS_NAME_TOKEN in lowered:
+        return True
+    if any(typo in lowered for typo in ANALYSIS_NAME_MISSPELLINGS):
         return True
     return any(token.lower() in lowered for token in extra_names if token)
 

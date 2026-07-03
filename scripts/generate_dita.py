@@ -416,15 +416,31 @@ def slugify(text: str) -> str:
     return _SLUG_NON_ALNUM.sub("-", ascii_only).strip("-")
 
 
+# Known filename misspellings in the legacy corpus, corrected on the way into
+# the DITA tree so published hrefs read consistently (e.g. an analysis sheet
+# authored as ``analaysis.doc`` → ``analaysis.png`` is emitted as
+# ``analysis.png``). Applied to the slugified *target* name only: the source
+# file is still read from its real, misspelled on-disk name. Keyed on the
+# slug form (post-``slugify``) so multi-word names (``analaysis sheet`` →
+# ``analaysis-sheet``) are corrected too. Kept in sync with
+# snapshot_analysis_docs.ANALYSIS_NAME_MISSPELLINGS, which recognises the same
+# typo when rendering the sheet.
+_ASSET_NAME_CORRECTIONS = (("analaysis", "analysis"),)
+
+
 def slugify_asset_name(filename: str) -> str:
     """Slugify a filename while preserving its extension (lower-cased).
 
     Example: ``"Lofar 1 ABC.PNG"`` → ``"lofar-1-abc.png"``. The original
     extension is kept so DITA-OT and downstream consumers can still
-    classify the asset by suffix.
+    classify the asset by suffix. Known legacy misspellings
+    (``_ASSET_NAME_CORRECTIONS``) are normalised so the emitted filename and
+    every href referencing it read consistently.
     """
     p = Path(filename)
     stem = slugify(p.stem)
+    for wrong, right in _ASSET_NAME_CORRECTIONS:
+        stem = stem.replace(wrong, right)
     suffix = p.suffix.lower()
     return f"{stem}{suffix}" if stem else f"asset{suffix}"
 

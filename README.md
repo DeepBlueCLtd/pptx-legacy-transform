@@ -101,6 +101,12 @@ analysis sheet has no rendered `.png` yet.
   for name in EXTRA_ANALYSIS_NAMES:
       sys.argv += ["--extra-name", name]
   ```
+- A **misspelling** of the token itself (e.g. `analaysis.doc` — note the
+  stray `a`, so `analysis` is not a substring) is recognised out of the
+  box via the built-in `ANALYSIS_NAME_MISSPELLINGS` list, no `--extra-name`
+  needed. `generate_dita.py` corrects the same misspellings when it names
+  the emitted asset, so the copied PNG and its DITA href read `analysis…`
+  even though the source file keeps its misspelled on-disk name.
 - **Pillow is an *optional* prep-time wheel** used only to trim page
   margins and normalise DPI on the rendered PNG (FR-017). It is imported
   defensively: when Pillow is absent the snapshotter keeps the full-page
