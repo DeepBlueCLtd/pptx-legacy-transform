@@ -52,6 +52,13 @@ DEFAULT_JOINING_PATTERN: str = "joining"
 GLC_VIEW_FIELDS: tuple[str, ...] = ("time_end", "bandwidth", "bandcentre")
 RELAXED_DEFAULT: str = "100"
 
+# Warning stamped on any row whose ``png_path`` references an asset (image or
+# ``.wav``) that is not present on disk. Such a row dangles silently through the
+# generator and only surfaces as a DITA-OT load error at publish time; catching
+# it here at the extraction boundary lets the operator track and triage the
+# instances (fix the source file, or drop the row) before publishing.
+ASSET_MISSING_WARNING: str = "asset file missing on disk"
+
 # Inner-asset extensions a GLC-backed gram actually renders (and so needs its
 # view fields for). A GLC row with no resolved asset (target_ext == "") dangles
 # per the missing-asset rule and is not subject to the check.
@@ -973,6 +980,21 @@ def _png_file_size(png_path: str, content_root: Path) -> str:
         return ""
 
 
+def _asset_file_missing(png_path: str, content_root: Path) -> bool:
+    """True when a target asset is *expected* (non-empty path) but absent on disk.
+
+    A blank ``png_path`` means the row carries no asset at all (an assetless
+    GLC link, or a gram with no analysis hyperlink) — that is not "missing",
+    just legitimately empty, so it returns ``False``. Only a populated
+    reference whose file cannot be found on disk counts, so the caller can
+    flag it for the author to fix or drop (mirrors the resolution
+    ``_png_file_size`` performs, but reports presence rather than size).
+    """
+    if not png_path:
+        return False
+    return not (content_root / png_path).is_file()
+
+
 def gram_to_rows(
     gram: GramPlaceholder,
     publication: str,
@@ -1066,6 +1088,12 @@ def gram_to_rows(
                         warnings.append(
                             f"gram missing {field_name} — GramFrame cannot "
                             f"render")
+        # A resolved asset reference (image or .wav) whose file is not on disk
+        # would dangle through the generator and only fail at publish; flag it
+        # here so the operator can track it. An assetless GLC row (png_path "",
+        # already carrying "GLC not found") is exempt.
+        if _asset_file_missing(png_path, content_root):
+            warnings.append(ASSET_MISSING_WARNING)
         row["warnings"] = ", ".join(warnings)
         rows.append(row)
 
@@ -1089,6 +1117,14 @@ def gram_to_rows(
                 PurePosixPath(analysis_png_resolved).with_suffix(".png"))
             if not (content_root / analysis_png_resolved).is_file():
                 analysis_warnings.append("analysis image not rendered")
+    # A directly-referenced analysis image (.png/.jpg) whose file is absent
+    # gets the same missing-asset flag as a GLC asset. The Word-sheet path
+    # above already records the more specific "analysis image not rendered"
+    # (snapshot step not run) for the same missing .png, so don't double-flag.
+    if (analysis_png_resolved
+            and "analysis image not rendered" not in analysis_warnings
+            and _asset_file_missing(analysis_png_resolved, content_root)):
+        analysis_warnings.append(ASSET_MISSING_WARNING)
     rows.append({
         "publication": publication,
         "chapter": chapter or "",
@@ -1141,6 +1177,35 @@ def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
     return problems
 
 
+def missing_asset_problems(
+    rows: list[dict], content_root: Path,
+) -> list[tuple[str, str, str, int]]:
+    """Return ``(publication, gram_id, png_path, line)`` for each asset-missing row.
+
+    A row *expects* a target file when its ``png_path`` is non-empty (a resolved
+    image or ``.wav`` reference). Rows that legitimately carry no asset — an
+    assetless GLC link, or a gram with no analysis hyperlink — have a blank
+    ``png_path`` and are exempt (the user's "not all rows require a target
+    file"). A populated reference whose file is absent on disk would dangle
+    through the generator and only fail at publish, so it is collected here.
+
+    ``line`` mirrors ``glc_view_problems``: ``write_csv`` emits the header then
+    ``rows`` in order, so index ``i`` lands on CSV line ``i + 2`` — the report
+    can point straight at the offending row.
+    """
+    problems: list[tuple[str, str, str, int]] = []
+    for index, row in enumerate(rows):
+        png_path = (row.get("png_path", "") or "").strip()
+        if not png_path:
+            continue
+        if _asset_file_missing(png_path, content_root):
+            problems.append((
+                row.get("publication", ""), row.get("gram_id", ""),
+                png_path, index + 2,
+            ))
+    return problems
+
+
 # -----------------------------------------------------------------------------
 # CSV writer (R11)
 # -----------------------------------------------------------------------------
@@ -1183,6 +1248,16 @@ def main(argv: Iterable[str] | None = None) -> int:
              "the 'main' publication. Lets you build and review the main "
              "document from the full corpus without first carving the tests "
              "out of source\\. Independent of --only.",
+    )
+    parser.add_argument(
+        "--strict-assets", action="store_true", dest="strict_assets",
+        help="Promote the missing-target-asset check to a hard abort. By "
+             "default a row that references an image/.wav whose file is absent "
+             "on disk is flagged (a per-row warning plus an enumerated summary) "
+             "but the CSV is still written, honouring the 'missing assets "
+             "dangle' rule. Pass this during a focused cleanup pass to make the "
+             "run fail (exit 1) until every referenced asset is present or its "
+             "row dropped.",
     )
     parser.add_argument(
         "--relaxed", action="store_true", dest="relaxed",
@@ -1285,6 +1360,37 @@ def main(argv: Iterable[str] | None = None) -> int:
         return 1
 
     write_csv(rows, args.out)
+
+    # Missing target assets: a row that references an image/.wav whose file is
+    # absent on disk would dangle silently through the generator and only
+    # surface as a DITA-OT load error at publish (e.g. an analysis sheet whose
+    # PNG never made it into source). Enumerate them here, at the extraction
+    # boundary, so the operator can track and triage each one — fix the source
+    # file, or drop the row — before publishing. Per the "missing assets
+    # dangle, they don't crash" invariant this is a WARNING that still yields a
+    # CSV (each offending row is also flagged in its warnings column);
+    # --strict-assets promotes it to a hard abort for a focused cleanup pass.
+    missing_assets = missing_asset_problems(rows, args.input_root)
+    if missing_assets:
+        detail = "; ".join(
+            f"CSV line {line_no}: {pub}/gram_id={gram_id!r} -> {png_path}"
+            for pub, gram_id, png_path, line_no in missing_assets)
+        if args.strict_assets:
+            LOGGER.error(
+                "Aborting (--strict-assets): %d row(s) reference an asset file "
+                "missing on disk. Fix the source file so it is present under "
+                "%s, or drop the row, then re-run. Offending rows: %s",
+                len(missing_assets), args.input_root, detail,
+            )
+            return 1
+        LOGGER.warning(
+            "%d row(s) reference an asset file missing on disk — each will "
+            "dangle in the generated DITA and fail to load in Oxygen/DITA-OT, "
+            "and is flagged with %r in its CSV warnings column. Fix the source "
+            "file or drop the row (re-run with --strict-assets to hard-fail on "
+            "these). Offending rows: %s",
+            len(missing_assets), ASSET_MISSING_WARNING, detail,
+        )
 
     # Issue #92: fail at extraction (not late in dedupe) when a GLC-backed gram
     # lacks the time + frequency view fields GramFrame requires. The CSV is

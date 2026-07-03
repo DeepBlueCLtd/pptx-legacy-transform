@@ -117,6 +117,14 @@ LOGGER = logging.getLogger(__name__)
 # Keeps the DITA tree slim for transit during cross-network testing.
 _STUB_WAV_PATH: "Path | None" = None
 
+# Temporary debugging aid: when enabled via ``--debug-provenance``, every gram
+# topic carries a visible instructor-only block mapping its published path
+# (``week-N/gram-NN``) back to its source publication, source chapter/deck title
+# and original ``gram_id`` — so an operator staring at a published page (e.g. a
+# missing analysis image) can find the source PPTX it came from. Off by default;
+# drop the flag once the debugging phase is over and the block disappears.
+_DEBUG_PROVENANCE: bool = False
+
 
 def _write_text(path: Path, text: str) -> None:
     """Write ``text`` with LF endings, working on Python 3.9.
@@ -908,6 +916,55 @@ def _append_edition_marker(body: ET.Element) -> None:
     }))
 
 
+def _append_debug_provenance(
+    body: ET.Element, first: dict, analysis_rows: list[dict], eff_gram_id: str,
+) -> None:
+    """Append the temporary source-provenance debug block (``--debug-provenance``).
+
+    The published IA renumbers and re-buckets grams (feature 008: several source
+    decks fold into ``main/week-N/``, and within-week collisions renumber via
+    ``target_gram_id``), so a published ``week-N/gram-NN`` no longer matches the
+    original publication / week / gram number an operator would search for in the
+    source PPTX. This block restores that mapping on the rendered page:
+
+    - source **publication** and **chapter** (the immutable source deck title),
+    - the original **gram_id** vs. the **published** week + gram number,
+    - for the analysis sheet, its **source path** and whether it resolved — the
+      direct pointer when chasing a missing analysis image.
+
+    Rendered as an instructor-only ``<note>`` (``audience="-trainee"``) so it
+    never leaks into a student edition; ``outputclass="debug-provenance"`` lets
+    the theme style or hide it. Temporary: gated off by default and removed
+    simply by dropping the flag.
+    """
+    _, published_chapter, _ = _normalise_chapter(_effective_chapter(first))
+    note = ET.SubElement(body, "note", {
+        "audience": "-trainee",
+        "outputclass": "debug-provenance",
+        "type": "other",
+        "othertype": "Source provenance (debug)",
+    })
+
+    def _line(label: str, value: str) -> None:
+        p = ET.SubElement(note, "p")
+        p.text = f"{label}: {value}"
+
+    _line("Source publication", first.get("publication", ""))
+    _line("Source chapter (deck)", first.get("chapter", ""))
+    _line("Source gram number", first.get("gram_id", ""))
+    _line(
+        "Published as",
+        f"{published_chapter or first.get('publication', '')}"
+        f" / gram {_gram_num(eff_gram_id)}",
+    )
+    if analysis_rows:
+        analysis_png = analysis_rows[0].get("png_path", "") or ""
+        _line("Analysis image source", analysis_png or "(no analysis hyperlink)")
+        warnings = analysis_rows[0].get("warnings", "") or ""
+        if warnings:
+            _line("Analysis warnings", warnings)
+
+
 def _inject_static_edition_marker(text: str, source: Path) -> str:
     """Return *text* (a static DITA page) with the instructor-only edition
     marker inserted as the first child of its topic body.
@@ -1059,6 +1116,8 @@ def emit_gram_topic(
         ph.text = f" - {first['vessel_name']}"
     body = ET.SubElement(topic, "body")
     _append_edition_marker(body)
+    if _DEBUG_PROVENANCE:
+        _append_debug_provenance(body, first, analysis_rows, eff_gram_id)
 
     written: list[Path] = []
     skipped: list[dict] = []
@@ -1603,6 +1662,14 @@ def main(argv: Iterable[str] | None = None) -> int:
              "(keeps slugified per-gram filenames so paired .glc references "
              "still resolve). Slims the DITA tree for cross-system transit.")
     parser.add_argument(
+        "--debug-provenance", action="store_true", dest="debug_provenance",
+        help="Temporary debugging aid: stamp each gram topic with a visible "
+             "instructor-only block mapping its published week-N/gram-NN back "
+             "to the source publication, source chapter/deck title and original "
+             "gram_id (plus the analysis image's source path). Helps trace a "
+             "published page — e.g. a missing analysis image — to the PPTX it "
+             "came from. Off by default; drop the flag to remove the block.")
+    parser.add_argument(
         "--static-root", type=Path, dest="static_root", default=Path("static"),
         help="Folder of common static pages (welcome.dita, security.dita, …) "
              "and their image subfolders. Copied verbatim into each publication "
@@ -1622,6 +1689,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.info("Using stub WAV for every .wav copy: %s", _STUB_WAV_PATH)
     else:
         _STUB_WAV_PATH = None
+
+    global _DEBUG_PROVENANCE
+    _DEBUG_PROVENANCE = bool(args.debug_provenance)
+    if _DEBUG_PROVENANCE:
+        LOGGER.info(
+            "Debug provenance enabled: each gram topic will carry a visible "
+            "instructor-only source-provenance block (temporary).")
 
     if not args.csv_path.is_file():
         LOGGER.error("CSV does not exist: %s", args.csv_path)

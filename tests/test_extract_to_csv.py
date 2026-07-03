@@ -879,5 +879,124 @@ class QuestionsLabelFilterTests(unittest.TestCase):
                 self.assertFalse(extract_to_csv._label_ends_in_questions(label))
 
 
+class MissingAssetDetectionTests(unittest.TestCase):
+    """A row that references an asset file absent on disk is flagged at
+    extraction (a per-row warning + the ``missing_asset_problems`` scan) so the
+    operator can track and triage it — rather than the reference dangling
+    silently until DITA-OT fails to load it at publish. Rows that carry no
+    asset (blank ``png_path``) are exempt."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "missing_asset"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _analysis_row(self, png_name: str, create: bool) -> dict:
+        if create:
+            (self.tmp / png_name).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(links=[], png=png_name)
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        return rows[-1]  # the analysis row
+
+    def test_present_asset_is_not_flagged(self) -> None:
+        analysis = self._analysis_row("analysis.png", create=True)
+        self.assertEqual(analysis["warnings"], "")
+        self.assertFalse(
+            extract_to_csv.missing_asset_problems([analysis], self.tmp))
+
+    def test_absent_asset_is_flagged(self) -> None:
+        analysis = self._analysis_row("analysis.png", create=False)
+        self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+        problems = extract_to_csv.missing_asset_problems([analysis], self.tmp)
+        self.assertEqual(len(problems), 1)
+
+    def test_assetless_row_is_exempt(self) -> None:
+        # A gram with no analysis hyperlink carries a blank png_path; that is
+        # "no target file", not "missing" — no asset-missing flag.
+        analysis = self._analysis_row("", create=False)
+        self.assertEqual(analysis["png_path"], "")
+        self.assertNotIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+        self.assertFalse(
+            extract_to_csv.missing_asset_problems([analysis], self.tmp))
+
+    def test_missing_asset_problems_scan_and_line_numbering(self) -> None:
+        (self.tmp / "there.png").write_bytes(b"x")
+        rows = [
+            {"publication": "main", "gram_id": "1", "topic_type": "analysis",
+             "png_path": "there.png"},                 # present -> ok
+            {"publication": "main", "gram_id": "2", "topic_type": "glc",
+             "png_path": "gone.png"},                   # absent -> flagged
+            {"publication": "main", "gram_id": "3", "topic_type": "glc",
+             "png_path": ""},                           # assetless -> exempt
+        ]
+        problems = extract_to_csv.missing_asset_problems(rows, self.tmp)
+        self.assertEqual(len(problems), 1)
+        pub, gram_id, png_path, line_no = problems[0]
+        self.assertEqual((pub, gram_id, png_path), ("main", "2", "gone.png"))
+        # index 1 -> CSV line 3 (header is line 1), matching glc_view_problems.
+        self.assertEqual(line_no, 3)
+
+
+class MissingAssetMainTests(unittest.TestCase):
+    """End-to-end: a corpus with a referenced asset file removed makes extract
+    warn (and still write the CSV) by default, or hard-abort under
+    ``--strict-assets``."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(
+            TMP / "extract_missing_asset_corpus")
+
+    def _extract(self, out_csv: Path, *extra: str) -> int:
+        return extract_to_csv.main(
+            ["--input-root", str(self.corpus), "--out", str(out_csv), *extra])
+
+    def _delete_one_referenced_asset(self, out_csv: Path) -> str:
+        # A clean extract first, to learn a genuinely-present referenced asset
+        # (non-empty png_path with a file_size), then delete that file so the
+        # next run sees the reference dangling.
+        self.assertEqual(self._extract(out_csv), 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        target = next(r["png_path"] for r in rows
+                      if r["png_path"] and r["file_size"])
+        (self.corpus / target).unlink()
+        return target
+
+    def test_default_warns_and_still_writes_csv(self) -> None:
+        out_csv = TMP / "extract_missing_default.csv"
+        self._delete_one_referenced_asset(out_csv)
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            rc = self._extract(out_csv)
+        self.assertEqual(rc, 0)
+        log = "\n".join(cm.output)
+        self.assertIn("missing on disk", log)
+        self.assertIn("CSV line ", log)
+        self.assertTrue(out_csv.exists())
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        self.assertTrue(
+            any(extract_to_csv.ASSET_MISSING_WARNING in r["warnings"]
+                for r in rows),
+            "at least one row must carry the asset-missing warning")
+
+    def test_strict_assets_aborts_after_writing_csv(self) -> None:
+        out_csv = TMP / "extract_missing_strict.csv"
+        self._delete_one_referenced_asset(out_csv)
+        with self.assertLogs(extract_to_csv.LOGGER, level="ERROR") as cm:
+            rc = self._extract(out_csv, "--strict-assets")
+        self.assertEqual(rc, 1)
+        self.assertIn("--strict-assets", "\n".join(cm.output))
+        # The CSV is written before the abort so its warnings are inspectable.
+        self.assertTrue(out_csv.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

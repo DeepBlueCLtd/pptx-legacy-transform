@@ -47,5 +47,12 @@ sys.argv = [
     "--clean",
     "--image-root", str(SOURCE),
     "--stub-wav", "stock.wav",
+    # Temporary debugging aid: stamp each gram page with a visible
+    # instructor-only block mapping its published week-N/gram-NN back to the
+    # source publication, source deck title and original gram number (plus the
+    # analysis image's source path). Handy when a published page — e.g. a
+    # missing analysis image — needs tracing to the PPTX it came from. Remove
+    # this line once the debugging phase is over and the block disappears:
+    # "--debug-provenance",
 ]
 runpy.run_path(str(WRITE), run_name="__main__")

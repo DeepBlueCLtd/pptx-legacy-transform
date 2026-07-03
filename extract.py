@@ -48,5 +48,11 @@ sys.argv = [
     # Build only the main document — walk the whole corpus but drop the
     # progress-test and final-assessment decks:
     # "--exclude-tests",
+    # Hard-fail when a row references an image/.wav that is missing on disk
+    # (e.g. an analysis sheet whose PNG never made it into source). By default
+    # these are warned + listed (see extract.log, "missing on disk") and the
+    # CSV is still written; uncomment for a focused cleanup pass that must not
+    # publish until every referenced asset is present or its row dropped:
+    # "--strict-assets",
 ]
 runpy.run_path(str(EXTRACT), run_name="__main__")
