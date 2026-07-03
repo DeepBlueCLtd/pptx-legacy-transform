@@ -799,5 +799,69 @@ class GlcViewFieldMainTests(unittest.TestCase):
                 self.assertEqual(r[field_name], extract_to_csv.RELAXED_DEFAULT)
 
 
+class DeletedGramRemnantTests(unittest.TestCase):
+    """A header button emptied when its gram was deleted in PowerPoint must
+    not become a blank-``gram_id`` row.
+
+    When a gram is deleted, the emptied header shape often survives, still
+    carrying its shape-level hyperlink to the (now-orphaned) analysis sheet
+    but with no caption and no matching ``.glc`` links. Such a remnant would
+    otherwise emit a lone analysis row whose ``gram_id`` is blank — an
+    invalid row ``deduplicate_csv`` rejects via ``require_field``.
+    """
+
+    def _slide_with_real_gram_and_remnant(self):
+        from pptx import Presentation
+        from pptx.util import Emu
+
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+
+        # A genuine gram: captioned header (shape-level analysis link) plus a
+        # sibling Lofar shape carrying a text-run .glc link in the same folder.
+        header = slide.shapes.add_textbox(Emu(0), Emu(0), Emu(100), Emu(50))
+        header.text_frame.text = "Gram 14: Frigate"
+        mock_pptx.add_shape_level_hyperlink(header, "Gram14/Analysis%20Sheet.png")
+
+        lofar = slide.shapes.add_textbox(Emu(0), Emu(60), Emu(100), Emu(30))
+        run = lofar.text_frame.paragraphs[0].add_run()
+        run.text = "Lofar"
+        mock_pptx.add_text_run_hyperlink(run, "Gram14/chan.glc")
+
+        # The remnant: an emptied header still linked to a deleted gram's
+        # analysis sheet, with no caption and no Lofar links.
+        remnant = slide.shapes.add_textbox(Emu(0), Emu(100), Emu(100), Emu(50))
+        remnant.text_frame.text = ""
+        mock_pptx.add_shape_level_hyperlink(remnant, "Gram15/Analysis%20Sheet.png")
+
+        return slide
+
+    def test_remnant_is_dropped_and_real_gram_kept(self) -> None:
+        slide = self._slide_with_real_gram_and_remnant()
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            grams = extract_to_csv.extract_grams_from_slide(slide, slide_num=3)
+        self.assertEqual([g.gram_id for g in grams], ["14"],
+                         "remnant should be dropped, real gram kept")
+        # No surviving gram carries a blank id.
+        self.assertTrue(all(g.gram_id.strip() for g in grams))
+        self.assertTrue(
+            any("deleted-gram remnant" in m for m in cm.output),
+            f"expected a remnant-skip warning, got: {cm.output}")
+
+    def test_remnant_produces_no_blank_gram_id_row(self) -> None:
+        slide = self._slide_with_real_gram_and_remnant()
+        grams = extract_to_csv.extract_grams_from_slide(slide, slide_num=3)
+        rows: list[dict] = []
+        for gram in grams:
+            rows.extend(extract_to_csv.gram_to_rows(
+                gram, "main", "Instructor Week 1 Grams", "week-1",
+                content_root=TMP, source_dir=TMP,
+                target_chapter="1", relaxed=True,
+            ))
+        self.assertTrue(rows)
+        self.assertTrue(all(r["gram_id"].strip() for r in rows),
+                        "a blank-gram_id row survived to CSV output")
+
+
 if __name__ == "__main__":
     unittest.main()

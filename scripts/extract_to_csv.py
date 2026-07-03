@@ -841,17 +841,40 @@ def extract_grams_from_slide(
 
     for header, analysis_href in headers:
         lofar_pairs = header_to_pairs.get(id(header), [])
+
+        descriptor = "".join(
+            run.text or "" for para in header.text_frame.paragraphs for run in para.runs
+        ).strip()
+        gram_id, instructor_detail = _split_descriptor(descriptor)
+
+        # Deleted-gram remnant: when a gram is removed in PowerPoint the
+        # emptied header button often survives, still carrying its
+        # shape-level hyperlink to the old analysis sheet but with its
+        # "Gram N: ..." caption gone. That shape passes the header test
+        # above yet yields an empty gram_id, and its now-orphaned GramNN/
+        # folder no longer has matching .glc shapes, so it would emit a
+        # lone analysis row with a blank gram_id -- an invalid row that
+        # dedupe rejects (require_field). A header with neither a gram
+        # number nor any Lofar link is not publishable content, so drop
+        # it here (loudly) rather than the operator hand-deleting the row
+        # on every run. A header that *does* carry Lofar links but no
+        # parseable number is a different problem (a caption we failed to
+        # read) -- keep it and let the no-Lofar/number warnings surface.
+        if not gram_id and not lofar_pairs:
+            h_left, h_top, _, _ = _bbox(header)
+            LOGGER.warning(
+                "Slide %d: skipping deleted-gram remnant at top=%d left=%d "
+                "(analysis href %r) -- no gram number and no Lofar links",
+                slide_num, h_top, h_left, analysis_href,
+            )
+            continue
+
         if not lofar_pairs:
             h_left, h_top, _, _ = _bbox(header)
             LOGGER.warning(
                 "Slide %d: gram header at top=%d left=%d has no Lofar box",
                 slide_num, h_top, h_left,
             )
-
-        descriptor = "".join(
-            run.text or "" for para in header.text_frame.paragraphs for run in para.runs
-        ).strip()
-        gram_id, instructor_detail = _split_descriptor(descriptor)
 
         glc_links = [GlcLink(display_text=t.strip(), href=h) for t, h in lofar_pairs]
         grams.append(GramPlaceholder(
