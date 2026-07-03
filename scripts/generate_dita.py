@@ -247,10 +247,17 @@ def decode_csv_bytes(raw: bytes, path: Path, logger: logging.Logger) -> str:
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        logger.warning(
-            "%s is not UTF-8; decoding as Windows-1252 (cp1252), which is "
-            "what Excel's 'CSV (Comma delimited)' save produces. Re-save as "
-            "'CSV UTF-8' to silence this and guarantee a clean round-trip.",
+        # DEBUG, not WARNING: the plain *"CSV (Comma delimited)"* save is a
+        # supported round-trip (we decode cp1252 here and the writer emits
+        # ``utf-8-sig`` again), so this is a routine note for the debug log,
+        # not a console nag the operator must act on. Kept off stdout (the
+        # stream handler is INFO) but recorded in the per-stage log for the
+        # air-gapped maintainer.
+        logger.debug(
+            "%s is not UTF-8; decoded as Windows-1252 (cp1252), the encoding "
+            "Excel's 'CSV (Comma delimited)' save produces. Handled — the data "
+            "round-trips cleanly. Save as 'CSV UTF-8' if you want a byte-exact "
+            "BOM-prefixed file.",
             path,
         )
         return raw.decode("cp1252")

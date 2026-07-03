@@ -528,8 +528,10 @@ all three of those if you "Save As" instead of "Save":
   longer need the awkward *"CSV (MS-DOS)"* option (which uses a different,
   OEM code page and is now best avoided — it can mangle non-ASCII glyphs
   under the cp1252 fallback). For a byte-clean round-trip that preserves the
-  BOM, prefer *Save As → CSV UTF-8*. A fallback decode is logged as a
-  warning in `generate.log` / the dedupe log.
+  BOM, prefer *Save As → CSV UTF-8*. A fallback decode is noted at DEBUG
+  level in `generate.log` / the dedupe log — it stays off the console,
+  since the cp1252 save is a supported round-trip rather than something
+  you must act on.
 - **BOM stripped** if you re-save as plain CSV without `Unicode (UTF-8)`
   selected — non-ASCII vessel names no longer crash the reader (see above),
   but the byte-level round-trip invariant in `csv-schema.md` no longer holds.
@@ -686,7 +688,7 @@ canonical air-gapped test surface.
 | `NotImplementedError: Shape grouping is not implemented yet.` | Expected pre-handover (FR-015). | Run introspection against a real instructor PPTX, answer the five questions in the stub's docstring, then implement the function. |
 | `extract_to_csv.py` exits 0 with empty CSV. | `--input-root` does not contain any `.pptx`. | Verify the path; the walker is recursive. |
 | CSV opens with garbled non-ASCII vessel names in Excel. | The file lost its BOM during Save As. | Re-export from Excel via *File → Save As → CSV UTF-8*. |
-| `UnicodeDecodeError` when running `write.py`/`dedupe.py` after editing the CSV in Excel. | Excel's default *"CSV (Comma delimited)"* save writes Windows ANSI (cp1252), not UTF-8; older builds of the reader were strict utf-8. | Fixed: the readers now fall back to cp1252, so the **default save just works** — you no longer need the awkward *"CSV (MS-DOS)"* option. For a byte-clean round-trip, prefer *Save As → CSV UTF-8*. |
+| `UnicodeDecodeError` when running `write.py`/`dedupe.py` after editing the CSV in Excel. | Excel's default *"CSV (Comma delimited)"* save writes Windows ANSI (cp1252), not UTF-8; older builds of the reader were strict utf-8. | Fixed: the readers now fall back to cp1252, so the **default save just works** — you no longer need the awkward *"CSV (MS-DOS)"* option, and the fallback is logged at DEBUG (no console warning). For a byte-clean round-trip, prefer *Save As → CSV UTF-8*. |
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Every GLC-backed gram (image or `.wav`) needs `time_end` / `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (Analysis-sheet rows and dangling GLC rows are exempt.) |
 | `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | A GLC-backed gram's GLC has no time period and/or band fields; GramFrame can't render without them. | Fix the offending GLC(s) listed in the error so they carry `time_end`, `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
