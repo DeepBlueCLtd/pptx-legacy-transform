@@ -117,13 +117,14 @@ LOGGER = logging.getLogger(__name__)
 # Keeps the DITA tree slim for transit during cross-network testing.
 _STUB_WAV_PATH: "Path | None" = None
 
-# Temporary debugging aid: when enabled via ``--debug-provenance``, every gram
-# topic carries a visible instructor-only block mapping its published path
-# (``week-N/gram-NN``) back to its source publication, source chapter/deck title
-# and original ``gram_id`` — so an operator staring at a published page (e.g. a
-# missing analysis image) can find the source PPTX it came from. Off by default;
-# drop the flag once the debugging phase is over and the block disappears.
-_DEBUG_PROVENANCE: bool = False
+# Temporary debugging aid: when enabled, every gram topic carries a visible
+# instructor-only block mapping its published path (``week-N/gram-NN``) back to
+# its source publication, source chapter/deck title and original ``gram_id`` —
+# so an operator staring at a published page (e.g. a missing analysis image) can
+# find the source PPTX it came from. ON by default during the current debugging
+# phase (``--no-debug-provenance`` suppresses it); flip the CLI default back off
+# once the phase is over.
+_DEBUG_PROVENANCE: bool = True
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -1663,12 +1664,18 @@ def main(argv: Iterable[str] | None = None) -> int:
              "still resolve). Slims the DITA tree for cross-system transit.")
     parser.add_argument(
         "--debug-provenance", action="store_true", dest="debug_provenance",
+        default=True,
         help="Temporary debugging aid: stamp each gram topic with a visible "
              "instructor-only block mapping its published week-N/gram-NN back "
              "to the source publication, source chapter/deck title and original "
              "gram_id (plus the analysis image's source path). Helps trace a "
              "published page — e.g. a missing analysis image — to the PPTX it "
-             "came from. Off by default; drop the flag to remove the block.")
+             "came from. ON by default during the current debugging phase; pass "
+             "--no-debug-provenance to suppress the block.")
+    parser.add_argument(
+        "--no-debug-provenance", action="store_false", dest="debug_provenance",
+        help="Suppress the source-provenance debug block (see "
+             "--debug-provenance), which is otherwise on by default for now.")
     parser.add_argument(
         "--static-root", type=Path, dest="static_root", default=Path("static"),
         help="Folder of common static pages (welcome.dita, security.dita, …) "

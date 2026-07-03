@@ -227,33 +227,17 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(image, "PNG analysis assets render as <image>")
         self.assertEqual(image.get("href"), "gram12-analysis.png")
 
-    def test_no_debug_provenance_block_by_default(self) -> None:
-        """Without --debug-provenance the temporary source-provenance block is
-        absent — normal builds carry no debug note."""
-        rc = _run(self.out)
-        self.assertEqual(rc, 0)
-        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
-        root = ET.parse(topic).getroot()
-        self.assertIsNone(
-            root.find(".//note[@outputclass='debug-provenance']"),
-            "no debug provenance block should appear without the flag")
-
-    def test_debug_provenance_block_maps_published_to_source(self) -> None:
-        """--debug-provenance stamps each gram with an instructor-only note
+    def test_debug_provenance_block_on_by_default_maps_published_to_source(self) -> None:
+        """The source-provenance block is ON by default (current debugging
+        phase): a plain build stamps each gram with an instructor-only note
         mapping its published path back to the source publication, chapter/deck
         and original gram number, plus the analysis image's source path."""
-        rc = generate_dita.main([
-            "--csv", str(FIXTURES / "minimal.csv"),
-            "--out", str(self.out),
-            "--image-root", str(FIXTURES),
-            "--static-root", str(STATIC_ROOT),
-            "--debug-provenance",
-        ])
+        rc = _run(self.out)  # no flag -> default on
         self.assertEqual(rc, 0)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
         note = root.find(".//body/note[@outputclass='debug-provenance']")
-        self.assertIsNotNone(note, "debug run must stamp a provenance note")
+        self.assertIsNotNone(note, "provenance note should be present by default")
         # Instructor-only so it never leaks into a student edition.
         self.assertEqual(note.get("audience"), "-trainee")
         text = " ".join(p.text or "" for p in note.findall("p"))
@@ -261,6 +245,23 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIn("Nordic Fishing Vessels", text)  # source chapter/deck title
         self.assertIn("12", text)                       # source gram number
         self.assertIn("gram12_analysis.png", text)      # analysis image source path
+
+    def test_no_debug_provenance_block_when_suppressed(self) -> None:
+        """--no-debug-provenance suppresses the temporary block, so a build
+        passed that flag carries no debug note."""
+        rc = generate_dita.main([
+            "--csv", str(FIXTURES / "minimal.csv"),
+            "--out", str(self.out),
+            "--image-root", str(FIXTURES),
+            "--static-root", str(STATIC_ROOT),
+            "--no-debug-provenance",
+        ])
+        self.assertEqual(rc, 0)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        self.assertIsNone(
+            root.find(".//note[@outputclass='debug-provenance']"),
+            "no debug provenance block should appear with --no-debug-provenance")
 
     def test_analysis_jump_link_is_instructor_only_and_targets_section(self) -> None:
         """Issue #91: a gram with an analysis sheet carries a floating

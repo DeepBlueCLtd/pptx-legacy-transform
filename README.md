@@ -483,14 +483,14 @@ installs, not the user-folder install.
    (several source decks fold into one `week-N/` folder, and within-week
    collisions renumber via `target_gram_id`), a published `week-N/gram-NN` no
    longer matches the publication / week / gram number you would search for in
-   the source PPTX. Pass `--debug-provenance` to stamp each gram page with a
-   visible **instructor-only** block mapping it back: source publication, source
+   the source PPTX. Each gram page therefore carries a visible
+   **instructor-only** block mapping it back: source publication, source
    chapter/deck title, original `gram_id`, the published week + gram number, and
    the analysis image's source path. It is the fast way to trace a published
    page — e.g. one whose analysis image failed to load — to the deck it came
-   from. The block is off by default and disappears the moment you drop the
-   flag; it is tagged `audience="-trainee"` so it never leaks into a student
-   edition.
+   from. The block is **on by default during the current debugging phase**; pass
+   `--no-debug-provenance` to suppress it. It is tagged `audience="-trainee"` so
+   it never leaks into a student edition.
 
 6. **Stage 6 — Build verification (Oxygen).** Build both the instructor
    profile (no audience exclusion) and the trainee profile (excluding
@@ -717,7 +717,7 @@ canonical air-gapped test surface.
 | CSV opens with garbled non-ASCII vessel names in Excel. | The file lost its BOM during Save As. | Re-export from Excel via *File → Save As → CSV UTF-8*. |
 | `UnicodeDecodeError` when running `write.py`/`dedupe.py` after editing the CSV in Excel. | Excel's default *"CSV (Comma delimited)"* save writes Windows ANSI (cp1252), not UTF-8; older builds of the reader were strict utf-8. | Fixed: the readers now fall back to cp1252, so the **default save just works** — you no longer need the awkward *"CSV (MS-DOS)"* option, and the fallback is logged at DEBUG (no console warning). For a byte-clean round-trip, prefer *Save As → CSV UTF-8*. |
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
-| Oxygen / DITA-OT reports `[DOTX008E] The resource '…analysis-20sheet-20.png' cannot be loaded`. | The topic references an asset (here an analysis sheet PNG) that is not present in the built tree — the source file was missing at generate time, so the generator dangled the href. (`-20` is DITA-OT's rendering of the URL-escaped space `%20` in the original filename.) | Catch it upstream: `extract_to_csv.py` now flags any referenced-but-missing asset with `asset file missing on disk` in the CSV `warnings` column and an enumerated `extract.log` list, so re-run extraction and triage those rows (restore the source file, or drop the row) before publishing. To map a published `week-N/gram-NN` back to the source deck/gram it came from, re-generate with `--debug-provenance` and read the block at the top of the gram page. |
+| Oxygen / DITA-OT reports `[DOTX008E] The resource '…analysis-20sheet-20.png' cannot be loaded`. | The topic references an asset (here an analysis sheet PNG) that is not present in the built tree — the source file was missing at generate time, so the generator dangled the href. (`-20` is DITA-OT's rendering of the URL-escaped space `%20` in the original filename.) | Catch it upstream: `extract_to_csv.py` now flags any referenced-but-missing asset with `asset file missing on disk` in the CSV `warnings` column and an enumerated `extract.log` list, so re-run extraction and triage those rows (restore the source file, or drop the row) before publishing. To map a published `week-N/gram-NN` back to the source deck/gram it came from, read the source-provenance block at the top of the gram page (on by default for now; `--no-debug-provenance` suppresses it). |
 | `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Every GLC-backed gram (image or `.wav`) needs `time_end` / `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (Analysis-sheet rows and dangling GLC rows are exempt.) |
 | `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | A GLC-backed gram's GLC has no time period and/or band fields; GramFrame can't render without them. | Fix the offending GLC(s) listed in the error so they carry `time_end`, `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
