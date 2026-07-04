@@ -645,6 +645,49 @@ def is_framing_slide(slide) -> bool:
     return False
 
 
+def _descriptor_text(header) -> str:
+    """Collapse a header shape's text runs into its ``"Gram N: <detail>"`` caption."""
+    return "".join(
+        run.text or "" for para in header.text_frame.paragraphs for run in para.runs
+    ).strip()
+
+
+def _reconnect_orphan_glc(
+    glc_href: str,
+    folder_key: str,
+    num_to_header: dict,
+    content_root: Path | None,
+    source_dir: Path | None,
+):
+    """Reconnect a folder-orphaned ``.glc`` to its gram header via a sibling
+    analysis sheet, or return ``None`` when it can't be confidently recovered.
+
+    A ``.glc`` whose ``GramNN/`` folder matches no header on the slide is
+    usually a gram whose *analysis-sheet* header hyperlink was left pointing at
+    an earlier build's folder (a stale link), so the folder-key pairing in
+    ``extract_grams_from_slide`` can't associate them. When the ``.glc``'s own
+    on-disk folder holds an analysis-sheet image — proof this is a real gram,
+    and the very sheet ``generate_dita`` will surface once the row exists (see
+    the Lofar-folder recovery in ``gram_to_rows``) — reconnect it to the header
+    carrying the same gram number rather than dropping it and warning.
+
+    Returns that header, or ``None`` when recovery isn't safe: no filesystem
+    context, a folder key with no gram number, the ``.glc`` doesn't resolve on
+    disk, no sibling analysis sheet beside it, or no number-matched header. In
+    every ``None`` case the caller warns and drops exactly as before.
+    """
+    if content_root is None:
+        return None
+    if not re.search(r"\d", folder_key):
+        return None
+    resolved = resolve_glc_path(glc_href, content_root, source_dir=source_dir)
+    if resolved is None:
+        return None
+    if _recover_analysis_sheet([resolved.parent], content_root) is None:
+        return None
+    return num_to_header.get(_gram_num_from_id(folder_key))
+
+
 def extract_grams_from_slide(
     slide,
     slide_num: int,
@@ -791,6 +834,17 @@ def extract_grams_from_slide(
             continue
         folder_to_header[key] = (header, href)
 
+    # Index headers by their parsed gram number so a .glc whose gram folder
+    # matches no header — because that gram's analysis-sheet header links to a
+    # stale earlier-build folder — can still be reconnected to its gram via a
+    # sibling analysis sheet (see _reconnect_orphan_glc). First header wins on a
+    # numeric collision; numberless headers can't disambiguate, so are skipped.
+    num_to_header: dict[str, object] = {}
+    for header, _analysis_href in headers:
+        h_gram_id, _ = _split_descriptor(_descriptor_text(header))
+        if re.search(r"\d", h_gram_id):
+            num_to_header.setdefault(_gram_num_from_id(h_gram_id), header)
+
     header_to_pairs: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for cand, pairs in candidates:
         for text, glc_href in pairs:
@@ -816,6 +870,21 @@ def extract_grams_from_slide(
                         "trailing-'a' fallback", slide_num, glc_href, key, fallback,
                     )
             if hdr_entry is None:
+                recovered_header = _reconnect_orphan_glc(
+                    glc_href, key, num_to_header, content_root, source_dir,
+                )
+                if recovered_header is not None:
+                    # A stale analysis-sheet link left this .glc folder-orphaned,
+                    # but its sibling analysis sheet proves the gram is real —
+                    # reconnect it by gram number rather than warn-and-drop.
+                    LOGGER.info(
+                        "Slide %d: .glc %r names folder %r with no folder-matched "
+                        "header (its analysis link points elsewhere); reconnected "
+                        "to the 'Gram %s' header via its sibling analysis sheet",
+                        slide_num, glc_href, key, _gram_num_from_id(key),
+                    )
+                    header_to_pairs[id(recovered_header)].append((text, glc_href))
+                    continue
                 LOGGER.warning(
                     "Slide %d: .glc %r names folder %r but no matching header on this slide",
                     slide_num, glc_href, key,
@@ -887,10 +956,7 @@ def extract_grams_from_slide(
     for header, analysis_href in headers:
         lofar_pairs = header_to_pairs.get(id(header), [])
 
-        descriptor = "".join(
-            run.text or "" for para in header.text_frame.paragraphs for run in para.runs
-        ).strip()
-        gram_id, instructor_detail = _split_descriptor(descriptor)
+        gram_id, instructor_detail = _split_descriptor(_descriptor_text(header))
 
         # Deleted-gram remnant: when a gram is removed in PowerPoint the
         # emptied header button often survives, still carrying its

@@ -483,6 +483,19 @@ installs, not the user-folder install.
    correctly-linked sheet is untouched, so it can't change output for grams that
    already resolve.
 
+   The **reverse** case is the same stale link seen from the `.glc` side: when
+   a gram's analysis-sheet *header* points at a stale folder, its `GramNN/`
+   `.glc` files match no header by folder key and would be dropped with a
+   `.glc … names folder … but no matching header on this slide` warning — the
+   gram's Lofars silently lost. So before warning, extraction checks the
+   `.glc`'s own on-disk folder for a sibling analysis sheet (the same
+   `*analysis*` / `*analaysis*` image the recovery above would find). If one is
+   there — proof this is a real gram — the `.glc` is **reconnected to the header
+   carrying the same gram number** (a logged, silent recovery, no warning), and
+   the mis-linked analysis sheet is then recovered from that folder by the rule
+   above. Without a sibling sheet (or a matching header) the `.glc` is dropped
+   and the warning stands, exactly as before.
+
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
    - fill in any empty `vessel_name` they recognise,
