@@ -1621,7 +1621,12 @@ def emit_main_ditamap(
                             + [topic_file])
             gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
         for _, href in sorted(gram_refs):
-            ET.SubElement(chapter_ref, "topicref", {"href": href})
+            # linking="none" suppresses DITA-OT's auto-generated child-link
+            # list on the chapter page; the enterBtn buttons in the chapter
+            # topic body are the intended navigation surface (issue #130).
+            ET.SubElement(chapter_ref, "topicref", {
+                "href": href, "linking": "none",
+            })
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
