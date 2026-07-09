@@ -1433,6 +1433,62 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
     return written
 
 
+def emit_gram_index_topics(rows: list[dict], out_dir: Path) -> list[Path]:
+    """Write one ``gram-index.dita`` per effective ``main`` chapter (week).
+
+    Each index topic lives beside its chapter topic at
+    ``main/<slug>/gram-index.dita`` and renders a navigable list of
+    ``enterBtn``-styled links — one per gram in that week, sorted by
+    ascending gram number — so instructors can select a gram from a
+    full-width button panel instead of a sidebar list (issue #130).
+
+    The topic is referenced by the ditamap as the sole child of the chapter
+    topicref, with the individual gram topicrefs nested one tier below it.
+    Oxygen/DITA-OT then suppresses the per-gram left-column listing on gram
+    pages (the column belongs to the gram-index page itself) while still
+    allowing each gram page to fill the full content width.
+    """
+    written: list[Path] = []
+    for slug, (_, chapter_rows) in _main_chapters(rows).items():
+        if not slug:
+            continue
+        # Collect (gram_num, gram_dir/gram_file) pairs, deduplicated and sorted.
+        seen: set[str] = set()
+        gram_entries: list[tuple[int, str, str]] = []
+        for row in chapter_rows:
+            doc_slug = _doc_slug(_effective_doc(row))
+            gram_dir = _gram_folder_name(_effective_gram_id(row))
+            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+            if uniq in seen:
+                continue
+            seen.add(uniq)
+            eff_gram_id = _effective_gram_id(row)
+            gram_num = int(_gram_num(eff_gram_id))
+            topic_file = _topic_filename(eff_gram_id)
+            # href is relative to gram-index.dita (which lives in the week folder)
+            href = "/".join([s for s in (doc_slug, gram_dir) if s] + [topic_file])
+            gram_entries.append((gram_num, href, str(gram_num)))
+        gram_entries.sort(key=lambda t: t[0])
+
+        topic = ET.Element("topic", {"id": "gram_index"})
+        ET.SubElement(topic, "title").text = GRAMS_NAVTITLE
+        body = ET.SubElement(topic, "body")
+        _append_edition_marker(body)
+        ul = ET.SubElement(body, "ul", {"outputclass": "gram-index"})
+        for _, href, label in gram_entries:
+            li = ET.SubElement(ul, "li")
+            ET.SubElement(li, "xref", {
+                "href": href, "format": "dita", "outputclass": "enterBtn",
+            }).text = f"Gram {label}"
+
+        chapter_dir = out_dir / "main" / slug
+        chapter_dir.mkdir(parents=True, exist_ok=True)
+        path = chapter_dir / "gram-index.dita"
+        _write_text(path, _serialise(topic, TOPIC_DOCTYPE))
+        written.append(path)
+    return written
+
+
 def discover_static_pages(static_root: Path) -> list[str]:
     """Return the common static page filenames (top-level ``*.dita`` under
     ``static_root``) in nav order: Welcome, Security, then any extras
@@ -1597,8 +1653,11 @@ def emit_main_ditamap(
             href = "/".join([s for s in (slug, doc_slug, gram_dir) if s]
                             + [topic_file])
             gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
+        gram_index_ref = ET.SubElement(chapter_ref, "topicref", {
+            "href": f"{slug}/gram-index.dita",
+        })
         for _, href in sorted(gram_refs):
-            ET.SubElement(chapter_ref, "topicref", {"href": href})
+            ET.SubElement(gram_index_ref, "topicref", {"href": href})
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
@@ -1875,6 +1934,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         # its own page at the top level of the map.
         chapter_topics = emit_main_chapter_topics(rows, args.out)
         for path in chapter_topics:
+            written.append(path)
+            LOGGER.info("Wrote %s", path)
+        gram_index_topics = emit_gram_index_topics(rows, args.out)
+        for path in gram_index_topics:
             written.append(path)
             LOGGER.info("Wrote %s", path)
         ditamap_paths.append(emit_main_ditamap(rows, args.out, static_pages))

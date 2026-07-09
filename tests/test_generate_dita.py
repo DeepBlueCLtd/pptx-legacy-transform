@@ -400,6 +400,67 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(len(hrefs), len(set(hrefs)),
                          f"duplicate topicrefs in ditamap: {hrefs}")
 
+    def test_gram_index_topic_generated_per_week(self) -> None:
+        """A ``gram-index.dita`` is generated inside each week folder for the
+        ``main`` publication (issue #130)."""
+        _run(self.out)
+        ditamap = self.out / "main" / "main.ditamap"
+        root = ET.parse(ditamap).getroot()
+        chapters = [tr for tr in root.findall("topicref")
+                    if "/" in (tr.get("href") or "")]
+        self.assertGreaterEqual(len(chapters), 1)
+        for chapter_ref in chapters:
+            slug = chapter_ref.get("href", "").split("/")[0]
+            index = self.out / "main" / slug / "gram-index.dita"
+            self.assertTrue(index.is_file(),
+                            f"gram-index.dita missing for week {slug}")
+
+    def test_gram_index_contains_enter_btn_links(self) -> None:
+        """Each ``gram-index.dita`` body holds an ``<ul outputclass='gram-index'>``
+        with ``<xref outputclass='enterBtn'>`` links pointing at the week's
+        gram topics (issue #130)."""
+        _run(self.out)
+        index_path = self.out / "main" / "nordic-fishing-vessels" / "gram-index.dita"
+        self.assertTrue(index_path.is_file())
+        root = ET.parse(index_path).getroot()
+        self.assertEqual(root.tag, "topic")
+        self.assertEqual(root.get("id"), "gram_index")
+        ul = root.find(".//ul[@outputclass='gram-index']")
+        self.assertIsNotNone(ul, "expected <ul outputclass='gram-index'>")
+        xrefs = ul.findall(".//xref[@outputclass='enterBtn']")
+        self.assertGreaterEqual(len(xrefs), 1, "expected at least one enterBtn link")
+        for xref in xrefs:
+            self.assertEqual(xref.get("format"), "dita")
+            href = xref.get("href", "")
+            self.assertTrue(href.endswith(".dita"),
+                            f"enterBtn href should point at a .dita topic: {href!r}")
+            self.assertIsNotNone(xref.text)
+            self.assertTrue(xref.text.startswith("Gram "),
+                            f"button label should start with 'Gram ': {xref.text!r}")
+
+    def test_gram_index_in_ditamap_between_chapter_and_grams(self) -> None:
+        """The ditamap nests gram topicrefs one level deeper — under a
+        ``gram-index`` topicref — rather than directly under the chapter
+        topicref (issue #130)."""
+        _run(self.out)
+        ditamap = self.out / "main" / "main.ditamap"
+        root = ET.parse(ditamap).getroot()
+        chapters = [tr for tr in root.findall("topicref")
+                    if "/" in (tr.get("href") or "")]
+        self.assertGreaterEqual(len(chapters), 1)
+        for chapter_ref in chapters:
+            slug = chapter_ref.get("href", "").split("/")[0]
+            children = chapter_ref.findall("topicref")
+            self.assertEqual(len(children), 1,
+                             f"chapter {slug!r} should have exactly one child "
+                             f"(the gram-index topicref)")
+            gram_index_ref = children[0]
+            self.assertIn("gram-index.dita", gram_index_ref.get("href", ""),
+                          "sole chapter child must be the gram-index topicref")
+            gram_refs = gram_index_ref.findall("topicref")
+            self.assertGreaterEqual(len(gram_refs), 1,
+                                    "gram topicrefs nest inside gram-index")
+
     def test_no_ditamap_at_output_root(self) -> None:
         """Every ditamap lives inside its named publication folder; nothing
         ``*.ditamap`` may sit at the root of the output tree."""
@@ -476,7 +537,8 @@ class GenerateDitaTests(unittest.TestCase):
         ditamap = generate_dita.emit_main_ditamap(rows, self.out)
         hrefs = [tr.get("href")
                  for tr in ET.parse(ditamap).getroot().iter("topicref")
-                 if "gram-" in (tr.get("href") or "")]
+                 if "gram-" in (tr.get("href") or "")
+                 and "gram-index" not in (tr.get("href") or "")]
         self.assertEqual(hrefs, [
             "week-2/gram-07/gram_07.dita",
             "week-2/gram-23/gram_23.dita",
