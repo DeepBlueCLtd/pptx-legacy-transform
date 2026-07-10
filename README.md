@@ -167,16 +167,25 @@ A second, differently-shaped image intake handles the common case where a gram
 has **only** a `.wav`: students only inspect the spectrogram visually, so the
 author opens each `.wav` in the analysis tool, screenshots the displayed gram,
 and saves it in a **parallel *incoming* tree** named for the duration shown on
-the y-axis plus the wav's own stem — e.g. `5m26s WAV 1.jpg` (5 min 26 s of
-`WAV 1`) or `21m WAVE 3.png`. The **prep-time** stage
-`ingest_gram_images.py` (wrapper `ingest.py`) imports these.
+the y-axis plus the wav's own stem, separated by a space **or** an underscore —
+e.g. `5m26s WAV 1.jpg` (5 min 26 s of `WAV 1`), `21m WAVE 3.png`, or
+`10m_0 - 600 Hz.jpg`. The **prep-time** stage `ingest_gram_images.py` (wrapper
+`ingest.py`) imports these.
 
 The incoming tree mirrors `source/` but **omits the per-document container
 folder**: `incoming/<doc>/<gram>/<image>` maps to
 `source/<doc>/<container>/<gram>/`, where `<container>` is the *single*
-sub-folder of the source document folder (identified by uniqueness, never by
-name — a document folder with zero or several sub-folders is reported and
-skipped).
+sub-folder of the source document folder (identified by position, never by
+name). One publication omits the container tier and holds its gram folders
+directly under the document folder; a document folder with a large flat set of
+sub-folders (eight or more) is read as that container-less layout, while an
+in-between count (2–7) is reported as ambiguous and skipped.
+
+Matching folds **case** at every level — document folders, gram folders, and
+image-stem-to-wav — because the hand-typed incoming names drift in case from
+`source/` (an incoming `7m_WAV 1.jpg` matches a source `Wav 1.wav`). Whitespace
+and token content stay exact, so missing spaces and mistyped words are still
+reported for the operator to fix.
 
 The stage runs in two phases:
 
@@ -189,8 +198,9 @@ The stage runs in two phases:
   fixes names in the **incoming** tree by hand and re-runs until it is clean.
   Nothing on disk changes except the report and `ingest.log`.
 - **Apply** (`--apply`). For each verified match, copies the image beside its
-  `.glc` renamed to the wav's stem (`5m26s WAV 1.jpg` → `WAV 1.jpg`), rewrites
-  the `.glc`'s `<filename>` to point at it, and inserts
+  `.glc` renamed to the wav's stem in the wav's own casing (`7m_WAV 1.jpg`
+  beside `Wav 1.wav` → `Wav 1.jpg`), rewrites the `.glc`'s `<filename>` to
+  point at it, and inserts
   `<bitmap_crop_values><bottom_crop>N</bottom_crop></bitmap_crop_values>` with
   the duration in whole seconds (`5m26s` → `326`, `21m` → `1260`), which a later
   `extract.py` reads as the gram's `time_end`.

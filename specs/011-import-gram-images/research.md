@@ -20,11 +20,16 @@ Check II). `match.py` — rejected (describes only phase 1).
 ## R2 — Duration grammar and parsing
 
 **Decision**: The duration token is the filename's leading run up to the first
-space, matched case-insensitively against
+separator, matched case-insensitively against
 `^(?P<m>\d+)m(?:(?P<s>\d{1,2})s)?$` → `seconds = m*60 + (s or 0)`. The stem is
-everything after that first space run, stripped; an empty stem is classed
+everything after that separator, stripped; an empty stem is classed
 unparseable. No range validation on the seconds part beyond two digits
 (`5m26s` → 326, `21m` → 1260, `0m` → 0 applied as-is per spec edge case).
+
+> **Revised (post-#145, real-data patterns):** the separator is a space **or**
+> an underscore — the author uses both, sometimes after the minutes
+> (`10m_0 - 600 Hz`), sometimes after the seconds (`7m20s_0 - 441 Hz`). The
+> split is therefore on the first `[ _]`, not the first space.
 
 **Rationale**: Matches the owner-confirmed grammar (`Nm`, `NmSSs`) exactly and
 nothing more. Rejecting rather than guessing on other shapes feeds the
@@ -39,13 +44,15 @@ Splitting on the *last* space — rejected: stems legitimately contain spaces
 
 ## R3 — Matching pipeline and outcome classes
 
-**Decision**: Three matching tiers, all exact-name after Unicode-preserving
-comparison (no case folding, no whitespace collapsing — drift is *reported*,
-not absorbed):
+**Decision**: Three matching tiers. Comparison folds **case** but nothing else
+— whitespace and token content stay exact, so genuine drift is *reported*, not
+absorbed (see the post-#145 revision below):
 
 1. **Document**: incoming `<doc>` folder name == source `<doc>` folder name.
-2. **Container**: the matched source doc folder must contain exactly one
-   subdirectory; 0 or 2+ → `structurally-ambiguous-doc`, doc skipped.
+2. **Container**: the tier holding the gram folders — the matched source doc
+   folder's single subdirectory, or the doc folder itself when it holds ≥ 8
+   subdirectories (a container-less flat publication); an in-between count →
+   `structurally-ambiguous-doc`, doc skipped.
 3. **Gram folder**: incoming `<gram>` name == a gram folder name under the
    container.
 4. **Image → GLC-referenced asset**: parse each incoming image filename
@@ -64,6 +71,15 @@ Full outcome taxonomy (report + tally): `matched` (verify) / `applied`
 `unparseable-duration`, `unmatched-image`, `ambiguous`, `already-converted`,
 `glc-unreadable`, `glc-already-cropped` (wav-backed GLC that already carries
 `bitmap_crop_values`).
+
+> **Revised (post-#145, real-data patterns):** all three name comparisons fold
+> **case** — the hand-typed incoming names drift in case from `source/`
+> (`7m_WAV 1.jpg` → `Wav 1.wav`), so case is never a reported mismatch. The
+> `GramFolderView` buckets are keyed by the casefolded asset stem; two
+> case-variant screenshots therefore collapse onto one bucket and register as
+> `ambiguous`. Whitespace/token drift is still exact and still reported. When
+> apply copies the image it takes the **wav's** own casing for the basename,
+> not the screenshot's, keeping the folder internally consistent.
 
 **Rationale**: Exact matching keeps the operator the sole authority on names
 (Principle IV) — the report loop, not the matcher, absorbs drift. Matching

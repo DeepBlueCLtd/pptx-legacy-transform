@@ -4,10 +4,21 @@ Many grams ship with only a ``.wav`` asset, rendered live by the on-PC GLC
 viewer. Students only ever inspect the spectrogram visually, so the author
 opens each ``.wav`` in the analysis tool, screenshots the displayed gram, and
 saves it -- in a *parallel incoming tree* -- named for the duration shown on
-the y-axis plus the wav's own stem::
+the y-axis plus the wav's own stem. The duration is separated from the stem by
+either a space or an underscore (the author uses both, sometimes after the
+minutes, sometimes after the seconds)::
 
-    5m26s WAV 1.jpg      # 5 min 26 s of WAV 1
-    21m WAVE 3.png       # 21 min of WAVE 3
+    5m26s WAV 1.jpg          # 5 min 26 s of "WAV 1"
+    21m WAVE 3.png           # 21 min of "WAVE 3"
+    10m_0 - 600 Hz.jpg       # 10 min of "0 - 600 Hz" (underscore separator)
+    7m20s_0 - 441 Hz.jpg     # 7 min 20 s of "0 - 441 Hz"
+
+Matching is **case-insensitive** at both the folder and the stem level: the
+hand-typed incoming names drift in case from ``source\\`` (an incoming
+``7m_WAV 1.jpg`` matches a source ``Wav 1.wav``), so case is never a reason to
+report a mismatch. The copied image takes the *wav's* own casing, keeping each
+gram folder internally consistent. Genuine drift (missing spaces, changed
+tokens) is still reported for the operator to fix.
 
 The incoming tree mirrors ``source\\`` but **omits the per-document container
 folder**: ``incoming\\<doc>\\<gram>\\<image>`` maps to
@@ -74,6 +85,18 @@ GLC_IMAGE_EXTENSIONS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif")
 # tolerated ("10M"). Nothing else parses -- other shapes feed the
 # unparseable-duration survey. Anchored: the whole leading token must match.
 DURATION_RE = re.compile(r"^(?P<m>\d+)m(?:(?P<s>\d{1,2})s)?$", re.IGNORECASE)
+
+# The duration token is separated from the stem by a space or an underscore
+# ("11m Wav 1", "10m_0 - 600 Hz", "7m20s_0 - 441 Hz"). Split on the first.
+DURATION_SEPARATOR_RE = re.compile(r"[ _]")
+
+# A source document folder normally holds exactly one sub-folder -- the
+# "<doc> Files" container that holds the gram folders. One publication instead
+# lays its gram folders *directly* under the doc folder, with no container
+# tier. A doc folder with this many or more sub-folders is read as that flat
+# layout (its sub-folders are the grams) rather than reported as ambiguous;
+# the normal single-container case has exactly one, so the two never collide.
+FLAT_DOC_MIN_GRAMS = 8
 
 
 # -----------------------------------------------------------------------------
@@ -181,7 +204,7 @@ def parse_image_filename(path: Path) -> Optional[CandidateImage]:
         return None
 
     full_stem = path.stem  # filename without the final extension
-    parts = full_stem.split(" ", 1)
+    parts = DURATION_SEPARATOR_RE.split(full_stem, maxsplit=1)
     raw_token = parts[0]
     remainder = parts[1].strip() if len(parts) > 1 else ""
 
@@ -209,6 +232,10 @@ def build_gram_folder_view(folder: Path) -> GramFolderView:
     converted gram). A GLC that yields no inner filename (malformed or missing)
     is recorded in ``unreadable`` and excluded from matching. ``has_crop`` flags
     a GLC that already carries a ``<bitmap_crop_values>`` structure.
+
+    The bucket keys are the referenced asset stems **casefolded**, so an
+    incoming screenshot matches its wav regardless of case drift; each ref
+    keeps the wav's original-case basename for naming the copied image.
     """
     view = GramFolderView(folder=folder)
     for glc_path in sorted(folder.glob("*.glc")):
@@ -226,12 +253,12 @@ def build_gram_folder_view(folder: Path) -> GramFolderView:
         has_crop = "<bitmap_crop_values" in raw
         ref = GlcRef(glc_path=glc_path, referenced_basename=basename,
                      has_crop=has_crop)
-        stem = Path(basename).stem
+        stem_key = Path(basename).stem.casefold()
         suffix = Path(basename).suffix.lower()
         if suffix == ".wav":
-            view.wav_refs.setdefault(stem, []).append(ref)
+            view.wav_refs.setdefault(stem_key, []).append(ref)
         elif suffix in GLC_IMAGE_EXTENSIONS:
-            view.image_refs.setdefault(stem, []).append(ref)
+            view.image_refs.setdefault(stem_key, []).append(ref)
         # Any other extension is anomalous (per glc-schema): not a wav, not one
         # of our images -- it cannot match an incoming screenshot, so it is
         # simply not indexed.
@@ -386,6 +413,8 @@ def process_gram(
             continue
         images.append(candidate)
 
+    # Group parseable images by casefolded stem so case drift collapses onto
+    # one key (and two case-variant screenshots collide as ambiguous).
     parseable: Dict[str, List[CandidateImage]] = defaultdict(list)
     for candidate in images:
         if not candidate.parseable:
@@ -394,40 +423,45 @@ def process_gram(
                 note='token "%s"' % candidate.raw_token))
             tally.bump(KIND_UNPARSEABLE)
         else:
-            parseable[candidate.stem].append(candidate)
+            parseable[candidate.stem.casefold()].append(candidate)
 
-    available_wavs = ", ".join(sorted(view.wav_refs)) or "(none)"
+    available_wavs = ", ".join(sorted(
+        Path(ref.referenced_basename).stem
+        for refs in view.wav_refs.values() for ref in refs)) or "(none)"
 
-    for stem in sorted(parseable):
-        group = parseable[stem]
-        if stem in view.wav_refs:
+    for key in sorted(parseable):
+        group = parseable[key]
+        display_stem = group[0].stem
+        if key in view.wav_refs:
             if len(group) > 1:
                 claimants = ", ".join(sorted(c.path.name for c in group))
                 outcomes.append(Outcome(
                     KIND_AMBIGUOUS, _rel(incoming_gram, incoming_root),
                     note='wav "%s" claimed by %s; none applied'
-                         % (stem, claimants)))
+                         % (display_stem, claimants)))
                 tally.bump(KIND_AMBIGUOUS)
                 continue
             candidate = group[0]
             outcomes.append(Outcome(
                 KIND_MATCHED, _rel(candidate.path, incoming_root),
-                note='wav "%s"' % stem))
+                note='wav "%s"' % display_stem))
             tally.bump(KIND_MATCHED)
             if apply:
-                _apply_match(candidate, view.wav_refs[stem], source_gram,
+                _apply_match(candidate, view.wav_refs[key], source_gram,
                              outcomes, tally)
-        elif stem in view.image_refs:
+        elif key in view.image_refs:
             for candidate in group:
                 outcomes.append(Outcome(
                     KIND_ALREADY, _rel(candidate.path, incoming_root),
-                    note='stem "%s" already an image in the GLC' % stem))
+                    note='stem "%s" already an image in the GLC'
+                         % candidate.stem))
                 tally.bump(KIND_ALREADY)
         else:
             for candidate in group:
                 outcomes.append(Outcome(
                     KIND_UNMATCHED_IMAGE, _rel(candidate.path, incoming_root),
-                    note='stem "%s"; folder wavs: %s' % (stem, available_wavs)))
+                    note='stem "%s"; folder wavs: %s'
+                         % (candidate.stem, available_wavs)))
                 tally.bump(KIND_UNMATCHED_IMAGE)
 
 
@@ -449,7 +483,13 @@ def _apply_match(
         # Nothing to rewrite; do not orphan an image copy in the folder.
         return
 
-    target_name = candidate.stem + candidate.extension
+    # Name the copy after the wav's own stem (its casing), not the incoming
+    # screenshot's -- the hand-typed name may differ in case (incoming
+    # "WAV 1" vs source "Wav 1.wav"), and the copy should sit consistently
+    # beside the wav it replaces.
+    wav_stem = Path(sorted(writable, key=lambda r: r.glc_path.name)[0]
+                    .referenced_basename).stem
+    target_name = wav_stem + candidate.extension
     destination = source_gram / target_name
     shutil.copyfile(candidate.path, destination)
     tally.images_copied += 1
@@ -491,33 +531,46 @@ def ingest_tree(
     outcomes: List[Outcome] = []
     tally = Tally()
 
-    source_doc_names = [p.name for p in _subdirs(source_root)]
+    source_docs = _subdirs(source_root)
+    source_doc_names = [p.name for p in source_docs]
+    # Case-insensitive folder match: key by casefolded name, suggest and report
+    # against the real names.
+    source_doc_map = {p.name.casefold(): p for p in source_docs}
 
     for incoming_doc in _subdirs(incoming_root):
-        source_doc = source_root / incoming_doc.name
-        if not source_doc.is_dir():
+        source_doc = source_doc_map.get(incoming_doc.name.casefold())
+        if source_doc is None:
             note, drift = _suggestion_note(incoming_doc.name, source_doc_names)
             outcomes.append(Outcome(
                 KIND_UNMATCHED_DOC, incoming_doc.name, note=note, drift=drift))
             tally.bump(KIND_UNMATCHED_DOC)
             continue
 
-        containers = _subdirs(source_doc)
-        if len(containers) != 1:
+        subdirs = _subdirs(source_doc)
+        if len(subdirs) == 1:
+            # Normal layout: the single "<doc> Files" container holds the grams.
+            container = subdirs[0]
+        elif len(subdirs) >= FLAT_DOC_MIN_GRAMS:
+            # Flat layout (observed in one publication): the gram folders sit
+            # directly under the doc folder, with no container tier.
+            container = source_doc
+        else:
             outcomes.append(Outcome(
                 KIND_AMBIGUOUS_DOC, _rel(source_doc, source_root),
-                note="%d subdirectories (expected exactly 1); skipped"
-                     % len(containers)))
+                note="%d subdirectories (expected exactly 1 container, or >= %d "
+                     "gram folders for a flat publication); skipped"
+                     % (len(subdirs), FLAT_DOC_MIN_GRAMS)))
             tally.bump(KIND_AMBIGUOUS_DOC)
             continue
-        container = containers[0]
-        container_grams = {p.name: p for p in _subdirs(container)}
+        container_grams = _subdirs(container)
+        container_gram_names = [p.name for p in container_grams]
+        container_gram_map = {p.name.casefold(): p for p in container_grams}
 
         for incoming_gram in _subdirs(incoming_doc):
-            source_gram = container_grams.get(incoming_gram.name)
+            source_gram = container_gram_map.get(incoming_gram.name.casefold())
             if source_gram is None:
                 note, drift = _suggestion_note(
-                    incoming_gram.name, list(container_grams))
+                    incoming_gram.name, container_gram_names)
                 outcomes.append(Outcome(
                     KIND_UNMATCHED_GRAM,
                     _rel(incoming_gram, incoming_root), note=note, drift=drift))

@@ -55,10 +55,14 @@ change.
    typed as `WAVE n`), **When** the report is produced, **Then** those
    mismatches are grouped so the trend is visible at a glance rather than
    buried in a flat list.
-6. **Given** a source document folder containing zero or more than one
-   sub-folder at the container level, **When** verify runs, **Then** the
-   report flags that document as structurally ambiguous and the document is
-   skipped for the remainder of the run.
+6. **Given** a source document folder with an ambiguous number of sub-folders
+   (neither a single container nor a large flat set of gram folders), **When**
+   verify runs, **Then** the report flags that document as structurally
+   ambiguous and the document is skipped for the remainder of the run.
+6a. **Given** a source document folder that omits the container tier and holds
+   its gram folders directly (a large flat set), **When** verify runs, **Then**
+   the document folder itself is treated as the container and its gram folders
+   match normally.
 7. **Given** any verify run, **When** it completes, **Then** no file or folder
    in either the incoming or the source tree has been created, modified,
    renamed, or deleted.
@@ -151,8 +155,10 @@ names both candidates, and the summary counts one ambiguous skip.
 
 ### Edge Cases
 
-- Source document folder has zero or 2+ sub-folders at the container level →
-  document reported as structurally ambiguous and skipped (US1 scenario 6).
+- Source document folder has an ambiguous number of sub-folders (neither one
+  container nor a large flat set) → reported as structurally ambiguous and
+  skipped (US1 scenario 6). A large flat set is treated as a container-less
+  publication (US1 scenario 6a).
 - Incoming tree contains a document with no counterpart in the source tree at
   all → reported as an unmatched document with nearest candidates.
 - Incoming gram folder is empty, or contains only non-image files → nothing to
@@ -187,26 +193,31 @@ names both candidates, and the summary counts one ambiguous skip.
 - **FR-002**: The tool MUST treat the incoming tree as read-only in every
   mode, and MUST make no change of any kind to either tree in verify mode.
 - **FR-003**: The tool MUST resolve each source document's gram-folder
-  container as the *single* sub-folder of the document folder, by position not
-  by name; a document with zero or multiple sub-folders MUST be reported and
-  skipped.
+  container by position, not by name: the *single* sub-folder of the document
+  folder when there is exactly one, or the document folder itself when it holds
+  a large flat set of gram folders (a threshold count, to accommodate the one
+  publication that omits the container tier). A document with an in-between
+  count of sub-folders MUST be reported and skipped.
 - **FR-004**: The tool MUST match incoming document folders and gram folders
-  to source folders by exact name, and MUST report every non-match together
-  with the nearest available candidate name(s).
+  to source folders by name **case-insensitively** (case drift is absorbed;
+  whitespace and other differences are not), and MUST report every non-match
+  together with the nearest available candidate name(s).
 - **FR-005**: The tool MUST split each incoming image filename into a leading
-  duration token and a remaining stem, accepting duration forms of whole
-  minutes (`Nm`) and minutes-plus-seconds (`NmSSs`), and MUST report filenames
-  whose leading token does not parse as a distinct "unparseable duration"
-  class that records the raw token.
+  duration token and a remaining stem, separated by a space **or** an
+  underscore, accepting duration forms of whole minutes (`Nm`) and
+  minutes-plus-seconds (`NmSSs`), and MUST report filenames whose leading token
+  does not parse as a distinct "unparseable duration" class that records the
+  raw token.
 - **FR-006**: The tool MUST match each parsed incoming image stem against the
-  wav basenames referenced by the GLC files in the matched gram folder (not
-  against directory listings), and MUST report unmatched images with the
-  available wav names.
+  wav basenames referenced by the GLC files in the matched gram folder
+  **case-insensitively** (not against directory listings), and MUST report
+  unmatched images with the available wav names.
 - **FR-007**: The report MUST group mismatches by shared pattern where one is
   detectable, so systematic drifts are visible as trends.
 - **FR-008**: In apply mode, for each verified match the tool MUST copy the
-  incoming image into the source gram folder named as the wav's stem plus the
-  incoming image's extension, overwriting an existing file of that name.
+  incoming image into the source gram folder named as the wav's stem (in the
+  wav's own casing, not the incoming screenshot's) plus the incoming image's
+  extension, overwriting an existing file of that name.
 - **FR-009**: In apply mode the tool MUST repoint the matched GLC's referenced
   filename to the copied image's basename, altering nothing else in the file
   beyond the changes required by FR-010.
@@ -237,8 +248,10 @@ names both candidates, and the summary counts one ambiguous skip.
 - **Incoming tree**: The author's delivered folder hierarchy —
   `<root>/<document>/<gram>/<images>` — read-only input; partial coverage of
   documents, grams, and lofars is normal.
-- **Source document container**: The single sub-folder of a source document
-  folder, holding its gram folders; identified by uniqueness, never by name.
+- **Source document container**: The tier holding a document's gram folders —
+  the single sub-folder of the document folder, or the document folder itself
+  when it holds a large flat set of grams (the container-less publication);
+  identified by position, never by name.
 - **Candidate image**: An incoming file named `<duration> <stem>.<ext>`; its
   parsed duration supplies the bottom-crop value and its stem identifies the
   wav it replaces.
@@ -281,14 +294,16 @@ names both candidates, and the summary counts one ambiguous skip.
 
 - The author fixes the **incoming** tree; source-tree names are never edited
   for matching purposes, because they feed chapter/identity extraction.
-- Duration grammar is `Nm` or `NmSSs` (e.g. `21m`, `5m26s`). Other forms
-  (bare seconds, `mm:ss`) are not expected; if the wild data disagrees, the
-  unparseable-duration survey in the first verify report will reveal it and
-  the grammar can be extended then.
-- Exact-name matching (with the report loop) is the baseline. If the report
-  shows a repeating drift (e.g. `WAVE` for `WAV`), a normalisation rule may be
-  added as a follow-up rather than hand-renaming at scale — codifying a trend
-  is a deliberate change, not an automatic behaviour.
+- Duration grammar is `Nm` or `NmSSs` (e.g. `21m`, `5m26s`), with the token
+  separated from the stem by a space or an underscore (the author uses both).
+  Other forms (bare seconds, `mm:ss`) are not expected; if the wild data
+  disagrees, the unparseable-duration survey in the first verify report will
+  reveal it and the grammar can be extended then.
+- Matching folds **case** (folders and stems) because the hand-typed incoming
+  names drift in case from `source/`; whitespace and token content stay exact,
+  so genuine drift (missing spaces, changed words) is still reported for the
+  operator to fix. A further repeating drift beyond case may still be codified
+  as a normalisation rule as a follow-up rather than hand-renaming at scale.
 - This is pre-CSV preparation: the operator re-runs extraction after apply, so
   no reconciliation with any in-flight signed-off CSV is needed.
 - Leaving the wav in place (diverging from the existing same-folder relink
