@@ -59,7 +59,10 @@ class Edition:
 
     Exactly two editions exist (per spec 003 FR-013 / Out of Scope):
 
-    - ``instructor`` — no audience filter; the full content, including
+    - ``instructor`` — DITA-OT runs with
+      ``--filter=<dita>/instructor.ditaval`` to strip every element
+      carrying ``audience="student-only"`` (today just the in-body 7
+      Questions section). Instructors keep the full content otherwise:
       vessel-name decorations, Analysis Sheets, and "Instructor Version"
       labelling.
     - ``student`` — DITA-OT runs with ``--filter=<dita>/trainee.ditaval``
@@ -80,7 +83,7 @@ EDITIONS: tuple[Edition, ...] = (
     Edition(
         name="instructor",
         output_subdir="instructor",
-        ditaval=None,
+        ditaval=Path("instructor.ditaval"),
         description=(
             "Full content, including answers, vessel names, and analysis sheets."
         ),
@@ -963,7 +966,8 @@ def publish(
     """Run DITA-OT once per ditamap per edition.
 
     For each ditamap, the publisher emits two HTML trees:
-    ``<out_root>/instructor/<stem>/`` (no audience filter) and
+    ``<out_root>/instructor/<stem>/`` (with
+    ``--filter=<dita>/instructor.ditaval``) and
     ``<out_root>/student/<stem>/`` (with ``--filter=<dita>/trainee.ditaval``).
     Both editions are produced from the *same* staged DITA source tree —
     no per-edition forking, no post-publish rewriting (FR-013).
@@ -1067,14 +1071,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dita.is_dir():
         print(f"Source dita tree not found: {args.dita}", file=sys.stderr)
         return 1
-    if not (args.dita / "trainee.ditaval").is_file():
-        print(
-            f"Required DITAVAL profile missing: {args.dita / 'trainee.ditaval'}.\n"
-            "Spec 003 makes the dual-edition publish the only supported mode; "
-            "the trainee filter must be committed alongside the DITA source.",
-            file=sys.stderr,
-        )
-        return 1
+    for profile in ("trainee.ditaval", "instructor.ditaval"):
+        if not (args.dita / profile).is_file():
+            print(
+                f"Required DITAVAL profile missing: {args.dita / profile}.\n"
+                "Spec 003 makes the dual-edition publish the only supported "
+                "mode; both edition filters must be committed alongside the "
+                "DITA source (generate_dita.py emits them).",
+                file=sys.stderr,
+            )
+            return 1
     if not _dita_launcher(args.dita_ot).exists():
         print(f"DITA-OT not found at {args.dita_ot}", file=sys.stderr)
         return 1

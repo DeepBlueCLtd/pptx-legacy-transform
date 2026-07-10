@@ -91,7 +91,10 @@ GRAMS_NAVTITLE = "Grams"
 
 # 7 Questions image — shown at the top of student gram pages (the analysis
 # sheet is instructor-only so students see this section first) and also
-# surfaced as a root-level topic in every publication's ditamap.
+# surfaced as a root-level topic in every publication's ditamap. The in-body
+# section is *student-only* (see STUDENT_ONLY_AUDIENCE): instructors get the
+# 7 Questions image as the root-level nav topic only, not repeated on every
+# gram page. The root-level topic is unfiltered, so both editions keep it.
 SEVEN_QUESTIONS_IMAGE = "7_questions.png"
 SEVEN_QUESTIONS_TOPIC_STEM = "7_questions"
 # NCNames (XML id attributes) cannot start with a digit, so the topic id differs
@@ -100,6 +103,13 @@ SEVEN_QUESTIONS_TOPIC_ID = "seven-questions"
 SEVEN_QUESTIONS_TOPIC_TITLE = "7 Questions"
 # Stable section id so the floating nav panel can link to it in-page.
 SEVEN_QUESTIONS_SECTION_ID = "seven-questions"
+
+# Audience token for student-only content — currently just the in-body 7
+# Questions section (and its nav-panel jump link). This is the mirror of the
+# instructor-only ``-trainee`` convention: the *instructor* DITAVAL excludes
+# it, the trainee (student) DITAVAL leaves it in. An element carrying this
+# token therefore survives only in the student edition.
+STUDENT_ONLY_AUDIENCE = "student-only"
 
 # Hidden, instructor-only per-page edition marker. The trainee DITAVAL strips
 # audience="-trainee", so this element survives only in the *instructor* build;
@@ -1038,13 +1048,16 @@ def _inject_static_edition_marker(text: str, source: Path) -> str:
 def _append_seven_questions_section(body: ET.Element, href: str) -> None:
     """Append the 7 Questions image section to a gram body.
 
-    The section has no audience filter so it ships in both editions.
+    The section carries ``audience="student-only"`` so it ships in the
+    student edition only — the instructor DITAVAL strips it. Instructors
+    still reach the 7 Questions image via the root-level nav topic
+    (``7_questions.dita``); it is not repeated on every gram page.
     In the student edition the analysis section (``audience="-trainee"``)
-    is filtered out, making this the first visible content on the page.
-    In the instructor edition it appears below the analysis section.
+    is filtered out too, making this the first visible content on the page.
     """
     section = ET.SubElement(body, "section", {
         "id": SEVEN_QUESTIONS_SECTION_ID,
+        "audience": STUDENT_ONLY_AUDIENCE,
         "outputclass": "seven-questions",
     })
     ET.SubElement(section, "title").text = SEVEN_QUESTIONS_TOPIC_TITLE
@@ -1073,10 +1086,11 @@ def _append_gram_nav_panel(
     anchor). Earlier this panel was the instructor-only Analysis-Sheet pill
     (issue #91); it now serves students and instructors alike.
 
-    When ``has_seven_q`` is True a leading unfiltered xref to the
-    ``seven-questions`` section is prepended — both editions get it, but
-    in the student edition it scrolls to the first visible content (the
-    7 Questions image).
+    When ``has_seven_q`` is True a leading ``audience="student-only"`` xref
+    to the ``seven-questions`` section is prepended. The student edition
+    keeps it (scrolling to the first visible content, the 7 Questions
+    image); the instructor DITAVAL strips both this entry and its target
+    section, so the instructor panel never ships a dangling anchor.
 
     Emitted only when there is something to jump to.
     """
@@ -1085,6 +1099,7 @@ def _append_gram_nav_panel(
     panel = ET.SubElement(parent, "p", {"outputclass": "gram-nav"})
     if has_seven_q:
         xref = ET.SubElement(panel, "xref", {
+            "audience": STUDENT_ONLY_AUDIENCE,
             "href": f"#{topic_id}/{SEVEN_QUESTIONS_SECTION_ID}",
         })
         xref.text = SEVEN_QUESTIONS_TOPIC_TITLE
@@ -1174,9 +1189,11 @@ def emit_gram_topic(
 
     1. The analysis-sheet section (DOCX link or embedded PNG), once,
        wrapped with ``audience="-trainee"`` (instructor-only).
-    2. The 7 Questions image section (unfiltered — both editions), when
-       ``seven_q`` is True. In the student edition the analysis section
-       is filtered out, so this section appears first on the page.
+    2. The 7 Questions image section (``audience="student-only"`` — the
+       instructor DITAVAL strips it), when ``seven_q`` is True. In the
+       student edition the analysis section is filtered out too, so this
+       section appears first on the page; instructors don't get it here at
+       all (they have the root-level 7_questions.dita nav topic instead).
     3. One block per ``topic_type="glc"`` row, in CSV ``sequence``
        order. The block shape is chosen by the extension of the asset
        named inside the ``.glc`` (carried through as ``png_path``):
@@ -1808,6 +1825,29 @@ def write_trainee_ditaval(out_dir: Path) -> Path:
     return path
 
 
+INSTRUCTOR_DITAVAL = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<val>\n'
+    '  <prop att="audience" val="student-only" action="exclude"/>\n'
+    '</val>\n'
+)
+
+
+def write_instructor_ditaval(out_dir: Path) -> Path:
+    """Emit the DITAVAL profile that the instructor edition filters with.
+
+    The mirror of ``trainee.ditaval``: DITA elements authored as
+    student-only content carry ``audience="student-only"`` (today just the
+    in-body 7 Questions section and its nav-panel jump link), and the
+    instructor build passes this profile to strip them. Instructors keep
+    the 7 Questions image via the root-level ``7_questions.dita`` nav topic,
+    which is unfiltered.
+    """
+    path = out_dir / "instructor.ditaval"
+    _write_text(path, INSTRUCTOR_DITAVAL)
+    return path
+
+
 def write_manifest(out_dir: Path, files: list[Path]) -> Path:
     """Write ``manifest.txt`` listing every produced file (sorted)."""
     manifest_path = out_dir / "manifest.txt"
@@ -2049,9 +2089,13 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     ditaval_path = write_trainee_ditaval(args.out)
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
+    instructor_ditaval_path = write_instructor_ditaval(args.out)
+    LOGGER.info("Wrote DITAVAL profile %s", instructor_ditaval_path)
 
     manifest_path = write_manifest(
-        args.out, written + static_copied + seven_q_pub_paths + ditamap_paths + [ditaval_path])
+        args.out,
+        written + static_copied + seven_q_pub_paths + ditamap_paths
+        + [ditaval_path, instructor_ditaval_path])
     LOGGER.info("Wrote manifest %s", manifest_path)
 
     skipped_path = write_skipped_report(args.out, skipped)

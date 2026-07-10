@@ -290,10 +290,11 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_gram_nav_panel_links_lofars_for_all_and_analysis_instructor_only(self) -> None:
         """A gram carries a single floating nav panel (``<p class="gram-nav">``).
-        It lists a leading 7 Questions xref (both editions), then one xref per
-        Lofar (both editions), then for grams with an analysis sheet a trailing
-        instructor-only (``audience="-trainee"``) xref to the analysis section.
-        Every xref targets a real anchor within the same topic."""
+        It lists a leading student-only 7 Questions xref
+        (``audience="student-only"``), then one xref per Lofar (both editions),
+        then for grams with an analysis sheet a trailing instructor-only
+        (``audience="-trainee"``) xref to the analysis section. Every xref
+        targets a real anchor within the same topic."""
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
@@ -307,7 +308,7 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(
             [(x.text, x.get("href"), x.get("audience")) for x in xrefs],
             [
-                ("7 Questions", f"#{topic_id}/seven-questions", None),
+                ("7 Questions", f"#{topic_id}/seven-questions", "student-only"),
                 ("Lofar 1", f"#{topic_id}/lofar-1", None),
                 ("Analysis Sheet", f"#{topic_id}/analysis-sheet", "-trainee"),
             ],
@@ -330,8 +331,8 @@ class GenerateDitaTests(unittest.TestCase):
         xrefs = panel.findall("xref")
         self.assertEqual([x.text for x in xrefs], ["7 Questions", "Lofar 1"],
                          "7 Questions + Lofar entry — no analysis sheet on this gram")
-        self.assertIsNone(panel.find("xref[@audience]"),
-                          "no instructor-only entry without an analysis sheet")
+        self.assertIsNone(panel.find("xref[@audience='-trainee']"),
+                          "no instructor-only analysis entry without an analysis sheet")
 
     def test_docx_analysis_renders_as_xref(self) -> None:
         """When the analysis asset is a .docx, the section emits an <xref>
@@ -1035,8 +1036,10 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertGreater(q_idx, 0, "7 Questions must follow the static pages")
 
     def test_seven_questions_section_in_gram_body(self) -> None:
-        """Each gram body carries a ``seven-questions`` section (no audience
-        filter) embedding the 7 Questions image via a publication-relative href."""
+        """Each gram body carries a ``seven-questions`` section (student-only
+        via ``audience="student-only"``) embedding the 7 Questions image via a
+        publication-relative href. The instructor DITAVAL strips it, so the
+        image is not repeated on every instructor gram page."""
         _run(self.out)
         topic_path = (
             self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
@@ -1045,8 +1048,9 @@ class GenerateDitaTests(unittest.TestCase):
         section = root.find(".//body/section[@id='seven-questions']")
         self.assertIsNotNone(section, "gram body must carry a seven-questions section")
         self.assertEqual(section.get("outputclass"), "seven-questions")
-        self.assertIsNone(section.get("audience"),
-                          "seven-questions section must be unfiltered (both editions)")
+        self.assertEqual(section.get("audience"), "student-only",
+                         "seven-questions section must be student-only (instructor "
+                         "DITAVAL strips it)")
         image = section.find("image")
         self.assertIsNotNone(image, "section must embed the 7 Questions image")
         href = image.get("href")
@@ -1206,6 +1210,13 @@ class AudienceShapeTests(unittest.TestCase):
         self.assertFalse(legacy_chapter.exists(),
                          f"legacy instructor-prefixed folder must not exist: {legacy_chapter}")
         for path in self.out.rglob("*"):
+            # FR-014 forbids "instructor" in published topic/chapter path
+            # components (they become student URLs). The instructor DITAVAL
+            # profile is a build-time filter that never reaches html/, so it
+            # is legitimately named after the edition it produces — the mirror
+            # of trainee.ditaval.
+            if path.suffix == ".ditaval":
+                continue
             self.assertNotIn(
                 "instructor", path.name.lower(),
                 f'no path component under {self.out} may contain "instructor": {path}',
