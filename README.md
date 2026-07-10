@@ -876,11 +876,12 @@ Then use `Z:\…` paths everywhere — never `\\server\share\…`:
 - **`publish_html.py`** — pass drive-letter paths to every directory
   flag: `--dita Z:\Out --staged Z:\dita-build --out Z:\html --dita-ot
   Z:\dita-ot-4.4`.
-- **Oxygen (production publisher)** — open the map from `Z:\…`, then in
-  the transformation scenario's **Output** tab set the **base**,
-  **temporary**, and **output** directories to absolute drive-letter
-  paths (e.g. `Z:\dita-temp`, `Z:\html\…`). Duplicate the stock
-  scenario first — the built-ins are read-only.
+- **Oxygen (production publisher)** — all paths in the transformation
+  scenario's **Output** and **Parameters** tabs must use absolute
+  drive-letter paths (e.g. `Z:\dita-temp`, `Z:\html\…`). See
+  [Configuring Oxygen transformation scenarios](#configuring-oxygen-transformation-scenarios-production-publisher)
+  for the full setup, including `${cfn}` output-path templates and the
+  `args.filter` parameter for the student edition.
 
 > **Privilege gotcha:** a drive mapped in an Administrator shell is
 > invisible to a non-Administrator publisher (and vice-versa). Map the
@@ -990,6 +991,95 @@ Point elsewhere with `--static-root <dir>` (default `static/`); a missing folder
 simply omits the pages (logged warning) rather than failing the build. Edit
 `static/welcome.dita` and `static/security.dita` in Oxygen like any topic — the
 committed copies are mock development content. See [`static/README.md`](static/README.md).
+
+### Configuring Oxygen transformation scenarios (production publisher)
+
+Oxygen publishes each ditamap independently. Set up **two** saved transformation
+scenarios — one instructor, one student — then run both against every ditamap.
+Using Oxygen's `${cfn}` editor variable in the output path gives each publication
+its own subfolder automatically, so running the scenarios on successive ditamaps
+never overwrites a previous publication's output.
+
+#### Create the instructor scenario
+
+1. In Oxygen's **Transformation Scenarios** pane, locate the built-in
+   **DITA Map WebHelp Responsive** scenario, then **Duplicate** it (built-ins
+   are read-only). Name the duplicate **AAAC Instructor**.
+
+2. In the **Output** tab of the duplicated scenario, set:
+
+   | Field | Value |
+   |---|---|
+   | Output directory | `Z:\html\instructor\${cfn}` |
+   | Temporary files directory | `Z:\dita-temp\${cfn}` |
+
+   Leave `args.filter` (on the **Parameters** tab) blank — the instructor
+   edition includes all content with no audience filtering.
+
+3. On the **Templates** tab, select the custom publishing template (the
+   Fi3ldMan-derived one that carries the GramFrame overlay and any other theme
+   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`.
+
+#### Create the student scenario
+
+4. Duplicate the **same built-in** scenario again. Name the copy **AAAC Student**.
+
+5. In the **Output** tab, set:
+
+   | Field | Value |
+   |---|---|
+   | Output directory | `Z:\html\student\${cfn}` |
+   | Temporary files directory | `Z:\dita-temp\student-${cfn}` |
+
+6. On the **Parameters** tab, add or edit:
+
+   | Parameter | Value |
+   |---|---|
+   | `args.filter` | `Z:\dita\trainee.ditaval` |
+
+   Use the absolute drive-letter path to the `trainee.ditaval` file that
+   `generate_dita.py` writes at the root of its `--out` folder (i.e., one level
+   above the per-publication subfolders).
+
+7. On the **Templates** tab, select the **same** custom template as the
+   instructor scenario — there is no need for a separate student template
+   (see `theme/oxygen-hide-search/README.md`).
+
+#### Publishing each ditamap
+
+For every ditamap in the `dita\` tree:
+
+1. Open the ditamap in Oxygen from the mapped drive
+   (e.g. `Z:\dita\main\main.ditamap`).
+2. Run **AAAC Instructor** → output lands in `Z:\html\instructor\main\`.
+3. Run **AAAC Student** → output lands in `Z:\html\student\main\`.
+4. Repeat for each remaining ditamap (`progress-test-1`, `progress-test-2`, …).
+
+The `${cfn}` variable expands to the ditamap stem (`main`,
+`progress-test-1`, …), so each publication's HTML lands in its own named
+subfolder and later runs on a different ditamap do not overwrite it.
+
+#### Resulting folder layout
+
+```text
+Z:\html\
+├── instructor\
+│   ├── main\
+│   ├── progress-test-1\
+│   └── progress-test-2\
+└── student\
+    ├── main\
+    ├── progress-test-1\
+    └── progress-test-2\
+```
+
+This matches the `publish_html.py` dev-preview layout
+(`html/<edition>/<ditamap-stem>/`).
+
+> **Temporary files and the mapped-drive rule.** All four directories — the
+> DITA input, the DITAVAL, the temporary files, and the output — must be on a
+> **mapped drive letter**, not a raw `\\server\share` UNC path. See [Map a
+> drive — DITA-OT cannot read `\\server\share` (UNC) paths](#map-a-drive--dita-ot-cannot-read-serversh-unc-paths).
 
 ## Known limitations
 
