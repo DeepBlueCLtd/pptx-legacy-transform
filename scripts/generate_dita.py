@@ -89,6 +89,15 @@ STATIC_PAGE_ORDER: tuple[str, ...] = ("welcome.dita", "security.dita")
 # ditamap root into a single nav entry (feature 010).
 GRAMS_NAVTITLE = "Grams"
 
+# 7 Questions image — shown at the top of student gram pages (the analysis
+# sheet is instructor-only so students see this section first) and also
+# surfaced as a root-level topic in every publication's ditamap.
+SEVEN_QUESTIONS_IMAGE = "7_questions.png"
+SEVEN_QUESTIONS_TOPIC_STEM = "7_questions"
+SEVEN_QUESTIONS_TOPIC_TITLE = "7 Questions"
+# Stable section id so the floating nav panel can link to it in-page.
+SEVEN_QUESTIONS_SECTION_ID = "seven-questions"
+
 # Hidden, instructor-only per-page edition marker. The trainee DITAVAL strips
 # audience="-trainee", so this element survives only in the *instructor* build;
 # its outputclass surfaces it as ``<p class="gf-persistent">`` in the rendered
@@ -1023,8 +1032,27 @@ def _inject_static_edition_marker(text: str, source: Path) -> str:
     return new_text
 
 
+def _append_seven_questions_section(body: ET.Element, href: str) -> None:
+    """Append the 7 Questions image section to a gram body.
+
+    The section has no audience filter so it ships in both editions.
+    In the student edition the analysis section (``audience="-trainee"``)
+    is filtered out, making this the first visible content on the page.
+    In the instructor edition it appears below the analysis section.
+    """
+    section = ET.SubElement(body, "section", {
+        "id": SEVEN_QUESTIONS_SECTION_ID,
+        "outputclass": "seven-questions",
+    })
+    ET.SubElement(section, "title").text = SEVEN_QUESTIONS_TOPIC_TITLE
+    ET.SubElement(section, "image", {
+        "href": href, "placement": "break", "align": "center",
+    })
+
+
 def _append_gram_nav_panel(
     parent: ET.Element, topic_id: str, lofar_count: int, has_analysis: bool,
+    has_seven_q: bool = False,
 ) -> None:
     """Append the floating gram navigation panel.
 
@@ -1042,11 +1070,21 @@ def _append_gram_nav_panel(
     anchor). Earlier this panel was the instructor-only Analysis-Sheet pill
     (issue #91); it now serves students and instructors alike.
 
+    When ``has_seven_q`` is True a leading unfiltered xref to the
+    ``seven-questions`` section is prepended — both editions get it, but
+    in the student edition it scrolls to the first visible content (the
+    7 Questions image).
+
     Emitted only when there is something to jump to.
     """
-    if lofar_count == 0 and not has_analysis:
+    if lofar_count == 0 and not has_analysis and not has_seven_q:
         return
     panel = ET.SubElement(parent, "p", {"outputclass": "gram-nav"})
+    if has_seven_q:
+        xref = ET.SubElement(panel, "xref", {
+            "href": f"#{topic_id}/{SEVEN_QUESTIONS_SECTION_ID}",
+        })
+        xref.text = SEVEN_QUESTIONS_TOPIC_TITLE
     for n in range(1, lofar_count + 1):
         xref = ET.SubElement(panel, "xref", {
             "href": f"#{topic_id}/{_lofar_anchor_id(n)}",
@@ -1125,14 +1163,18 @@ def _append_glc_viewer_link(
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
     master_index: dict[tuple, MasterTarget] | None = None,
+    seven_q: bool = False,
 ) -> tuple[list[Path], list[dict], int]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
     The body contains, in order:
 
     1. The analysis-sheet section (DOCX link or embedded PNG), once,
-       wrapped with ``audience="-trainee"``.
-    2. One block per ``topic_type="glc"`` row, in CSV ``sequence``
+       wrapped with ``audience="-trainee"`` (instructor-only).
+    2. The 7 Questions image section (unfiltered — both editions), when
+       ``seven_q`` is True. In the student edition the analysis section
+       is filtered out, so this section appears first on the page.
+    3. One block per ``topic_type="glc"`` row, in CSV ``sequence``
        order. The block shape is chosen by the extension of the asset
        named inside the ``.glc`` (carried through as ``png_path``):
 
@@ -1213,6 +1255,15 @@ def emit_gram_topic(
         if copied is not None:
             written.append(copied)
         _append_analysis_section(body, href)
+
+    if seven_q:
+        # Relative path from the per-gram topic folder up to the publication
+        # root where 7_questions.png was copied.  The depth varies (week tier
+        # for main, optional doc tier for both) so we compute it at runtime.
+        pub = first["publication"]
+        pub_dir = out_dir / pub
+        seven_q_href = _relpath_posix(pub_dir / SEVEN_QUESTIONS_IMAGE, topic_dir)
+        _append_seven_questions_section(body, seven_q_href)
 
     lofar_index = 0
     for row in glc_rows:
@@ -1298,10 +1349,13 @@ def emit_gram_topic(
         skipped.append(_skip_record(row, reason))
 
     # Floating nav panel: one in-page jump per rendered Lofar (both editions)
-    # plus an instructor-only Analysis Sheet link. Appended last so it counts
-    # only the Lofars that actually rendered (a skipped row claims no number);
-    # position:fixed in the theme means DOM order doesn't affect placement.
-    _append_gram_nav_panel(body, topic_id, lofar_index, bool(analysis_rows))
+    # plus an instructor-only Analysis Sheet link, and (when present) a leading
+    # 7 Questions link. Appended last so it counts only the Lofars that actually
+    # rendered (a skipped row claims no number); position:fixed in the theme
+    # means DOM order doesn't affect placement.
+    _append_gram_nav_panel(
+        body, topic_id, lofar_index, bool(analysis_rows), has_seven_q=seven_q,
+    )
 
     # Navigation back to the publication index is delivered by the page
     # chrome (a future custom header bar), not by per-topic related-links:
@@ -1510,6 +1564,46 @@ def copy_static_tree(static_root: Path, pub_dir: Path) -> list[Path]:
     return copied
 
 
+def emit_seven_questions_topic(pub_dir: Path, src: Path) -> list[Path]:
+    """Emit ``7_questions.dita`` and copy ``7_questions.png`` into ``pub_dir``.
+
+    The topic embeds the image inline so the publication's nav shows it as
+    a renderable page (a bare image file cannot be referenced by a ditamap).
+    Like all generated topics it carries the instructor-only edition marker.
+    The PNG copy is graceful-dangle: if ``src`` is absent a warning is logged
+    and the topic is still written with its intended href (dropping the PNG in
+    and re-running generates a complete, byte-identical result).
+
+    Returns the list of written destination paths (topic + PNG if copied).
+    """
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+
+    image_dest = pub_dir / SEVEN_QUESTIONS_IMAGE
+    if src.is_file():
+        shutil.copyfile(src, image_dest)
+        written.append(image_dest)
+    else:
+        LOGGER.warning(
+            "7 Questions image not found at %s — %s emitted with dangling href "
+            "(drop the PNG into the publication folder and re-run to resolve).",
+            src, pub_dir / f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
+        )
+
+    topic = ET.Element("topic", {"id": SEVEN_QUESTIONS_TOPIC_STEM})
+    ET.SubElement(topic, "title").text = SEVEN_QUESTIONS_TOPIC_TITLE
+    body = ET.SubElement(topic, "body")
+    _append_edition_marker(body)
+    ET.SubElement(body, "image", {
+        "href": SEVEN_QUESTIONS_IMAGE,
+        "placement": "break", "align": "center",
+    })
+    topic_path = pub_dir / f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita"
+    _write_text(topic_path, _serialise(topic, TOPIC_DOCTYPE))
+    written.append(topic_path)
+    return written
+
+
 def _append_static_topicrefs(
     root: ET.Element, static_pages: Iterable[str],
 ) -> None:
@@ -1557,6 +1651,7 @@ def _main_chapters(rows: list[dict]) -> "OrderedDict[str, tuple[str, list[dict]]
 
 def emit_main_ditamap(
     rows: list[dict], out_dir: Path, static_pages: Iterable[str] = (),
+    seven_q_page: bool = False,
 ) -> Path:
     """Write ``main/main.ditamap`` — inside the publication folder — with one
     chapter-topic ``<topicref>`` per week at the **top level** of the map.
@@ -1591,6 +1686,10 @@ def emit_main_ditamap(
     root = ET.Element("map")
     _append_map_title(root, "Main")
     _append_static_topicrefs(root, static_pages)
+    if seven_q_page:
+        ET.SubElement(root, "topicref", {
+            "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
+        })
     for slug, (_, chapter_rows) in _main_chapters(rows).items():
         if slug:
             chapter_ref = ET.SubElement(root, "topicref", {
@@ -1651,6 +1750,7 @@ def _flat_publication_title(publication: str) -> str:
 def emit_test_ditamap(
     publication: str, rows: list[dict], out_dir: Path,
     static_pages: Iterable[str] = (),
+    seven_q_page: bool = False,
 ) -> Path:
     """Write ``<publication>/<publication>.ditamap`` inside the publication
     folder, with folder-relative hrefs (no ``<publication>/`` prefix).
@@ -1666,6 +1766,10 @@ def emit_test_ditamap(
     root = ET.Element("map")
     _append_map_title(root, _flat_publication_title(publication))
     _append_static_topicrefs(root, static_pages)
+    if seven_q_page:
+        ET.SubElement(root, "topicref", {
+            "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
+        })
     grams_head = _append_grams_topichead(root)
     seen: set[str] = set()
     gram_refs: list[tuple[int, str]] = []
@@ -1775,6 +1879,15 @@ def main(argv: Iterable[str] | None = None) -> int:
              "folder and referenced as the first ditamap entries, ahead of the "
              "Grams nav folder. Default: ./static. A missing folder yields no "
              "shared pages (a logged warning), not an error.")
+    parser.add_argument(
+        "--seven-questions", type=Path, dest="seven_questions",
+        default=Path("7_questions.png"),
+        help="Path to the 7 Questions PNG. Copied into each publication folder "
+             "and referenced as a root-level nav topic (7_questions.dita) in "
+             "every ditamap and as an unfiltered section at the top of each "
+             "gram page (students see it first; instructors see it below the "
+             "analysis sheet). Default: ./7_questions.png. A missing file "
+             "yields dangling hrefs (drop the PNG in and re-run), not an error.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("generate.log"))
@@ -1860,11 +1973,21 @@ def main(argv: Iterable[str] | None = None) -> int:
     except PipelineDataError as exc:
         LOGGER.error("Aborting: %s", exc)
         return 1
+    seven_q_src = args.seven_questions
+    seven_q_available = seven_q_src.is_file()
+    if not seven_q_available:
+        LOGGER.warning(
+            "7 Questions image not found at %s — gram topics will carry a "
+            "dangling href; drop the file in and re-run to resolve.",
+            seven_q_src,
+        )
+
     for key, gram_rows in gram_groups.items():
         try:
             paths, skips, redirected = emit_gram_topic(
                 gram_rows, args.out, args.image_root,
                 master_index=master_index,
+                seven_q=True,
             )
             for path in paths:
                 written.append(path)
@@ -1896,6 +2019,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         if copied:
             LOGGER.info("Copied %d static file(s) into %s/", len(copied), pub)
 
+    # 7 Questions topic: copy the PNG and emit a thin wrapper topic into every
+    # publication folder, then reference it as a root-level ditamap entry
+    # (after static pages, before gram content).
+    seven_q_pub_paths: list[Path] = []
+    for pub in publications:
+        pub_paths = emit_seven_questions_topic(args.out / pub, seven_q_src)
+        seven_q_pub_paths.extend(pub_paths)
+        LOGGER.info(
+            "Wrote 7 Questions topic/image into %s/ (%d file(s))",
+            pub, len(pub_paths),
+        )
+
     ditamap_paths: list[Path] = []
     if any(r["publication"] == "main" for r in rows):
         # Week sub-documents: one chapter topic per effective main chapter,
@@ -1905,11 +2040,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         for path in chapter_topics:
             written.append(path)
             LOGGER.info("Wrote %s", path)
-        ditamap_paths.append(emit_main_ditamap(rows, args.out, static_pages))
+        ditamap_paths.append(
+            emit_main_ditamap(rows, args.out, static_pages, seven_q_page=True)
+        )
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
         if pub != "main":
-            path = emit_test_ditamap(pub, rows, args.out, static_pages)
+            path = emit_test_ditamap(
+                pub, rows, args.out, static_pages, seven_q_page=True,
+            )
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
 
@@ -1917,7 +2056,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
 
     manifest_path = write_manifest(
-        args.out, written + static_copied + ditamap_paths + [ditaval_path])
+        args.out, written + static_copied + seven_q_pub_paths + ditamap_paths + [ditaval_path])
     LOGGER.info("Wrote manifest %s", manifest_path)
 
     skipped_path = write_skipped_report(args.out, skipped)

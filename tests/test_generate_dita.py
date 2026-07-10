@@ -25,10 +25,14 @@ TMP = REPO_ROOT / "tests" / "_tmp"
 STATIC_ROOT = REPO_ROOT / "static"
 
 
+SEVEN_QUESTIONS_PNG = FIXTURES / "7_questions.png"
+
+
 def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          image_root: Path = FIXTURES, clean: bool = True,
          stub_wav: "Path | None" = None,
-         static_root: "Path | None" = STATIC_ROOT) -> int:
+         static_root: "Path | None" = STATIC_ROOT,
+         seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -43,6 +47,10 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
     # static_root=None to exercise the "no static root" degradation path.
     if static_root is not None:
         argv += ["--static-root", str(static_root)]
+    # Pin --seven-questions so the 7 Questions PNG is sourced from a known
+    # location. Pass seven_questions=None to exercise the missing-PNG path.
+    if seven_questions is not None:
+        argv += ["--seven-questions", str(seven_questions)]
     return generate_dita.main(argv)
 
 
@@ -202,14 +210,23 @@ class GenerateDitaTests(unittest.TestCase):
         """Regression guard: the gramframe block must carry an <image> element
         with a non-empty href pointing at a file that actually exists next to
         the topic. Without this, the published HTML would render an empty
-        gram cell — the failure mode that motivated this test."""
+        gram cell — the failure mode that motivated this test.
+        The 7 Questions image (in the publication root, not the gram folder)
+        is excluded — its relative ``../..`` href is expected and tested
+        separately."""
         _run(self.out)
         gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
         topic = gram_dir / "gram_12.dita"
         root = ET.parse(topic).getroot()
-        images = root.findall(".//image")
+        # Only images inside gramframe sections are gram-local assets.
+        images = root.findall(".//section[@outputclass='lofar-stage']//image") + \
+                 root.findall(".//table[@outputclass='gram-config']//image")
+        if not images:
+            # Fall back: any image whose href is gram-local (no leading ..)
+            images = [img for img in root.findall(".//image")
+                      if not (img.get("href") or "").startswith("..")]
         self.assertGreaterEqual(len(images), 1,
-                                "generated DITA must contain at least one <image>")
+                                "generated DITA must contain at least one gramframe <image>")
         for img in images:
             href = img.get("href")
             self.assertTrue(href, f"<image> is missing href: {ET.tostring(img)!r}")
@@ -273,10 +290,10 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_gram_nav_panel_links_lofars_for_all_and_analysis_instructor_only(self) -> None:
         """A gram carries a single floating nav panel (``<p class="gram-nav">``).
-        It lists one in-page xref per Lofar (unfiltered — both editions) plus,
-        for a gram with an analysis sheet, a trailing instructor-only
-        (``audience="-trainee"``) xref to the analysis-sheet section. Every
-        xref targets a real anchor within the same topic."""
+        It lists a leading 7 Questions xref (both editions), then one xref per
+        Lofar (both editions), then for grams with an analysis sheet a trailing
+        instructor-only (``audience="-trainee"``) xref to the analysis section.
+        Every xref targets a real anchor within the same topic."""
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
@@ -286,31 +303,33 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(panel, "gram page must carry the floating nav panel")
 
         xrefs = panel.findall("xref")
-        # Gram 12: one Lofar + an analysis sheet => two panel entries.
+        # Gram 12: 7Q + one Lofar + an analysis sheet => three panel entries.
         self.assertEqual(
             [(x.text, x.get("href"), x.get("audience")) for x in xrefs],
             [
+                ("7 Questions", f"#{topic_id}/seven-questions", None),
                 ("Lofar 1", f"#{topic_id}/lofar-1", None),
                 ("Analysis Sheet", f"#{topic_id}/analysis-sheet", "-trainee"),
             ],
         )
         # Each anchor resolves to a section that actually carries that id.
         ids = {s.get("id") for s in root.findall(".//body/section")}
+        self.assertIn("seven-questions", ids)
         self.assertIn("lofar-1", ids)
         self.assertIn("analysis-sheet", ids)
 
     def test_gram_nav_panel_without_analysis_omits_instructor_entry(self) -> None:
         """A gram with no analysis sheet (e.g. a progress-test gram) still
-        gets the nav panel — students navigate Lofars too — but with no
-        instructor-only analysis entry to strip."""
+        gets the nav panel with a 7 Questions link (both editions) and a Lofar
+        link, but no instructor-only analysis entry."""
         _run(self.out)
         topic = self.out / "progress-test-1" / "gram-03" / "gram_03.dita"
         root = ET.parse(topic).getroot()
         panel = root.find(".//body/p[@outputclass='gram-nav']")
         self.assertIsNotNone(panel, "a gram page must carry the nav panel for students too")
         xrefs = panel.findall("xref")
-        self.assertEqual([x.text for x in xrefs], ["Lofar 1"],
-                         "only the Lofar entry — no analysis sheet on this gram")
+        self.assertEqual([x.text for x in xrefs], ["7 Questions", "Lofar 1"],
+                         "7 Questions + Lofar entry — no analysis sheet on this gram")
         self.assertIsNone(panel.find("xref[@audience]"),
                           "no instructor-only entry without an analysis sheet")
 
@@ -596,30 +615,31 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_static_pages_lead_every_ditamap(self) -> None:
         """Feature 010: Welcome then Security are the first root-level
-        topicrefs, bare-filename hrefs (the map sits beside the copied
-        pages). For progress tests they precede the Grams folder; for main
-        they precede the top-level Week folders."""
+        topicrefs, followed by the 7 Questions topic, bare-filename hrefs
+        (the map sits beside the copied pages). For progress tests they
+        precede the Grams folder; for main they precede the top-level
+        Week folders."""
         _run(self.out)
-        # Progress tests: static pages are the *only* root topicrefs, ahead
-        # of the single Grams <topichead>.
+        # Progress tests: static pages + 7Q are the only root topicrefs,
+        # ahead of the single Grams <topichead>.
         root = ET.parse(self.out / "progress-test-1"
                         / "progress-test-1.ditamap").getroot()
         self.assertEqual(
             [tr.get("href") for tr in root.findall("topicref")],
-            ["welcome.dita", "security.dita"],
-            "progress test: Welcome then Security must be the only root "
+            ["welcome.dita", "security.dita", "7_questions.dita"],
+            "progress test: Welcome, Security, 7 Questions must be the root "
             "topicrefs (grams live under the Grams folder)",
         )
         tags = [c.tag for c in root]
         self.assertLess(tags.index("topicref"), tags.index("topichead"),
                         "static pages must precede the Grams folder")
         # Main: weeks are pulled up to the top level, so the root topicrefs are
-        # Welcome, Security, then the Week sub-documents — static pages lead.
+        # Welcome, Security, 7 Questions, then the Week sub-documents.
         root = ET.parse(self.out / "main" / "main.ditamap").getroot()
         hrefs = [tr.get("href") for tr in root.findall("topicref")]
-        self.assertEqual(hrefs[:2], ["welcome.dita", "security.dita"],
-                         "main: Welcome then Security must lead the top level")
-        self.assertGreater(len(hrefs), 2,
+        self.assertEqual(hrefs[:3], ["welcome.dita", "security.dita", "7_questions.dita"],
+                         "main: Welcome, Security, 7 Questions must lead the top level")
+        self.assertGreater(len(hrefs), 3,
                            "main: Week sub-documents follow the static pages")
 
     def test_static_tree_copied_into_each_publication(self) -> None:
@@ -648,14 +668,16 @@ class GenerateDitaTests(unittest.TestCase):
                 self.assertEqual(marker.get("audience"), "-trainee")
 
     def test_missing_static_root_degrades_gracefully(self) -> None:
-        """An absent static root omits the common pages (no root topicref) but
-        still demotes grams under the Grams folder and succeeds (rc 0)."""
+        """An absent static root omits the Welcome/Security pages but the
+        7 Questions topicref is still present; grams are still demoted under
+        the Grams folder and the run succeeds (rc 0)."""
         rc = _run(self.out, static_root=TMP / "absent_static_dir")
         self.assertEqual(rc, 0)
         root = ET.parse(
             self.out / "progress-test-1" / "progress-test-1.ditamap").getroot()
-        self.assertEqual(root.findall("topicref"), [],
-                         "no static pages when the static root is absent")
+        hrefs = [tr.get("href") for tr in root.findall("topicref")]
+        self.assertEqual(hrefs, ["7_questions.dita"],
+                         "only the 7 Questions topicref when static root is absent")
         grams = root.find("topichead")
         self.assertIsNotNone(grams, "grams are still demoted under a Grams folder")
         self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
@@ -693,8 +715,8 @@ class GenerateDitaTests(unittest.TestCase):
         root = ET.parse(topic).getroot()
         # No gramframe table for this row (no pre-rendered spectrogram).
         self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
-        # No <image> either — the WAV is not a renderable image.
-        self.assertIsNone(root.find(".//image"))
+        # No gramframe <image> — the WAV is not a renderable spectrogram.
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']//image"))
         xref = root.find(".//xref")
         self.assertIsNotNone(xref, "WAV-typed GLC row must emit an <xref>")
         # The href targets the .glc (slugified), not the .wav: the GLC
@@ -862,8 +884,9 @@ class GenerateDitaTests(unittest.TestCase):
         topic = self.out / "main" / "arctic-survey" / "gram-08" / "gram_08.dita"
         self.assertTrue(topic.is_file())
         root = ET.parse(topic).getroot()
-        self.assertIsNone(root.find(".//image"))
-        self.assertIsNone(root.find(".//xref"))
+        # No gramframe image for the skipped row (7Q section image is expected).
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']//image"))
+        self.assertIsNone(root.find(".//xref[@format='glc']"))
         skipped = (self.out / "skipped.txt").read_text(encoding="utf-8")
         self.assertIn('gram_id="8"', skipped)
         self.assertIn(".bmp", skipped,
@@ -967,6 +990,123 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(listed, actual)
         self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
                          "manifest must be sorted")
+
+
+    # ------------------------------------------------------------------
+    # 7 Questions feature
+    # ------------------------------------------------------------------
+
+    def test_seven_questions_topic_emitted_per_publication(self) -> None:
+        """A ``7_questions.dita`` topic and a copy of ``7_questions.png`` are
+        written into every publication folder when the source PNG exists."""
+        _run(self.out)
+        for pub in ("main", "progress-test-1"):
+            pub_dir = self.out / pub
+            self.assertTrue((pub_dir / "7_questions.dita").is_file(),
+                            f"7_questions.dita must be in {pub}/")
+            self.assertTrue((pub_dir / "7_questions.png").is_file(),
+                            f"7_questions.png must be copied into {pub}/")
+
+    def test_seven_questions_topic_structure(self) -> None:
+        """``7_questions.dita`` embeds the image, carries the edition marker,
+        and uses the canonical topic id / title."""
+        _run(self.out)
+        topic_path = self.out / "main" / "7_questions.dita"
+        root = ET.parse(topic_path).getroot()
+        self.assertEqual(root.tag, "topic")
+        self.assertEqual(root.get("id"), "7_questions")
+        self.assertEqual(root.findtext("title"), "7 Questions")
+        body = root.find("body")
+        self.assertIsNotNone(body)
+        # First body child is the edition marker.
+        marker = body[0]
+        self.assertEqual(marker.get("outputclass"), "gf-persistent")
+        self.assertEqual(marker.get("audience"), "-trainee")
+        # Image embeds the PNG by bare filename.
+        image = body.find("image")
+        self.assertIsNotNone(image, "7_questions.dita must embed the image")
+        self.assertEqual(image.get("href"), "7_questions.png")
+
+    def test_seven_questions_topicref_in_ditamaps(self) -> None:
+        """Both the main and progress-test ditamaps carry a ``7_questions.dita``
+        topicref after the static pages but before the gram/week content."""
+        _run(self.out)
+        for ditamap in (
+            self.out / "main" / "main.ditamap",
+            self.out / "progress-test-1" / "progress-test-1.ditamap",
+        ):
+            root = ET.parse(ditamap).getroot()
+            hrefs = [tr.get("href") for tr in root.findall("topicref")]
+            self.assertIn("7_questions.dita", hrefs,
+                          f"{ditamap.name}: 7_questions.dita must appear as a root topicref")
+            q_idx = hrefs.index("7_questions.dita")
+            # Static pages precede it.
+            self.assertGreater(q_idx, 0, "7 Questions must follow the static pages")
+
+    def test_seven_questions_section_in_gram_body(self) -> None:
+        """Each gram body carries a ``seven-questions`` section (no audience
+        filter) embedding the 7 Questions image via a publication-relative href."""
+        _run(self.out)
+        topic_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        )
+        root = ET.parse(topic_path).getroot()
+        section = root.find(".//body/section[@id='seven-questions']")
+        self.assertIsNotNone(section, "gram body must carry a seven-questions section")
+        self.assertEqual(section.get("outputclass"), "seven-questions")
+        self.assertIsNone(section.get("audience"),
+                          "seven-questions section must be unfiltered (both editions)")
+        image = section.find("image")
+        self.assertIsNotNone(image, "section must embed the 7 Questions image")
+        href = image.get("href")
+        self.assertTrue(href, "image must have an href")
+        self.assertTrue(href.endswith("7_questions.png"),
+                        f"href must point at 7_questions.png, got {href!r}")
+
+    def test_seven_questions_section_after_analysis_section(self) -> None:
+        """In the gram body the analysis section (instructor-only) precedes the
+        7 Questions section, so instructors see analysis first and students see
+        7 Questions first (analysis is filtered for students)."""
+        _run(self.out)
+        topic_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        )
+        root = ET.parse(topic_path).getroot()
+        body = root.find("body")
+        self.assertIsNotNone(body)
+        ids = [s.get("id") for s in body.findall("section")]
+        self.assertIn("analysis-sheet", ids)
+        self.assertIn("seven-questions", ids)
+        self.assertLess(ids.index("analysis-sheet"), ids.index("seven-questions"),
+                        "analysis-sheet must precede seven-questions in the body")
+
+    def test_seven_questions_missing_png_degrades_gracefully(self) -> None:
+        """When ``7_questions.png`` is absent the generator still emits the
+        topic and section (dangling href), logs a warning, and exits with
+        rc 0 — consistent with the missing-asset dangle rule."""
+        rc = _run(self.out, seven_questions=TMP / "absent_7q.png")
+        self.assertEqual(rc, 0, "missing 7Q PNG must not abort generation")
+        topic_path = self.out / "main" / "7_questions.dita"
+        self.assertTrue(topic_path.is_file(), "7_questions.dita must still be emitted")
+        # The PNG copy is absent (nothing to copy).
+        self.assertFalse((self.out / "main" / "7_questions.png").is_file(),
+                         "7_questions.png must not exist when source is absent")
+        # Gram topic still carries the section with a dangling href.
+        gram_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        )
+        root = ET.parse(gram_path).getroot()
+        section = root.find(".//body/section[@id='seven-questions']")
+        self.assertIsNotNone(section, "seven-questions section must still be emitted")
+
+    def test_seven_questions_in_manifest(self) -> None:
+        """The 7_questions.dita topic and PNG are listed in the manifest."""
+        _run(self.out)
+        manifest = (self.out / "manifest.txt").read_text(encoding="utf-8")
+        self.assertIn("main/7_questions.dita", manifest)
+        self.assertIn("main/7_questions.png", manifest)
+        self.assertIn("progress-test-1/7_questions.dita", manifest)
+        self.assertIn("progress-test-1/7_questions.png", manifest)
 
 
 class SlugifyAssetNameTests(unittest.TestCase):

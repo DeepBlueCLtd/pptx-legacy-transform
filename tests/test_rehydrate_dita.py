@@ -176,7 +176,8 @@ class RehydrateDitaTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         g31 = dedup / "main" / "images" / "gram-31"
         topic = ET.parse(g31 / "gram_31.dita").getroot()
-        image = topic.find(".//image")
+        # Find the gramframe image (not the 7 Questions section image).
+        image = topic.find(".//table[@outputclass='gram-config']//image")
         # Href is re-localised even though the copy dangled (drop-in resolves it).
         self.assertEqual(image.get("href"), "shared-b.png")
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
