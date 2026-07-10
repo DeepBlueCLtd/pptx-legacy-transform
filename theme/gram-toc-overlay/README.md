@@ -39,7 +39,15 @@ visible**.
    links — so it no longer steals a full-height column. It sits above the
    gramframe (which is lower down the page, under the Lofar heading), not over
    it, and scrolls up out of the way as the reader moves to the gramframe.
-   Oxygen's own collapse/expand toggle keeps working.
+3. **Pins the panel open.** Oxygen's topic-TOC script sizes the mini-TOC to the
+   room the layout leaves for it (an inline `style="width: …px"` on
+   `#wh_topic_toc_content`). Now that step 1 gives the content column the full
+   row width, that measurement is zero, so the script would collapse the panel
+   to a width-0 sliver — a grey vertical line with no links — just after load.
+   The overlay overrides that inline width with `!important` so the links
+   always show. Side effect: the collapse button becomes inert (the panel stays
+   open); an optional, commented rule in the CSS hides that dead button if you
+   want.
 
 ## Layout
 

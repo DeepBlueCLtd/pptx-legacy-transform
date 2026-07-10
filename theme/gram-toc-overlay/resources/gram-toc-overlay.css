@@ -69,9 +69,7 @@ body:has(p.gram-nav) .wh_content_area {
 }
 
 /* 3. Lift the mini-TOC out of the flex flow into a compact top-right overlay
- *    that is only as tall as its own links. `width: auto` lets it shrink-wrap
- *    the inner container Oxygen sizes, so its collapse/expand toggle keeps
- *    working. */
+ *    that is only as tall as its own links. */
 body:has(p.gram-nav) #wh_topic_toc {
   position: absolute;
   top: 0;
@@ -87,3 +85,28 @@ body:has(p.gram-nav) #wh_topic_toc {
   border-radius: 6px;
   box-shadow: 0 4px 14px rgba(27, 31, 35, 0.12);
 }
+
+/* 4. Force the panel OPEN. Oxygen's topic-TOC script measures the room the
+ *    layout leaves for the TOC and pins the inner container to that width via
+ *    an inline `style="width: …px"`. Now that rule 1 gives the content column
+ *    the full row width, that measurement is zero, so the script collapses the
+ *    panel to a width-0 sliver (a grey vertical line, no links) just after
+ *    load. Override the inline width so the links always show. `!important`
+ *    beats the inline style the script keeps re-setting. This makes the
+ *    collapse button inert — the panel simply stays open (hide the button with
+ *    rule 5 if the dead control bothers you). */
+body:has(p.gram-nav) #wh_topic_toc #wh_topic_toc_content {
+  width: auto !important;
+  min-width: 190px;
+  padding: 6px 10px;
+}
+body:has(p.gram-nav) #wh_topic_toc .wh_topic_toc {
+  display: block !important;
+}
+
+/* 5. OPTIONAL — the collapse button no longer does anything useful once the
+ *    panel is pinned open. Uncomment to hide it.
+body:has(p.gram-nav) #wh_topic_toc #wh_close_topic_toc_button {
+  display: none !important;
+}
+*/
