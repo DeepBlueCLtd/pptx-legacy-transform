@@ -585,27 +585,30 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(hrefs, ["gram-02/gram_02.dita", "gram-10/gram_10.dita"])
 
     def test_test_ditamap_grams_under_grams_folder(self) -> None:
-        """Feature 010: a progress-test ditamap's root children are the <title>,
-        the common static <topicref>s, then a single "Grams" <topichead> holding
-        every gram topicref — no gram sits at the ditamap root any more."""
+        """Feature 010 (updated): a progress-test ditamap's root children are
+        the <title>, the common static <topicref>s, then a single
+        ``<topicref href="grams.dita">`` (a real topic, not a nav-only
+        topichead) holding every gram topicref — no gram sits at the ditamap
+        root and Oxygen renders a proper Grams landing page."""
         _run(self.out)
         ditamap = self.out / "progress-test-1" / "progress-test-1.ditamap"
         self.assertTrue(ditamap.is_file(),
                         "the test ditamap must live inside its publication folder")
         root = ET.parse(ditamap).getroot()
         for child in root:
-            self.assertIn(child.tag, {"title", "topicref", "topichead"},
+            self.assertIn(child.tag, {"title", "topicref"},
                           f"unexpected child {child.tag} in test ditamap")
-        topicheads = root.findall("topichead")
-        self.assertEqual(len(topicheads), 1,
-                         "exactly one root-level topichead — the Grams folder")
-        grams = topicheads[0]
-        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
-        # Grams holds the gram topicrefs directly — progress tests have no
-        # per-chapter tier below the Grams folder.
-        self.assertGreaterEqual(len(grams.findall("topicref")), 1)
-        self.assertIsNone(grams.find("topichead"),
-                          "progress-test grams sit flat under Grams, no chapter tier")
+        # No topichead — replaced by a real topicref to grams.dita.
+        self.assertEqual(root.findall("topichead"), [],
+                         "no topichead — Grams is now a real topic topicref")
+        grams_refs = [tr for tr in root.findall("topicref")
+                      if tr.get("href") == "grams.dita"]
+        self.assertEqual(len(grams_refs), 1, "exactly one grams.dita topicref at root")
+        grams_ref = grams_refs[0]
+        # Gram topicrefs are nested under the grams.dita topicref.
+        self.assertGreaterEqual(len(grams_ref.findall("topicref")), 1)
+        self.assertIsNone(grams_ref.find("topichead"),
+                          "progress-test grams sit flat under grams.dita, no chapter tier")
         # No gram topicref leaks up to the ditamap root.
         self.assertEqual(
             [tr.get("href") for tr in root.findall("topicref")
@@ -620,19 +623,15 @@ class GenerateDitaTests(unittest.TestCase):
         precede the Grams folder; for main they precede the top-level
         Week folders."""
         _run(self.out)
-        # Progress tests: static pages + 7Q are the only root topicrefs,
-        # ahead of the single Grams <topichead>.
+        # Progress tests: static pages + 7Q then grams.dita are all root topicrefs.
         root = ET.parse(self.out / "progress-test-1"
                         / "progress-test-1.ditamap").getroot()
-        self.assertEqual(
-            [tr.get("href") for tr in root.findall("topicref")],
-            ["welcome.dita", "security.dita", "7_questions.dita"],
-            "progress test: Welcome, Security, 7 Questions must be the root "
-            "topicrefs (grams live under the Grams folder)",
-        )
-        tags = [c.tag for c in root]
-        self.assertLess(tags.index("topicref"), tags.index("topichead"),
-                        "static pages must precede the Grams folder")
+        hrefs = [tr.get("href") for tr in root.findall("topicref")]
+        self.assertEqual(hrefs[:3], ["welcome.dita", "security.dita", "7_questions.dita"],
+                         "progress test: Welcome, Security, 7 Questions must lead "
+                         "the root topicrefs")
+        self.assertIn("grams.dita", hrefs,
+                      "grams.dita topicref must be present at the root")
         # Main: weeks are pulled up to the top level, so the root topicrefs are
         # Welcome, Security, 7 Questions, then the Week sub-documents.
         root = ET.parse(self.out / "main" / "main.ditamap").getroot()
@@ -669,18 +668,18 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_missing_static_root_degrades_gracefully(self) -> None:
         """An absent static root omits the Welcome/Security pages but the
-        7 Questions topicref is still present; grams are still demoted under
-        the Grams folder and the run succeeds (rc 0)."""
+        7 Questions topicref and grams.dita topicref are still present;
+        the run succeeds (rc 0)."""
         rc = _run(self.out, static_root=TMP / "absent_static_dir")
         self.assertEqual(rc, 0)
         root = ET.parse(
             self.out / "progress-test-1" / "progress-test-1.ditamap").getroot()
         hrefs = [tr.get("href") for tr in root.findall("topicref")]
-        self.assertEqual(hrefs, ["7_questions.dita"],
-                         "only the 7 Questions topicref when static root is absent")
-        grams = root.find("topichead")
-        self.assertIsNotNone(grams, "grams are still demoted under a Grams folder")
-        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
+        self.assertEqual(hrefs, ["7_questions.dita", "grams.dita"],
+                         "7 Questions then grams.dita when static root is absent")
+        grams_refs = [tr for tr in root.findall("topicref")
+                      if tr.get("href") == "grams.dita"]
+        self.assertEqual(len(grams_refs), 1, "grams.dita topicref present without static root")
 
     def test_every_topic_carries_instructor_edition_marker(self) -> None:
         """Every ``<topic>`` page — grams, chapter sub-documents, and the copied

@@ -1616,17 +1616,52 @@ def _append_static_topicrefs(
         ET.SubElement(root, "topicref", {"href": name})
 
 
-def _append_grams_topichead(root: ET.Element) -> ET.Element:
-    """Append and return the ``<topichead>`` (navtitle ``Grams``) that holds
-    every per-gram topicref, collapsing N gram entries into a single root-level
-    nav item (feature 010). Uses the ``<topicmeta>/<navtitle>`` child form,
-    matching the chapter topicheads.
+GRAMS_TOPIC_STEM = "grams"
+
+
+def emit_test_grams_topic(
+    publication: str, rows: list[dict], out_dir: Path,
+) -> Path:
+    """Write ``<publication>/grams.dita`` — a navigable landing page for a
+    flat (non-``main``) publication, mirroring the ``week_N.dita`` chapter
+    topics so Oxygen renders a proper "Grams" page with a bullet-list of
+    gram links rather than collapsing to a nav-only ``<topichead>``.
     """
-    topichead = ET.SubElement(root, "topichead")
-    topicmeta = ET.SubElement(topichead, "topicmeta")
-    navtitle = ET.SubElement(topicmeta, "navtitle")
-    navtitle.text = GRAMS_NAVTITLE
-    return topichead
+    pub_dir = out_dir / publication
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    topic = ET.Element("topic", {"id": GRAMS_TOPIC_STEM})
+    title_el = ET.SubElement(topic, "title")
+    title_el.text = GRAMS_NAVTITLE
+    body = ET.SubElement(topic, "body")
+    _append_edition_marker(body)
+
+    seen: set[str] = set()
+    gram_entries: list[tuple[int, str, str]] = []
+    for row in rows:
+        if row["publication"] != publication:
+            continue
+        doc_slug = _doc_slug(_effective_doc(row))
+        gram_dir = _gram_folder_name(_effective_gram_id(row))
+        uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+        if uniq in seen:
+            continue
+        seen.add(uniq)
+        eff_gram_id = _effective_gram_id(row)
+        gram_num = int(_gram_num(eff_gram_id))
+        topic_file = _topic_filename(eff_gram_id)
+        href = "/".join([s for s in (doc_slug, gram_dir) if s] + [topic_file])
+        gram_entries.append((gram_num, href, str(gram_num)))
+    gram_entries.sort(key=lambda t: t[0])
+    ul = ET.SubElement(body, "ul", {"outputclass": "gram-index"})
+    for _, href, label in gram_entries:
+        li = ET.SubElement(ul, "li")
+        ET.SubElement(li, "xref", {
+            "href": href, "format": "dita", "outputclass": "enterBtn",
+        }).text = f"Gram {label}"
+
+    path = pub_dir / f"{GRAMS_TOPIC_STEM}.dita"
+    _write_text(path, _serialise(topic, TOPIC_DOCTYPE))
+    return path
 
 
 def _main_chapters(rows: list[dict]) -> "OrderedDict[str, tuple[str, list[dict]]]":
@@ -1756,9 +1791,9 @@ def emit_test_ditamap(
     folder, with folder-relative hrefs (no ``<publication>/`` prefix).
 
     The common static pages lead (feature 010); the per-gram topicrefs are
-    grouped under a single ``<topichead>`` (navtitle ``Grams``) so they sit one
-    level below the ditamap root rather than flooding it as direct children,
-    in ascending gram-number order regardless of CSV row order.
+    nested under a ``<topicref href="grams.dita">`` so Oxygen renders a real
+    "Grams" landing page (like the week chapter topics in ``main``) rather
+    than a nav-only ``<topichead>`` with no content of its own.
     """
     pub_dir = out_dir / publication
     pub_dir.mkdir(parents=True, exist_ok=True)
@@ -1770,7 +1805,9 @@ def emit_test_ditamap(
         ET.SubElement(root, "topicref", {
             "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
         })
-    grams_head = _append_grams_topichead(root)
+    grams_ref = ET.SubElement(root, "topicref", {
+        "href": f"{GRAMS_TOPIC_STEM}.dita",
+    })
     seen: set[str] = set()
     gram_refs: list[tuple[int, str]] = []
     for row in rows:
@@ -1787,7 +1824,7 @@ def emit_test_ditamap(
         href = f"{prefix}{gram_dir}/{topic_file}"
         gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
     for _, href in sorted(gram_refs):
-        ET.SubElement(grams_head, "topicref", {"href": href})
+        ET.SubElement(grams_ref, "topicref", {"href": href})
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
@@ -2046,6 +2083,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
         if pub != "main":
+            grams_topic = emit_test_grams_topic(pub, rows, args.out)
+            written.append(grams_topic)
+            LOGGER.info("Wrote %s", grams_topic)
             path = emit_test_ditamap(
                 pub, rows, args.out, static_pages, seven_q_page=True,
             )
