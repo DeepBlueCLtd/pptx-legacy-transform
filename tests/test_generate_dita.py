@@ -417,21 +417,17 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_main_ditamap_weeks_at_top_level(self) -> None:
         """Each main chapter (week) is a *sub-document* pulled up to the **top
-        level** of the map: a real chapter topic referenced by a top-level
-        ``<topicref>`` (beside the static pages, no enclosing ``Grams``
-        ``<topichead>``), with the chapter's gram topicrefs one tier below it."""
+        level** of the map: a real chapter topic referenced by a bare top-level
+        ``<topicref>`` with no nested gram topicrefs — grams are navigated via
+        the enterBtn links inside the chapter topic itself."""
         _run(self.out)
         ditamap = self.out / "main" / "main.ditamap"
         self.assertTrue(ditamap.is_file(),
                         "main.ditamap must live inside the main/ folder")
         root = ET.parse(ditamap).getroot()
         self.assertEqual(root.tag, "map")
-        # The weeks are pulled up to the top level — the single "Grams"
-        # <topichead> folder is gone from main.
         self.assertEqual(root.findall("topichead"), [],
                          "main has no Grams folder — weeks sit at the top level")
-        # A week topicref points at its chapter topic; static pages are bare
-        # filenames. The chapter topicrefs are the non-static root topicrefs.
         chapters = [tr for tr in root.findall("topicref")
                     if "/" in (tr.get("href") or "")]
         self.assertGreaterEqual(len(chapters), 1)
@@ -442,12 +438,10 @@ class GenerateDitaTests(unittest.TestCase):
             chapter_topic = ditamap.parent / href
             self.assertTrue(chapter_topic.is_file(),
                             f"chapter topic missing on disk: {chapter_topic}")
-            gram_refs = chapter_ref.findall("topicref")
-            self.assertGreaterEqual(len(gram_refs), 1,
-                                    "gram topicrefs nest inside the chapter")
-            for gram_ref in gram_refs:
-                self.assertTrue((ditamap.parent / gram_ref.get("href")).is_file(),
-                                "gram hrefs are relative to the ditamap folder")
+            # Grams are NOT nested in the ditamap; they live as enterBtn links
+            # in the chapter topic body.
+            self.assertEqual(chapter_ref.findall("topicref"), [],
+                             "no gram topicrefs nested under chapter in ditamap")
 
     def test_main_ditamap_one_topicref_per_gram(self) -> None:
         """The CSV carries N+1 rows per gram but the ditamap must point to
@@ -479,9 +473,8 @@ class GenerateDitaTests(unittest.TestCase):
             href = xref.get("href", "")
             self.assertTrue(href.endswith(".dita"),
                             f"enterBtn href should point at a .dita topic: {href!r}")
-            self.assertIsNotNone(xref.text)
-            self.assertTrue(xref.text.startswith("Gram "),
-                            f"button label should start with 'Gram ': {xref.text!r}")
+            # No explicit text — DITA pulls the target topic's title at publish time.
+            self.assertIsNone(xref.text)
 
     def test_no_ditamap_at_output_root(self) -> None:
         """Every ditamap lives inside its named publication folder; nothing
@@ -540,11 +533,11 @@ class GenerateDitaTests(unittest.TestCase):
                          "no main ditamap may be written when a week is unassigned")
 
     def test_main_ditamap_grams_sorted_by_effective_number(self) -> None:
-        """Within a week, gram topicrefs are emitted in ascending numeric
-        order — not CSV row order, which interleaves a week's native deck
-        with the even-sliced no-week decks' renumbered grams. The sort is
-        numeric (102 follows 23), and the effective number (target_gram_id)
-        is what's ordered."""
+        """Within a week, gram enterBtn links in the chapter topic are emitted
+        in ascending numeric order — not CSV row order. The sort is numeric
+        (102 follows 23), and the effective number (target_gram_id) is ordered.
+        (Grams no longer appear as topicrefs in the ditamap — they are links
+        inside the chapter topic body.)"""
         def row(gram_id, target="", chapter="2"):
             r = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
             r.update({
@@ -556,19 +549,22 @@ class GenerateDitaTests(unittest.TestCase):
             return r
 
         rows = [row("23"), row("7", target="102"), row("7")]
-        ditamap = generate_dita.emit_main_ditamap(rows, self.out)
-        hrefs = [tr.get("href")
-                 for tr in ET.parse(ditamap).getroot().iter("topicref")
-                 if "gram-" in (tr.get("href") or "")]
+        generate_dita.emit_main_chapter_topics(rows, self.out)
+        generate_dita.emit_main_ditamap(rows, self.out)
+        chapter_topic = self.out / "main" / "week-2" / "week_2.dita"
+        xrefs = ET.parse(chapter_topic).getroot().findall(
+            ".//ul[@outputclass='gram-index']/li/xref")
+        hrefs = [x.get("href") for x in xrefs]
         self.assertEqual(hrefs, [
-            "week-2/gram-07/gram_07.dita",
-            "week-2/gram-23/gram_23.dita",
-            "week-2/gram-102/gram_102.dita",
+            "gram-07/gram_07.dita",
+            "gram-23/gram_23.dita",
+            "gram-102/gram_102.dita",
         ], "grams must sort by effective number, numerically")
 
     def test_test_ditamap_grams_sorted_by_effective_number(self) -> None:
-        """The flat publications' gram topicrefs are number-ordered too,
-        regardless of CSV row order."""
+        """The flat publications' gram enterBtn links are number-ordered,
+        regardless of CSV row order. (Grams no longer appear as topicrefs
+        in the ditamap — they are links inside the grams.dita topic body.)"""
         def row(gram_id):
             r = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
             r.update({
@@ -577,19 +573,19 @@ class GenerateDitaTests(unittest.TestCase):
             })
             return r
 
-        ditamap = generate_dita.emit_test_ditamap(
+        generate_dita.emit_test_grams_topic(
             "progress-test-9", [row("10"), row("2")], self.out)
-        hrefs = [tr.get("href")
-                 for tr in ET.parse(ditamap).getroot().iter("topicref")
-                 if "gram-" in (tr.get("href") or "")]
+        grams_topic = self.out / "progress-test-9" / "grams.dita"
+        xrefs = ET.parse(grams_topic).getroot().findall(
+            ".//ul[@outputclass='gram-index']/li/xref")
+        hrefs = [x.get("href") for x in xrefs]
         self.assertEqual(hrefs, ["gram-02/gram_02.dita", "gram-10/gram_10.dita"])
 
     def test_test_ditamap_grams_under_grams_folder(self) -> None:
         """Feature 010 (updated): a progress-test ditamap's root children are
-        the <title>, the common static <topicref>s, then a single
-        ``<topicref href="grams.dita">`` (a real topic, not a nav-only
-        topichead) holding every gram topicref — no gram sits at the ditamap
-        root and Oxygen renders a proper Grams landing page."""
+        the <title>, the common static <topicref>s, then a bare
+        ``<topicref href="grams.dita">`` with no nested gram topicrefs —
+        grams are navigated via the enterBtn links inside grams.dita itself."""
         _run(self.out)
         ditamap = self.out / "progress-test-1" / "progress-test-1.ditamap"
         self.assertTrue(ditamap.is_file(),
@@ -598,18 +594,14 @@ class GenerateDitaTests(unittest.TestCase):
         for child in root:
             self.assertIn(child.tag, {"title", "topicref"},
                           f"unexpected child {child.tag} in test ditamap")
-        # No topichead — replaced by a real topicref to grams.dita.
         self.assertEqual(root.findall("topichead"), [],
-                         "no topichead — Grams is now a real topic topicref")
+                         "no topichead — Grams is a real topic topicref")
         grams_refs = [tr for tr in root.findall("topicref")
                       if tr.get("href") == "grams.dita"]
         self.assertEqual(len(grams_refs), 1, "exactly one grams.dita topicref at root")
-        grams_ref = grams_refs[0]
-        # Gram topicrefs are nested under the grams.dita topicref.
-        self.assertGreaterEqual(len(grams_ref.findall("topicref")), 1)
-        self.assertIsNone(grams_ref.find("topichead"),
-                          "progress-test grams sit flat under grams.dita, no chapter tier")
-        # No gram topicref leaks up to the ditamap root.
+        # No gram topicrefs nested in the ditamap at all.
+        self.assertEqual(grams_refs[0].findall("topicref"), [],
+                         "no gram topicrefs nested under grams.dita in ditamap")
         self.assertEqual(
             [tr.get("href") for tr in root.findall("topicref")
              if "gram-" in (tr.get("href") or "")],
@@ -1528,7 +1520,8 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ditamap = (out_dir / "main" / "main.ditamap").read_text(encoding="utf-8")
         self.assertIn('href="week-2/week_2.dita"', ditamap,
                       "the week is a sub-document referenced by the map")
-        self.assertIn("week-2/gram-07/gram_07.dita", ditamap)
+        self.assertNotIn("gram-07", ditamap,
+                         "gram hrefs must not appear in ditamap — they live in chapter topic")
         week_topic = out_dir / "main" / "week-2" / "week_2.dita"
         self.assertTrue(week_topic.is_file(), "week chapter topic must exist")
         self.assertIn("<title>Week 2</title>",
