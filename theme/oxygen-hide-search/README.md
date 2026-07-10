@@ -65,10 +65,14 @@ Template** with a `<css>` resource entry.
 
 ## Wiring it into the (single, shared) template
 
-You run a **separate transformation scenario per edition** (the instructor
-scenario and the trainee-filtered student scenario — the one that passes
-`args.filter` / the `trainee.ditaval` profile). Both can now share **one**
-publishing template:
+You run a **separate transformation scenario per edition**: the instructor
+scenario passes `args.filter` = the `instructor.ditaval` profile (which
+strips the student-only 7 Questions section from gram pages), and the
+student scenario passes `args.filter` = the `trainee.ditaval` profile
+(which strips the instructor-only content). Both `.ditaval` files are
+emitted by `generate_dita.py` beside the DITA source. The two scenarios
+now differ only in which `args.filter` they point at, and can share
+**one** publishing template:
 
 1. **Use your existing publishing template** (the Fi3ldMan-derived one that
    hosts the GramFrame overlay — see `../gramframe-oxygen/README.md`). There

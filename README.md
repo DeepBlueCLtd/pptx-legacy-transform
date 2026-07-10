@@ -913,7 +913,7 @@ html/
 ├── index.html                        ← shared landing — pick an edition
 ├── instructor/
 │   ├── index.html                    ← publication list, instructor edition
-│   ├── main/                         ← DITA-OT render, no audience filter
+│   ├── main/                         ← DITA-OT render with --filter=instructor.ditaval
 │   ├── progress-test-1/
 │   └── …                             ← one folder per ditamap
 └── student/
@@ -924,9 +924,12 @@ html/
 ```
 
 The instructor edition contains every vessel-name decoration,
-Analysis Sheet section, and "Instructor Version" labelling. The
-student edition is produced by a second DITA-OT pass with
-`dita/trainee.ditaval` excluding every element carrying
+Analysis Sheet section, and "Instructor Version" labelling; it is
+produced with `dita/instructor.ditaval`, which excludes the one piece
+of student-only content — the in-body 7 Questions section on each gram
+page (instructors reach that image via the root-level 7 Questions nav
+topic instead). The student edition is produced by a second DITA-OT
+pass with `dita/trainee.ditaval` excluding every element carrying
 `audience="-trainee"`. URL paths below the top-level edition segment
 are identical across editions — swapping `instructor/` ↔ `student/`
 in any URL reaches the same gram in the other edition.
