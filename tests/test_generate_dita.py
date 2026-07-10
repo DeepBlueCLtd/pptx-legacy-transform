@@ -356,6 +356,46 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "analysis.docx")
         self.assertEqual(xref.get("format"), "docx")
 
+    def test_jpg_analysis_renders_as_inline_image(self) -> None:
+        """JPG and JPEG analysis assets embed as <image>, not <xref>."""
+        for ext in ("jpg", "jpeg"):
+            with self.subTest(ext=ext):
+                csv_path = TMP / f"{self._testMethodName}_{ext}.csv"
+                cols = generate_dita.CSV_COLUMNS
+                rows = [{c: "" for c in cols}, {c: "" for c in cols}]
+                rows[0].update({
+                    "publication": "main", "chapter": "Nordic Fishing Vessels",
+                    "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+                    "topic_type": "glc", "sequence": "1",
+                    "topic_filename": "gram_12.dita",
+                    "link_href": "supporting/gram12/config_1.glc",
+                    "glc_path": "supporting/gram12/config_1.glc",
+                    "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+                    "png_path": "images/gram12.png",
+                })
+                rows[1].update({
+                    "publication": "main", "chapter": "Nordic Fishing Vessels",
+                    "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+                    "topic_type": "analysis", "sequence": "1",
+                    "topic_filename": "gram_12.dita",
+                    "png_path": f"analysis.{ext}",
+                })
+                with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+                    w = csv.DictWriter(fh, fieldnames=list(cols),
+                                       quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+                    w.writeheader()
+                    for r in rows:
+                        w.writerow(r)
+                out = TMP / f"{self._testMethodName}_{ext}_out"
+                _run(out, csv_path=csv_path)
+                topic = out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+                root = ET.parse(topic).getroot()
+                analysis_section = root.find(".//body/section[@audience='-trainee']")
+                self.assertIsNotNone(analysis_section)
+                image = analysis_section.find("image")
+                self.assertIsNotNone(image, f".{ext} analysis assets must render as <image>")
+                self.assertEqual(image.get("href"), f"analysis.{ext}")
+
     def test_main_ditamap_weeks_at_top_level(self) -> None:
         """Each main chapter (week) is a *sub-document* pulled up to the **top
         level** of the map: a real chapter topic referenced by a top-level

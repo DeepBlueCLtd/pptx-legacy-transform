@@ -1079,7 +1079,7 @@ def _append_analysis_section(
     if not href:
         return
     suffix = Path(href).suffix.lower().lstrip(".")
-    if suffix == "png":
+    if suffix in ("png", "jpg", "jpeg"):
         ET.SubElement(section, "image", {
             "href": href, "placement": "break", "align": "center",
         })
