@@ -66,7 +66,8 @@ os.chdir(r"C:\dev\aaac")     # project ROOT on the target (illustrative path)
 os.getcwd()                   # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): analysis sheets -> PNGs
-exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc -> image
+exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc -> image (moves .wav aside)
+exec(open(r"ingest.py").read())      # prep (when an incoming screenshot tree arrives): verify names, then APPLY=True to import + relink (leaves .wav in place)
 exec(open(r"extract.py").read())     # Stage 3: source\  -> extract.csv at ROOT
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
 exec(open(r"write.py").read())       # Stage 5: signed-off CSV -> dita\
@@ -81,7 +82,7 @@ level *above* the canonical scripts:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py   ← thin wrappers (set sys.argv, runpy the canonical script)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py  ingest.py   ← thin wrappers (set sys.argv, runpy the canonical script)
 ├── pipeline.py          ← orchestrator: runs the four core stages in sequence, fail-fast
 ├── stock.wav            ← silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
@@ -301,5 +302,5 @@ relevant feature's `spec.md` and `plan.md` first — the contracts under
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-[specs/010-frequency-bands/plan.md](specs/010-frequency-bands/plan.md)
+[specs/011-import-gram-images/plan.md](specs/011-import-gram-images/plan.md)
 <!-- SPECKIT END -->

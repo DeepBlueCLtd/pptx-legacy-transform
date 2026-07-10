@@ -46,6 +46,7 @@ SCRIPTS = (
     "rehydrate_dita.py",
     "snapshot_analysis_docs.py",
     "relink_glc_to_image.py",
+    "ingest_gram_images.py",
 )
 
 # Thin REPL wrappers at the repo root plus the pipeline orchestrator
@@ -61,6 +62,7 @@ WRAPPERS = (
     "introspect.py",
     "snapshot.py",
     "relink.py",
+    "ingest.py",
     "pipeline.py",
 )
 

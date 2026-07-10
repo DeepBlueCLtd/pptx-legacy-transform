@@ -71,7 +71,7 @@ STAGES = ("extract", "dedupe", "write", "publish")
 # session picks up edited canonical scripts (mirrors the wrappers).
 _CANONICAL_MODULES = ("extract_to_csv", "introspect_pptx", "deduplicate_csv",
                       "generate_dita", "publish_html", "rehydrate_dita",
-                      "snapshot_analysis_docs", "mock_pptx")
+                      "snapshot_analysis_docs", "ingest_gram_images", "mock_pptx")
 
 # The DEBUG log each canonical main() writes in the cwd, named in the
 # failure banner so the operator knows where to look.

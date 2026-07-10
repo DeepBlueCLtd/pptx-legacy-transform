@@ -26,6 +26,7 @@ WRAPPERS = {
     "introspect.py": "introspect_pptx.py",
     "snapshot.py": "snapshot_analysis_docs.py",
     "relink.py": "relink_glc_to_image.py",
+    "ingest.py": "ingest_gram_images.py",
 }
 
 ALLOWED_IMPORTS = {"os", "sys", "runpy", "pathlib"}
