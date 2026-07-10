@@ -1,0 +1,89 @@
+/* Float the WebHelp "On this page" mini-TOC as a top-right overlay on gram
+ * pages — production Oxygen WebHelp Responsive overlay.
+ *
+ * THE PROBLEM
+ *   Oxygen WebHelp Responsive renders the per-topic "On this page" table of
+ *   contents as <nav id="wh_topic_toc">, a flex *sibling* of the content
+ *   column (<div id="wh_topic_body">) inside the topic's <div class="row">.
+ *   As an in-flow flex item it reserves a full-height strip down the right
+ *   edge of the page for its ENTIRE scroll length — even though its own
+ *   content is just a couple of links ("7 Questions", "Lofar 1"). On a gram
+ *   page the gramframe lives in wh_topic_body and sizes itself to that column,
+ *   so the reserved strip squeezes the gramframe narrower (and, because the
+ *   gramframe keeps its aspect ratio, shorter). Collapsing the TOC with its
+ *   own toggle button visibly lets the gramframe reclaim the space — this
+ *   overlay makes that reclaim the default while KEEPING the TOC visible.
+ *
+ * WHAT IT DOES
+ *   1. Gives the content column the full row width (overrides the col-md-9 /
+ *      col-lg-* Bootstrap width), so the gramframe spans the whole page.
+ *   2. Lifts #wh_topic_toc out of the flex flow and pins it as a compact
+ *      overlay in the TOP-RIGHT of the content area, only as tall as its own
+ *      links — so it no longer steals a full-height column. It sits above the
+ *      gramframe (which is lower down the page, under the Lofar heading), not
+ *      over it, and scrolls up out of the way as the reader moves to the
+ *      gramframe. Oxygen's own collapse/expand toggle still works.
+ *
+ * SCOPE — gram pages only
+ *   Every gram page carries <p class="gram-nav"> in BOTH editions (the
+ *   unfiltered in-page Lofar jump links; see ../gram-nav-panel/). Non-gram
+ *   pages (welcome, security, week / publication indexes) carry none, so
+ *   `body:has(p.gram-nav)` matches gram pages exactly and leaves every other
+ *   page's mini-TOC untouched. `:has()` is the same selector mechanism
+ *   ../oxygen-hide-search/ already relies on.
+ *
+ * OXYGEN-ONLY
+ *   Unlike ../gram-nav-panel/, this overlay has no dev/CI-preview counterpart:
+ *   the "On this page" mini-TOC is an Oxygen WebHelp Responsive feature, and
+ *   publish_html.py's DITA-OT HTML5 preview never emits #wh_topic_toc. Nothing
+ *   to keep in step on the dev side.
+ *
+ * Self-contained (literal colours, no CSS custom properties) because the
+ * Oxygen WebHelp Responsive output does not load the operator-console theme.
+ * Install per ../README.md (copy into your publishing template's resources/
+ * and reference it from the .opt <resources> so it loads last and wins the
+ * cascade).
+ *
+ * TUNING (per target, in this file)
+ *   - Vertical/horizontal offset of the floated panel: the `top` / `right` on
+ *     rule 3 below.
+ *   - Panel width cap: `max-width` on rule 3.
+ *   - Prefer it to FOLLOW the scroll (viewport-sticky) instead of sitting at
+ *     the top of the topic? Swap `position: absolute` for `position: fixed` on
+ *     rule 3 and drop rule 2 — but note a fixed panel will then float OVER the
+ *     full-width gramframe as you scroll past it.
+ */
+
+/* 1. Content column takes the full row width (overrides col-md-9 / col-lg-*).
+ *    The #id selector outranks any .col-* class rule in every breakpoint. */
+body:has(p.gram-nav) #wh_topic_body {
+  flex: 0 0 100%;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* 2. Anchor the overlay: make the content area the positioned ancestor so the
+ *    absolutely-positioned TOC below resolves against it. */
+body:has(p.gram-nav) .wh_content_area {
+  position: relative;
+}
+
+/* 3. Lift the mini-TOC out of the flex flow into a compact top-right overlay
+ *    that is only as tall as its own links. `width: auto` lets it shrink-wrap
+ *    the inner container Oxygen sizes, so its collapse/expand toggle keeps
+ *    working. */
+body:has(p.gram-nav) #wh_topic_toc {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: auto;
+  max-width: 240px;
+  height: auto;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  z-index: 400;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(27, 31, 35, 0.12);
+}
