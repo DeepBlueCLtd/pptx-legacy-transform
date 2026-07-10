@@ -314,7 +314,11 @@ through the student transformation scenario — see that folder's `README.md`.
 `theme\gram-nav-panel\` is a third overlay (one CSS file) that pins the
 floating per-gram navigation panel — the in-page Lofar jump links (both
 editions) plus the instructor-only Analysis Sheet link — to the lower-right
-corner; see that folder's `README.md`.
+corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
+overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
+compact top-right overlay on gram pages, so it stops reserving a full-height
+right-hand column and lets the gramframe use the full page width; see that
+folder's `README.md`.
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
