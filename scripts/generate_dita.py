@@ -1503,7 +1503,7 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
             li = ET.SubElement(ul, "li")
             ET.SubElement(li, "xref", {
                 "href": href, "format": "dita", "outputclass": "enterBtn",
-            }).text = f"Gram {label}"
+        })
 
         chapter_dir = out_dir / "main" / slug
         chapter_dir.mkdir(parents=True, exist_ok=True)
@@ -1728,41 +1728,10 @@ def emit_main_ditamap(
         ET.SubElement(root, "topicref", {
             "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
         })
-    for slug, (_, chapter_rows) in _main_chapters(rows).items():
+    for slug, _ in _main_chapters(rows).items():
         if slug:
-            chapter_ref = ET.SubElement(root, "topicref", {
+            ET.SubElement(root, "topicref", {
                 "href": f"{slug}/{_chapter_topic_stem(slug)}.dita",
-            })
-        else:
-            chapter_ref = root
-        seen: set[str] = set()
-        gram_refs: list[tuple[int, str]] = []
-        for row in chapter_rows:
-            doc_slug = _doc_slug(_effective_doc(row))
-            gram_dir = _gram_folder_name(_effective_gram_id(row))
-            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
-            if uniq in seen:
-                continue
-            seen.add(uniq)
-            topic_file = _topic_filename(_effective_gram_id(row))
-            # Build the href from non-empty segments only, mirroring the
-            # pathlib-based on-disk layout (_publication_root, which drops
-            # empty path parts). A bare-integer week gives slug "week-N"; a
-            # no-week deck (e.g. Pub10 with a blank target_chapter) gives an
-            # EMPTY slug — interpolating it as "{slug}/..." would emit a
-            # leading-slash "/..." (absolute) href that DITA-OT cannot
-            # resolve, silently dropping the topic under
-            # --processing-mode=lax (a 404 in the rendered output).
-            # Filtering empties keeps href == path relative to the map.
-            href = "/".join([s for s in (slug, doc_slug, gram_dir) if s]
-                            + [topic_file])
-            gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
-        for _, href in sorted(gram_refs):
-            # linking="none" suppresses DITA-OT's auto-generated child-link
-            # list on the chapter page; the enterBtn buttons in the chapter
-            # topic body are the intended navigation surface (issue #130).
-            ET.SubElement(chapter_ref, "topicref", {
-                "href": href, "linking": "none",
             })
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
@@ -1808,26 +1777,9 @@ def emit_test_ditamap(
         ET.SubElement(root, "topicref", {
             "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
         })
-    grams_ref = ET.SubElement(root, "topicref", {
+    ET.SubElement(root, "topicref", {
         "href": f"{GRAMS_TOPIC_STEM}.dita",
     })
-    seen: set[str] = set()
-    gram_refs: list[tuple[int, str]] = []
-    for row in rows:
-        if row["publication"] != publication:
-            continue
-        doc_slug = _doc_slug(_effective_doc(row))
-        gram_dir = _gram_folder_name(_effective_gram_id(row))
-        uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
-        if uniq in seen:
-            continue
-        seen.add(uniq)
-        topic_file = _topic_filename(_effective_gram_id(row))
-        prefix = f"{doc_slug}/" if doc_slug else ""
-        href = f"{prefix}{gram_dir}/{topic_file}"
-        gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
-    for _, href in sorted(gram_refs):
-        ET.SubElement(grams_ref, "topicref", {"href": href})
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
