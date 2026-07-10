@@ -135,6 +135,84 @@ section.section > h2.sectiontitle {
   margin: 32px 0 12px;
 }
 
+/* ---------- Gram index: re-flowing tile grid ----------
+   generate_dita.py emits each week/chapter landing page and each progress test
+   with a <ul outputclass="gram-index"> of <xref outputclass="enterBtn"> links,
+   one per gram. Untouched that is a tall single-column bullet list; lay it out
+   as a grid of rounded tiles that reflow to the content width so a 30-gram week
+   is a scannable board, not a scroll. Production counterpart:
+   theme/gram-index-grid.css (a paste-in slug for the operator's oxygen.css) —
+   keep the two in step
+   (same grid; colours differ because that overlay dresses the light stock
+   WebHelp template and this is the dark operator console). */
+ul.gram-index {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
+}
+ul.gram-index > li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+ul.gram-index > li > a.enterBtn,
+ul.gram-index > li > a.enterBtn:link,
+ul.gram-index > li > a.enterBtn:visited {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+  font: 600 13px/1.2 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyan-bright);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(77,208,225,0.04);
+  transition: color 0.12s ease, border-color 0.12s ease,
+              background-color 0.12s ease, transform 0.12s ease;
+}
+/* Vessel name (instructor edition only): quieter subtitle under the number. */
+ul.gram-index > li > a.enterBtn .vessel-name {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  color: var(--ink-dim);
+}
+ul.gram-index > li > a.enterBtn:hover,
+ul.gram-index > li > a.enterBtn:focus {
+  color: var(--amber-bright);
+  background: var(--panel-2);
+  border-color: var(--amber);
+  transform: translateY(-1px);
+}
+ul.gram-index > li > a.enterBtn:hover .vessel-name,
+ul.gram-index > li > a.enterBtn:focus .vessel-name {
+  color: var(--amber);
+}
+ul.gram-index > li > a.enterBtn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  ul.gram-index > li > a.enterBtn { transition: none; }
+  ul.gram-index > li > a.enterBtn:hover,
+  ul.gram-index > li > a.enterBtn:focus { transform: none; }
+}
+
 /* ---------- Cleanup of DITA-OT scaffolding ---------- */
 caption:empty { display: none; }
 section.section > br,
