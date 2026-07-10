@@ -1397,13 +1397,10 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
 
     The ditamap nests each week's gram topicrefs under a ``<topicref>`` to
     this topic (not a nav-only ``<topichead>``), so every renderer gives the
-    week its own page at the top level of the map — the publication index
-    lists the weeks, and each week page lists its grams (DITA-OT and Oxygen
-    both auto-generate child links for a topic with topicref children). The
-    topic body is intentionally empty: the title is the content, the
-    children are the point — apart from the hidden instructor-only edition
-    marker, which every page carries so the shared stylesheet can tell the
-    editions apart (see ``EDITION_MARKER_OUTPUTCLASS``).
+    week its own page at the top level of the map. The topic body contains a
+    ``<ul outputclass="gram-index">`` of ``enterBtn``-styled links — one per
+    gram in the week, sorted by ascending gram number — so clicking a week
+    lands directly on the gram-selection page without an extra hop (issue #130).
 
     The title is decomposed by ``_normalise_chapter``: a leading
     "Instructor " (case-insensitive) is wrapped in ``<ph audience="-trainee">``
@@ -1412,7 +1409,7 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
     them fail-fast in ``check_main_chapter_assigned`` before this runs.
     """
     written: list[Path] = []
-    for slug, (raw_chapter, _) in _main_chapters(rows).items():
+    for slug, (raw_chapter, chapter_rows) in _main_chapters(rows).items():
         if not slug:
             continue
         audience_prefix, display_remainder, _ = _normalise_chapter(raw_chapter)
@@ -1424,7 +1421,33 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
             ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
             ph.text = audience_prefix
             ph.tail = display_remainder
-        _append_edition_marker(ET.SubElement(topic, "body"))
+        body = ET.SubElement(topic, "body")
+        _append_edition_marker(body)
+
+        # Gram-selection button list: deduplicated, sorted by gram number.
+        seen: set[str] = set()
+        gram_entries: list[tuple[int, str, str]] = []
+        for row in chapter_rows:
+            doc_slug = _doc_slug(_effective_doc(row))
+            gram_dir = _gram_folder_name(_effective_gram_id(row))
+            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+            if uniq in seen:
+                continue
+            seen.add(uniq)
+            eff_gram_id = _effective_gram_id(row)
+            gram_num = int(_gram_num(eff_gram_id))
+            topic_file = _topic_filename(eff_gram_id)
+            # href relative to the chapter topic (in main/<slug>/)
+            href = "/".join([s for s in (doc_slug, gram_dir) if s] + [topic_file])
+            gram_entries.append((gram_num, href, str(gram_num)))
+        gram_entries.sort(key=lambda t: t[0])
+        ul = ET.SubElement(body, "ul", {"outputclass": "gram-index"})
+        for _, href, label in gram_entries:
+            li = ET.SubElement(ul, "li")
+            ET.SubElement(li, "xref", {
+                "href": href, "format": "dita", "outputclass": "enterBtn",
+            }).text = f"Gram {label}"
+
         chapter_dir = out_dir / "main" / slug
         chapter_dir.mkdir(parents=True, exist_ok=True)
         path = chapter_dir / f"{_chapter_topic_stem(slug)}.dita"
@@ -1598,7 +1621,12 @@ def emit_main_ditamap(
                             + [topic_file])
             gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
         for _, href in sorted(gram_refs):
-            ET.SubElement(chapter_ref, "topicref", {"href": href})
+            # linking="none" suppresses DITA-OT's auto-generated child-link
+            # list on the chapter page; the enterBtn buttons in the chapter
+            # topic body are the intended navigation surface (issue #130).
+            ET.SubElement(chapter_ref, "topicref", {
+                "href": href, "linking": "none",
+            })
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path

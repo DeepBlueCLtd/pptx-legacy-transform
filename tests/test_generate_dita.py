@@ -400,6 +400,30 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(len(hrefs), len(set(hrefs)),
                          f"duplicate topicrefs in ditamap: {hrefs}")
 
+    def test_chapter_topic_contains_enter_btn_links(self) -> None:
+        """The week chapter topic itself holds a ``<ul outputclass='gram-index'>``
+        with ``<xref outputclass='enterBtn'>`` links to the week's grams, so
+        clicking a week in the nav lands directly on the gram-selection page
+        without an extra hop (issue #130)."""
+        _run(self.out)
+        chapter_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "nordic_fishing_vessels.dita"
+        )
+        self.assertTrue(chapter_path.is_file())
+        root = ET.parse(chapter_path).getroot()
+        ul = root.find(".//ul[@outputclass='gram-index']")
+        self.assertIsNotNone(ul, "expected <ul outputclass='gram-index'> in chapter topic")
+        xrefs = ul.findall(".//xref[@outputclass='enterBtn']")
+        self.assertGreaterEqual(len(xrefs), 1, "expected at least one enterBtn link")
+        for xref in xrefs:
+            self.assertEqual(xref.get("format"), "dita")
+            href = xref.get("href", "")
+            self.assertTrue(href.endswith(".dita"),
+                            f"enterBtn href should point at a .dita topic: {href!r}")
+            self.assertIsNotNone(xref.text)
+            self.assertTrue(xref.text.startswith("Gram "),
+                            f"button label should start with 'Gram ': {xref.text!r}")
+
     def test_no_ditamap_at_output_root(self) -> None:
         """Every ditamap lives inside its named publication folder; nothing
         ``*.ditamap`` may sit at the root of the output tree."""
