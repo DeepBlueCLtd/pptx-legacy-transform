@@ -1014,7 +1014,7 @@ class GenerateDitaTests(unittest.TestCase):
         topic_path = self.out / "main" / "7_questions.dita"
         root = ET.parse(topic_path).getroot()
         self.assertEqual(root.tag, "topic")
-        self.assertEqual(root.get("id"), "7_questions")
+        self.assertEqual(root.get("id"), "seven-questions")
         self.assertEqual(root.findtext("title"), "7 Questions")
         body = root.find("body")
         self.assertIsNotNone(body)

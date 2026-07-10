@@ -94,6 +94,9 @@ GRAMS_NAVTITLE = "Grams"
 # surfaced as a root-level topic in every publication's ditamap.
 SEVEN_QUESTIONS_IMAGE = "7_questions.png"
 SEVEN_QUESTIONS_TOPIC_STEM = "7_questions"
+# NCNames (XML id attributes) cannot start with a digit, so the topic id differs
+# from the filename stem.
+SEVEN_QUESTIONS_TOPIC_ID = "seven-questions"
 SEVEN_QUESTIONS_TOPIC_TITLE = "7 Questions"
 # Stable section id so the floating nav panel can link to it in-page.
 SEVEN_QUESTIONS_SECTION_ID = "seven-questions"
@@ -1590,7 +1593,7 @@ def emit_seven_questions_topic(pub_dir: Path, src: Path) -> list[Path]:
             src, pub_dir / f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
         )
 
-    topic = ET.Element("topic", {"id": SEVEN_QUESTIONS_TOPIC_STEM})
+    topic = ET.Element("topic", {"id": SEVEN_QUESTIONS_TOPIC_ID})
     ET.SubElement(topic, "title").text = SEVEN_QUESTIONS_TOPIC_TITLE
     body = ET.SubElement(topic, "body")
     _append_edition_marker(body)
