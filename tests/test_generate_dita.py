@@ -581,6 +581,12 @@ class GenerateDitaTests(unittest.TestCase):
             ".//ul[@outputclass='gram-index']/li/xref")
         hrefs = [x.get("href") for x in xrefs]
         self.assertEqual(hrefs, ["gram-02/gram_02.dita", "gram-10/gram_10.dita"])
+        # The xref carries no hardcoded label: DITA-OT resolves the link text
+        # from the target topic's own <title> (Gram N - Vessel), so the real
+        # gram title — incl. the instructor-visible vessel name — shows on the
+        # index, matching the per-week main index behaviour.
+        for xref in xrefs:
+            self.assertIsNone(xref.text)
 
     def test_test_ditamap_grams_under_grams_folder(self) -> None:
         """Feature 010 (updated): a progress-test ditamap's root children are

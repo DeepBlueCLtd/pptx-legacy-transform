@@ -1675,9 +1675,13 @@ def emit_test_grams_topic(
     ul = ET.SubElement(body, "ul", {"outputclass": "gram-index"})
     for _, href, label in gram_entries:
         li = ET.SubElement(ul, "li")
+        # Leave the xref text empty so DITA-OT resolves the link label from
+        # the target topic's own <title> (``Gram N - Vessel``), matching the
+        # per-week ``main`` index — a hardcoded ``Gram N`` here masked the real
+        # gram title (incl. the instructor-visible vessel name) on flat pubs.
         ET.SubElement(li, "xref", {
             "href": href, "format": "dita", "outputclass": "enterBtn",
-        }).text = f"Gram {label}"
+        })
 
     path = pub_dir / f"{GRAMS_TOPIC_STEM}.dita"
     _write_text(path, _serialise(topic, TOPIC_DOCTYPE))
