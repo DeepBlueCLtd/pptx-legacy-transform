@@ -141,7 +141,8 @@ section.section > h2.sectiontitle {
    one per gram. Untouched that is a tall single-column bullet list; lay it out
    as a grid of rounded tiles that reflow to the content width so a 30-gram week
    is a scannable board, not a scroll. Production counterpart:
-   theme/gram-index-grid/resources/gram-index-grid.css — keep the two in step
+   theme/gram-index-grid.css (a paste-in slug for the operator's oxygen.css) —
+   keep the two in step
    (same grid; colours differ because that overlay dresses the light stock
    WebHelp template and this is the dark operator console). */
 ul.gram-index {
