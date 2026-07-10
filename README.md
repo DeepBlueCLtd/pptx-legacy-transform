@@ -161,14 +161,61 @@ through the corpus folder by folder, verifying each batch with `git diff` since
 the sources are versioned. `--dry-run` previews matches without changing
 anything; activity is logged to `relink.log`.
 
+### Importing author gram images from a parallel delivery
+
+A second, differently-shaped image intake handles the common case where a gram
+has **only** a `.wav`: students only inspect the spectrogram visually, so the
+author opens each `.wav` in the analysis tool, screenshots the displayed gram,
+and saves it in a **parallel *incoming* tree** named for the duration shown on
+the y-axis plus the wav's own stem — e.g. `5m26s WAV 1.jpg` (5 min 26 s of
+`WAV 1`) or `21m WAVE 3.png`. The **prep-time** stage
+`ingest_gram_images.py` (wrapper `ingest.py`) imports these.
+
+The incoming tree mirrors `source/` but **omits the per-document container
+folder**: `incoming/<doc>/<gram>/<image>` maps to
+`source/<doc>/<container>/<gram>/`, where `<container>` is the *single*
+sub-folder of the source document folder (identified by uniqueness, never by
+name — a document folder with zero or several sub-folders is reported and
+skipped).
+
+The stage runs in two phases:
+
+- **Verify** (default, read-only). Matches incoming document and gram folders,
+  and image stems (after stripping the duration token) against the `.wav`
+  basenames the gram's `.glc` files reference, then writes `ingest_report.txt`:
+  every unmatched folder or image with its nearest-candidate suggestions, a
+  survey of unparseable duration tokens, and a *trends* section that aggregates
+  systematic drifts (e.g. `token-drift 'WAVE' -> 'WAV' x 14`). The operator
+  fixes names in the **incoming** tree by hand and re-runs until it is clean.
+  Nothing on disk changes except the report and `ingest.log`.
+- **Apply** (`--apply`). For each verified match, copies the image beside its
+  `.glc` renamed to the wav's stem (`5m26s WAV 1.jpg` → `WAV 1.jpg`), rewrites
+  the `.glc`'s `<filename>` to point at it, and inserts
+  `<bitmap_crop_values><bottom_crop>N</bottom_crop></bitmap_crop_values>` with
+  the duration in whole seconds (`5m26s` → `326`, `21m` → `1260`), which a later
+  `extract.py` reads as the gram's `time_end`.
+
+Ambiguity is never guessed: two images claiming one wav, an image with no
+matching wav, a `.glc` already pointing at an image, or a wav-backed `.glc`
+that unexpectedly already carries crop values are each warned, skipped, and
+counted. Idempotency rides on the "already points at an image" skip, so it is
+safe to re-run as you work through the corpus.
+
+**Divergence from `relink.py`:** that stage moves the superseded `.wav` aside
+to `.wav.bak`; `ingest.py` deliberately **leaves the `.wav` in place** — a
+future user may want the audio and cannot be assumed able to rename file
+suffixes. The generator only copies what the `.glc` references, so the retained
+wav never reaches `dita/`.
+
 ## Folder structure
 
 | Path | Role |
 |---|---|
-| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` `relink.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
+| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` `relink.py` `ingest.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
 | `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
 | `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/relink_glc_to_image.py` | **Prep-time** stage: rewrite each `.glc` that still points at a `.wav` to reference the matching author-supplied `Image <N>-…` image in the same folder, moving the old `.wav` aside to `.wav.bak`; idempotent and re-runnable. See [Relinking `.wav` grams to pre-rendered images](#relinking-wav-grams-to-pre-rendered-images). |
+| `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<duration> <wav-stem>.<ext>`), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem/duration mismatches; `--apply` copies each image beside its `.glc`, repoints the `.glc`, and records the duration as `<bottom_crop>`. Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
@@ -237,6 +284,7 @@ os.getcwd()                       # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): render analysis sheets -> sibling PNGs
 exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc at the image
+exec(open(r"ingest.py").read())      # prep (when an incoming screenshot tree is delivered): verify names, then set APPLY=True to import + relink
 exec(open(r"extract.py").read())     # Stage 3: walk source\ -> extract.csv at ROOT
 #   -> open extract.csv in Excel, resolve warnings, save as UTF-8 CSV
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions -> extract.dedupe.csv
@@ -292,7 +340,7 @@ restarting the interpreter:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py   ← thin wrappers (committed templates)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py  ingest.py   ← thin wrappers (committed templates)
 ├── pipeline.py          ← orchestrator: extract -> dedupe -> write -> publish, fail-fast (committed template)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
