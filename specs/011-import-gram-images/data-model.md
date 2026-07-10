@@ -6,9 +6,9 @@
 
 ```text
 <incoming-root>/
-└── <doc>/                 # matches a source doc folder name exactly
-    └── <gram>/            # matches a gram folder name under the source container
-        └── <duration> <stem>.<jpg|jpeg|png>   # candidate image (any number, incl. zero)
+└── <doc>/                 # matches a source doc folder name, case-insensitively
+    └── <gram>/            # matches a gram folder name under the source container, case-insensitively
+        └── <duration>[ _]<stem>.<jpg|jpeg|png>   # candidate image; duration + stem split on space OR underscore
 ```
 
 Partial coverage at every level is normal. Non-image files and empty folders
@@ -21,8 +21,8 @@ deletes anything under `<incoming-root>`.
 source/
 └── <doc>/
     ├── <doc-title>.pptx           # ignored by this tool
-    └── <container>/               # THE single subdirectory — identified by
-        └── <gram>/                # uniqueness, never by name
+    └── <container>/               # the single subdirectory (normal), OR the doc
+        └── <gram>/                # folder itself when it holds a large flat set
             ├── Lofar N.glc        # 0+ GLCs; the unit of conversion
             ├── <stem>.wav         # referenced by a GLC; never touched
             └── <stem>.<ext>       # written by apply (copy of incoming image)
@@ -116,9 +116,11 @@ Re-run: the GLC now references an image → the gram lands in
 
 - Duration grammar per CandidateImage above; violations are data to report,
   never fatal (Zone B/C — author-typed input).
-- Container uniqueness: exactly one subdirectory of the source doc folder;
-  else the doc is skipped and reported.
-- Matching is exact-name; drift is reported with suggestions, never absorbed.
+- Container resolution: exactly one subdirectory of the source doc folder, or
+  the doc folder itself when it holds ≥ `FLAT_DOC_MIN_GRAMS` subdirectories (a
+  container-less publication); an in-between count skips and reports the doc.
+- Matching folds case (folders and stems); whitespace/token drift is reported
+  with suggestions, never absorbed.
 - Verify mode writes nothing except `ingest_report.txt` and `ingest.log`
   (both in cwd, outside both trees).
 - Apply refuses per-file (skip + count) rather than per-run: one bad GLC never

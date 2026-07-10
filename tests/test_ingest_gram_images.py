@@ -139,6 +139,27 @@ class DurationParsingTests(IngestTestBase):
         self.assertTrue(ci.parseable)
         self.assertEqual(ci.extension, ".PNG")  # case preserved
 
+    def test_underscore_separator_after_minutes(self):
+        ci = self.parse("10m_0 - 600 Hz.jpg")
+        self.assertEqual(ci.seconds, 600)
+        self.assertEqual(ci.stem, "0 - 600 Hz")
+        self.assertTrue(ci.parseable)
+
+    def test_underscore_separator_after_seconds(self):
+        ci = self.parse("7m20s_0 - 441 Hz.jpg")
+        self.assertEqual(ci.seconds, 7 * 60 + 20)
+        self.assertEqual(ci.stem, "0 - 441 Hz")
+
+    def test_underscore_separator_short_stem(self):
+        ci = self.parse("7m_WAV 1.jpg")
+        self.assertEqual(ci.seconds, 420)
+        self.assertEqual(ci.stem, "WAV 1")
+
+    def test_space_separator_still_works(self):
+        ci = self.parse("11m Wav 1.jpg")
+        self.assertEqual(ci.seconds, 660)
+        self.assertEqual(ci.stem, "Wav 1")
+
     def test_bare_number_unparseable(self):
         ci = self.parse("326 WAV 1.jpg")
         self.assertIsNone(ci.seconds)
@@ -178,7 +199,8 @@ class GramFolderViewTests(IngestTestBase):
         (gram / "Lofar 2.glc").write_text(
             WAV_GLC.format(name="lofar-2.png"), encoding="utf-8")
         view = ingest.build_gram_folder_view(gram)
-        self.assertIn("WAV 1", view.wav_refs)
+        # keys are casefolded so case drift collapses onto one bucket
+        self.assertIn("wav 1", view.wav_refs)
         self.assertIn("lofar-2", view.image_refs)
         self.assertEqual(view.unreadable, [])
 
@@ -188,14 +210,14 @@ class GramFolderViewTests(IngestTestBase):
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
         view = ingest.build_gram_folder_view(gram)
         self.assertEqual(len(view.unreadable), 1)
-        self.assertIn("WAV 1", view.wav_refs)  # good one still indexed
+        self.assertIn("wav 1", view.wav_refs)  # good one still indexed
 
     def test_has_crop_flag(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav",
                            template=WAV_GLC_CROPPED)
         view = ingest.build_gram_folder_view(gram)
-        self.assertTrue(view.wav_refs["WAV 1"][0].has_crop)
+        self.assertTrue(view.wav_refs["wav 1"][0].has_crop)
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +269,31 @@ class VerifyTests(IngestTestBase):
         self.assertEqual(len(amb), 1)
         self.assertIn("2 subdirectories", amb[0].note)
 
+    def test_flat_publication_no_container(self):
+        # One publication has no "<doc> Files" tier: gram folders sit directly
+        # under the doc folder. >= FLAT_DOC_MIN_GRAMS such folders => flat.
+        doc = self.source / "Flat Doc"
+        for n in range(1, ingest.FLAT_DOC_MIN_GRAMS + 1):
+            (doc / ("Gram %d" % n)).mkdir(parents=True)
+        gram1 = doc / "Gram 1"
+        gram1.joinpath("Lofar 1.glc").write_text(
+            WAV_GLC.format(name="WAV 1.wav"), encoding="utf-8")
+        gram1.joinpath("WAV 1.wav").write_bytes(b"RIFF")
+        self.incoming_image("Flat Doc", "Gram 1", "5m26s WAV 1.png")
+        outcomes, tally = self.run_ingest(apply=False)
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+        self.assertEqual(tally.counts.get(ingest.KIND_AMBIGUOUS_DOC, 0), 0)
+
+    def test_below_flat_threshold_still_ambiguous(self):
+        # A handful of sub-folders (below the flat threshold, not a single
+        # container) stays ambiguous — we won't guess the layout.
+        doc = self.source / "Doc"
+        for n in range(1, 4):  # 3 subdirs
+            (doc / ("Thing %d" % n)).mkdir(parents=True)
+        self.incoming_image("Doc", "Thing 1", "5m WAV 1.png")
+        outcomes, tally = self.run_ingest(apply=False)
+        self.assertEqual(tally.counts.get(ingest.KIND_AMBIGUOUS_DOC), 1)
+
     def test_unparseable_survey(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
@@ -294,6 +341,61 @@ class VerifyTests(IngestTestBase):
         self.run_ingest(apply=False)
         self.assertEqual(self.snapshot(self.source), src_before)
         self.assertEqual(self.snapshot(self.incoming), inc_before)
+
+
+# ---------------------------------------------------------------------------
+# Case-insensitive matching (folders + stems) and the underscore separator
+# ---------------------------------------------------------------------------
+
+class CaseInsensitiveMatchTests(IngestTestBase):
+
+    def test_case_insensitive_folder_match(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
+        # incoming doc AND gram folders differ only in case
+        self.incoming_image("DOC", "GRAM 1", "5m26s WAV 1.png")
+        outcomes, tally = self.run_ingest(apply=False)
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+        self.assertEqual(tally.counts.get(ingest.KIND_UNMATCHED_DOC, 0), 0)
+        self.assertEqual(tally.counts.get(ingest.KIND_UNMATCHED_GRAM, 0), 0)
+
+    def test_case_insensitive_stem_match(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")  # mixed-case wav
+        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")  # upper stem
+        outcomes, tally = self.run_ingest(apply=False)
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+
+    def test_underscore_and_case_apply_uses_wav_casing(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        glc = self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")
+        # underscore separator AND upper-case stem, as in the real data
+        self.incoming_image("Doc", "Gram 1", "7m_WAV 1.jpg")
+        self.run_ingest(apply=True)
+        # copy takes the WAV's casing, not the incoming screenshot's
+        self.assertTrue((gram / "Wav 1.jpg").exists())
+        self.assertFalse((gram / "WAV 1.jpg").exists())
+        doc = parse_glc(glc)
+        self.assertEqual(doc.image_filename, "Wav 1.jpg")
+        self.assertEqual(doc.time_end, "420")
+
+    def test_descriptive_stem_with_underscore(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        glc = self.write_wav_glc(gram, "Lofar 1.glc", "0 - 600 Hz.wav")
+        self.incoming_image("Doc", "Gram 1", "10m_0 - 600 Hz.jpg")
+        self.run_ingest(apply=True)
+        self.assertTrue((gram / "0 - 600 Hz.jpg").exists())
+        self.assertEqual(parse_glc(glc).time_end, "600")
+
+    def test_two_case_variant_images_are_ambiguous(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")
+        self.incoming_image("Doc", "Gram 1", "5m WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "6m wav 1.jpg")
+        before = self.snapshot(self.source)
+        outcomes, tally = self.run_ingest(apply=True)
+        self.assertEqual(tally.counts.get(ingest.KIND_AMBIGUOUS), 1)
+        self.assertEqual(self.snapshot(self.source), before)
 
 
 # ---------------------------------------------------------------------------

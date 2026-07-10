@@ -39,34 +39,47 @@ other wrappers.
 ## Matching rules (normative)
 
 1. **Doc**: incoming `<doc>` dir name must equal a `--source-root` child dir
-   name exactly. Miss → `unmatched-doc` (+ ≤3 nearest candidates, drift label).
-2. **Container**: the matched source doc dir must have exactly one subdirectory
-   (any name). 0 or 2+ → `structurally-ambiguous-doc`; doc skipped.
+   name **case-insensitively**. Miss → `unmatched-doc` (+ ≤3 nearest
+   candidates, drift label).
+2. **Container**: resolve the tier that holds the gram folders. If the matched
+   source doc dir has exactly one subdirectory (any name), that is the
+   container. If it has **≥ 8** subdirectories, it is a *flat* publication
+   (one exists) whose gram folders sit directly under the doc dir — the doc dir
+   itself is the container. Any other count (0, or 2–7) →
+   `structurally-ambiguous-doc`; doc skipped.
 3. **Gram**: incoming `<gram>` dir name must equal a container child dir name
-   exactly. Miss → `unmatched-gram` (+ candidates, drift label).
-4. **Image filename split**: leading token = chars before the first space;
-   token must match `^(\d+)m(?:(\d{1,2})s)?$` (case-insensitive);
-   `seconds = m*60 + s(0)`. Stem = rest after the space run, stripped,
-   non-empty. Violation → `unparseable-duration` (raw token echoed).
-   Eligible extensions: `.jpg` `.jpeg` `.png`, case-insensitive; other files
-   ignored (debug log only).
+   **case-insensitively**. Miss → `unmatched-gram` (+ candidates, drift label).
+4. **Image filename split**: leading token = chars before the first separator,
+   which is a space **or** an underscore (`10m_0 - 600 Hz`,
+   `7m20s_0 - 441 Hz`, `11m Wav 1`); token must match
+   `^(\d+)m(?:(\d{1,2})s)?$` (case-insensitive); `seconds = m*60 + s(0)`.
+   Stem = rest after that separator, stripped, non-empty. Violation →
+   `unparseable-duration` (raw token echoed). Eligible extensions: `.jpg`
+   `.jpeg` `.png`, case-insensitive; other files ignored (debug log only).
 5. **Image → asset**: compare the stem against stems of assets referenced by
-   the gram folder's `.glc` files (via `parse_glc`), extension-blind:
+   the gram folder's `.glc` files (via `parse_glc`), extension-blind and
+   **case-insensitive**:
    - equals a wav-backed GLC's wav stem, uniquely among the folder's incoming
      images → **match** (all GLCs sharing that wav stem are part of it);
-   - two+ incoming images resolve to one wav stem → `ambiguous`, none applied;
+   - two+ incoming images resolve to one wav stem (case-folded) → `ambiguous`,
+     none applied;
    - equals an image-backed GLC's stem → `already-converted`;
    - otherwise → `unmatched-image` (folder's wav stems echoed).
    Unreadable GLCs → `glc-unreadable` and are excluded from matching.
-6. Comparison is exact (no case folding, no whitespace collapsing). Drift is
-   reported, never silently absorbed.
+6. Matching folds **case** (folders and stems) so the hand-typed incoming
+   names need not match `source\`'s casing; **whitespace and token content are
+   still exact**, so missing spaces and changed words are reported, never
+   silently absorbed.
 
 ## Apply semantics (normative)
 
 Per verified match, in this order, per gram folder in sorted path order:
 
-1. Copy the incoming image to `<gram-folder>/<stem><ext>` (`shutil.copyfile`
-   semantics: bytes only, no metadata; overwrite existing).
+1. Copy the incoming image to `<gram-folder>/<wav-stem><ext>` (`shutil.copyfile`
+   semantics: bytes only, no metadata; overwrite existing). The basename takes
+   the **wav's own casing** (from the matched GLC's referenced wav), not the
+   incoming screenshot's — so an incoming `7m_WAV 1.jpg` lands as `Wav 1.jpg`
+   beside a source `Wav 1.wav`, keeping the folder internally consistent.
 2. For each matched GLC (sorted): a single-write targeted text edit that
    (a) replaces the first `<filename>` inner text with the copied basename,
    and (b) inserts, immediately after `</filename>`, indented to match the
