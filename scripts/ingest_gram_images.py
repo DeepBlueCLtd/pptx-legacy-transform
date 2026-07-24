@@ -3,22 +3,32 @@
 Many grams ship with only a ``.wav`` asset, rendered live by the on-PC GLC
 viewer. Students only ever inspect the spectrogram visually, so the author
 opens each ``.wav`` in the analysis tool, screenshots the displayed gram, and
-saves it -- in a *parallel incoming tree* -- named for the duration shown on
-the y-axis plus the wav's own stem. The duration is separated from the stem by
-either a space or an underscore (the author uses both, sometimes after the
-minutes, sometimes after the seconds)::
+saves it -- in a *parallel incoming tree* -- under the **wav's own name**::
 
-    5m26s WAV 1.jpg          # 5 min 26 s of "WAV 1"
-    21m WAVE 3.png           # 21 min of "WAVE 3"
-    10m_0 - 600 Hz.jpg       # 10 min of "0 - 600 Hz" (underscore separator)
-    7m20s_0 - 441 Hz.jpg     # 7 min 20 s of "0 - 441 Hz"
+    WAV 1.jpg                # screenshot of "WAV 1.wav"
+    WAVE 3.png               # screenshot of "WAVE 3.wav"
+    0 - 600 Hz.jpg           # screenshot of "0 - 600 Hz.wav"
 
-Matching is **case-insensitive** at both the folder and the stem level: the
-hand-typed incoming names drift in case from ``source\\`` (an incoming
-``7m_WAV 1.jpg`` matches a source ``Wav 1.wav``), so case is never a reason to
-report a mismatch. The copied image takes the *wav's* own casing, keeping each
-gram folder internally consistent. Genuine drift (missing spaces, changed
-tokens) is still reported for the operator to fix.
+The whole filename stem is matched against the wav basename -- there is **no
+duration token to strip**. Since issue #148 the gram's time period (``time_end``)
+is measured from the imported image's pixel height, so the author no longer
+prefixes a duration and this tool no longer parses one.
+
+Matching is **tolerant of the two systematic ways the hand-typed incoming names
+drift** from the wav basenames in ``source\\``; neither is worth making the
+operator hand-fix:
+
+* **case** -- an incoming ``WAV 2`` matches a source ``Wav 2.wav``;
+* **hyphen spacing** -- an incoming ``0 - 1000 Hz`` matches a source
+  ``0-1000 Hz.wav`` *and* vice versa (the author is inconsistent about the
+  spaces flanking the frequency-range dash).
+
+Both are folded by ``match_key`` (casefold + collapsed whitespace + spaces
+stripped from around hyphens), applied to **both** sides so every spelling lands
+on one key. The copied image takes the *wav's* own casing and spacing, keeping
+each gram folder internally consistent. Genuine drift (a mistyped token, a
+missing digit) still yields a different key and is reported for the operator to
+fix.
 
 The incoming tree mirrors ``source\\`` but **omits the per-document container
 folder**: ``incoming\\<doc>\\<gram>\\<image>`` maps to
@@ -31,27 +41,27 @@ This runs in two phases:
 * **verify** (default, read-only) -- match incoming doc/gram folders and image
   stems against the source corpus and write a mismatch report
   (``ingest_report.txt``) grouped by outcome class, with nearest-candidate
-  suggestions and a survey of unparseable duration tokens. The operator fixes
-  the **incoming** tree by hand and re-runs until clean. Nothing on disk is
-  changed except the report and the log.
+  suggestions. The operator fixes the **incoming** tree by hand and re-runs
+  until clean. Nothing on disk is changed except the report and the log.
 * **apply** (``--apply``) -- for every verified match, copy the image beside its
-  ``.glc`` renamed to the wav's stem, rewrite the ``.glc``'s ``<filename>`` to
-  point at it, and insert ``<bitmap_crop_values><bottom_crop>N</bottom_crop>``
-  ``</bitmap_crop_values>`` (the duration in whole seconds) so the extractor
-  reads it as the gram's ``time_end`` and the generator embeds the image inline.
+  ``.glc`` renamed to the wav's stem and rewrite the ``.glc``'s ``<filename>``
+  to point at it, so the generator embeds the image inline. Nothing else in the
+  ``.glc`` is touched -- no ``<bitmap_crop_values>`` is written (the time period
+  is image-derived, issue #148).
 
 **Demon images (issue #151).** The same incoming folders may also carry
 *demon* images -- an alternately-rendered gram view carrying a ``Demon`` token,
-either leading (``Demon - 10m2s 0-40Hz.png``, ``Demon - 0-40Hz.png``) or after a
-leading duration token (``4m10s_Demon - 0 - 40 Hz.jpg``). These
-are **additive**, not ``.wav`` replacements, so they skip the duration/stem
-matching entirely. In verify they are listed in a ``DEMON IMAGES`` report
-section; in apply each is copied into the source gram folder under its original
-name and gets a ``demon.glc`` marker cloned from the folder's first hyperlinked
-``.glc`` -- with its ``<filename>`` repointed at the image and its band settings
-overwritten to the fixed 0 - 40 Hz range. The marker is the signal ``extract``
-keys on to emit a leading demon GramFrame; the demon's time period is the
-image's pixel height (issue #148), so no ``bottom_crop`` is written.
+either leading (``Demon - 10m2s 0-40Hz.png``, ``Demon - 0-40Hz.png``), a
+*numbered* demon (``Demon2- 0 - 40 Hz.jpg``), or after a leading duration token
+(``4m10s_Demon - 0 - 40 Hz.jpg``). These are **additive**, not ``.wav``
+replacements, so they skip the stem matching entirely. In verify they are listed
+in a ``DEMON IMAGES`` report section; in apply each is copied into the source
+gram folder under its original name and gets a ``demon.glc`` marker cloned from
+the folder's first hyperlinked ``.glc`` -- with its ``<filename>`` repointed at
+the image and its band settings overwritten to the fixed 0 - 40 Hz range. The
+marker is the signal ``extract`` keys on to emit a leading demon GramFrame; the
+demon's time period is the image's pixel height (issue #148), so no
+``bottom_crop`` is written.
 
 **Deliberate divergence from ``relink_glc_to_image.py``:** that sibling prep
 tool moves the superseded ``.wav`` aside to ``<name>.wav.bak``. This tool
@@ -94,21 +104,18 @@ IMAGE_EXTENSIONS: Tuple[str, ...] = (".jpg", ".jpeg", ".png")
 # recognise an already-converted GLC). Mirrors the generator's dispatch set.
 GLC_IMAGE_EXTENSIONS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif")
 
-# A duration token: whole minutes, optionally minutes-plus-seconds. Case
-# tolerated ("10M"). Nothing else parses -- other shapes feed the
-# unparseable-duration survey. Anchored: the whole leading token must match.
-DURATION_RE = re.compile(r"^(?P<m>\d+)m(?:(?P<s>\d{1,2})s)?$", re.IGNORECASE)
-
 # A "demon" image is an alternately-rendered gram view identified by a ``Demon``
 # token (issue #151). The token is either at the very start
-# (``Demon - 10m2s 0-40Hz.png``, ``Demon - 0-40Hz.png``) or after a leading
-# duration token and a space/underscore separator
+# (``Demon - 10m2s 0-40Hz.png``, ``Demon - 0-40Hz.png``), a *numbered* demon
+# (``Demon2- 0 - 40 Hz.jpg`` -- the digit rides straight after ``Demon``), or
+# after a leading duration token and a space/underscore separator
 # (``4m10s_Demon - 0 - 40 Hz.jpg``). It is *additive* -- never a .wav
-# replacement -- so a matching file is intercepted before the duration/stem
-# matching path and handled apart. Anchored so ``WAV 1``-style screenshots (no
-# ``Demon`` token) never match.
+# replacement -- so a matching file is intercepted before the stem matching path
+# and handled apart. ``demon\d*`` absorbs the optional demon index and the
+# trailing ``(?![a-z])`` requires a non-letter (or end) after it, so ``WAV 1``
+# screenshots and words like ``Demonstrate`` never match.
 DEMON_PREFIX_RE = re.compile(
-    r"^(?:\d+m(?:\d{1,2}s)?[ _])?demon\b", re.IGNORECASE)
+    r"^(?:\d+m(?:\d{1,2}s)?[ _])?demon\d*(?![a-z])", re.IGNORECASE)
 
 # The demon GramFrame's frequency range is always 0 - 40 Hz (issue #151). The
 # generator derives the band from ``bandwidth``/``bandcentre`` the way it does
@@ -126,10 +133,6 @@ DEMON_BANDCENTRE = "20"
 BANDWIDTH_TAG_RE = re.compile(r"(<bandwidth>)(.*?)(</bandwidth>)", re.DOTALL)
 BANDCENTRE_TAG_RE = re.compile(r"(<bandcentre>)(.*?)(</bandcentre>)", re.DOTALL)
 
-# The duration token is separated from the stem by a space or an underscore
-# ("11m Wav 1", "10m_0 - 600 Hz", "7m20s_0 - 441 Hz"). Split on the first.
-DURATION_SEPARATOR_RE = re.compile(r"[ _]")
-
 # A source document folder normally holds exactly one sub-folder -- the
 # "<doc> Files" container that holds the gram folders. One publication instead
 # lays its gram folders *directly* under the doc folder, with no container
@@ -145,17 +148,16 @@ FLAT_DOC_MIN_GRAMS = 8
 
 @dataclass
 class CandidateImage:
-    """An incoming author screenshot, parsed into duration + stem."""
+    """An incoming author screenshot: its path, match stem, and extension.
+
+    The whole filename stem is the match key -- there is no duration token to
+    strip (issue #148 derives the gram's time period from the image height), so
+    ``stem`` is simply ``path.stem``.
+    """
 
     path: Path
-    raw_token: str
-    seconds: Optional[int]  # None -> duration token did not parse
-    stem: str               # remainder after the token; "" -> unparseable
+    stem: str               # full filename stem, matched whole against the wav
     extension: str          # as delivered, case preserved
-
-    @property
-    def parseable(self) -> bool:
-        return self.seconds is not None and bool(self.stem)
 
 
 @dataclass
@@ -164,7 +166,6 @@ class GlcRef:
 
     glc_path: Path
     referenced_basename: str
-    has_crop: bool
 
 
 @dataclass
@@ -192,12 +193,10 @@ KIND_MATCHED = "matched"
 KIND_UNMATCHED_DOC = "unmatched-doc"
 KIND_AMBIGUOUS_DOC = "structurally-ambiguous-doc"
 KIND_UNMATCHED_GRAM = "unmatched-gram"
-KIND_UNPARSEABLE = "unparseable-duration"
 KIND_UNMATCHED_IMAGE = "unmatched-image"
 KIND_AMBIGUOUS = "ambiguous"
 KIND_ALREADY = "already-converted"
 KIND_GLC_UNREADABLE = "glc-unreadable"
-KIND_GLC_CROPPED = "glc-already-cropped"
 KIND_DEMON = "demon-image"
 
 # Report section order + human headings.
@@ -205,11 +204,9 @@ SECTION_ORDER: Tuple[Tuple[str, str], ...] = (
     (KIND_UNMATCHED_DOC, "UNMATCHED DOCUMENTS"),
     (KIND_AMBIGUOUS_DOC, "STRUCTURALLY AMBIGUOUS DOCUMENTS"),
     (KIND_UNMATCHED_GRAM, "UNMATCHED GRAM FOLDERS"),
-    (KIND_UNPARSEABLE, "UNPARSEABLE DURATIONS"),
     (KIND_UNMATCHED_IMAGE, "UNMATCHED IMAGES"),
     (KIND_AMBIGUOUS, "AMBIGUOUS"),
     (KIND_GLC_UNREADABLE, "UNREADABLE GLCS"),
-    (KIND_GLC_CROPPED, "ALREADY-CROPPED GLCS"),
     (KIND_ALREADY, "ALREADY CONVERTED"),
     (KIND_DEMON, "DEMON IMAGES"),
     (KIND_MATCHED, "MATCHED"),
@@ -233,38 +230,40 @@ class Tally:
 # Parsing
 # -----------------------------------------------------------------------------
 
+def match_key(stem: str) -> str:
+    """Canonical key for tolerant stem matching (case + hyphen-spacing drift).
+
+    The hand-typed incoming names drift from the wav basenames in two
+    systematic ways the operator should not have to hand-fix:
+
+    * **case** -- an incoming ``WAV 2`` matches a source ``Wav 2.wav``;
+    * **hyphen spacing** -- an incoming ``0 - 1000 Hz`` matches a source
+      ``0-1000 Hz.wav`` *and* vice versa (the author is inconsistent about the
+      spaces flanking the frequency-range dash).
+
+    Both are folded by collapsing internal whitespace, stripping any spaces
+    flanking a hyphen, then casefolding, so every spelling of the same name
+    yields one key. Applied to **both** the incoming stem and the wav basename.
+    Genuine drift (a mistyped token, a missing digit) still yields a different
+    key and is reported.
+    """
+    collapsed = re.sub(r"\s+", " ", stem).strip()
+    dehyphenated = re.sub(r"\s*-\s*", "-", collapsed)
+    return dehyphenated.casefold()
+
+
 def parse_image_filename(path: Path) -> Optional[CandidateImage]:
     """Parse an incoming file into a CandidateImage, or None if not an image.
 
-    Splits the stem on the first whitespace run: the leading token is matched
-    against the duration grammar, the remainder is the stem used to find the
-    wav. A file whose extension is not an accepted image type returns None (the
-    caller debug-logs and ignores it). An image whose token does not parse, or
-    which has no stem after the token, is returned with ``parseable`` False.
+    The whole filename stem is the match key -- there is no duration token to
+    strip (issue #148 measures the gram's time period from the image height, so
+    the author no longer prefixes a duration). A file whose extension is not an
+    accepted image type returns None (the caller debug-logs and ignores it).
     """
     ext = path.suffix
     if ext.lower() not in IMAGE_EXTENSIONS:
         return None
-
-    full_stem = path.stem  # filename without the final extension
-    parts = DURATION_SEPARATOR_RE.split(full_stem, maxsplit=1)
-    raw_token = parts[0]
-    remainder = parts[1].strip() if len(parts) > 1 else ""
-
-    match = DURATION_RE.match(raw_token)
-    seconds: Optional[int] = None
-    if match:
-        minutes = int(match.group("m"))
-        secs = int(match.group("s")) if match.group("s") else 0
-        seconds = minutes * 60 + secs
-
-    return CandidateImage(
-        path=path,
-        raw_token=raw_token,
-        seconds=seconds,
-        stem=remainder,
-        extension=ext,
-    )
+    return CandidateImage(path=path, stem=path.stem, extension=ext)
 
 
 def build_gram_folder_view(folder: Path) -> GramFolderView:
@@ -273,12 +272,12 @@ def build_gram_folder_view(folder: Path) -> GramFolderView:
     A GLC whose inner filename is a ``.wav`` lands in ``wav_refs``; an image
     inner filename lands in ``image_refs`` (used to recognise an already-
     converted gram). A GLC that yields no inner filename (malformed or missing)
-    is recorded in ``unreadable`` and excluded from matching. ``has_crop`` flags
-    a GLC that already carries a ``<bitmap_crop_values>`` structure.
+    is recorded in ``unreadable`` and excluded from matching.
 
-    The bucket keys are the referenced asset stems **casefolded**, so an
-    incoming screenshot matches its wav regardless of case drift; each ref
-    keeps the wav's original-case basename for naming the copied image.
+    The bucket keys are the referenced asset stems folded through ``match_key``,
+    so an incoming screenshot matches its wav regardless of case or
+    hyphen-spacing drift; each ref keeps the wav's original-case basename for
+    naming the copied image.
     """
     view = GramFolderView(folder=folder)
     for glc_path in sorted(folder.glob("*.glc")):
@@ -289,19 +288,13 @@ def build_gram_folder_view(folder: Path) -> GramFolderView:
         if not basename:
             view.unreadable.append(glc_path)
             continue
-        try:
-            raw = glc_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            raw = ""
-        has_crop = "<bitmap_crop_values" in raw
-        ref = GlcRef(glc_path=glc_path, referenced_basename=basename,
-                     has_crop=has_crop)
-        stem_key = Path(basename).stem.casefold()
+        ref = GlcRef(glc_path=glc_path, referenced_basename=basename)
+        key = match_key(Path(basename).stem)
         suffix = Path(basename).suffix.lower()
         if suffix == ".wav":
-            view.wav_refs.setdefault(stem_key, []).append(ref)
+            view.wav_refs.setdefault(key, []).append(ref)
         elif suffix in GLC_IMAGE_EXTENSIONS:
-            view.image_refs.setdefault(stem_key, []).append(ref)
+            view.image_refs.setdefault(key, []).append(ref)
         # Any other extension is anomalous (per glc-schema): not a wav, not one
         # of our images -- it cannot match an incoming screenshot, so it is
         # simply not indexed.
@@ -377,48 +370,21 @@ def _format_drift(
 # GLC mutation (apply)
 # -----------------------------------------------------------------------------
 
-def _indent_unit(text: str, filename_indent: str) -> str:
-    """Infer one indentation step from the file, defaulting to two spaces."""
-    match = re.search(r"^(\s*)<data_source>", text, re.MULTILINE)
-    if match:
-        parent = match.group(1)
-        if filename_indent.startswith(parent) and len(filename_indent) > len(parent):
-            return filename_indent[len(parent):]
-    return "  "
-
-
-def build_relinked_glc_text(text: str, new_basename: str, seconds: int) -> str:
-    """Return ``text`` with the first ``<filename>`` repointed + a crop block.
+def build_relinked_glc_text(text: str, new_basename: str) -> str:
+    """Return ``text`` with the first ``<filename>`` repointed at ``new_basename``.
 
     A targeted text edit (not an XML round-trip) so every other byte is
-    preserved: the first ``<filename>`` inner text is replaced with
-    ``new_basename`` and a ``<bitmap_crop_values>`` block carrying
-    ``<bottom_crop>{seconds}</bottom_crop>`` is inserted immediately after the
-    corresponding ``</filename>``, indented to match the file. Raises
-    ``ValueError`` if the ``<filename>`` anchor is absent, so a malformed file
-    is never half-written.
+    preserved: only the first ``<filename>`` inner text is replaced. **No**
+    ``<bitmap_crop_values>`` block is inserted -- the gram's time period is the
+    imported image's pixel height, measured at extraction (issue #148), so
+    ingest neither derives nor writes a duration. Raises ``ValueError`` if the
+    ``<filename>`` anchor is absent, so a malformed file is never half-written.
     """
     new_text, count = FILENAME_TAG_RE.subn(
         lambda m: m.group(1) + new_basename + m.group(3), text, count=1)
     if count != 1:
         raise ValueError("no <filename> element to rewrite")
-
-    close_idx = new_text.index("</filename>")
-    after = close_idx + len("</filename>")
-
-    # Indentation of the <filename> line drives the crop block's alignment.
-    line_start = new_text.rfind("\n", 0, close_idx) + 1
-    line_indent_match = re.match(r"\s*", new_text[line_start:])
-    indent = line_indent_match.group(0) if line_indent_match else "  "
-    unit = _indent_unit(new_text, indent)
-
-    block = (
-        "\n%s<bitmap_crop_values>"
-        "\n%s%s<bottom_crop>%d</bottom_crop>"
-        "\n%s</bitmap_crop_values>"
-        % (indent, indent, unit, seconds, indent)
-    )
-    return new_text[:after] + block + new_text[after:]
+    return new_text
 
 
 def build_demon_glc_text(text: str, new_basename: str) -> str:
@@ -506,7 +472,7 @@ def process_gram(
 
     # Collect and parse the incoming images. Demon images (leading "Demon"
     # token) are intercepted here -- they are additive, not .wav replacements,
-    # so they never enter the duration/stem matching path (issue #151).
+    # so they never enter the stem matching path (issue #151).
     images: List[CandidateImage] = []
     demon_images: List[Path] = []
     for entry in sorted(incoming_gram.iterdir()):
@@ -522,56 +488,58 @@ def process_gram(
             continue
         images.append(candidate)
 
-    # Group parseable images by casefolded stem so case drift collapses onto
-    # one key (and two case-variant screenshots collide as ambiguous).
-    parseable: Dict[str, List[CandidateImage]] = defaultdict(list)
+    # Group images by canonical match key so case and hyphen-spacing drift
+    # collapse onto one key (and two variant screenshots of one wav collide as
+    # ambiguous rather than both being applied).
+    grouped: Dict[str, List[CandidateImage]] = defaultdict(list)
     for candidate in images:
-        if not candidate.parseable:
-            outcomes.append(Outcome(
-                KIND_UNPARSEABLE, _rel(candidate.path, incoming_root),
-                note='token "%s"' % candidate.raw_token))
-            tally.bump(KIND_UNPARSEABLE)
-        else:
-            parseable[candidate.stem.casefold()].append(candidate)
+        grouped[match_key(candidate.stem)].append(candidate)
 
     available_wavs = ", ".join(sorted(
         Path(ref.referenced_basename).stem
         for refs in view.wav_refs.values() for ref in refs)) or "(none)"
 
-    for key in sorted(parseable):
-        group = parseable[key]
+    for key in sorted(grouped):
+        group = grouped[key]
         display_stem = group[0].stem
+        if len(group) > 1:
+            claimants = ", ".join(sorted(c.path.name for c in group))
+            outcomes.append(Outcome(
+                KIND_AMBIGUOUS, _rel(incoming_gram, incoming_root),
+                note='stem "%s" claimed by %s; none applied'
+                     % (display_stem, claimants)))
+            tally.bump(KIND_AMBIGUOUS)
+            continue
+        candidate = group[0]
         if key in view.wav_refs:
-            if len(group) > 1:
-                claimants = ", ".join(sorted(c.path.name for c in group))
+            refs = view.wav_refs[key]
+            distinct = sorted({Path(r.referenced_basename).name for r in refs})
+            if len(distinct) > 1:
+                # Normalisation folded two genuinely different wavs onto one
+                # key -- never guess which the image belongs to.
                 outcomes.append(Outcome(
-                    KIND_AMBIGUOUS, _rel(incoming_gram, incoming_root),
-                    note='wav "%s" claimed by %s; none applied'
-                         % (display_stem, claimants)))
+                    KIND_AMBIGUOUS, _rel(candidate.path, incoming_root),
+                    note='stem "%s" matches %d wavs (%s); none applied'
+                         % (display_stem, len(distinct), ", ".join(distinct))))
                 tally.bump(KIND_AMBIGUOUS)
                 continue
-            candidate = group[0]
             outcomes.append(Outcome(
                 KIND_MATCHED, _rel(candidate.path, incoming_root),
-                note='wav "%s"' % display_stem))
+                note='wav "%s"' % Path(refs[0].referenced_basename).stem))
             tally.bump(KIND_MATCHED)
             if apply:
-                _apply_match(candidate, view.wav_refs[key], source_gram,
-                             outcomes, tally)
+                _apply_match(candidate, refs, source_gram, outcomes, tally)
         elif key in view.image_refs:
-            for candidate in group:
-                outcomes.append(Outcome(
-                    KIND_ALREADY, _rel(candidate.path, incoming_root),
-                    note='stem "%s" already an image in the GLC'
-                         % candidate.stem))
-                tally.bump(KIND_ALREADY)
+            outcomes.append(Outcome(
+                KIND_ALREADY, _rel(candidate.path, incoming_root),
+                note='stem "%s" already an image in the GLC' % candidate.stem))
+            tally.bump(KIND_ALREADY)
         else:
-            for candidate in group:
-                outcomes.append(Outcome(
-                    KIND_UNMATCHED_IMAGE, _rel(candidate.path, incoming_root),
-                    note='stem "%s"; folder wavs: %s'
-                         % (candidate.stem, available_wavs)))
-                tally.bump(KIND_UNMATCHED_IMAGE)
+            outcomes.append(Outcome(
+                KIND_UNMATCHED_IMAGE, _rel(candidate.path, incoming_root),
+                note='stem "%s"; folder wavs: %s'
+                     % (candidate.stem, available_wavs)))
+            tally.bump(KIND_UNMATCHED_IMAGE)
 
     if demon_images:
         _process_demon_images(
@@ -654,37 +622,23 @@ def _apply_match(
     outcomes: List[Outcome], tally: Tally,
 ) -> None:
     """Copy the image and repoint every wav-backed GLC that shares its stem."""
-    writable = [r for r in refs if not r.has_crop]
-    cropped = [r for r in refs if r.has_crop]
+    ordered = sorted(refs, key=lambda r: r.glc_path.name)
 
-    for ref in sorted(cropped, key=lambda r: r.glc_path.name):
-        outcomes.append(Outcome(
-            KIND_GLC_CROPPED, ref.glc_path.name,
-            note="already carries bitmap_crop_values; skipped"))
-        tally.bump(KIND_GLC_CROPPED)
-
-    if not writable:
-        # Nothing to rewrite; do not orphan an image copy in the folder.
-        return
-
-    # Name the copy after the wav's own stem (its casing), not the incoming
-    # screenshot's -- the hand-typed name may differ in case (incoming
-    # "WAV 1" vs source "Wav 1.wav"), and the copy should sit consistently
-    # beside the wav it replaces.
-    wav_stem = Path(sorted(writable, key=lambda r: r.glc_path.name)[0]
-                    .referenced_basename).stem
+    # Name the copy after the wav's own stem (its casing and spacing), not the
+    # incoming screenshot's -- the hand-typed name may differ in case ("WAV 1"
+    # vs "Wav 1.wav") or hyphen spacing ("0 - 40 Hz" vs "0-40 Hz.wav"), and the
+    # copy should sit consistently beside the wav it replaces.
+    wav_stem = Path(ordered[0].referenced_basename).stem
     target_name = wav_stem + candidate.extension
     destination = source_gram / target_name
     shutil.copyfile(candidate.path, destination)
     tally.images_copied += 1
     LOGGER.info("copied %s -> %s", candidate.path, destination)
 
-    assert candidate.seconds is not None  # parseable guaranteed by caller
-    for ref in sorted(writable, key=lambda r: r.glc_path.name):
+    for ref in ordered:
         try:
             text = ref.glc_path.read_text(encoding="utf-8")
-            new_text = build_relinked_glc_text(text, target_name,
-                                               candidate.seconds)
+            new_text = build_relinked_glc_text(text, target_name)
         except (OSError, ValueError) as exc:
             LOGGER.warning("skip GLC (could not rewrite): %s [%s]",
                            ref.glc_path, exc)
@@ -695,9 +649,8 @@ def _apply_match(
             continue
         ref.glc_path.write_text(new_text, encoding="utf-8")
         tally.glcs_rewritten += 1
-        LOGGER.info("relinked %s: %s -> %s (bottom_crop=%d)",
-                    ref.glc_path, ref.referenced_basename, target_name,
-                    candidate.seconds)
+        LOGGER.info("relinked %s: %s -> %s",
+                    ref.glc_path, ref.referenced_basename, target_name)
 
 
 # -----------------------------------------------------------------------------

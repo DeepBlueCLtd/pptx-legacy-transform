@@ -1,10 +1,13 @@
 """Tests for ingest_gram_images.py.
 
-Exercises the two-phase import of author-supplied gram screenshots: duration
-parsing, container resolution, folder/stem matching with nearest-candidate
-suggestions and trend grouping, the read-only verify guarantee, the apply-mode
-GLC rewrite + crop insertion + image copy (wav deliberately left in place),
-idempotency, and every warn-and-skip class. Stdlib-only.
+Exercises the two-phase import of author-supplied gram screenshots: whole-stem
+matching (no duration parsing -- issue #148 measures the time period from the
+image height), the case- and hyphen-spacing-tolerant match key, container
+resolution, folder/stem matching with nearest-candidate suggestions and trend
+grouping, the read-only verify guarantee, the apply-mode GLC filename rewrite +
+image copy (wav deliberately left in place), idempotency, demon-image handling
+(including numbered ``Demon2-`` tokens), and every warn-and-skip class.
+Stdlib-only.
 """
 
 from __future__ import annotations
@@ -32,19 +35,6 @@ WAV_GLC = (
     "      <bandcentre>200</bandcentre>\n"
     "    </lofar>\n"
     "  </settings>\n"
-    "</GAPS_Lite_configuration>\n"
-)
-
-# A GLC that already carries a bitmap_crop_values structure while still
-# referencing a wav -- the anomalous glc-already-cropped case.
-WAV_GLC_CROPPED = (
-    "<GAPS_Lite_configuration>\n"
-    "  <data_source>\n"
-    "    <filename>W:\\aaac\\{name}</filename>\n"
-    "    <bitmap_crop_values>\n"
-    "      <bottom_crop>99</bottom_crop>\n"
-    "    </bitmap_crop_values>\n"
-    "  </data_source>\n"
     "</GAPS_Lite_configuration>\n"
 )
 
@@ -108,82 +98,68 @@ class IngestTestBase(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Foundational: duration parsing + extension gate
+# Foundational: filename parsing (whole stem, no duration) + extension gate
 # ---------------------------------------------------------------------------
 
-class DurationParsingTests(IngestTestBase):
+class ImageFilenameParsingTests(IngestTestBase):
 
     def parse(self, name: str):
         return ingest.parse_image_filename(Path(name))
 
-    def test_minutes_and_seconds(self):
-        ci = self.parse("5m26s WAV 1.jpg")
-        self.assertEqual(ci.seconds, 326)
+    def test_whole_stem_is_the_match_stem(self):
+        ci = self.parse("WAV 1.jpg")
         self.assertEqual(ci.stem, "WAV 1")
         self.assertEqual(ci.extension, ".jpg")
-        self.assertTrue(ci.parseable)
 
-    def test_whole_minutes(self):
-        ci = self.parse("21m WAVE 3.png")
-        self.assertEqual(ci.seconds, 21 * 60)
-        self.assertEqual(ci.stem, "WAVE 3")
+    def test_frequency_range_stem_kept_intact(self):
+        # The reported failing case: "0 - 1322 Hz" must not be split on the
+        # leading "0 -" (which the old duration parser mistook for a token).
+        ci = self.parse("0 - 1322 Hz.jpg")
+        self.assertEqual(ci.stem, "0 - 1322 Hz")
 
-    def test_zero_minutes_applied_as_is(self):
-        ci = self.parse("0m WAV 2.png")
-        self.assertEqual(ci.seconds, 0)
-        self.assertTrue(ci.parseable)
+    def test_no_space_frequency_range(self):
+        ci = self.parse("0-1000 Hz.png")
+        self.assertEqual(ci.stem, "0-1000 Hz")
 
-    def test_case_insensitive_token(self):
-        ci = self.parse("10M WAV 1.PNG")
-        self.assertEqual(ci.seconds, 600)
-        self.assertTrue(ci.parseable)
-        self.assertEqual(ci.extension, ".PNG")  # case preserved
+    def test_leading_digit_stem_kept(self):
+        # "WAV 2" is kept whole -- the old parser split it into token "WAV".
+        ci = self.parse("WAV 2.png")
+        self.assertEqual(ci.stem, "WAV 2")
 
-    def test_underscore_separator_after_minutes(self):
-        ci = self.parse("10m_0 - 600 Hz.jpg")
-        self.assertEqual(ci.seconds, 600)
-        self.assertEqual(ci.stem, "0 - 600 Hz")
-        self.assertTrue(ci.parseable)
-
-    def test_underscore_separator_after_seconds(self):
-        ci = self.parse("7m20s_0 - 441 Hz.jpg")
-        self.assertEqual(ci.seconds, 7 * 60 + 20)
-        self.assertEqual(ci.stem, "0 - 441 Hz")
-
-    def test_underscore_separator_short_stem(self):
-        ci = self.parse("7m_WAV 1.jpg")
-        self.assertEqual(ci.seconds, 420)
-        self.assertEqual(ci.stem, "WAV 1")
-
-    def test_space_separator_still_works(self):
-        ci = self.parse("11m Wav 1.jpg")
-        self.assertEqual(ci.seconds, 660)
-        self.assertEqual(ci.stem, "Wav 1")
-
-    def test_bare_number_unparseable(self):
-        ci = self.parse("326 WAV 1.jpg")
-        self.assertIsNone(ci.seconds)
-        self.assertFalse(ci.parseable)
-        self.assertEqual(ci.raw_token, "326")
-
-    def test_colon_form_unparseable(self):
-        self.assertFalse(self.parse("5:26 WAV 1.jpg").parseable)
-
-    def test_three_digit_seconds_unparseable(self):
-        self.assertFalse(self.parse("5m261s WAV 1.jpg").parseable)
-
-    def test_empty_stem_unparseable(self):
-        ci = self.parse("5m26s.jpg")  # no stem after the token
-        self.assertEqual(ci.seconds, 326)
-        self.assertEqual(ci.stem, "")
-        self.assertFalse(ci.parseable)
+    def test_extension_case_preserved(self):
+        self.assertEqual(self.parse("WAV 1.PNG").extension, ".PNG")
 
     def test_non_image_returns_none(self):
-        self.assertIsNone(self.parse("5m26s WAV 1.wav"))
+        self.assertIsNone(self.parse("WAV 1.wav"))
         self.assertIsNone(self.parse("notes.txt"))
 
     def test_jpeg_accepted(self):
-        self.assertIsNotNone(self.parse("5m WAV 1.jpeg"))
+        self.assertIsNotNone(self.parse("WAV 1.jpeg"))
+
+
+# ---------------------------------------------------------------------------
+# The tolerant match key (case + hyphen spacing)
+# ---------------------------------------------------------------------------
+
+class MatchKeyTests(unittest.TestCase):
+
+    def test_case_folds(self):
+        self.assertEqual(ingest.match_key("WAV 2"), ingest.match_key("Wav 2"))
+
+    def test_hyphen_spacing_collapses_both_directions(self):
+        # "0 - 1000 Hz", "0-1000 Hz" and "0- 1000 Hz" all fold together.
+        keys = {ingest.match_key(s) for s in
+                ("0 - 1000 Hz", "0-1000 Hz", "0- 1000 Hz", "0 -1000 Hz")}
+        self.assertEqual(len(keys), 1)
+
+    def test_internal_whitespace_collapses(self):
+        self.assertEqual(ingest.match_key("WAV  1"), ingest.match_key("WAV 1"))
+
+    def test_genuine_drift_stays_distinct(self):
+        # A different token or a missing digit is real drift, not folded away.
+        self.assertNotEqual(ingest.match_key("WAV 1"), ingest.match_key("WAVE 1"))
+        self.assertNotEqual(ingest.match_key("0 - 1000 Hz"),
+                            ingest.match_key("0 - 1100 Hz"))
 
 
 # ---------------------------------------------------------------------------
@@ -199,10 +175,17 @@ class GramFolderViewTests(IngestTestBase):
         (gram / "Lofar 2.glc").write_text(
             WAV_GLC.format(name="lofar-2.png"), encoding="utf-8")
         view = ingest.build_gram_folder_view(gram)
-        # keys are casefolded so case drift collapses onto one bucket
-        self.assertIn("wav 1", view.wav_refs)
-        self.assertIn("lofar-2", view.image_refs)
+        # keys run through match_key so case/hyphen drift collapses onto one key
+        self.assertIn(ingest.match_key("WAV 1"), view.wav_refs)
+        self.assertIn(ingest.match_key("lofar-2"), view.image_refs)
         self.assertEqual(view.unreadable, [])
+
+    def test_hyphen_spaced_wav_key(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "0-1000 Hz.wav")
+        view = ingest.build_gram_folder_view(gram)
+        # the space-flavoured spelling resolves to the same bucket
+        self.assertIn(ingest.match_key("0 - 1000 Hz"), view.wav_refs)
 
     def test_unreadable_isolated(self):
         gram = self.source_gram("Doc", "Gram 1")
@@ -210,14 +193,7 @@ class GramFolderViewTests(IngestTestBase):
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
         view = ingest.build_gram_folder_view(gram)
         self.assertEqual(len(view.unreadable), 1)
-        self.assertIn("wav 1", view.wav_refs)  # good one still indexed
-
-    def test_has_crop_flag(self):
-        gram = self.source_gram("Doc", "Gram 1")
-        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav",
-                           template=WAV_GLC_CROPPED)
-        view = ingest.build_gram_folder_view(gram)
-        self.assertTrue(view.wav_refs["wav 1"][0].has_crop)
+        self.assertIn(ingest.match_key("WAV 1"), view.wav_refs)  # good one kept
 
 
 # ---------------------------------------------------------------------------
@@ -229,14 +205,14 @@ class VerifyTests(IngestTestBase):
     def test_exact_match_tallied(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         outcomes, tally = self.run_ingest(apply=False)
         self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
 
     def test_unmatched_doc_with_candidate(self):
         self.source_gram("Instructor Week 1 Grams", "Gram 1")
         self.incoming_image("Instructor Week 1 Gram", "Gram 1",
-                            "5m WAV 1.png")  # missing trailing 's'
+                            "WAV 1.png")  # doc missing trailing 's'
         outcomes, _ = self.run_ingest(apply=False)
         docs = self.of_kind(outcomes, ingest.KIND_UNMATCHED_DOC)
         self.assertEqual(len(docs), 1)
@@ -244,7 +220,7 @@ class VerifyTests(IngestTestBase):
 
     def test_unmatched_gram_with_drift_label(self):
         self.source_gram("Doc", "WAVE 1")
-        self.incoming_image("Doc", "WAV 1", "5m WAV 1.png")  # token drift
+        self.incoming_image("Doc", "WAV 1", "WAV 1.png")  # token drift
         outcomes, _ = self.run_ingest(apply=False)
         grams = self.of_kind(outcomes, ingest.KIND_UNMATCHED_GRAM)
         self.assertEqual(len(grams), 1)
@@ -254,7 +230,7 @@ class VerifyTests(IngestTestBase):
     def test_structurally_ambiguous_doc_zero(self):
         # doc folder exists in source but has no container subdir
         (self.source / "Doc").mkdir()
-        self.incoming_image("Doc", "Gram 1", "5m WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         outcomes, _ = self.run_ingest(apply=False)
         amb = self.of_kind(outcomes, ingest.KIND_AMBIGUOUS_DOC)
         self.assertEqual(len(amb), 1)
@@ -263,7 +239,7 @@ class VerifyTests(IngestTestBase):
     def test_structurally_ambiguous_doc_two(self):
         self.source_gram("Doc", "Gram 1", container="Files A")
         (self.source / "Doc" / "Files B").mkdir()
-        self.incoming_image("Doc", "Gram 1", "5m WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         outcomes, _ = self.run_ingest(apply=False)
         amb = self.of_kind(outcomes, ingest.KIND_AMBIGUOUS_DOC)
         self.assertEqual(len(amb), 1)
@@ -279,7 +255,7 @@ class VerifyTests(IngestTestBase):
         gram1.joinpath("Lofar 1.glc").write_text(
             WAV_GLC.format(name="WAV 1.wav"), encoding="utf-8")
         gram1.joinpath("WAV 1.wav").write_bytes(b"RIFF")
-        self.incoming_image("Flat Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Flat Doc", "Gram 1", "WAV 1.png")
         outcomes, tally = self.run_ingest(apply=False)
         self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
         self.assertEqual(tally.counts.get(ingest.KIND_AMBIGUOUS_DOC, 0), 0)
@@ -290,23 +266,14 @@ class VerifyTests(IngestTestBase):
         doc = self.source / "Doc"
         for n in range(1, 4):  # 3 subdirs
             (doc / ("Thing %d" % n)).mkdir(parents=True)
-        self.incoming_image("Doc", "Thing 1", "5m WAV 1.png")
+        self.incoming_image("Doc", "Thing 1", "WAV 1.png")
         outcomes, tally = self.run_ingest(apply=False)
         self.assertEqual(tally.counts.get(ingest.KIND_AMBIGUOUS_DOC), 1)
-
-    def test_unparseable_survey(self):
-        gram = self.source_gram("Doc", "Gram 1")
-        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "wibble WAV 1.png")
-        outcomes, _ = self.run_ingest(apply=False)
-        up = self.of_kind(outcomes, ingest.KIND_UNPARSEABLE)
-        self.assertEqual(len(up), 1)
-        self.assertIn('token "wibble"', up[0].note)
 
     def test_unmatched_image_lists_wavs(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m NOPE 9.png")
+        self.incoming_image("Doc", "Gram 1", "NOPE 9.png")
         outcomes, _ = self.run_ingest(apply=False)
         um = self.of_kind(outcomes, ingest.KIND_UNMATCHED_IMAGE)
         self.assertEqual(len(um), 1)
@@ -315,7 +282,7 @@ class VerifyTests(IngestTestBase):
     def test_token_drift_trend_aggregation(self):
         for n in (1, 2, 3):
             self.source_gram("Doc", "WAVE %d" % n)
-            self.incoming_image("Doc", "WAV %d" % n, "5m WAV %d.png" % n)
+            self.incoming_image("Doc", "WAV %d" % n, "WAV %d.png" % n)
         outcomes, _ = self.run_ingest(apply=False)
         trends = ingest._aggregate_trends(outcomes)
         self.assertIn("token-drift 'WAV' -> 'WAVE' x 3", trends)
@@ -323,7 +290,7 @@ class VerifyTests(IngestTestBase):
     def test_report_is_deterministic(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         o1, t1 = self.run_ingest(apply=False)
         o2, t2 = self.run_ingest(apply=False)
         r1 = ingest.render_report(o1, t1, incoming_root=self.incoming,
@@ -335,7 +302,7 @@ class VerifyTests(IngestTestBase):
     def test_verify_is_read_only(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         src_before = self.snapshot(self.source)
         inc_before = self.snapshot(self.incoming)
         self.run_ingest(apply=False)
@@ -344,60 +311,71 @@ class VerifyTests(IngestTestBase):
 
 
 # ---------------------------------------------------------------------------
-# Case-insensitive matching (folders + stems) and the underscore separator
+# Tolerant matching: case + hyphen spacing (the reported unmatched patterns)
 # ---------------------------------------------------------------------------
 
-class CaseInsensitiveMatchTests(IngestTestBase):
+class TolerantMatchTests(IngestTestBase):
+
+    def _match_one(self, wav_name: str, image_name: str):
+        gram = self.source_gram("Doc", "Gram 1")
+        glc = self.write_wav_glc(gram, "Lofar 1.glc", wav_name)
+        self.incoming_image("Doc", "Gram 1", image_name)
+        outcomes, tally = self.run_ingest(apply=True)
+        return gram, glc, tally
+
+    def test_case_insensitive_stem_match(self):
+        # incoming "WAV 2" vs source "Wav 2.wav"
+        gram, glc, tally = self._match_one("Wav 2.wav", "WAV 2.png")
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+        # copy takes the wav's own casing
+        self.assertTrue((gram / "Wav 2.png").exists())
+        self.assertEqual(parse_glc(glc).image_filename, "Wav 2.png")
+
+    def test_spaces_removed_around_minus(self):
+        # incoming "0 - 1000 Hz" vs source "0-1000 Hz.wav"
+        gram, glc, tally = self._match_one("0-1000 Hz.wav", "0 - 1000 Hz.jpg")
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+        # copy takes the wav's own spacing
+        self.assertTrue((gram / "0-1000 Hz.jpg").exists())
+        self.assertEqual(parse_glc(glc).image_filename, "0-1000 Hz.jpg")
+
+    def test_spaces_added_around_minus(self):
+        # incoming "0-1100 Hz" vs source "0 - 1100 Hz.wav"
+        gram, glc, tally = self._match_one("0 - 1100 Hz.wav", "0-1100 Hz.jpg")
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+        self.assertTrue((gram / "0 - 1100 Hz.jpg").exists())
+        self.assertEqual(parse_glc(glc).image_filename, "0 - 1100 Hz.jpg")
+
+    def test_exact_frequency_range_match(self):
+        # the previously-"unparseable" case now matches directly
+        gram, glc, tally = self._match_one("0 - 1322 Hz.wav", "0 - 1322 Hz.jpg")
+        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+        self.assertTrue((gram / "0 - 1322 Hz.jpg").exists())
 
     def test_case_insensitive_folder_match(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
         # incoming doc AND gram folders differ only in case
-        self.incoming_image("DOC", "GRAM 1", "5m26s WAV 1.png")
+        self.incoming_image("DOC", "GRAM 1", "WAV 1.png")
         outcomes, tally = self.run_ingest(apply=False)
         self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
         self.assertEqual(tally.counts.get(ingest.KIND_UNMATCHED_DOC, 0), 0)
         self.assertEqual(tally.counts.get(ingest.KIND_UNMATCHED_GRAM, 0), 0)
 
-    def test_case_insensitive_stem_match(self):
-        gram = self.source_gram("Doc", "Gram 1")
-        self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")  # mixed-case wav
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")  # upper stem
-        outcomes, tally = self.run_ingest(apply=False)
-        self.assertEqual(tally.counts.get(ingest.KIND_MATCHED), 1)
+    def test_no_bottom_crop_written(self):
+        # The time period is image-derived (issue #148); the GLC gets only a
+        # repointed <filename>, never a <bitmap_crop_values> block.
+        gram, glc, _ = self._match_one("WAV 1.wav", "WAV 1.png")
+        self.assertNotIn("bitmap_crop_values", glc.read_text(encoding="utf-8"))
+        self.assertNotIn("bottom_crop", glc.read_text(encoding="utf-8"))
 
-    def test_underscore_and_case_apply_uses_wav_casing(self):
+    def test_two_variant_images_are_ambiguous(self):
+        # A case variant and a hyphen-spacing variant both fold onto one wav:
+        # neither is applied.
         gram = self.source_gram("Doc", "Gram 1")
-        glc = self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")
-        # underscore separator AND upper-case stem, as in the real data
-        self.incoming_image("Doc", "Gram 1", "7m_WAV 1.jpg")
-        self.run_ingest(apply=True)
-        # copy takes the WAV's casing, not the incoming screenshot's
-        self.assertTrue((gram / "Wav 1.jpg").exists())
-        self.assertFalse((gram / "WAV 1.jpg").exists())
-        doc = parse_glc(glc)
-        self.assertEqual(doc.image_filename, "Wav 1.jpg")
-        # The tool still inserts the duration as <bottom_crop> (7m = 420 s);
-        # extract no longer reads it for time_end (that now comes from the
-        # image height, issue #148), so assert on the raw GLC text.
-        self.assertIn("<bottom_crop>420</bottom_crop>",
-                      glc.read_text(encoding="utf-8"))
-
-    def test_descriptive_stem_with_underscore(self):
-        gram = self.source_gram("Doc", "Gram 1")
-        glc = self.write_wav_glc(gram, "Lofar 1.glc", "0 - 600 Hz.wav")
-        self.incoming_image("Doc", "Gram 1", "10m_0 - 600 Hz.jpg")
-        self.run_ingest(apply=True)
-        self.assertTrue((gram / "0 - 600 Hz.jpg").exists())
-        # 10m = 600 s inserted as <bottom_crop> (unused by extract now, #148).
-        self.assertIn("<bottom_crop>600</bottom_crop>",
-                      glc.read_text(encoding="utf-8"))
-
-    def test_two_case_variant_images_are_ambiguous(self):
-        gram = self.source_gram("Doc", "Gram 1")
-        self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m WAV 1.png")
-        self.incoming_image("Doc", "Gram 1", "6m wav 1.jpg")
+        self.write_wav_glc(gram, "Lofar 1.glc", "0 - 40 Hz.wav")
+        self.incoming_image("Doc", "Gram 1", "0-40 Hz.png")
+        self.incoming_image("Doc", "Gram 1", "0 - 40 hz.jpg")
         before = self.snapshot(self.source)
         outcomes, tally = self.run_ingest(apply=True)
         self.assertEqual(tally.counts.get(ingest.KIND_AMBIGUOUS), 1)
@@ -411,7 +389,7 @@ class CaseInsensitiveMatchTests(IngestTestBase):
 class ApplyTests(IngestTestBase):
 
     def _matched_gram(self, wav="WAV 1.wav", glc="Lofar 1.glc",
-                      image="5m26s WAV 1.png"):
+                      image="WAV 1.png"):
         gram = self.source_gram("Doc", "Gram 1")
         glc_path = self.write_wav_glc(gram, glc, wav)
         img = self.incoming_image("Doc", "Gram 1", image)
@@ -430,39 +408,23 @@ class ApplyTests(IngestTestBase):
         self.run_ingest(apply=True)
         self.assertEqual((gram / "WAV 1.png").read_bytes(), img.read_bytes())
 
-    def test_glc_rewritten_and_crop_inserted(self):
+    def test_glc_filename_rewritten_no_crop(self):
         gram, glc_path, _ = self._matched_gram()
         before = glc_path.read_text(encoding="utf-8")
         self.run_ingest(apply=True)
         after = glc_path.read_text(encoding="utf-8")
         self.assertNotEqual(before, after)
-        # downstream contract: parse_glc reads the new image filename; the
-        # inserted <bottom_crop> (326) is verified as raw text below and by
-        # test_crop_block_indentation — extract derives time_end from the
-        # image height now, not this value (issue #148).
         doc = parse_glc(glc_path)
         self.assertEqual(doc.image_filename, "WAV 1.png")
-        self.assertIn("<bottom_crop>326</bottom_crop>", after)
+        self.assertNotIn("bitmap_crop_values", after)
 
-    def test_crop_block_indentation(self):
-        gram, glc_path, _ = self._matched_gram()
-        self.run_ingest(apply=True)
-        text = glc_path.read_text(encoding="utf-8")
-        self.assertIn("    <bitmap_crop_values>\n"
-                      "      <bottom_crop>326</bottom_crop>\n"
-                      "    </bitmap_crop_values>", text)
-
-    def test_only_filename_and_crop_changed(self):
+    def test_only_filename_changed(self):
         gram, glc_path, _ = self._matched_gram()
         before = glc_path.read_text(encoding="utf-8")
         self.run_ingest(apply=True)
         after = glc_path.read_text(encoding="utf-8")
-        # removing the crop block and reverting the filename yields the original
+        # reverting the filename yields the original, byte-for-byte
         reverted = after.replace(
-            "\n    <bitmap_crop_values>\n"
-            "      <bottom_crop>326</bottom_crop>\n"
-            "    </bitmap_crop_values>", "")
-        reverted = reverted.replace(
             "<filename>WAV 1.png</filename>",
             "<filename>W:\\aaac\\WAV 1.wav</filename>")
         self.assertEqual(reverted, before)
@@ -480,7 +442,7 @@ class ApplyTests(IngestTestBase):
         # second GLC references the same wav
         (gram / "Lofar 2.glc").write_text(
             WAV_GLC.format(name="W:\\aaac\\WAV 1.wav"), encoding="utf-8")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         _, tally = self.run_ingest(apply=True)
         self.assertEqual(tally.images_copied, 1)
         self.assertEqual(tally.glcs_rewritten, 2)
@@ -517,36 +479,35 @@ class AmbiguityTests(IngestTestBase):
     def test_two_images_one_wav_ambiguous(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
-        self.incoming_image("Doc", "Gram 1", "6m WAV 1.jpg")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.jpg")
         before = self.snapshot(self.source)
         outcomes, tally = self.run_ingest(apply=True)
         amb = self.of_kind(outcomes, ingest.KIND_AMBIGUOUS)
         self.assertEqual(len(amb), 1)
-        self.assertIn("5m26s WAV 1.png", amb[0].note)
-        self.assertIn("6m WAV 1.jpg", amb[0].note)
+        self.assertIn("WAV 1.png", amb[0].note)
+        self.assertIn("WAV 1.jpg", amb[0].note)
         self.assertEqual(self.snapshot(self.source), before)  # nothing applied
 
-    def test_already_cropped_glc_untouched_sibling_rewritten(self):
+    def test_image_matches_two_wavs_ambiguous(self):
+        # Two wavs differing only in hyphen spacing fold onto one key; an
+        # incoming image matching that key is not applied to either.
         gram = self.source_gram("Doc", "Gram 1")
-        # one already-cropped wav GLC, one normal wav GLC, same wav
-        cropped = self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav",
-                                     template=WAV_GLC_CROPPED)
-        normal = self.write_wav_glc(gram, "Lofar 2.glc", "WAV 1.wav")
-        cropped_before = cropped.read_text(encoding="utf-8")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.write_wav_glc(gram, "Lofar 1.glc", "0 - 40 Hz.wav")
+        self.write_wav_glc(gram, "Lofar 2.glc", "0-40 Hz.wav")
+        self.incoming_image("Doc", "Gram 1", "0 - 40 Hz.png")
+        before = self.snapshot(self.source)
         outcomes, tally = self.run_ingest(apply=True)
-        # cropped GLC byte-identical; normal GLC rewritten
-        self.assertEqual(cropped.read_text(encoding="utf-8"), cropped_before)
-        self.assertEqual(parse_glc(normal).image_filename, "WAV 1.png")
-        self.assertEqual(tally.counts.get(ingest.KIND_GLC_CROPPED), 1)
-        self.assertEqual(tally.glcs_rewritten, 1)
+        amb = self.of_kind(outcomes, ingest.KIND_AMBIGUOUS)
+        self.assertEqual(len(amb), 1)
+        self.assertIn("2 wavs", amb[0].note)
+        self.assertEqual(self.snapshot(self.source), before)
 
     def test_unreadable_glc_isolated_other_converts(self):
         gram = self.source_gram("Doc", "Gram 1")
         (gram / "bad.glc").write_text("<broken", encoding="utf-8")
         good = self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         outcomes, tally = self.run_ingest(apply=True)
         self.assertEqual(tally.counts.get(ingest.KIND_GLC_UNREADABLE), 1)
         self.assertEqual(parse_glc(good).image_filename, "WAV 1.png")
@@ -554,11 +515,11 @@ class AmbiguityTests(IngestTestBase):
     def test_summary_enumerates_all_classes(self):
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m26s WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         _, tally = self.run_ingest(apply=False)
         line = ingest._summary_line(tally, apply=False)
         for kind in (ingest.KIND_UNMATCHED_DOC, ingest.KIND_AMBIGUOUS,
-                     ingest.KIND_ALREADY, ingest.KIND_GLC_CROPPED):
+                     ingest.KIND_ALREADY, ingest.KIND_UNMATCHED_IMAGE):
             self.assertIn(kind, line)
 
 
@@ -706,22 +667,37 @@ class DemonImageTests(IngestTestBase):
             parse_glc(marker).image_filename, "4m10s_Demon - 0 - 40 Hz.jpg")
         self.assertTrue((gram / "4m10s_Demon - 0 - 40 Hz.jpg").exists())
 
+    def test_numbered_demon_token(self):
+        # A "Demon2-" token (the digit rides straight after "Demon", no space)
+        # must be recognised as a demon -- the reported miss.
+        gram = self._demon_gram(demon_names=["Demon2- 0 - 40 Hz.jpg"])
+        outcomes, tally = self.run_ingest(apply=True)
+        self.assertEqual(tally.demon_markers, 1)
+        self.assertTrue((gram / "demon.glc").exists())
+        self.assertTrue((gram / "Demon2- 0 - 40 Hz.jpg").exists())
+        # never mis-reported as an ordinary unmatched image
+        self.assertEqual(self.of_kind(outcomes, ingest.KIND_UNMATCHED_IMAGE), [])
+
     def test_prefix_regex_matches_expected_shapes(self):
         match = lambda s: bool(ingest.DEMON_PREFIX_RE.match(s))
         self.assertTrue(match("Demon - 0-40Hz"))
         self.assertTrue(match("Demon - 10m2s 0-40Hz"))
         self.assertTrue(match("4m10s_Demon - 0 - 40 Hz"))
         self.assertTrue(match("21m Demon - 0-40Hz"))
-        # not a demon: ordinary wav-replacement screenshots
-        self.assertFalse(match("5m26s WAV 1"))
+        # numbered demons (the reported miss)
+        self.assertTrue(match("Demon2- 0 - 40 Hz"))
+        self.assertTrue(match("Demon2- 9m_0 - 40 Hz"))
+        self.assertTrue(match("Demon3 - 0-40Hz"))
+        # not a demon: ordinary wav-replacement screenshots or "Demon"-words
         self.assertFalse(match("WAV 1"))
+        self.assertFalse(match("0 - 1322 Hz"))
+        self.assertFalse(match("Demonstrate"))
 
     def test_demon_not_matched_as_wav(self):
-        # A demon image must never be reported as an unmatched/unparseable image.
+        # A demon image must never be reported as an unmatched image.
         self._demon_gram(demon_names=["Demon - 0-40Hz.png"])
         outcomes, _ = self.run_ingest(apply=False)
         self.assertEqual(self.of_kind(outcomes, ingest.KIND_UNMATCHED_IMAGE), [])
-        self.assertEqual(self.of_kind(outcomes, ingest.KIND_UNPARSEABLE), [])
 
     def test_no_template_glc_skips(self):
         # Gram folder with a demon incoming but no hyperlinked .glc to clone.
@@ -736,7 +712,7 @@ class DemonImageTests(IngestTestBase):
         # A folder can carry both a normal wav-replacement screenshot and a demon.
         gram = self.source_gram("Doc", "Gram 1")
         self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
-        self.incoming_image("Doc", "Gram 1", "5m WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.png")
         self.incoming_image("Doc", "Gram 1", "Demon - 0-40Hz.png")
         outcomes, tally = self.run_ingest(apply=True)
         # wav replacement applied AND demon seeded

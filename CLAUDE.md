@@ -146,8 +146,9 @@ filename — no `../` traversal.
 A **demon** is an alternately-rendered gram view that **leads** the gram's page.
 It is additive (never a `.wav` replacement) and carries a third `topic_type`
 value, `demon`, alongside `glc` and `analysis`. Prep-time, `ingest_gram_images.py`
-recognises a delivered demon image (filename with a `Demon` token, leading or
-after a duration prefix like `4m10s_Demon - ...`), copies it into the source
+recognises a delivered demon image (filename with a `Demon` token, leading,
+numbered like `Demon2- ...`, or after a duration prefix like `4m10s_Demon - ...`),
+copies it into the source
 gram folder under its original name, and writes a `demon.glc` marker cloned from
 the folder's first hyperlinked `.glc` — repointed at the demon image with the
 band overwritten to the fixed **0 – 40 Hz** (`bandwidth=40`, `bandcentre=20`).

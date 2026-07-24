@@ -1,5 +1,14 @@
 # Data Model: Import Author Gram Images
 
+> **Partially superseded — see `contracts/ingest-contract.md`.** Duration parsing
+> was removed: the incoming image is named for the wav's own stem (no `<duration>`
+> prefix), the whole stem is the match key, and apply writes only a `<filename>`
+> repoint (no `<bitmap_crop_values>`/`<bottom_crop>`). The `CandidateImage.seconds`
+> field, the `unparseable-duration` and `glc-already-cropped` outcomes, and the
+> crop-insertion apply step below are all retired. Matching now folds **case
+> *and* hyphen spacing** (`0 - 1000 Hz` ↔ `0-1000 Hz`) via `match_key`. The
+> sections below record the original feature-011 design.
+
 ## Trees
 
 ### Incoming tree (read-only input)

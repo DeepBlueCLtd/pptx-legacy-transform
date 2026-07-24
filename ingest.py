@@ -6,15 +6,18 @@ Run from the WinPython REPL after the once-per-session, by-hand chdir:
     >>> exec(open(r"ingest.py").read())
 
 The author delivers a parallel tree of analysis-tool screenshots named
-"<duration> <wav-stem>.<jpg|jpeg|png>" (e.g. "5m26s WAV 1.jpg"). This
-walks that tree against source\\ and, by default, writes a read-only
-verify report (ingest_report.txt) of every folder/stem/duration
-mismatch with nearest-candidate suggestions — fix the names in the
-INCOMING tree by hand, then re-run until it is clean. Once clean, set
-APPLY = True in the Config block below (or uncomment "--apply") and
-re-run: each matched image is copied beside its .glc under the wav's
-stem, the .glc is repointed at it, and the duration is written into
-<bottom_crop> so a later extract.py reads it as time_end.
+for the wav's own stem, "<wav-stem>.<jpg|jpeg|png>" (e.g. "WAV 1.jpg",
+"0 - 600 Hz.png"). This walks that tree against source\\ and, by
+default, writes a read-only verify report (ingest_report.txt) of every
+folder/stem mismatch with nearest-candidate suggestions — fix the names
+in the INCOMING tree by hand, then re-run until it is clean. Matching
+folds case and hyphen spacing (an incoming "0 - 1000 Hz" matches a
+source "0-1000 Hz.wav", either direction), so only genuine drift is
+reported. Once clean, set APPLY = True in the Config block below (or
+uncomment "--apply") and re-run: each matched image is copied beside its
+.glc under the wav's stem and the .glc is repointed at it. No duration
+is parsed or written — extract.py measures the time period from the
+image height (issue #148).
 
 Unlike relink.py, this LEAVES THE .wav IN PLACE (a future user may want
 the audio); the generator only copies what the .glc references, so the

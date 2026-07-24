@@ -27,7 +27,9 @@ repo stays free of derived demon artefacts.
 
 Current fixture seeds two Week 1 grams:
 
-- **Gram 5** — one demon (`Demon - 0-40Hz.png`)
+- **Gram 5** — two demons (`Demon - 0-40Hz.png`, `Demon2- 0 - 40 Hz.png`),
+  proving the *numbered* `Demon2-` token (the digit rides straight after
+  `Demon`, no space) is recognised
 - **Gram 2** — two demons (`Demon - 0-40Hz.png`, `4m10s_Demon - 0 - 40 Hz.png`),
   proving multiple-demon ordering and the duration-prefixed filename form
 
