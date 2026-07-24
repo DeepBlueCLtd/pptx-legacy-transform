@@ -377,7 +377,11 @@ class CaseInsensitiveMatchTests(IngestTestBase):
         self.assertFalse((gram / "WAV 1.jpg").exists())
         doc = parse_glc(glc)
         self.assertEqual(doc.image_filename, "Wav 1.jpg")
-        self.assertEqual(doc.time_end, "420")
+        # The tool still inserts the duration as <bottom_crop> (7m = 420 s);
+        # extract no longer reads it for time_end (that now comes from the
+        # image height, issue #148), so assert on the raw GLC text.
+        self.assertIn("<bottom_crop>420</bottom_crop>",
+                      glc.read_text(encoding="utf-8"))
 
     def test_descriptive_stem_with_underscore(self):
         gram = self.source_gram("Doc", "Gram 1")
@@ -385,7 +389,9 @@ class CaseInsensitiveMatchTests(IngestTestBase):
         self.incoming_image("Doc", "Gram 1", "10m_0 - 600 Hz.jpg")
         self.run_ingest(apply=True)
         self.assertTrue((gram / "0 - 600 Hz.jpg").exists())
-        self.assertEqual(parse_glc(glc).time_end, "600")
+        # 10m = 600 s inserted as <bottom_crop> (unused by extract now, #148).
+        self.assertIn("<bottom_crop>600</bottom_crop>",
+                      glc.read_text(encoding="utf-8"))
 
     def test_two_case_variant_images_are_ambiguous(self):
         gram = self.source_gram("Doc", "Gram 1")
@@ -430,10 +436,13 @@ class ApplyTests(IngestTestBase):
         self.run_ingest(apply=True)
         after = glc_path.read_text(encoding="utf-8")
         self.assertNotEqual(before, after)
-        # downstream contract: parse_glc reads the new image + time_end
+        # downstream contract: parse_glc reads the new image filename; the
+        # inserted <bottom_crop> (326) is verified as raw text below and by
+        # test_crop_block_indentation — extract derives time_end from the
+        # image height now, not this value (issue #148).
         doc = parse_glc(glc_path)
         self.assertEqual(doc.image_filename, "WAV 1.png")
-        self.assertEqual(doc.time_end, "326")
+        self.assertIn("<bottom_crop>326</bottom_crop>", after)
 
     def test_crop_block_indentation(self):
         gram, glc_path, _ = self._matched_gram()

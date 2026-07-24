@@ -304,6 +304,55 @@ class EvenWeekSliceTests(unittest.TestCase):
         )
 
 
+class ImagePixelHeightTests(unittest.TestCase):
+    """The stdlib image-height reader (issue #148) across PNG/JPEG/GIF.
+
+    time_end is the image's scan-line count (pixel height), read from just the
+    file header with no Pillow on the runtime path.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "img_height"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _h(self, name: str, data: bytes) -> int | None:
+        (self.tmp / name).write_bytes(data)
+        return extract_to_csv._image_pixel_height(name, self.tmp)
+
+    def test_png_height(self) -> None:
+        mock_pptx.emit_png(self.tmp / "g.png", width=5, height=321)
+        self.assertEqual(
+            extract_to_csv._image_pixel_height("g.png", self.tmp), 321)
+
+    def test_gif_height(self) -> None:
+        import struct
+        gif = b"GIF89a" + struct.pack("<HH", 40, 275) + b"\x00" * 4
+        self.assertEqual(self._h("g.gif", gif), 275)
+
+    def test_jpeg_height_skips_intervening_segments(self) -> None:
+        import struct
+        soi = b"\xff\xd8"
+        app0 = b"\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00\x01\x01\x00" \
+            + b"\x00\x01\x00\x01\x00\x00"
+        sof0 = (b"\xff\xc0" + struct.pack(">H", 17) + b"\x08"
+                + struct.pack(">H", 442) + struct.pack(">H", 300)
+                + b"\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01")
+        jpeg = soi + app0 + sof0 + b"\xff\xd9"
+        self.assertEqual(self._h("g.jpg", jpeg), 442)
+
+    def test_missing_file_returns_none(self) -> None:
+        self.assertIsNone(
+            extract_to_csv._image_pixel_height("nope.png", self.tmp))
+
+    def test_unrecognised_bytes_return_none(self) -> None:
+        self.assertIsNone(self._h("junk.png", b"not an image at all"))
+
+    def test_blank_path_returns_none(self) -> None:
+        self.assertIsNone(extract_to_csv._image_pixel_height("", self.tmp))
+
+
 class GramToRowsTests(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -326,13 +375,17 @@ class GramToRowsTests(unittest.TestCase):
         self.assertIn("GLC not found", rows[0]["warnings"])
 
     def test_resolvable_glc_populates_measurements(self) -> None:
+        # time_end is the referenced image's pixel height (issue #148), not the
+        # GLC's bottom_crop; place a real image of a known height so the derived
+        # value is deterministic. bandwidth/bandcentre still come from the GLC.
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
         gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
         rows = extract_to_csv.gram_to_rows(
             gram, publication="main", chapter="Arctic Survey",
             chapter_slug="arctic-survey",
             content_root=self.tmp, source_dir=self.tmp,
         )
-        self.assertEqual(rows[0]["time_end"], "271")
+        self.assertEqual(rows[0]["time_end"], "123")
         self.assertEqual(rows[0]["bandwidth"], "400")
         self.assertEqual(rows[0]["bandcentre"], "200")
         self.assertEqual(rows[0]["png_path"], "gram12.PNG")
@@ -552,11 +605,29 @@ class GlcViewFieldTests(unittest.TestCase):
         # GramFrame table), so its blank view fields are legitimate.
         row = self._rows("spectro.png", relaxed=False)[0]
         self.assertEqual(row["target_ext"], ".png")
-        for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+        # The GLC-authored band fields warn "GramFrame cannot render".
+        for field_name in extract_to_csv.GLC_AUTHORED_VIEW_FIELDS:
             self.assertEqual(row[field_name], "")
             self.assertIn(
                 f"gram missing {field_name} — GramFrame cannot render",
                 row["warnings"])
+        # time_end is the image height (issue #148). Here the referenced image
+        # is missing, so the row already dangles (ASSET_MISSING) and time_end is
+        # exempt from the GramFrame gate — no "gram missing time_end" warning.
+        self.assertEqual(row["time_end"], "")
+        self.assertNotIn("time_end — GramFrame cannot render", row["warnings"])
+        self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, row["warnings"])
+
+    def test_present_but_unreadable_image_warns_time_period(self) -> None:
+        # An image that IS on disk but whose height cannot be read yields a
+        # non-fatal "time period unknown" warning (not a fail-fast, not
+        # ASSET_MISSING).
+        (self.tmp / "supporting/gram12").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "supporting/gram12/spectro.png").write_bytes(b"not a png")
+        row = self._rows("spectro.png", relaxed=False)[0]
+        self.assertEqual(row["time_end"], "")
+        self.assertIn("gram time period unknown", row["warnings"])
+        self.assertNotIn(extract_to_csv.ASSET_MISSING_WARNING, row["warnings"])
 
     def test_wav_row_is_exempt_from_view_requirement(self) -> None:
         # A .wav-backed gram never renders a GramFrame table, so a blank view
@@ -584,9 +655,11 @@ class GlcViewFieldTests(unittest.TestCase):
     def test_glc_view_problems_flags_each_missing_field(self) -> None:
         problems = extract_to_csv.glc_view_problems(
             self._rows("spectro.png", relaxed=False))
+        # Only the GLC-authored band fields fail-fast; time_end is image-derived
+        # (issue #148) and dangles rather than crashing.
         self.assertEqual(
             sorted(field for _, field, _ in problems),
-            sorted(extract_to_csv.GLC_VIEW_FIELDS))
+            sorted(extract_to_csv.GLC_AUTHORED_VIEW_FIELDS))
         # Relaxed run fills the blanks, so nothing is flagged.
         self.assertEqual(
             extract_to_csv.glc_view_problems(
@@ -866,12 +939,18 @@ class GlcViewFieldMainTests(unittest.TestCase):
         self.assertTrue(out_csv.exists())
         with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
-        glc_rows = [r for r in rows if r["topic_type"] == "glc"
-                    and r["target_ext"]]
-        self.assertTrue(glc_rows)
-        self.assertTrue(all(r["time_end"] == "" for r in glc_rows))
+        image_glc_rows = [r for r in rows if r["topic_type"] == "glc"
+                          and r["target_ext"]
+                          in extract_to_csv.GRAMFRAME_GLC_EXTENSIONS]
+        self.assertTrue(image_glc_rows)
+        # time_end is read from the image height (issue #148), so stripping the
+        # GLC leaves it populated — the strict fail is on the missing band
+        # fields, which are what "GramFrame cannot render" now flags. (.wav GLC
+        # rows keep a blank time_end and are not GramFrame rows.)
+        self.assertTrue(all(r["time_end"] for r in image_glc_rows))
+        self.assertTrue(all(r["bandwidth"] == "" for r in image_glc_rows))
         self.assertTrue(any("GramFrame cannot render" in r["warnings"]
-                            for r in glc_rows))
+                            for r in image_glc_rows))
 
     def test_relaxed_run_defaults_fields_and_succeeds(self) -> None:
         out_csv = TMP / "extract_glcview_relaxed.csv"
@@ -889,8 +968,12 @@ class GlcViewFieldMainTests(unittest.TestCase):
                       and r["target_ext"] in extract_to_csv.GRAMFRAME_GLC_EXTENSIONS]
         self.assertTrue(image_rows)
         for r in image_rows:
-            for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+            # Only the GLC-authored band fields were stripped, so only they are
+            # defaulted; time_end keeps the image-derived height (issue #148).
+            for field_name in extract_to_csv.GLC_AUTHORED_VIEW_FIELDS:
                 self.assertEqual(r[field_name], extract_to_csv.RELAXED_DEFAULT)
+            self.assertTrue(r["time_end"])
+            self.assertNotEqual(r["time_end"], extract_to_csv.RELAXED_DEFAULT)
 
 
 class DeletedGramRemnantTests(unittest.TestCase):
