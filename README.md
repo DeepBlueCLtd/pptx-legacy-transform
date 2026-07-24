@@ -220,6 +220,24 @@ future user may want the audio and cannot be assumed able to rename file
 suffixes. The generator only copies what the `.glc` references, so the retained
 wav never reaches `dita/`.
 
+**Demon images (issue #151).** The same incoming folders may also carry *demon*
+images — an alternately-rendered gram view whose filename carries a `Demon`
+token, either leading (`Demon - 10m2s 0-40Hz.png`, `Demon - 0-40Hz.png`) or
+after a duration prefix (`4m10s_Demon - 0 - 40 Hz.jpg`). These are **additive**,
+not `.wav` replacements, so they skip the duration/stem matching. In the default
+verify pass each is listed in a `DEMON IMAGES` report section; `--apply` copies
+the image into the source gram folder (original name kept) and writes a
+`demon.glc` marker cloned from the folder's first hyperlinked `.glc`, with its
+`<filename>` repointed at the image and its band overwritten to the fixed
+**0 – 40 Hz** range. Several demons in one folder get `demon.glc`, `demon-2.glc`,
+… markers. Later, `extract.py` finds each `demon.glc` in the gram's first Lofar
+folder and emits a leading `topic_type="demon"` row (time period = the demon
+image's pixel height, per issue #148; band = 0 – 40 Hz from the marker), which
+the generator renders as the gram's first GramFrame — shown to every audience,
+before the Lofars and after the instructor-only analysis sheet. A
+`demon_stock.png` at the repo root is the sample image for building demon test
+data.
+
 ## Folder structure
 
 | Path | Role |
@@ -228,7 +246,7 @@ wav never reaches `dita/`.
 | `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
 | `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/relink_glc_to_image.py` | **Prep-time** stage: rewrite each `.glc` that still points at a `.wav` to reference the matching author-supplied `Image <N>-…` image in the same folder, moving the old `.wav` aside to `.wav.bak`; idempotent and re-runnable. See [Relinking `.wav` grams to pre-rendered images](#relinking-wav-grams-to-pre-rendered-images). |
-| `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<duration> <wav-stem>.<ext>`), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem/duration mismatches; `--apply` copies each image beside its `.glc`, repoints the `.glc`, and records the duration as `<bottom_crop>`. Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
+| `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<duration> <wav-stem>.<ext>`), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem/duration mismatches; `--apply` copies each image beside its `.glc`, repoints the `.glc`, and records the duration as `<bottom_crop>`. Also seeds `demon.glc` markers for any *demon* images in the delivery (issue #151). Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
@@ -654,9 +672,9 @@ share a key) rather than hard-failing.
 | 2 | `chapter` | no | Empty for progress-test rows. |
 | 3 | `gram_id` | no | Format `Gram NN`. |
 | 4 | `vessel_name` | yes | Instructor-only content. |
-| 5 | `topic_type` | no | `glc` or `analysis`. |
+| 5 | `topic_type` | no | `glc`, `analysis`, or `demon`. A `demon` row (issue #151) is an alternately-rendered gram view seeded by ingest; the generator renders it as the gram's leading GramFrame (before the Lofars, after the analysis sheet). |
 | 6 | `sequence` | no | 1-based per gram, scoped per `topic_type`. |
-| 7 | `topic_filename` | no | `gram_NN.dita`. Every row of a single gram (one per Lofar plus one analysis) shares this filename; the generator merges the N+1 rows into one DITA topic per gram. |
+| 7 | `topic_filename` | no | `gram_NN.dita`. Every row of a single gram (the demon(s), one per Lofar, plus one analysis) shares this filename; the generator merges the rows into one DITA topic per gram. |
 | 8 | `display_text` | yes (rare) | Human-readable link label from the PPTX run. |
 | 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run; always a `.glc` in the audited corpus. |
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |

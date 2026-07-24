@@ -588,5 +588,163 @@ class DriftLabelTests(unittest.TestCase):
         self.assertIsNone(ingest.drift_label("Gram 1", None))
 
 
+# ---------------------------------------------------------------------------
+# Demon images (issue #151)
+# ---------------------------------------------------------------------------
+
+class DemonGlcTextTests(unittest.TestCase):
+    """The targeted demon.glc rewrite: repoint filename + bake 0-40 Hz band."""
+
+    def test_repoints_filename_and_bakes_band(self):
+        out = ingest.build_demon_glc_text(
+            WAV_GLC.format(name="WAV 1.wav"), "Demon - 0-40Hz.png")
+        self.assertIn("<filename>Demon - 0-40Hz.png</filename>", out)
+        self.assertIn("<bandwidth>40</bandwidth>", out)
+        self.assertIn("<bandcentre>20</bandcentre>", out)
+        # Original band values are gone.
+        self.assertNotIn("<bandwidth>400</bandwidth>", out)
+        self.assertNotIn("<bandcentre>200</bandcentre>", out)
+
+    def test_no_bottom_crop_inserted(self):
+        out = ingest.build_demon_glc_text(
+            WAV_GLC.format(name="WAV 1.wav"), "Demon - 0-40Hz.png")
+        self.assertNotIn("bitmap_crop_values", out)
+
+    def test_parses_to_expected_glc(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "demon.glc"
+            p.write_text(ingest.build_demon_glc_text(
+                WAV_GLC.format(name="WAV 1.wav"), "Demon - 0-40Hz.png"),
+                encoding="utf-8")
+            glc = parse_glc(p)
+            self.assertEqual(glc.image_filename, "Demon - 0-40Hz.png")
+            self.assertEqual(glc.bandwidth, "40")
+            self.assertEqual(glc.bandcentre, "20")
+
+    def test_missing_band_raises(self):
+        no_band = (
+            "<GAPS_Lite_configuration><data_source>"
+            "<filename>x.wav</filename></data_source>"
+            "</GAPS_Lite_configuration>")
+        with self.assertRaises(ValueError):
+            ingest.build_demon_glc_text(no_band, "Demon.png")
+
+    def test_missing_filename_raises(self):
+        no_fn = (
+            "<GAPS_Lite_configuration><settings><lofar>"
+            "<bandwidth>1</bandwidth><bandcentre>1</bandcentre>"
+            "</lofar></settings></GAPS_Lite_configuration>")
+        with self.assertRaises(ValueError):
+            ingest.build_demon_glc_text(no_fn, "Demon.png")
+
+
+class DemonImageTests(IngestTestBase):
+
+    def _demon_gram(self, *, demon_names):
+        """source gram with one wav-backed lofar; incoming holds demon(s)."""
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
+        for name in demon_names:
+            self.incoming_image("Doc", "Gram 1", name)
+        return gram
+
+    def test_verify_reports_demon_read_only(self):
+        gram = self._demon_gram(demon_names=["Demon - 0-40Hz.png"])
+        before = self.snapshot(self.source)
+        outcomes, tally = self.run_ingest(apply=False)
+        demons = self.of_kind(outcomes, ingest.KIND_DEMON)
+        self.assertEqual(len(demons), 1)
+        # nothing written in verify
+        self.assertEqual(self.snapshot(self.source), before)
+        self.assertFalse((gram / "demon.glc").exists())
+
+    def test_apply_creates_marker_and_copies_image(self):
+        gram = self._demon_gram(demon_names=["Demon - 10m2s 0-40Hz.png"])
+        outcomes, tally = self.run_ingest(apply=True)
+        marker = gram / "demon.glc"
+        image = gram / "Demon - 10m2s 0-40Hz.png"
+        self.assertTrue(marker.exists())
+        self.assertTrue(image.exists())  # original name preserved
+        glc = parse_glc(marker)
+        self.assertEqual(glc.image_filename, "Demon - 10m2s 0-40Hz.png")
+        self.assertEqual(glc.bandwidth, "40")
+        self.assertEqual(glc.bandcentre, "20")
+        self.assertEqual(tally.demon_markers, 1)
+
+    def test_apply_idempotent(self):
+        gram = self._demon_gram(demon_names=["Demon - 0-40Hz.png"])
+        self.run_ingest(apply=True)
+        after_first = self.snapshot(self.source)
+        outcomes, tally = self.run_ingest(apply=True)
+        # second run makes no change and reports "already present"
+        self.assertEqual(self.snapshot(self.source), after_first)
+        self.assertEqual(tally.demon_markers, 0)
+        note = self.of_kind(outcomes, ingest.KIND_DEMON)[0].note
+        self.assertIn("already present", note)
+
+    def test_multiple_demons_numbered_markers(self):
+        gram = self._demon_gram(
+            demon_names=["Demon - 0-40Hz.png", "Demon - 10m2s 0-40Hz.png"])
+        self.run_ingest(apply=True)
+        self.assertTrue((gram / "demon.glc").exists())
+        self.assertTrue((gram / "demon-2.glc").exists())
+        # deterministic: first marker -> first image by sorted name
+        first = parse_glc(gram / "demon.glc")
+        second = parse_glc(gram / "demon-2.glc")
+        self.assertEqual(first.image_filename, "Demon - 0-40Hz.png")
+        self.assertEqual(second.image_filename, "Demon - 10m2s 0-40Hz.png")
+
+    def test_duration_prefixed_demon_name(self):
+        # A demon filename may carry a leading duration token before "Demon"
+        # (e.g. "4m10s_Demon - 0 - 40 Hz.jpg"). The duration is decorative.
+        gram = self._demon_gram(demon_names=["4m10s_Demon - 0 - 40 Hz.jpg"])
+        outcomes, tally = self.run_ingest(apply=True)
+        self.assertEqual(tally.demon_markers, 1)
+        marker = gram / "demon.glc"
+        self.assertTrue(marker.exists())
+        self.assertEqual(
+            parse_glc(marker).image_filename, "4m10s_Demon - 0 - 40 Hz.jpg")
+        self.assertTrue((gram / "4m10s_Demon - 0 - 40 Hz.jpg").exists())
+
+    def test_prefix_regex_matches_expected_shapes(self):
+        match = lambda s: bool(ingest.DEMON_PREFIX_RE.match(s))
+        self.assertTrue(match("Demon - 0-40Hz"))
+        self.assertTrue(match("Demon - 10m2s 0-40Hz"))
+        self.assertTrue(match("4m10s_Demon - 0 - 40 Hz"))
+        self.assertTrue(match("21m Demon - 0-40Hz"))
+        # not a demon: ordinary wav-replacement screenshots
+        self.assertFalse(match("5m26s WAV 1"))
+        self.assertFalse(match("WAV 1"))
+
+    def test_demon_not_matched_as_wav(self):
+        # A demon image must never be reported as an unmatched/unparseable image.
+        self._demon_gram(demon_names=["Demon - 0-40Hz.png"])
+        outcomes, _ = self.run_ingest(apply=False)
+        self.assertEqual(self.of_kind(outcomes, ingest.KIND_UNMATCHED_IMAGE), [])
+        self.assertEqual(self.of_kind(outcomes, ingest.KIND_UNPARSEABLE), [])
+
+    def test_no_template_glc_skips(self):
+        # Gram folder with a demon incoming but no hyperlinked .glc to clone.
+        self.source_gram("Doc", "Gram 1")  # empty gram folder
+        self.incoming_image("Doc", "Gram 1", "Demon - 0-40Hz.png")
+        outcomes, tally = self.run_ingest(apply=True)
+        self.assertEqual(tally.demon_markers, 0)
+        note = self.of_kind(outcomes, ingest.KIND_DEMON)[0].note
+        self.assertIn("no hyperlinked", note)
+
+    def test_demon_alongside_wav_replacement(self):
+        # A folder can carry both a normal wav-replacement screenshot and a demon.
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
+        self.incoming_image("Doc", "Gram 1", "5m WAV 1.png")
+        self.incoming_image("Doc", "Gram 1", "Demon - 0-40Hz.png")
+        outcomes, tally = self.run_ingest(apply=True)
+        # wav replacement applied AND demon seeded
+        self.assertEqual(tally.demon_markers, 1)
+        self.assertGreaterEqual(tally.counts.get(ingest.KIND_MATCHED, 0), 1)
+        self.assertTrue((gram / "demon.glc").exists())
+        self.assertTrue((gram / "WAV 1.png").exists())  # wav replacement copy
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

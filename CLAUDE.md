@@ -133,12 +133,34 @@ round-trip compatibility. No author decision selects the treatment.
 
 ### One topic per gram
 
-A single gram spans N+1 CSV rows (one per Lofar + one analysis sheet) that all
-share a `topic_filename`. The generator **merges** them into one
-`gram-NN/gram_NN.dita` topic (Analysis Sheet section first, then one section per
-Lofar in `sequence` order). Every referenced asset is copied beside the topic
-with a stable name (`analysis.png`, `lofar-1.png`, `lofar-2-i.png`, …) so every
-`href` is a bare filename — no `../` traversal.
+A single gram spans N+1 CSV rows (one per Lofar + one analysis sheet, plus any
+demon rows) that all share a `topic_filename`. The generator **merges** them
+into one `gram-NN/gram_NN.dita` topic (Analysis Sheet section first, then the
+demon GramFrame(s), then one section per Lofar in `sequence` order). Every
+referenced asset is copied beside the topic with a stable name (`analysis.png`,
+`demon.png`, `lofar-1.png`, `lofar-2-i.png`, …) so every `href` is a bare
+filename — no `../` traversal.
+
+### Demon images (issue #151, feature 012)
+
+A **demon** is an alternately-rendered gram view that **leads** the gram's page.
+It is additive (never a `.wav` replacement) and carries a third `topic_type`
+value, `demon`, alongside `glc` and `analysis`. Prep-time, `ingest_gram_images.py`
+recognises a delivered demon image (filename with a `Demon` token, leading or
+after a duration prefix like `4m10s_Demon - ...`), copies it into the source
+gram folder under its original name, and writes a `demon.glc` marker cloned from
+the folder's first hyperlinked `.glc` — repointed at the demon image with the
+band overwritten to the fixed **0 – 40 Hz** (`bandwidth=40`, `bandcentre=20`).
+`extract_to_csv.py` then scans the gram's **first resolved Lofar folder** for
+`demon.glc` / `demon-2.glc` markers and emits a leading `topic_type="demon"` row
+per marker; its `time_end` is the demon image's **pixel height** (issue #148),
+its band is read from the marker. The generator (`emit_gram_topic`) renders each
+demon as an inline `demon-stage` GramFrame **before** the Lofars and after the
+instructor-only analysis sheet, with **no audience restriction** — so in the
+student editions (analysis filtered) the demon is the first block on the page.
+The 0 – 40 Hz constant lives in the `demon.glc` only: extract and the generator
+read it through the ordinary `bandwidth`/`bandcentre` band path with no
+demon-specific frequency special-case.
 
 ### The CSV is the human-in-the-loop contract
 

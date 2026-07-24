@@ -40,6 +40,19 @@ This runs in two phases:
   ``</bitmap_crop_values>`` (the duration in whole seconds) so the extractor
   reads it as the gram's ``time_end`` and the generator embeds the image inline.
 
+**Demon images (issue #151).** The same incoming folders may also carry
+*demon* images -- an alternately-rendered gram view carrying a ``Demon`` token,
+either leading (``Demon - 10m2s 0-40Hz.png``, ``Demon - 0-40Hz.png``) or after a
+leading duration token (``4m10s_Demon - 0 - 40 Hz.jpg``). These
+are **additive**, not ``.wav`` replacements, so they skip the duration/stem
+matching entirely. In verify they are listed in a ``DEMON IMAGES`` report
+section; in apply each is copied into the source gram folder under its original
+name and gets a ``demon.glc`` marker cloned from the folder's first hyperlinked
+``.glc`` -- with its ``<filename>`` repointed at the image and its band settings
+overwritten to the fixed 0 - 40 Hz range. The marker is the signal ``extract``
+keys on to emit a leading demon GramFrame; the demon's time period is the
+image's pixel height (issue #148), so no ``bottom_crop`` is written.
+
 **Deliberate divergence from ``relink_glc_to_image.py``:** that sibling prep
 tool moves the superseded ``.wav`` aside to ``<name>.wav.bak``. This tool
 **leaves the ``.wav`` untouched, in place** -- a future user may want the audio
@@ -85,6 +98,33 @@ GLC_IMAGE_EXTENSIONS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif")
 # tolerated ("10M"). Nothing else parses -- other shapes feed the
 # unparseable-duration survey. Anchored: the whole leading token must match.
 DURATION_RE = re.compile(r"^(?P<m>\d+)m(?:(?P<s>\d{1,2})s)?$", re.IGNORECASE)
+
+# A "demon" image is an alternately-rendered gram view identified by a ``Demon``
+# token (issue #151). The token is either at the very start
+# (``Demon - 10m2s 0-40Hz.png``, ``Demon - 0-40Hz.png``) or after a leading
+# duration token and a space/underscore separator
+# (``4m10s_Demon - 0 - 40 Hz.jpg``). It is *additive* -- never a .wav
+# replacement -- so a matching file is intercepted before the duration/stem
+# matching path and handled apart. Anchored so ``WAV 1``-style screenshots (no
+# ``Demon`` token) never match.
+DEMON_PREFIX_RE = re.compile(
+    r"^(?:\d+m(?:\d{1,2}s)?[ _])?demon\b", re.IGNORECASE)
+
+# The demon GramFrame's frequency range is always 0 - 40 Hz (issue #151). The
+# generator derives the band from ``bandwidth``/``bandcentre`` the way it does
+# for every gram (band spans bandwidth/2 either side of bandcentre), so a 0..40
+# range is a width of 40 centred on 20. These are baked into the demon.glc so
+# extract/generate read them through the ordinary band path (confirmed design:
+# ingest owns the constant, not extract or the generator).
+DEMON_BANDWIDTH = "40"
+DEMON_BANDCENTRE = "20"
+
+# Targeted band-element rewrites for the demon.glc (byte-preserving text edits,
+# not an XML round-trip -- consistent with build_relinked_glc_text). Each must
+# match exactly once in the cloned template; a template missing either element
+# cannot encode the fixed band and is skipped (fail-loud on our own output).
+BANDWIDTH_TAG_RE = re.compile(r"(<bandwidth>)(.*?)(</bandwidth>)", re.DOTALL)
+BANDCENTRE_TAG_RE = re.compile(r"(<bandcentre>)(.*?)(</bandcentre>)", re.DOTALL)
 
 # The duration token is separated from the stem by a space or an underscore
 # ("11m Wav 1", "10m_0 - 600 Hz", "7m20s_0 - 441 Hz"). Split on the first.
@@ -158,6 +198,7 @@ KIND_AMBIGUOUS = "ambiguous"
 KIND_ALREADY = "already-converted"
 KIND_GLC_UNREADABLE = "glc-unreadable"
 KIND_GLC_CROPPED = "glc-already-cropped"
+KIND_DEMON = "demon-image"
 
 # Report section order + human headings.
 SECTION_ORDER: Tuple[Tuple[str, str], ...] = (
@@ -170,6 +211,7 @@ SECTION_ORDER: Tuple[Tuple[str, str], ...] = (
     (KIND_GLC_UNREADABLE, "UNREADABLE GLCS"),
     (KIND_GLC_CROPPED, "ALREADY-CROPPED GLCS"),
     (KIND_ALREADY, "ALREADY CONVERTED"),
+    (KIND_DEMON, "DEMON IMAGES"),
     (KIND_MATCHED, "MATCHED"),
 )
 
@@ -181,6 +223,7 @@ class Tally:
     counts: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
     images_copied: int = 0
     glcs_rewritten: int = 0
+    demon_markers: int = 0
 
     def bump(self, kind: str) -> None:
         self.counts[kind] += 1
@@ -378,6 +421,65 @@ def build_relinked_glc_text(text: str, new_basename: str, seconds: int) -> str:
     return new_text[:after] + block + new_text[after:]
 
 
+def build_demon_glc_text(text: str, new_basename: str) -> str:
+    """Return ``text`` (a cloned template GLC) turned into a demon marker.
+
+    Two targeted, byte-preserving text edits (issue #151): the first
+    ``<filename>`` inner text is repointed at ``new_basename`` (the demon
+    image), and the ``<bandwidth>``/``<bandcentre>`` inner text is overwritten to
+    encode the fixed 0 - 40 Hz range (``DEMON_BANDWIDTH`` / ``DEMON_BANDCENTRE``)
+    so extract and the generator read it through the ordinary band path with no
+    demon special-case. No ``bottom_crop`` is inserted: the demon's time period
+    is the image's pixel height, measured at extraction (issue #148).
+
+    Raises ``ValueError`` when any of the three anchors (``<filename>``,
+    ``<bandwidth>``, ``<bandcentre>``) is absent, so a template that cannot
+    encode the fixed band is never written half-formed -- the caller skips it
+    with a warning rather than emit a broken marker.
+    """
+    new_text, count = FILENAME_TAG_RE.subn(
+        lambda m: m.group(1) + new_basename + m.group(3), text, count=1)
+    if count != 1:
+        raise ValueError("no <filename> element to rewrite")
+
+    new_text, bw = BANDWIDTH_TAG_RE.subn(
+        lambda m: m.group(1) + DEMON_BANDWIDTH + m.group(3), new_text, count=1)
+    if bw != 1:
+        raise ValueError("no <bandwidth> element to rewrite")
+
+    new_text, bc = BANDCENTRE_TAG_RE.subn(
+        lambda m: m.group(1) + DEMON_BANDCENTRE + m.group(3), new_text, count=1)
+    if bc != 1:
+        raise ValueError("no <bandcentre> element to rewrite")
+
+    return new_text
+
+
+def _demon_marker_name(index: int) -> str:
+    """Deterministic demon-marker filename for the *index*-th demon (1-based).
+
+    The issue names the marker ``demon.glc`` (singular); when a gram folder
+    carries several demon images the markers extend as ``demon-2.glc``,
+    ``demon-3.glc``, … in incoming-filename order so each references its own
+    image and extract emits them in a stable order ahead of the Lofars.
+    """
+    return "demon.glc" if index == 1 else "demon-%d.glc" % index
+
+
+def _first_template_glc(source_gram: Path) -> Optional[Path]:
+    """Return the gram folder's first hyperlinked ``.glc`` to clone, or None.
+
+    "First hyperlinked glc for that folder" (issue #151): the first ``.glc`` in
+    sorted order, excluding any ``demon*.glc`` marker (so a re-run never clones a
+    previously-created demon marker). Returns None when the folder has no
+    template ``.glc`` -- the demon cannot be wired up and is skipped.
+    """
+    for glc_path in sorted(source_gram.glob("*.glc")):
+        if glc_path.is_file() and not glc_path.name.lower().startswith("demon"):
+            return glc_path
+    return None
+
+
 # -----------------------------------------------------------------------------
 # Matching / classification -- shared by verify and apply
 # -----------------------------------------------------------------------------
@@ -402,10 +504,17 @@ def process_gram(
             note="no inner filename (malformed or missing)"))
         tally.bump(KIND_GLC_UNREADABLE)
 
-    # Collect and parse the incoming images.
+    # Collect and parse the incoming images. Demon images (leading "Demon"
+    # token) are intercepted here -- they are additive, not .wav replacements,
+    # so they never enter the duration/stem matching path (issue #151).
     images: List[CandidateImage] = []
+    demon_images: List[Path] = []
     for entry in sorted(incoming_gram.iterdir()):
         if not entry.is_file():
+            continue
+        if (entry.suffix.lower() in IMAGE_EXTENSIONS
+                and DEMON_PREFIX_RE.match(entry.stem)):
+            demon_images.append(entry)
             continue
         candidate = parse_image_filename(entry)
         if candidate is None:
@@ -463,6 +572,81 @@ def process_gram(
                     note='stem "%s"; folder wavs: %s'
                          % (candidate.stem, available_wavs)))
                 tally.bump(KIND_UNMATCHED_IMAGE)
+
+    if demon_images:
+        _process_demon_images(
+            demon_images, source_gram, incoming_root, source_root,
+            apply=apply, outcomes=outcomes, tally=tally)
+
+
+def _process_demon_images(
+    demon_images: List[Path], source_gram: Path, incoming_root: Path,
+    source_root: Path, *, apply: bool, outcomes: List[Outcome], tally: Tally,
+) -> None:
+    """Report (verify) or seed (apply) a demon marker for each demon image.
+
+    Each demon image is copied into ``source_gram`` **keeping its original
+    filename** and gets a ``demon.glc`` marker cloned from the folder's first
+    hyperlinked ``.glc``, repointed at the image with the fixed 0 - 40 Hz band
+    baked in (issue #151). Markers are named ``demon.glc``, ``demon-2.glc``, …
+    in incoming-filename order. Verify mode only reports; apply performs the
+    copy + marker write. Idempotent: a marker that already exists is left as-is
+    and reported "already present".
+    """
+    template = _first_template_glc(source_gram)
+    for index, image in enumerate(sorted(demon_images, key=lambda p: p.name),
+                                  start=1):
+        marker_name = _demon_marker_name(index)
+        marker_path = source_gram / marker_name
+        rel_image = _rel(image, incoming_root)
+
+        if not apply:
+            outcomes.append(Outcome(
+                KIND_DEMON, rel_image,
+                note='demon image (would seed %s)' % marker_name))
+            tally.bump(KIND_DEMON)
+            continue
+
+        if marker_path.exists():
+            outcomes.append(Outcome(
+                KIND_DEMON, rel_image,
+                note='already present: %s' % marker_name))
+            tally.bump(KIND_DEMON)
+            continue
+
+        if template is None:
+            LOGGER.warning(
+                "skip demon (no template .glc in %s): %s", source_gram, image)
+            outcomes.append(Outcome(
+                KIND_DEMON, rel_image,
+                note='no hyperlinked .glc to clone; skipped'))
+            tally.bump(KIND_DEMON)
+            continue
+
+        try:
+            text = template.read_text(encoding="utf-8")
+            marker_text = build_demon_glc_text(text, image.name)
+        except (OSError, ValueError) as exc:
+            LOGGER.warning("skip demon (could not build marker): %s [%s]",
+                           image, exc)
+            outcomes.append(Outcome(
+                KIND_DEMON, rel_image,
+                note='could not build marker: %s' % exc))
+            tally.bump(KIND_DEMON)
+            continue
+
+        # Copy the demon image beside the marker (original name preserved) and
+        # write the marker. Order: image first, so a marker never references a
+        # missing image even if the run is interrupted between the two writes.
+        shutil.copyfile(image, source_gram / image.name)
+        tally.images_copied += 1
+        marker_path.write_text(marker_text, encoding="utf-8")
+        tally.demon_markers += 1
+        LOGGER.info("demon: %s -> %s (marker %s, band 0-40 Hz)",
+                    image, source_gram / image.name, marker_name)
+        outcomes.append(Outcome(
+            KIND_DEMON, rel_image, note='seeded %s' % marker_name))
+        tally.bump(KIND_DEMON)
 
 
 def _apply_match(
@@ -597,6 +781,7 @@ def _summary_line(tally: Tally, *, apply: bool) -> str:
     if apply:
         parts.append("glcs_rewritten %d" % tally.glcs_rewritten)
         parts.append("images_copied %d" % tally.images_copied)
+        parts.append("demon_markers %d" % tally.demon_markers)
     return ", ".join(parts)
 
 
