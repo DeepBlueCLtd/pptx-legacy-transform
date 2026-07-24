@@ -1190,6 +1190,140 @@ class MainFlatLayoutTests(unittest.TestCase):
         self.assertIn("renumber", errors[0].lower())
 
 
+class DemonBlockTests(unittest.TestCase):
+    """Issue #151 — the demon GramFrame leads the gram, for all audiences."""
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.out = TMP / f"out_{self._testMethodName}"
+        self.image_root = TMP / f"img_{self._testMethodName}"
+        for d in (self.out, self.image_root):
+            if d.exists():
+                shutil.rmtree(d)
+        self.image_root.mkdir(parents=True)
+
+    def _png(self, rel: str) -> None:
+        p = self.image_root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    def _write_csv(self, rows: list[dict]) -> Path:
+        cols = generate_dita.CSV_COLUMNS
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            for r in rows:
+                w.writerow({c: r.get(c, "") for c in cols})
+        return csv_path
+
+    def _base(self, **kw) -> dict:
+        base = {c: "" for c in generate_dita.CSV_COLUMNS}
+        base.update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_filename": "gram_12.dita",
+        })
+        base.update(kw)
+        return base
+
+    def _topic_root(self):
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        self.assertTrue(topic.is_file(), f"missing {topic}")
+        return ET.parse(topic).getroot(), topic.parent
+
+    def _rows(self):
+        self._png("supporting/gram12/Demon - 0-40Hz.png")
+        self._png("images/gram12.png")
+        return [
+            self._base(topic_type="demon", sequence="1",
+                       glc_path="supporting/gram12/demon.glc",
+                       time_end="232", bandwidth="40", bandcentre="20",
+                       png_path="supporting/gram12/Demon - 0-40Hz.png"),
+            self._base(topic_type="glc", sequence="1", display_text="Lofar",
+                       glc_path="supporting/gram12/config.glc",
+                       link_href="supporting/gram12/config.glc",
+                       time_end="271", bandwidth="400", bandcentre="200",
+                       png_path="images/gram12.png"),
+            self._base(topic_type="analysis", sequence="1",
+                       png_path="images/gram12.png"),
+        ]
+
+    def test_demon_section_shape_and_band(self) -> None:
+        rc = generate_dita.main([
+            "--csv", str(self._write_csv(self._rows())),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        self.assertEqual(rc, 0)
+        root, _ = self._topic_root()
+        demon = root.find(".//section[@outputclass='demon-stage']")
+        self.assertIsNotNone(demon, "expected a demon-stage section")
+        self.assertEqual(demon.get("id"), "demon")
+        self.assertEqual(demon.find("title").text, "Demon")
+        # no audience restriction -> shown to all editions
+        self.assertIsNone(demon.get("audience"))
+        vals = {r.find("entry").text: r.findall("entry")[1].text
+                for r in demon.findall(".//tbody/row")
+                if len(r.findall("entry")) == 2}
+        self.assertEqual(vals.get("time-end"), "232")
+        self.assertEqual(vals.get("freq-start"), "0")   # 0-40 Hz
+        self.assertEqual(vals.get("freq-end"), "40")
+
+    def test_demon_precedes_lofar_and_follows_analysis(self) -> None:
+        generate_dita.main([
+            "--csv", str(self._write_csv(self._rows())),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        root, _ = self._topic_root()
+        body = root.find("body")
+        classes = [s.get("outputclass") for s in body.findall("section")]
+        # analysis-sheet, then demon-stage, then lofar-stage — in that order
+        self.assertLess(classes.index("analysis-sheet"), classes.index("demon-stage"))
+        self.assertLess(classes.index("demon-stage"), classes.index("lofar-stage"))
+
+    def test_demon_image_copied_with_stable_name(self) -> None:
+        generate_dita.main([
+            "--csv", str(self._write_csv(self._rows())),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        root, topic_dir = self._topic_root()
+        self.assertTrue((topic_dir / "demon.png").is_file(),
+                        "demon image must be copied under the stable name demon.png")
+        image = root.find(".//section[@outputclass='demon-stage']//image")
+        self.assertEqual(image.get("href"), "demon.png")
+
+    def test_multiple_demons_numbered(self) -> None:
+        self._png("supporting/gram12/Demon - a.png")
+        self._png("supporting/gram12/Demon - b.png")
+        self._png("images/gram12.png")
+        rows = [
+            self._base(topic_type="demon", sequence="1",
+                       time_end="100", bandwidth="40", bandcentre="20",
+                       png_path="supporting/gram12/Demon - a.png"),
+            self._base(topic_type="demon", sequence="2",
+                       time_end="200", bandwidth="40", bandcentre="20",
+                       png_path="supporting/gram12/Demon - b.png"),
+            self._base(topic_type="glc", sequence="1",
+                       glc_path="supporting/gram12/config.glc",
+                       link_href="supporting/gram12/config.glc",
+                       time_end="271", bandwidth="400", bandcentre="200",
+                       png_path="images/gram12.png"),
+        ]
+        generate_dita.main([
+            "--csv", str(self._write_csv(rows)),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        root, topic_dir = self._topic_root()
+        demons = [s for s in root.findall(".//section")
+                  if s.get("outputclass") == "demon-stage"]
+        self.assertEqual(
+            [(s.get("id"), s.find("title").text) for s in demons],
+            [("demon", "Demon"), ("demon-2", "Demon 2")])
+        self.assertTrue((topic_dir / "demon.png").is_file())
+        self.assertTrue((topic_dir / "demon-2.png").is_file())
+
+
 class AudienceShapeTests(unittest.TestCase):
     """Spec 003 — chapter slug normalisation and audience-tagged ditamap shape.
 

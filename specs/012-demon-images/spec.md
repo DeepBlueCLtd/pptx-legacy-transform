@@ -191,9 +191,9 @@ audience restriction.
   → only a leading `Demon` token (case-insensitive) is treated as a demon image;
   a stem like `WAV demon 1` is matched by the existing wav-replacement flow, not
   the demon flow.
-- **Demon filename tokens** (`10m2s`, `0-40Hz`) → decorative; the time period
-  comes from pixel height and the band is the fixed 0 – 40 Hz. The tokens are
-  neither parsed nor validated.
+- **Demon filename tokens** (`10m2s`, `0-40Hz`, and a leading duration prefix
+  such as `4m10s_`) → decorative; the time period comes from pixel height and the
+  band is the fixed 0 – 40 Hz. The tokens are neither parsed nor validated.
 - **Idempotent apply** → a second `--apply` over an already-seeded gram does not
   create a duplicate marker or re-copy the image with a changed name; the run
   reports the demon as already present.
@@ -204,10 +204,13 @@ audience restriction.
 
 #### Ingest (marker creation)
 
-- **FR-001**: `ingest` MUST recognise an incoming image whose filename begins
-  with a `Demon` token (case-insensitive) as a **demon image**, distinct from
-  the existing `.wav`-replacement screenshots, and MUST NOT attempt to match it
-  to a `.wav` stem.
+- **FR-001**: `ingest` MUST recognise an incoming image carrying a `Demon` token
+  (case-insensitive) as a **demon image**, distinct from the existing
+  `.wav`-replacement screenshots, and MUST NOT attempt to match it to a `.wav`
+  stem. The token is either at the start (`Demon - 0-40Hz.png`,
+  `Demon - 10m2s 0-40Hz.png`) or immediately after a leading duration token and
+  a space/underscore separator (`4m10s_Demon - 0 - 40 Hz.jpg`); the duration
+  prefix, like the other filename tokens, is decorative (FR-024).
 - **FR-002**: `ingest` MUST accept demon images with `png`, `jpg`, and `jpeg`
   extensions (case-insensitive), consistent with the existing incoming-image
   set.
@@ -291,12 +294,18 @@ audience restriction.
   #151) MUST be available at the repository root for building synthetic demon
   test data, and the synthetic/mock corpus MUST be able to exercise the demon
   path end-to-end.
+- **FR-024**: The demon filename's descriptive tokens — a duration reading
+  (`10m2s`), a frequency reading (`0-40Hz`), and any leading duration prefix
+  (`4m10s_`) — MUST be treated as decorative: neither parsed for values nor
+  validated against the image or the fixed band. Time comes from pixel height
+  (FR-011) and the band is the fixed 0 – 40 Hz (FR-005/FR-012).
 
 ### Key Entities
 
 - **Demon image**: An author-delivered screenshot rendered by the alternate
-  algorithm, named with a leading `Demon` token (e.g. `Demon - 10m2s 0-40Hz.png`,
-  `Demon - 0-40Hz.png`). Additive to a gram — never a `.wav` replacement.
+  algorithm, carrying a `Demon` token — leading (`Demon - 10m2s 0-40Hz.png`,
+  `Demon - 0-40Hz.png`) or after a duration prefix (`4m10s_Demon - 0 - 40 Hz.jpg`).
+  Additive to a gram — never a `.wav` replacement.
 - **`demon.glc` marker**: A per-demon GLC written into the source gram folder by
   `ingest`, cloned from the folder's first hyperlinked `.glc`, repointed at the
   demon image and carrying the fixed 0 – 40 Hz band. Its presence is the signal

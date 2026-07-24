@@ -500,6 +500,7 @@ def _relpath_posix(target: Path, start_dir: Path) -> str:
 
 def copy_asset(
     src_relpath: str, image_root: Path, topic_dir: Path,
+    target_name: str | None = None,
 ) -> tuple[str, Path | None]:
     """Copy the referenced asset next to its topic and return ``(href, written)``.
 
@@ -507,6 +508,10 @@ def copy_asset(
     (e.g. ``"Lofar 1 ABC.png"`` → ``"lofar-1-abc.png"``). Each gram has
     its own folder so two grams sharing an original filename never
     collide; the slug keeps hrefs URL-safe.
+
+    ``target_name`` overrides the derived filename with an explicit stable
+    basename (e.g. ``"demon.png"`` for a demon image whose source name varies);
+    the caller is responsible for its uniqueness within the topic folder.
 
     If ``src_relpath`` is empty, returns ``("", None)``.
 
@@ -519,7 +524,8 @@ def copy_asset(
     if not src_relpath:
         return "", None
     source = image_root / src_relpath
-    target_name = slugify_asset_name(Path(src_relpath).name)
+    if target_name is None:
+        target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
     # Testing aid: when --stub-wav is set, every .wav copy is sourced from
     # the stub file but keeps its slugified per-gram filename so the
@@ -916,10 +922,29 @@ def _append_gramframe_table(
     single numbered one) become a uniform incremental sequence, and so the
     floating nav panel can target each Lofar with an in-page anchor.
     """
+    return _append_gramframe_section(
+        parent, image_href, time_end, bandwidth, bandcentre,
+        section_id=_lofar_anchor_id(lofar_index),
+        title=f"Lofar {lofar_index}", outputclass="lofar-stage",
+    )
+
+
+def _append_gramframe_section(
+    parent: ET.Element, image_href: str, time_end: str,
+    bandwidth: str, bandcentre: str, *,
+    section_id: str, title: str, outputclass: str,
+) -> ET.Element:
+    """Append one GramFrame ``gram-config`` ``<section>`` with a given identity.
+
+    Shared body for the Lofar and demon (issue #151) GramFrame blocks: same
+    table shape (``class="gram-config"`` + two named ``<colspec>`` so DITA-OT
+    emits ``colspan="2"`` on the image row, which GramFrame requires), differing
+    only in the section ``id``/``title``/``outputclass``.
+    """
     section = ET.SubElement(parent, "section", {
-        "id": _lofar_anchor_id(lofar_index), "outputclass": "lofar-stage",
+        "id": section_id, "outputclass": outputclass,
     })
-    ET.SubElement(section, "title").text = f"Lofar {lofar_index}"
+    ET.SubElement(section, "title").text = title
     table = ET.SubElement(section, "table", {"outputclass": "gram-config"})
     tgroup = ET.SubElement(table, "tgroup", {"cols": "2"})
     ET.SubElement(tgroup, "colspec", {"colname": "c1", "colnum": "1"})
@@ -941,6 +966,30 @@ def _append_gramframe_table(
         ET.SubElement(r, "entry").text = label
         ET.SubElement(r, "entry").text = value
     return section
+
+
+def _demon_anchor_id(index: int) -> str:
+    """Stable id for the *index*-th demon section within a gram (``demon``/``demon-N``)."""
+    return "demon" if index == 1 else f"demon-{index}"
+
+
+def _append_demon_gramframe(
+    parent: ET.Element, image_href: str, time_end: str,
+    bandwidth: str, bandcentre: str, demon_index: int,
+) -> ET.Element:
+    """Append a demon GramFrame section (issue #151), leading the gram's page.
+
+    The demon is an ordinary inline image GramFrame (time period = image pixel
+    height, band = 0 - 40 Hz baked into its marker upstream) carrying no audience
+    restriction, so it renders in every edition. ``demon_index`` drives a stable
+    ``Demon`` / ``Demon N`` title and ``demon`` / ``demon-N`` anchor.
+    """
+    title = "Demon" if demon_index == 1 else f"Demon {demon_index}"
+    return _append_gramframe_section(
+        parent, image_href, time_end, bandwidth, bandcentre,
+        section_id=_demon_anchor_id(demon_index),
+        title=title, outputclass="demon-stage",
+    )
 
 
 # Stable id on the analysis-sheet section so the floating nav panel's
@@ -1068,7 +1117,7 @@ def _append_seven_questions_section(body: ET.Element, href: str) -> None:
 
 def _append_gram_nav_panel(
     parent: ET.Element, topic_id: str, lofar_count: int, has_analysis: bool,
-    has_seven_q: bool = False,
+    has_seven_q: bool = False, demon_count: int = 0,
 ) -> None:
     """Append the floating gram navigation panel.
 
@@ -1094,7 +1143,8 @@ def _append_gram_nav_panel(
 
     Emitted only when there is something to jump to.
     """
-    if lofar_count == 0 and not has_analysis and not has_seven_q:
+    if (lofar_count == 0 and demon_count == 0
+            and not has_analysis and not has_seven_q):
         return
     panel = ET.SubElement(parent, "p", {"outputclass": "gram-nav"})
     if has_seven_q:
@@ -1103,6 +1153,11 @@ def _append_gram_nav_panel(
             "href": f"#{topic_id}/{SEVEN_QUESTIONS_SECTION_ID}",
         })
         xref.text = SEVEN_QUESTIONS_TOPIC_TITLE
+    for n in range(1, demon_count + 1):
+        xref = ET.SubElement(panel, "xref", {
+            "href": f"#{topic_id}/{_demon_anchor_id(n)}",
+        })
+        xref.text = "Demon" if n == 1 else f"Demon {n}"
     for n in range(1, lofar_count + 1):
         xref = ET.SubElement(panel, "xref", {
             "href": f"#{topic_id}/{_lofar_anchor_id(n)}",
@@ -1194,6 +1249,11 @@ def emit_gram_topic(
        student edition the analysis section is filtered out too, so this
        section appears first on the page; instructors don't get it here at
        all (they have the root-level 7_questions.dita nav topic instead).
+    2a. The demon GramFrame block(s) (``topic_type="demon"``, issue #151),
+       in CSV ``sequence`` order — an inline image GramFrame (time period =
+       image pixel height, band = 0 - 40 Hz) with no audience restriction, so
+       it leads the gram in every edition (the first visible block for a
+       student, since analysis is filtered out).
     3. One block per ``topic_type="glc"`` row, in CSV ``sequence``
        order. The block shape is chosen by the extension of the asset
        named inside the ``.glc`` (carried through as ``png_path``):
@@ -1210,10 +1270,12 @@ def emit_gram_topic(
     are skipped with a warning recorded in ``skipped.txt``.
     """
     analysis_rows = [r for r in gram_rows if r["topic_type"] == "analysis"]
+    demon_rows = [r for r in gram_rows if r["topic_type"] == "demon"]
+    demon_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
     glc_rows = [r for r in gram_rows if r["topic_type"] == "glc"]
     glc_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
 
-    first = analysis_rows[0] if analysis_rows else glc_rows[0]
+    first = (analysis_rows or glc_rows or demon_rows)[0]
     eff_gram_id = _effective_gram_id(first)
     gram_num = _gram_num(eff_gram_id)
     topic_dir = _topic_dir_for_row(out_dir, first)
@@ -1284,6 +1346,38 @@ def emit_gram_topic(
         pub_dir = out_dir / pub
         seven_q_href = _relpath_posix(pub_dir / SEVEN_QUESTIONS_IMAGE, topic_dir)
         _append_seven_questions_section(body, seven_q_href)
+
+    # Demon GramFrame(s) (issue #151) lead the gram content: after the
+    # analysis/7-questions sections, before every Lofar. Shown to all audiences
+    # (no restriction), so in the student editions -- where analysis is filtered
+    # -- the demon is the first block on the page. Each demon image is copied
+    # beside the topic under a stable ``demon.png`` / ``demon-N.png`` name so its
+    # href needs no ``../`` traversal.
+    demon_count = 0
+    for row in demon_rows:
+        png_path = row.get("png_path", "") or ""
+        if not png_path:
+            reason = "demon row has no png_path"
+            LOGGER.error(
+                "Skipping row %s/%s/%s seq=%s: %s",
+                row["publication"], row["gram_id"], row["topic_type"],
+                row["sequence"], reason,
+            )
+            skipped.append(_skip_record(row, reason))
+            continue
+        demon_count += 1
+        ext = Path(png_path).suffix.lower() or ".png"
+        target_name = ("demon" if demon_count == 1 else f"demon-{demon_count}") + ext
+        image_href, copied = copy_asset(
+            png_path, image_root, topic_dir, target_name=target_name)
+        if copied is not None:
+            written.append(copied)
+        _append_demon_gramframe(
+            body, image_href,
+            row.get("time_end", ""),
+            row.get("bandwidth", ""), row.get("bandcentre", ""),
+            demon_count,
+        )
 
     lofar_index = 0
     for row in glc_rows:
@@ -1375,6 +1469,7 @@ def emit_gram_topic(
     # means DOM order doesn't affect placement.
     _append_gram_nav_panel(
         body, topic_id, lofar_index, bool(analysis_rows), has_seven_q=seven_q,
+        demon_count=demon_count,
     )
 
     # Navigation back to the publication index is delivered by the page

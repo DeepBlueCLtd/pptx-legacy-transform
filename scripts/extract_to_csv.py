@@ -76,6 +76,11 @@ ASSET_MISSING_WARNING: str = "asset file missing on disk"
 GRAMFRAME_GLC_EXTENSIONS: tuple[str, ...] = (
     ".png", ".jpg", ".jpeg", ".gif")
 
+# A demon marker (issue #151): ingest writes a ``demon.glc`` (and ``demon-2.glc``,
+# … for several demons) into a gram folder beside a demon image. It is *not*
+# hyperlinked from the slide, so ``extract`` discovers it by scanning the gram's
+# first resolved Lofar folder (see ``_DEMON_MARKER_RE`` / ``_find_demon_markers``).
+
 # Prefixes that identify the welcome / exit framing slides emitted by
 # ``mock_pptx.py``. These slides carry no gram content and must not
 # contribute rows to the CSV.
@@ -1239,6 +1244,129 @@ def _recover_analysis_sheet(
     return None
 
 
+# A demon marker's stem is exactly ``demon`` (the first) or ``demon-N`` (the
+# Nth, N>=2). Anchored so ``demonstrate.glc`` and other ``demon``-prefixed files
+# never match. Case-insensitive.
+_DEMON_MARKER_RE = re.compile(r"^demon(?:-(\d+))?$", re.IGNORECASE)
+
+
+def _find_demon_markers(lofar_dir: Path) -> list[Path]:
+    """Return the ``demon.glc`` / ``demon-N.glc`` markers in ``lofar_dir``.
+
+    Ordered ``demon`` (1) then ``demon-2``, ``demon-3``, … by their numeric
+    suffix — a plain lexical sort would wrongly put ``demon-2.glc`` before
+    ``demon.glc`` (``-`` < ``.``). Deterministic so multiple demons emit in a
+    stable order ahead of the Lofars.
+    """
+    markers: list[tuple[int, Path]] = []
+    for entry in sorted(lofar_dir.iterdir()):
+        if not (entry.is_file() and entry.suffix.lower() == ".glc"):
+            continue
+        match = _DEMON_MARKER_RE.match(entry.stem)
+        if match is None:
+            continue
+        order = int(match.group(1)) if match.group(1) else 1
+        markers.append((order, entry))
+    return [entry for _order, entry in sorted(markers, key=lambda t: (t[0], t[1].name))]
+
+
+def demon_rows_for_gram(
+    gram: GramPlaceholder,
+    lofar_dirs: list[Path],
+    publication: str,
+    chapter: str | None,
+    content_root: Path,
+    gram_num: str,
+    target_doc: str,
+    target_chapter: str,
+    relaxed: bool,
+) -> list[dict]:
+    """Emit one ``topic_type="demon"`` row per demon marker for this gram (#151).
+
+    A demon image is an alternately-rendered gram view that leads the gram's
+    page. It is signalled by a ``demon.glc`` marker ingest writes into the gram
+    folder (never hyperlinked from the slide), so it is discovered here by
+    scanning the folder of the gram's **first resolved Lofar ``.glc``**
+    (``lofar_dirs[0]``). A gram with no resolved Lofar has no folder to inspect
+    and gets no demon row. Each marker becomes one demon row ordered ahead of
+    the Lofar rows; the demon's ``time_end`` is the image's pixel height (issue
+    #148) and its band is the fixed 0 - 40 Hz read from the marker.
+    """
+    if not lofar_dirs:
+        return []
+    lofar_dir = lofar_dirs[0]
+    if not lofar_dir.is_dir():
+        return []
+
+    rows: list[dict] = []
+    for i, marker in enumerate(_find_demon_markers(lofar_dir), start=1):
+        warnings: list[str] = []
+        glc = parse_glc(marker)
+        warnings.extend(glc.warnings)
+        glc_path = _rel_to_root(marker, content_root)
+        png_path = ""
+        time_end = ""
+        if glc.image_filename:
+            png_path = resolve_asset_path(
+                glc.image_filename, content_root, source_dir=marker.parent)
+            if Path(png_path).suffix.lower() in GRAMFRAME_GLC_EXTENSIONS:
+                height = _image_pixel_height(png_path, content_root)
+                if height is not None:
+                    time_end = str(height)
+
+        row = {
+            "publication": publication,
+            "chapter": chapter or "",
+            "target_doc": target_doc,
+            "target_chapter": target_chapter,
+            "gram_id": gram.gram_id,
+            "vessel_name": gram.vessel_name,
+            "topic_type": "demon",
+            "sequence": str(i),
+            "topic_filename": f"gram_{gram_num}.dita",
+            "display_text": "",
+            "link_href": "",
+            "glc_path": glc_path,
+            "time_end": time_end,
+            "bandwidth": glc.bandwidth,
+            "bandcentre": glc.bandcentre,
+            "png_path": png_path,
+            "target_ext": Path(png_path).suffix.lower(),
+            "file_size": _png_file_size(png_path, content_root),
+            "wav_treatment": "",
+            "warnings": "",
+        }
+        asset_missing = _asset_file_missing(png_path, content_root)
+        # A demon is always rendered as an inline image GramFrame, so it needs
+        # the same view fields an image Lofar does. ``time_end`` is image-derived
+        # (dangles when the image is absent, like every image row); the band
+        # comes from the demon marker ingest wrote (0 - 40 Hz). Mirror the image
+        # Lofar handling: default under --relaxed, else warn (never fail-fast --
+        # a demon row is topic_type="demon", exempt from glc_view_problems).
+        if row["target_ext"] in GRAMFRAME_GLC_EXTENSIONS:
+            for field_name in GLC_VIEW_FIELDS:
+                if (row[field_name] or "").strip():
+                    continue
+                if relaxed:
+                    row[field_name] = RELAXED_DEFAULT
+                    warnings.append(
+                        f"demon missing {field_name} — defaulted to "
+                        f"{RELAXED_DEFAULT} (--relaxed)")
+                elif field_name == "time_end":
+                    if not asset_missing:
+                        warnings.append(
+                            "demon time period unknown — could not read image "
+                            "height")
+                else:
+                    warnings.append(
+                        f"demon missing {field_name} — GramFrame cannot render")
+        if asset_missing:
+            warnings.append(ASSET_MISSING_WARNING)
+        row["warnings"] = ", ".join(warnings)
+        rows.append(row)
+    return rows
+
+
 def gram_to_rows(
     gram: GramPlaceholder,
     publication: str,
@@ -1371,6 +1499,14 @@ def gram_to_rows(
         row["warnings"] = ", ".join(warnings)
         rows.append(row)
 
+    # Demon rows (issue #151) lead the gram: emitted here, once the Lofar folders
+    # are known, and prepended to every return path so they precede the Lofar
+    # rows in the CSV (the generator renders them first, after the analysis
+    # sheet). A gram with no resolved Lofar folder gets none.
+    demon_rows = demon_rows_for_gram(
+        gram, lofar_dirs, publication, chapter, content_root, gram_num,
+        target_doc, target_chapter, relaxed)
+
     analysis_warnings: list[str] = []
     analysis_png = gram.png_href or ""
     if not analysis_png:
@@ -1425,7 +1561,7 @@ def gram_to_rows(
                 "The gram's Lofar rows are unaffected.",
                 gram.gram_id or "<no gram_id>", analysis_png,
             )
-            return rows
+            return demon_rows + rows
     rows.append({
         "publication": publication,
         "chapter": chapter or "",
@@ -1448,7 +1584,7 @@ def gram_to_rows(
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
     })
-    return rows
+    return demon_rows + rows
 
 
 def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:

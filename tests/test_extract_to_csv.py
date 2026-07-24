@@ -1369,5 +1369,93 @@ class DeletedGramFolderMainTests(unittest.TestCase):
             "the single missing file must still be flagged")
 
 
+DEMON_GLC = (
+    "<GAPS_Lite_configuration>\n"
+    "  <data_source>\n"
+    "    <filename>{name}</filename>\n"
+    "  </data_source>\n"
+    "  <settings>\n"
+    "    <lofar>\n"
+    "      <bandwidth>40</bandwidth>\n"
+    "      <bandcentre>20</bandcentre>\n"
+    "    </lofar>\n"
+    "  </settings>\n"
+    "</GAPS_Lite_configuration>\n"
+)
+
+
+class DemonRowsTests(unittest.TestCase):
+    """Extract emits a leading ``topic_type=demon`` row per demon marker (#151)."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "demon_rows"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+        self.gramdir = self.tmp / "supporting/gram12"
+        self.gramdir.mkdir(parents=True)
+        shutil.copy(FIXTURES / "minimal.glc", self.gramdir / "config_1.glc")
+
+    def _add_demon(self, marker: str, image: str, *, height: int = 232) -> None:
+        (self.gramdir / marker).write_text(
+            DEMON_GLC.format(name=image), encoding="utf-8")
+        mock_pptx.emit_png(self.gramdir / image, width=978, height=height)
+
+    def _rows(self):
+        gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
+        return extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+
+    def test_demon_row_leads_and_carries_view(self) -> None:
+        self._add_demon("demon.glc", "Demon - 0-40Hz.png", height=232)
+        rows = self._rows()
+        demon = rows[0]
+        self.assertEqual(demon["topic_type"], "demon")
+        self.assertEqual(demon["sequence"], "1")
+        self.assertEqual(demon["time_end"], "232")   # image pixel height (#148)
+        self.assertEqual(demon["bandwidth"], "40")    # 0-40 Hz baked in the glc
+        self.assertEqual(demon["bandcentre"], "20")
+        self.assertEqual(demon["png_path"], "supporting/gram12/Demon - 0-40Hz.png")
+        self.assertEqual(demon["topic_filename"], rows[1]["topic_filename"])
+        # placed before the Lofar (glc) row
+        self.assertEqual(rows[1]["topic_type"], "glc")
+
+    def test_no_demon_marker_no_demon_row(self) -> None:
+        rows = self._rows()
+        self.assertFalse(any(r["topic_type"] == "demon" for r in rows))
+
+    def test_multiple_demons_ordered(self) -> None:
+        self._add_demon("demon.glc", "Demon - 0-40Hz.png", height=100)
+        self._add_demon("demon-2.glc", "Demon - 10m2s 0-40Hz.png", height=200)
+        rows = self._rows()
+        demons = [r for r in rows if r["topic_type"] == "demon"]
+        self.assertEqual([d["sequence"] for d in demons], ["1", "2"])
+        self.assertEqual(demons[0]["time_end"], "100")
+        self.assertEqual(demons[1]["time_end"], "200")
+        # both precede the glc row
+        self.assertEqual(rows[0]["topic_type"], "demon")
+        self.assertEqual(rows[1]["topic_type"], "demon")
+
+    def test_missing_demon_image_dangles(self) -> None:
+        # marker present but its referenced image absent -> row still emitted,
+        # blank time_end, ASSET_MISSING flag (no crash, no fail-fast).
+        (self.gramdir / "demon.glc").write_text(
+            DEMON_GLC.format(name="Demon - 0-40Hz.png"), encoding="utf-8")
+        rows = self._rows()
+        demon = rows[0]
+        self.assertEqual(demon["topic_type"], "demon")
+        self.assertEqual(demon["time_end"], "")
+        self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, demon["warnings"])
+
+    def test_demon_row_not_gated_by_glc_view_problems(self) -> None:
+        # A demon row is topic_type="demon", exempt from the band fail-fast gate.
+        self._add_demon("demon.glc", "Demon - 0-40Hz.png")
+        rows = self._rows()
+        self.assertEqual(extract_to_csv.glc_view_problems(rows), [])
+
+
 if __name__ == "__main__":
     unittest.main()
