@@ -229,6 +229,7 @@ mock_corpus/
 extracted.csv
 source.csv
 source.dedup.csv
+ingest_report.txt
 
 # Pipeline output trees — never committed. The PR CI web job and the
 # gh-pages regenerate workflow rebuild them from source/ via the full
