@@ -5,6 +5,16 @@
 **Status**: Draft
 **Input**: User description: "Import author-supplied gram images from a parallel incoming tree, matching them to wav-backed GLC files, and relink with duration metadata. Many grams have only a .wav asset; students do only visual inspection, so the author has opened each .wav in the analysis tool and taken a screenshot, saving it as `<duration> <wav-stem>.<jpg|jpeg|png>` (e.g. `5m26s WAV 1.jpg`). The incoming tree omits the source tree's intermediate container folder. A two-phase prep tool verifies the incoming tree against the source corpus (report-only), then applies the conversion: copy the image beside its GLC, repoint the GLC at it, and record the screenshot's displayed duration so downstream stages treat the gram as a pre-rendered image."
 
+> **Partially superseded — see `contracts/ingest-contract.md`.** The duration
+> metadata this spec centres on was later removed: `time_end` is measured from
+> the imported image's pixel height (issue #148), so the author names the
+> screenshot for the wav's own stem (no duration prefix), the whole stem is the
+> match key, and apply writes only a `<filename>` repoint — no `bottom_crop`,
+> no `unparseable-duration`/`glc-already-cropped` outcomes. Matching also grew a
+> hyphen-spacing fold (`0 - 1000 Hz` ↔ `0-1000 Hz`) alongside the case fold, and
+> demon detection now recognises numbered `Demon2-` tokens. The scenarios below
+> record the original feature-011 design.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Verify the incoming tree against the source corpus (Priority: P1)

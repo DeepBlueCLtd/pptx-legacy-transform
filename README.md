@@ -166,11 +166,12 @@ anything; activity is logged to `relink.log`.
 A second, differently-shaped image intake handles the common case where a gram
 has **only** a `.wav`: students only inspect the spectrogram visually, so the
 author opens each `.wav` in the analysis tool, screenshots the displayed gram,
-and saves it in a **parallel *incoming* tree** named for the duration shown on
-the y-axis plus the wav's own stem, separated by a space **or** an underscore —
-e.g. `5m26s WAV 1.jpg` (5 min 26 s of `WAV 1`), `21m WAVE 3.png`, or
-`10m_0 - 600 Hz.jpg`. The **prep-time** stage `ingest_gram_images.py` (wrapper
-`ingest.py`) imports these.
+and saves it in a **parallel *incoming* tree** under the **wav's own name** —
+e.g. `WAV 1.jpg`, `WAVE 3.png`, or `0 - 600 Hz.jpg`. The whole filename stem is
+matched against the wav basename; there is **no duration token** to strip, since
+issue #148 measures the gram's time period (`time_end`) from the imported
+image's pixel height, not from the filename. The **prep-time** stage
+`ingest_gram_images.py` (wrapper `ingest.py`) imports these.
 
 The incoming tree mirrors `source/` but **omits the per-document container
 folder**: `incoming/<doc>/<gram>/<image>` maps to
@@ -181,38 +182,41 @@ directly under the document folder; a document folder with a large flat set of
 sub-folders (eight or more) is read as that container-less layout, while an
 in-between count (2–7) is reported as ambiguous and skipped.
 
-Matching folds **case** at every level — document folders, gram folders, and
-image-stem-to-wav — because the hand-typed incoming names drift in case from
-`source/` (an incoming `7m_WAV 1.jpg` matches a source `Wav 1.wav`). Whitespace
-and token content stay exact, so missing spaces and mistyped words are still
+Matching **folds two systematic kinds of drift** so the operator never hand-fixes
+them — at every folder level and image-stem-to-wav:
+
+- **case** — an incoming `WAV 2` matches a source `Wav 2.wav`;
+- **hyphen spacing** — an incoming `0 - 1000 Hz` matches a source `0-1000 Hz.wav`
+  *and* vice versa (the author is inconsistent about the spaces flanking the
+  frequency-range dash).
+
+Both are folded by a `match_key` (casefold + collapsed whitespace + spaces
+stripped from around hyphens) applied to **both** sides. Everything else —
+different tokens, a missing digit — stays exact, so real mistakes are still
 reported for the operator to fix.
 
 The stage runs in two phases:
 
 - **Verify** (default, read-only). Matches incoming document and gram folders,
-  and image stems (after stripping the duration token) against the `.wav`
-  basenames the gram's `.glc` files reference, then writes `ingest_report.txt`:
-  every unmatched folder or image with its nearest-candidate suggestions, a
-  survey of unparseable duration tokens, and a *trends* section that aggregates
+  and image stems, against the `.wav` basenames the gram's `.glc` files
+  reference, then writes `ingest_report.txt`: every unmatched folder or image
+  with its nearest-candidate suggestions and a *trends* section that aggregates
   systematic drifts (e.g. `token-drift 'WAVE' -> 'WAV' x 14`). The operator
   fixes names in the **incoming** tree by hand and re-runs until it is clean.
   Nothing on disk changes except the report and `ingest.log`.
 - **Apply** (`--apply`). For each verified match, copies the image beside its
-  `.glc` renamed to the wav's stem in the wav's own casing (`7m_WAV 1.jpg`
-  beside `Wav 1.wav` → `Wav 1.jpg`), rewrites the `.glc`'s `<filename>` to
-  point at it, and inserts
-  `<bitmap_crop_values><bottom_crop>N</bottom_crop></bitmap_crop_values>` with
-  the duration in whole seconds (`5m26s` → `326`, `21m` → `1260`). Note that
-  `extract.py` no longer reads this value for the gram's time period — since
-  issue #148 the time period (`time_end`) is measured from the imported image's
-  **pixel height** (scan lines), not the `.glc` — but the crop is retained for
-  the on-PC GLC viewer and round-trip fidelity.
+  `.glc` renamed to the wav's stem in the wav's own casing **and** spacing
+  (`WAV 1.jpg` beside `Wav 1.wav` → `Wav 1.jpg`; `0 - 1000 Hz.jpg` beside
+  `0-1000 Hz.wav` → `0-1000 Hz.jpg`) and rewrites the `.glc`'s `<filename>` to
+  point at it. Nothing else in the `.glc` changes — no `<bitmap_crop_values>` is
+  written, because since issue #148 the time period (`time_end`) is measured
+  from the imported image's **pixel height** (scan lines), not the `.glc`.
 
-Ambiguity is never guessed: two images claiming one wav, an image with no
-matching wav, a `.glc` already pointing at an image, or a wav-backed `.glc`
-that unexpectedly already carries crop values are each warned, skipped, and
-counted. Idempotency rides on the "already points at an image" skip, so it is
-safe to re-run as you work through the corpus.
+Ambiguity is never guessed: two images folding onto one wav, an image folding
+onto two distinct wavs, an image with no matching wav, or a `.glc` already
+pointing at an image are each warned, skipped, and counted. Idempotency rides on
+the "already points at an image" skip, so it is safe to re-run as you work
+through the corpus.
 
 **Divergence from `relink.py`:** that stage moves the superseded `.wav` aside
 to `.wav.bak`; `ingest.py` deliberately **leaves the `.wav` in place** — a
@@ -222,9 +226,10 @@ wav never reaches `dita/`.
 
 **Demon images (issue #151).** The same incoming folders may also carry *demon*
 images — an alternately-rendered gram view whose filename carries a `Demon`
-token, either leading (`Demon - 10m2s 0-40Hz.png`, `Demon - 0-40Hz.png`) or
-after a duration prefix (`4m10s_Demon - 0 - 40 Hz.jpg`). These are **additive**,
-not `.wav` replacements, so they skip the duration/stem matching. In the default
+token, either leading (`Demon - 10m2s 0-40Hz.png`, `Demon - 0-40Hz.png`), a
+*numbered* demon (`Demon2- 0 - 40 Hz.jpg` — the digit rides straight after
+`Demon`), or after a duration prefix (`4m10s_Demon - 0 - 40 Hz.jpg`). These are
+**additive**, not `.wav` replacements, so they skip the stem matching. In the default
 verify pass each is listed in a `DEMON IMAGES` report section; `--apply` copies
 the image into the source gram folder (original name kept) and writes a
 `demon.glc` marker cloned from the folder's first hyperlinked `.glc`, with its
