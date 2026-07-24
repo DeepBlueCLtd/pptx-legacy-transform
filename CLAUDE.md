@@ -265,6 +265,16 @@ independently, so each must be self-contained.
   only feed the image GramFrame table, so a `.wav` row (surfaced as a `.glc`
   link, never a GramFrame render) may leave them blank without error, and the
   dedup/generate view key reads them tolerantly (a blank degrades to `""`).
+  `time_end` (the gram's time period) is **not** taken from the `.glc` at all:
+  it is the referenced image's **pixel height** in scan lines, measured from the
+  file on disk at extraction (issue #148 — the legacy viewer's scan-line count ×
+  a per-line update period that is always `1` s, so seconds == rows). The GLC's
+  `bottom_crop` is ignored (many valid image GLCs omit it, which used to raise a
+  spurious "invalid GLC" warning). Because it is now image-derived, a blank
+  `time_end` is an asset problem that **dangles** (missing image → `ASSET_MISSING`
+  flag; present-but-unreadable image → a `time period unknown` warning), never a
+  fail-fast — only the GLC-authored `bandwidth`/`bandcentre` remain in the
+  extract-time strict gate.
 - **Dual logging.** Stages write a DEBUG log at the repo root
   (`generate.log`, `extract.log`, `introspect.log`) alongside console output —
   the primary debugging surface on the air-gapped network.

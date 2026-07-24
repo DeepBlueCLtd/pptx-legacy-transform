@@ -23,8 +23,11 @@ class GlcParserTests(unittest.TestCase):
         TMP.mkdir(parents=True, exist_ok=True)
 
     def test_parse_minimal_glc_returns_expected_fields(self) -> None:
+        # time_end is no longer a GLC field (issue #148): it is derived from the
+        # image's pixel height at extraction, so the parser exposes only the
+        # image filename and the two frequency-band values.
         doc = extract_to_csv.parse_glc(FIXTURES / "minimal.glc")
-        self.assertEqual(doc.time_end, "271")
+        self.assertFalse(hasattr(doc, "time_end"))
         self.assertEqual(doc.bandwidth, "400")
         self.assertEqual(doc.bandcentre, "200")
         self.assertEqual(doc.image_filename, "gram12.PNG")
@@ -33,7 +36,6 @@ class GlcParserTests(unittest.TestCase):
     def test_parse_malformed_glc_returns_empty_with_warning(self) -> None:
         doc = extract_to_csv.parse_glc(FIXTURES / "malformed.glc")
         self.assertEqual(doc.image_filename, "")
-        self.assertEqual(doc.time_end, "")
         self.assertEqual(doc.bandwidth, "")
         self.assertEqual(doc.bandcentre, "")
         self.assertEqual(len(doc.warnings), 1)
@@ -64,7 +66,9 @@ class GlcParserTests(unittest.TestCase):
         )
         doc = extract_to_csv.parse_glc(path)
         self.assertIn("GLC missing filename", doc.warnings)
-        self.assertIn("GLC missing bottom_crop", doc.warnings)
+        # bottom_crop is no longer read, so its absence is no longer warned
+        # (issue #148 — it was spurious "invalid GLC" noise on valid images).
+        self.assertNotIn("GLC missing bottom_crop", doc.warnings)
         self.assertIn("GLC missing bandwidth", doc.warnings)
         self.assertIn("GLC missing bandcentre", doc.warnings)
 

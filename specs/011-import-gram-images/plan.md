@@ -5,6 +5,13 @@
 
 ## Summary
 
+> **Superseded note (issue #148):** the `bottom_crop` this stage inserts is no
+> longer read by `extract_to_csv.py` for the gram's time period. `time_end` is
+> now measured from the imported image's **pixel height** (scan lines) at
+> extraction. The crop insertion is retained for the on-PC GLC viewer and
+> round-trip fidelity; the mentions below of extraction reading `bottom_crop` as
+> `time_end` describe the original design and are kept for history.
+
 A new prep-time stage converts wav-only grams to pre-rendered-image grams using
 the author's analysis-tool screenshots, delivered in a parallel *incoming* tree
 (`incoming/<doc>/<gram>/` ↔ `source/<doc>/<container>/<gram>/`, the container

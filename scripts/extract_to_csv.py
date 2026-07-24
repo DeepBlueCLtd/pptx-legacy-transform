@@ -43,7 +43,9 @@ DEFAULT_JOINING_PATTERN: str = "joining"
 
 # GramFrame needs the full time + frequency coordinate system to render a gram,
 # so an *image* GLC-backed gram (pre-rendered .png/.jpg embedded inline) requires
-# these three "view" fields. A .wav-backed gram does *not*: it is surfaced
+# these three "view" fields. ``time_end`` is the image's pixel height (issue
+# #148, derived at extraction from the file on disk); ``bandwidth``/``bandcentre``
+# come from the .glc. A .wav-backed gram does *not* need them: it is surfaced
 # downstream as a plain link to its .glc (the on-PC GLC viewer renders it live,
 # reading the .glc directly), so no GramFrame table is emitted and the view
 # fields are never consumed for it -- a blank one is fine. We catch a blank on an
@@ -51,6 +53,11 @@ DEFAULT_JOINING_PATTERN: str = "joining"
 # late and cryptically in dedupe. ``--relaxed`` substitutes ``RELAXED_DEFAULT``
 # so the rest of the toolchain can still be exercised against an incomplete corpus.
 GLC_VIEW_FIELDS: tuple[str, ...] = ("time_end", "bandwidth", "bandcentre")
+# The subset of the view fields that come from the GLC author and so are subject
+# to the strict extract-time fail-fast (issue #92). ``time_end`` is excluded: it
+# is derived from the image's pixel height (issue #148), so a blank one is a
+# dangling-asset problem, not an author omission — see ``glc_view_problems``.
+GLC_AUTHORED_VIEW_FIELDS: tuple[str, ...] = ("bandwidth", "bandcentre")
 RELAXED_DEFAULT: str = "100"
 
 # Warning stamped on any row whose ``png_path`` references an asset (image or
@@ -130,7 +137,6 @@ def setup_logging(log_path: Path) -> None:
 @dataclass
 class GlcDocument:
     image_filename: str = ""
-    time_end: str = ""
     bandwidth: str = ""
     bandcentre: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -144,6 +150,12 @@ def parse_glc(path: Path) -> GlcDocument:
     a single ``"GLC malformed: <reason>"`` warning. Path stripping uses
     ``pathlib.PureWindowsPath(raw).name`` so a Windows ``W:\\foo\\bar.PNG``
     surfaces as ``bar.PNG``.
+
+    The GLC's ``bottom_crop`` is deliberately **not** read: the gram's time
+    period (``time_end``) is derived from the pixel height of the referenced
+    image, not from the ``.glc`` (issue #148). Many valid image GLCs omit the
+    element entirely, so reading it here only produced spurious "invalid GLC"
+    warnings.
     """
     doc = GlcDocument()
     try:
@@ -170,13 +182,6 @@ def parse_glc(path: Path) -> GlcDocument:
             doc.image_filename = ""
         else:
             doc.image_filename = PureWindowsPath(raw).name
-
-    bottom = root.findtext("data_source/bitmap_crop_values/bottom_crop")
-    if bottom is None or not bottom.strip():
-        doc.warnings.append("GLC missing bottom_crop")
-        doc.time_end = ""
-    else:
-        doc.time_end = bottom.strip()
 
     bandwidth = root.findtext("settings/lofar/bandwidth")
     if bandwidth is None or not bandwidth.strip():
@@ -1057,6 +1062,85 @@ def _png_file_size(png_path: str, content_root: Path) -> str:
         return ""
 
 
+def _jpeg_pixel_height(fh) -> int | None:
+    """Walk a JPEG's segment markers and return its pixel height, or ``None``.
+
+    ``fh`` is an open binary file positioned anywhere; the scan restarts at the
+    first marker after the SOI. Reads only segment headers (never the entropy-
+    coded scan data), skipping non-frame segments by their declared length until
+    a Start-Of-Frame marker is reached, whose body carries ``precision(1),
+    height(2), width(2)``. Returns ``None`` on a truncated or unexpected stream.
+    """
+    fh.seek(2)  # past the SOI (0xFFD8)
+    # Frame headers that carry image dimensions. DHT (0xC4), JPG (0xC8) and
+    # DAC (0xCC) share the 0xCn range but are not frame headers, so they are
+    # skipped like any other length-prefixed segment.
+    sof_markers = frozenset((
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+    ))
+    while True:
+        prefix = fh.read(1)
+        if not prefix:
+            return None
+        if prefix != b"\xff":
+            continue
+        marker = fh.read(1)
+        while marker == b"\xff":  # fill bytes before the marker code
+            marker = fh.read(1)
+        if not marker:
+            return None
+        code = marker[0]
+        # Standalone markers (no length payload): SOI, EOI, RSTn, TEM.
+        if code == 0xD8 or code == 0xD9 or 0xD0 <= code <= 0xD7 or code == 0x01:
+            continue
+        length_bytes = fh.read(2)
+        if len(length_bytes) < 2:
+            return None
+        seg_len = int.from_bytes(length_bytes, "big")
+        if seg_len < 2:
+            return None
+        if code in sof_markers:
+            body = fh.read(seg_len - 2)
+            if len(body) < 5:
+                return None
+            return int.from_bytes(body[1:3], "big")
+        fh.seek(seg_len - 2, 1)  # skip this segment's body
+
+
+def _image_pixel_height(png_path: str, content_root: Path) -> int | None:
+    """Return the pixel height (scan-line count) of an image, or ``None``.
+
+    Issue #148: a pre-rendered gram's time period is derived from the image
+    itself — the number of horizontal scan lines, i.e. the pixel height — not
+    from any value in the ``.glc`` (the legacy viewer multiplies the scan-line
+    count by an update period that is always ``1`` second, so seconds == pixel
+    rows). Reads only the header of PNG, JPEG and GIF files using the standard
+    library, keeping Pillow off the runtime path per the air-gap dependency
+    budget. Returns ``None`` when the file is absent, truncated, or not a
+    recognised/parsable format, so the caller leaves ``time_end`` blank and the
+    usual missing-view-field handling (warn, or ``--relaxed`` default) applies.
+    """
+    if not png_path:
+        return None
+    candidate = content_root / png_path
+    try:
+        with candidate.open("rb") as fh:
+            head = fh.read(26)
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                # PNG mandates IHDR as the first chunk; height is the four
+                # big-endian bytes at offset 20 (8 sig + 4 len + 4 tag + 4 w).
+                return int.from_bytes(head[20:24], "big") if len(head) >= 24 else None
+            if head[:6] in (b"GIF87a", b"GIF89a"):
+                # Logical-screen height: two little-endian bytes at offset 8.
+                return int.from_bytes(head[8:10], "little") if len(head) >= 10 else None
+            if head[:2] == b"\xff\xd8":
+                return _jpeg_pixel_height(fh)
+    except OSError:
+        return None
+    return None
+
+
 def _asset_file_missing(png_path: str, content_root: Path) -> bool:
     """True when a target asset is *expected* (non-empty path) but absent on disk.
 
@@ -1201,7 +1285,6 @@ def gram_to_rows(
                 lofar_dirs.append(resolved.parent)
             glc = parse_glc(resolved)
             warnings.extend(glc.warnings)
-            time_end = glc.time_end
             bandwidth = glc.bandwidth
             bandcentre = glc.bandcentre
             if glc.image_filename:
@@ -1214,6 +1297,15 @@ def gram_to_rows(
                 png_path = resolve_asset_path(
                     glc.image_filename, content_root, source_dir=resolved.parent,
                 )
+                # Issue #148: the gram's time period (the GramFrame y-axis,
+                # ``time_end``) is the image's scan-line count — its pixel
+                # height — not the GLC's ``bottom_crop``. Only a pre-rendered
+                # image carries this; a .wav-backed row is surfaced as a link
+                # to its .glc (no GramFrame table) and keeps a blank time_end.
+                if Path(png_path).suffix.lower() in GRAMFRAME_GLC_EXTENSIONS:
+                    height = _image_pixel_height(png_path, content_root)
+                    if height is not None:
+                        time_end = str(height)
 
         row = {
             "publication": publication,
@@ -1237,28 +1329,44 @@ def gram_to_rows(
             "wav_treatment": "",
             "warnings": "",
         }
+        # A resolved asset reference (image or .wav) whose file is not on disk
+        # would dangle through the generator and only fail at publish; flag it
+        # here so the operator can track it. An assetless GLC row (png_path "",
+        # already carrying "GLC not found") is exempt.
+        asset_missing = _asset_file_missing(png_path, content_root)
         # An *image* GLC-backed gram needs its time + frequency view fields for
         # GramFrame; flag (or, under --relaxed, default) any blank one so the
         # issue surfaces here rather than later in dedupe (issue #92). A .wav row
         # is exempt -- it links to its .glc, no GramFrame table -- as is an
         # assetless GLC row (target_ext "") which dangles.
+        #
+        # ``time_end`` is handled apart from the GLC-authored band fields: it is
+        # the image's pixel height (issue #148), so a blank one is an *asset*
+        # problem, not an author omission. When the image is missing on disk it
+        # already dangles (ASSET_MISSING below, and re-resolves when the file is
+        # dropped in), so — per the "missing assets dangle, they don't crash"
+        # invariant — it is exempt from the fail-fast gate; only a
+        # present-but-unreadable image earns a (non-fatal) warning here. The
+        # fail-fast gate (glc_view_problems) therefore covers band fields only.
         if row["target_ext"] in GRAMFRAME_GLC_EXTENSIONS:
             for field_name in GLC_VIEW_FIELDS:
-                if not (row[field_name] or "").strip():
-                    if relaxed:
-                        row[field_name] = RELAXED_DEFAULT
+                if (row[field_name] or "").strip():
+                    continue
+                if relaxed:
+                    row[field_name] = RELAXED_DEFAULT
+                    warnings.append(
+                        f"gram missing {field_name} — defaulted to "
+                        f"{RELAXED_DEFAULT} (--relaxed)")
+                elif field_name == "time_end":
+                    if not asset_missing:
                         warnings.append(
-                            f"gram missing {field_name} — defaulted to "
-                            f"{RELAXED_DEFAULT} (--relaxed)")
-                    else:
-                        warnings.append(
-                            f"gram missing {field_name} — GramFrame cannot "
-                            f"render")
-        # A resolved asset reference (image or .wav) whose file is not on disk
-        # would dangle through the generator and only fail at publish; flag it
-        # here so the operator can track it. An assetless GLC row (png_path "",
-        # already carrying "GLC not found") is exempt.
-        if _asset_file_missing(png_path, content_root):
+                            "gram time period unknown — could not read image "
+                            "height")
+                else:
+                    warnings.append(
+                        f"gram missing {field_name} — GramFrame cannot "
+                        f"render")
+        if asset_missing:
             warnings.append(ASSET_MISSING_WARNING)
         row["warnings"] = ", ".join(warnings)
         rows.append(row)
@@ -1347,12 +1455,18 @@ def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
     """Return ``(gram_id, field, line)`` for every GLC gram row missing a view field.
 
     Every *image* GLC-backed gram (a ``glc`` row whose inner asset is a
-    renderable image) must carry ``time_end`` / ``bandwidth`` / ``bandcentre``
-    for GramFrame to render. ``.wav`` rows are exempt -- they surface as a link
-    to the ``.glc``, never a GramFrame table, so their view fields are optional.
+    renderable image) must carry ``bandwidth`` and ``bandcentre`` for GramFrame
+    to render. ``.wav`` rows are exempt -- they surface as a link to the
+    ``.glc``, never a GramFrame table, so their view fields are optional.
     Analysis rows and assetless (dangling) GLC rows are also exempt. Under
     ``--relaxed`` the image blanks are already filled with ``RELAXED_DEFAULT``
     upstream, so this returns empty (issue #92).
+
+    ``time_end`` is **not** gated here: it is the image's pixel height (issue
+    #148), so a blank one is a missing/unreadable-asset problem that dangles
+    (flagged ASSET_MISSING and resolved by dropping the file in), not an author
+    omission — hard-failing on it would violate the "missing assets dangle"
+    invariant. Only the GLC-authored band fields fail-fast.
 
     ``line`` is the 1-based line the row occupies in the CSV this run writes
     (``write_csv`` emits the header then ``rows`` in order, so index ``i`` lands
@@ -1365,7 +1479,7 @@ def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
         if (row.get("target_ext", "") or "").lower() not in GRAMFRAME_GLC_EXTENSIONS:
             continue
         line_no = index + 2  # +1 header, +1 for 0-based -> 1-based
-        for field_name in GLC_VIEW_FIELDS:
+        for field_name in GLC_AUTHORED_VIEW_FIELDS:
             if not (row.get(field_name, "") or "").strip():
                 problems.append((row.get("gram_id", ""), field_name, line_no))
     return problems
@@ -1613,9 +1727,10 @@ def main(argv: Iterable[str] | None = None) -> int:
             for gram_id, field_name, line_no in problems)
         LOGGER.error(
             "Aborting: %d GLC gram view field(s) missing — GramFrame cannot "
-            "render without them. Fix the GLC(s) so they carry a time period, "
-            "bandwidth and bandcentre, or re-run with --relaxed to substitute "
-            "'%s' for development. Offending rows: %s",
+            "render without them. Fix the GLC(s) so they carry a bandwidth and "
+            "bandcentre (the time period is read from the image height), or "
+            "re-run with --relaxed to substitute '%s' for development. "
+            "Offending rows: %s",
             len(problems), RELAXED_DEFAULT, detail,
         )
         return 1

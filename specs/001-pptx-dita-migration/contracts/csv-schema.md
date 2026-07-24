@@ -29,7 +29,7 @@ generator never re-reads PPTX or GLC files.
 | 8 | `display_text` | string | yes (analysis rows) | human-readable link label from the PPTX run |
 | 9 | `link_href` | string | yes (analysis rows) | raw hyperlink URI from the PPTX `Lofar` run. In the real corpus this is **always** a `.glc` path; the `.glc`-target invariant is documented in `high-level-spec.md` §1.5 and the reverse-spec. Any non-`.glc` value here represents a future or anomalous case (see backlog item 007). |
 | 10 | `glc_path` | string | yes (analysis rows; empty for non-GLC links) | resolved `.glc` path relative to source folder. Equals `link_href` for the normal case; empty only when `link_href` is non-`.glc` (anomaly). |
-| 11 | `time_end` | string | yes (when GLC missing or analysis row) | numeric string, no units |
+| 11 | `time_end` | string | yes (`.wav`/analysis rows, or unmeasurable image) | numeric string, no units. The gram's time period: the referenced image's **pixel height** (scan lines), measured from the file on disk at extraction, **not** the GLC's `bottom_crop` (issue #148). Blank for `.wav`/analysis rows and when no image can be measured. |
 | 12 | `bandwidth` | string | yes (when GLC missing or analysis row) | numeric string, no units. Width of the frequency band (issue #87). |
 | 13 | `bandcentre` | string | yes (when GLC missing or analysis row) | numeric string, no units. Centre of the frequency band; with `bandwidth` it gives `freq_start = bandcentre - bandwidth/2`, `freq_end = bandcentre + bandwidth/2` (issue #87). Replaces the former single `freq_end` column. |
 | 14 | `png_path` | string | yes | path of the asset to copy next to the topic, resolved relative to `--image-root`. For GLC rows it is the file named by the `.glc`'s inner `<data_source><filename>` element — a `.png` (~82% of grams) or `.jpg` for a pre-rendered spectrogram, or a `.wav` (~18%) when the `.glc` configures the on-PC viewer to render live from audio. The downstream generator dispatches on the extension (see `dita-topic-schema.md` §1.2/§1.3): image extensions embed inline; `.wav` triggers the GLC-viewer-link branch which copies the `.glc` + `.wav` pair side-by-side. For analysis rows it is the rendered analysis image: a `.png`/`.jpg` exported directly, or — for a Word-authored sheet (`.doc`/`.docx`) — the **same-stem `.png` sibling** produced by `snapshot_analysis_docs.py` (feature 007; the extractor redirects the Word href to it). May be empty when the asset is missing; when a Word sheet's render is absent the value stays the intended `.png` href (so the image dangles) and `warnings` carries `"analysis image not rendered"`. The FR-023 `analysis_docx_path` column was never implemented and is not introduced. |
@@ -80,9 +80,11 @@ holds a gram with the same `gram_id` without renumbering one of them.
 4. GLC rows whose inner `data_source/filename` is a `.wav` (the
    `.glc` configures the on-PC GLC viewer to render a fresh
    spectrogram from audio rather than reference a pre-rendered
-   screenshot) keep all normal GLC-row fields populated — `glc_path`
-   resolved as usual, `time_end`/`bandwidth`/`bandcentre` parsed from the `.glc`,
-   and `png_path` carrying the resolved `.wav` path. No author
+   screenshot) keep their GLC-row fields populated — `glc_path`
+   resolved as usual, `bandwidth`/`bandcentre` parsed from the `.glc`,
+   and `png_path` carrying the resolved `.wav` path. `time_end` is left
+   blank (there is no pre-rendered image to measure, and a `.wav` row
+   renders no GramFrame table — issue #148). No author
    intervention is required; the generator emits a §1.3 GLC-viewer
    link block automatically and copies both the `.glc` and the
    companion `.wav` into the per-gram folder. `display_text` carries

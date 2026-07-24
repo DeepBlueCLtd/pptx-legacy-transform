@@ -1,10 +1,16 @@
 # Contract: ingest_gram_images.py (feature 011)
 
 The operator-facing contract for the new prep-time stage. The GLC element it
-writes (`data_source/bitmap_crop_values/bottom_crop`) is *already specified* in
-the canonical `specs/001-pptx-dita-migration/contracts/glc-schema.md` (parsed
-as `time_end`); this stage produces values conforming to that schema, so the
-canonical contract needs no change.
+writes (`data_source/bitmap_crop_values/bottom_crop`) is documented in the
+canonical `specs/001-pptx-dita-migration/contracts/glc-schema.md`; this stage
+produces values conforming to that schema.
+
+> **Superseded (issue #148):** `extract_to_csv.py` no longer reads `bottom_crop`
+> for the gram's time period — `time_end` is now measured from the imported
+> image's pixel height. The `bottom_crop` this stage writes is retained for the
+> on-PC GLC viewer and round-trip fidelity, but it no longer drives `time_end`.
+> The image this stage copies in is what the extractor measures, so the imported
+> screenshot's own pixel height is what reaches GramFrame.
 
 ## CLI
 
