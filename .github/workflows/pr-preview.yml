@@ -73,6 +73,14 @@ jobs:
       - name: Build html/ from the mock corpus
         run: |
           set -euo pipefail
+          # Demon demo (issue #151): regenerate the demon.glc markers from the
+          # committed incoming fixture rather than committing tool output into
+          # source/. ingest --apply copies the demon images into their source
+          # gram folders and writes demon.glc / demon-2.glc, so the preview
+          # exercises the real prep flow and the markers are provably
+          # reproducible. Idempotent; only mutates the ephemeral CI checkout.
+          python scripts/ingest_gram_images.py \
+            --incoming-root demo/demon-incoming --source-root source/ --apply
           python scripts/extract_to_csv.py --input-root source/ --out source.csv
           python scripts/deduplicate_csv.py --csv source.csv --image-root source/ --out source.dedup.csv
           python scripts/generate_dita.py --csv source.dedup.csv --out dita/ --image-root source/ --clean
