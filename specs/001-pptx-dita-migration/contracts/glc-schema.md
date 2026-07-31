@@ -24,6 +24,7 @@ the parser never raises.
     <lofar>
       <bandwidth>...</bandwidth>        <!-- band width  -->
       <bandcentre>...</bandcentre>      <!-- band centre frequency -->
+      <update_period>...</update_period><!-- optional; seconds per scan line -->
     </lofar>
   </settings>
 </GAPS_Lite_configuration>
@@ -36,15 +37,29 @@ the parser never raises.
 | `data_source/filename` | `image_filename` | string | strip path with `pathlib.PureWindowsPath(raw).name`; if `raw` is empty, return empty |
 | `settings/lofar/bandwidth` | `bandwidth` | string | trim whitespace; empty if missing |
 | `settings/lofar/bandcentre` | `bandcentre` | string | trim whitespace; empty if missing |
+| `settings/lofar/update_period` | `update_period` | string | trim whitespace; empty if missing — **no warning**, an absent period means the default `1` s per scan line |
 
 **`bottom_crop` is no longer read (issue #148).** The gram's time period
 (`time_end`) is the referenced image's **pixel height** — the number of
 horizontal scan lines — measured from the image file on disk by
-`extract_to_csv.py`, not parsed from the GLC (the legacy viewer multiplies the
-scan-line count by an update period that is always `1` s, so seconds == rows).
-`parse_glc` therefore exposes only `image_filename`, `bandwidth` and
-`bandcentre`; it neither reads `bottom_crop` nor emits a
-`"GLC missing bottom_crop"` warning (many valid image GLCs omit the element).
+`extract_to_csv.py`, not parsed from the GLC. `parse_glc` therefore exposes
+`image_filename`, `bandwidth`, `bandcentre` and `update_period`; it neither
+reads `bottom_crop` nor emits a `"GLC missing bottom_crop"` warning (many valid
+image GLCs omit the element).
+
+**`update_period` scales that height (issue #160).** The legacy viewer
+multiplies the scan-line count by `update_period`, the seconds one scan line
+represents, so `time_end = pixel height × update_period`. Nearly all of the
+corpus states `1` (or omits the element), which is why rows read as seconds
+until now — but values such as `2` exist, and a gram whose GLC carries one is
+twice as long as its pixel height suggests. `extract_to_csv.py` therefore reads
+the element and scales:
+
+| `update_period` | Behaviour |
+|---|---|
+| absent / empty | default `1` — no warning; this is the ordinary case |
+| a positive number (`2`, `0.5`) | honoured; `time_end` = height × period, trailing zeros trimmed, never exponent notation |
+| unparsable or non-positive (`two`, `0`, `-2`) | default `1` + a `"GLC invalid update_period …"` warning in the row (forgiving at the boundary — the row still emits) |
 
 The frequency band is **bandwidth + bandcentre** (issue #87): the band spans
 `bandwidth/2` either side of `bandcentre`, so `freq_start = bandcentre -
@@ -96,6 +111,12 @@ The parser emits these exact warning strings into the row's
 - `"GLC missing bandcentre"` — `<bandcentre>` element absent or empty
 - `"GLC duplicate filename"` — `<filename>` appears more than once
 
+`extract_to_csv.py` adds one more when it scales the measured height (it is the
+extractor's judgement, not the parser's — `parse_glc` returns the raw string):
+
+- `"GLC invalid update_period <raw> — assumed 1 s per scan line"` —
+  `<update_period>` present but not a positive number
+
 ## Worked example
 
 Input:
@@ -128,12 +149,15 @@ GlcDocument(
     image_filename="gram12.PNG",
     bandwidth="400",
     bandcentre="200",
+    update_period="",
     warnings=[],
 )
 ```
 
 (`bottom_crop` of `271` above is ignored — `time_end` is later set by
-`extract_to_csv.py` from `gram12.PNG`'s pixel height, issue #148.)
+`extract_to_csv.py` from `gram12.PNG`'s pixel height, issue #148. With no
+`update_period` stated the height is taken as seconds; had the GLC carried
+`<update_period>2</update_period>`, a 271-row image would be a 542 s gram.)
 
 Malformed input (truncated mid-tag):
 
