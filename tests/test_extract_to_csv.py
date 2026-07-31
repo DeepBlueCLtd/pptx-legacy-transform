@@ -148,6 +148,29 @@ class ClassificationTests(unittest.TestCase):
             extract_to_csv.DEFAULT_JOINING_PATTERN, {})
         self.assertEqual(pub, "AAAC-joining-assessment")
 
+    def test_corpus_assessment_folder_names_route_by_course(self) -> None:
+        """The four real corpus assessment decks, verbatim. Their titles use
+        three different separator styles around the code — space, ``-`` and
+        ``_`` — and each must still yield the course-coded publication rather
+        than a per-run ``…-assessment-1`` both courses share."""
+        cases = {
+            "Instructor SSAC - Final Assessment_UPDATED": "SSAC-final-assessment",
+            "Instructor AAAC Final Assessment Updated": "AAAC-final-assessment",
+            "Instructor_SSAC_Joining Assessment": "SSAC-joining-assessment",
+            "Instructor_AAAC_Joining Assessment": "AAAC-joining-assessment",
+        }
+        for folder, expected in cases.items():
+            with self.subTest(folder=folder):
+                pub, chapter, slug = extract_to_csv.classify_publication(
+                    Path("/root") / folder / f"{folder}.pptx",
+                    extract_to_csv.DEFAULT_TEST_PATTERN, {},
+                    extract_to_csv.DEFAULT_FINAL_PATTERN, {},
+                    extract_to_csv.DEFAULT_JOINING_PATTERN, {})
+                self.assertEqual(pub, expected)
+                self.assertIsNone(chapter)
+                self.assertIsNone(slug)
+        self.assertEqual(len(set(cases.values())), 4, "all four names must differ")
+
     def test_joining_assessment_routing(self) -> None:
         """A deck whose filename contains the joining pattern routes to its own
         joining-assessment-N publication, never to main."""
