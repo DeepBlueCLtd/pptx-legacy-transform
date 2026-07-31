@@ -9,8 +9,10 @@ produces values conforming to that schema.
 > measures the gram's time period (`time_end`) from the imported image's pixel
 > height, not from any GLC value. As a consequence this stage **no longer parses
 > a duration from the incoming filename and no longer writes `bottom_crop`** —
-> the incoming screenshot is named for the wav's own stem (no duration prefix)
-> and the apply-mode GLC edit is a bare `<filename>` repoint. The image this
+> the incoming screenshot is named for the wav's own stem and the apply-mode GLC
+> edit is a bare `<filename>` repoint. A *leading* duration token is still
+> **tolerated** on the incoming name (delivered batches keep carrying one): it is
+> stripped as a fallback match key only, and never recorded anywhere. The image this
 > stage copies in is what the extractor measures, so the imported screenshot's
 > own pixel height is what reaches GramFrame. Sections below marked *(superseded)*
 > describe the retired duration/crop behaviour.
@@ -58,13 +60,18 @@ other wrappers.
    `structurally-ambiguous-doc`; doc skipped.
 3. **Gram**: incoming `<gram>` dir name must equal a container child dir name
    **case-insensitively**. Miss → `unmatched-gram` (+ candidates, drift label).
-4. **Image stem**: the whole filename stem is the match stem — there is **no
-   duration token to strip** (the author names the screenshot for the wav's own
-   stem; `time_end` is image-derived, issue #148). Eligible extensions: `.jpg`
+4. **Image stem**: the whole filename stem is the primary match stem (the author
+   names the screenshot for the wav's own stem; `time_end` is image-derived,
+   issue #148). A **leading duration token** matching `^\d+m(?:\d{1,2}s)?[ _]`
+   is *tolerated*: it is stripped to form a **second, fallback** key, tried only
+   after the whole stem matched nothing — so a source wav whose own basename
+   starts with a duration still matches whole, and a frequency range such as
+   `0 - 1322 Hz` (no `m`) is never mistaken for a duration. Stripping that
+   leaves an empty remainder yields no fallback key. Eligible extensions: `.jpg`
    `.jpeg` `.png`, case-insensitive; other files ignored (debug log only).
-   *(superseded: the old contract split a leading `^(\d+)m(?:(\d{1,2})s)?$`
-   duration token off the stem and reported `unparseable-duration` on a miss;
-   both the split and that outcome class are gone.)*
+   *(superseded: the old contract split the duration token off unconditionally
+   and reported `unparseable-duration` on a miss; the unconditional split and
+   that outcome class are gone — the token is now optional and never recorded.)*
 5. **Image → asset**: fold every stem (incoming and referenced) through
    `match_key` = casefold + collapse-whitespace + strip-spaces-around-hyphens,
    then compare against stems of assets referenced by the gram folder's `.glc`

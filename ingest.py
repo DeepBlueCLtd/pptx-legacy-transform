@@ -11,13 +11,15 @@ for the wav's own stem, "<wav-stem>.<jpg|jpeg|png>" (e.g. "WAV 1.jpg",
 default, writes a read-only verify report (ingest_report.txt) of every
 folder/stem mismatch with nearest-candidate suggestions — fix the names
 in the INCOMING tree by hand, then re-run until it is clean. Matching
-folds case and hyphen spacing (an incoming "0 - 1000 Hz" matches a
-source "0-1000 Hz.wav", either direction), so only genuine drift is
-reported. Once clean, set APPLY = True in the Config block below (or
-uncomment "--apply") and re-run: each matched image is copied beside its
-.glc under the wav's stem and the .glc is repointed at it. No duration
-is parsed or written — extract.py measures the time period from the
-image height (issue #148).
+folds case, hyphen spacing (an incoming "0 - 1000 Hz" matches a source
+"0-1000 Hz.wav", either direction) and a leading duration token (an
+incoming "9m WAV 1" or "7m20s_0 - 1000 Hz" matches "WAV 1.wav" /
+"0 - 1000 Hz.wav"), so only genuine drift is reported. Once clean, set
+APPLY = True in the Config block below (or uncomment "--apply") and
+re-run: each matched image is copied beside its .glc under the wav's
+stem — dropping any duration prefix — and the .glc is repointed at it.
+No duration is recorded anywhere: extract.py measures the time period
+from the image height (issue #148).
 
 Unlike relink.py, this LEAVES THE .wav IN PLACE (a future user may want
 the audio); the generator only copies what the .glc references, so the

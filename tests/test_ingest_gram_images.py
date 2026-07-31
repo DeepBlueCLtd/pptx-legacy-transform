@@ -1,8 +1,9 @@
 """Tests for ingest_gram_images.py.
 
 Exercises the two-phase import of author-supplied gram screenshots: whole-stem
-matching (no duration parsing -- issue #148 measures the time period from the
-image height), the case- and hyphen-spacing-tolerant match key, container
+matching with a tolerated leading duration token as a fallback key (the duration
+is never recorded -- issue #148 measures the time period from the image height),
+the case- and hyphen-spacing-tolerant match key, container
 resolution, folder/stem matching with nearest-candidate suggestions and trend
 grouping, the read-only verify guarantee, the apply-mode GLC filename rewrite +
 image copy (wav deliberately left in place), idempotency, demon-image handling
@@ -160,6 +161,109 @@ class MatchKeyTests(unittest.TestCase):
         self.assertNotEqual(ingest.match_key("WAV 1"), ingest.match_key("WAVE 1"))
         self.assertNotEqual(ingest.match_key("0 - 1000 Hz"),
                             ingest.match_key("0 - 1100 Hz"))
+
+
+# ---------------------------------------------------------------------------
+# The tolerated leading duration token (issue #148 fallback)
+# ---------------------------------------------------------------------------
+
+class DurationPrefixTests(unittest.TestCase):
+    """The author still types a duration on many screenshots; tolerate it."""
+
+    def test_whole_minutes_stripped(self):
+        self.assertEqual(ingest.strip_duration_prefix("9m WAV 1"), "WAV 1")
+
+    def test_minutes_and_seconds_stripped(self):
+        self.assertEqual(ingest.strip_duration_prefix("4m10s WAV 2"), "WAV 2")
+
+    def test_underscore_separator_stripped(self):
+        self.assertEqual(
+            ingest.strip_duration_prefix("7m20s_0 - 1000 Hz"), "0 - 1000 Hz")
+
+    def test_space_separated_frequency_stem(self):
+        self.assertEqual(
+            ingest.strip_duration_prefix("10m2s 0-200 Hz"), "0-200 Hz")
+
+    def test_frequency_range_is_not_a_duration(self):
+        # The regression the whole-stem rewrite was protecting: a leading
+        # "0 - 1322 Hz" must never be read as a duration token.
+        self.assertIsNone(ingest.strip_duration_prefix("0 - 1322 Hz"))
+        self.assertIsNone(ingest.strip_duration_prefix("0-1000 Hz"))
+
+    def test_numbered_wav_is_not_a_duration(self):
+        self.assertIsNone(ingest.strip_duration_prefix("WAV 2"))
+
+    def test_duration_only_stem_yields_none(self):
+        # Nothing left after stripping -> no fallback key, report it unmatched.
+        self.assertIsNone(ingest.strip_duration_prefix("9m "))
+
+    def test_candidate_keys_try_whole_stem_first(self):
+        keys = ingest.candidate_keys("9m WAV 1")
+        self.assertEqual(keys[0], ingest.match_key("9m WAV 1"))
+        self.assertEqual(keys[1], ingest.match_key("WAV 1"))
+
+    def test_candidate_keys_without_duration_is_single(self):
+        self.assertEqual(ingest.candidate_keys("WAV 1"),
+                         (ingest.match_key("WAV 1"),))
+
+
+class DurationPrefixMatchingTests(IngestTestBase):
+    """End-to-end: the 145 UNMATCHED IMAGES from the real delivery now match."""
+
+    def test_duration_prefixed_image_matches_wav(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
+        self.incoming_image("Doc", "Gram 1", "9m WAV 1.jpg")
+        outcomes, _tally = self.run_ingest(apply=False)
+        self.assertEqual(len(self.of_kind(outcomes, ingest.KIND_MATCHED)), 1)
+        self.assertEqual(self.of_kind(outcomes, ingest.KIND_UNMATCHED_IMAGE), [])
+
+    def test_duration_prefixed_frequency_stem_matches(self):
+        gram = self.source_gram("Doc", "Gram 4a")
+        self.write_wav_glc(gram, "Lofar 1.glc", "0-1000 Hz.wav")
+        self.incoming_image("Doc", "Gram 4a", "7m20s_0 - 1000 Hz.jpg")
+        outcomes, _tally = self.run_ingest(apply=False)
+        self.assertEqual(len(self.of_kind(outcomes, ingest.KIND_MATCHED)), 1)
+
+    def test_copy_drops_the_duration_and_takes_the_wav_name(self):
+        gram = self.source_gram("Doc", "Gram 1")
+        glc = self.write_wav_glc(gram, "Lofar 1.glc", "Wav 1.wav")
+        self.incoming_image("Doc", "Gram 1", "4m10s WAV 1.jpg", b"IMAGEBYTES")
+        self.run_ingest(apply=True)
+        # copied under the wav's own casing, no duration token
+        self.assertTrue((gram / "Wav 1.jpg").is_file())
+        self.assertFalse((gram / "4m10s WAV 1.jpg").exists())
+        self.assertEqual(parse_glc(glc).image_filename, "Wav 1.jpg")
+        # the wav is deliberately left in place
+        self.assertTrue((gram / "Wav 1.wav").is_file())
+
+    def test_whole_stem_wins_over_stripped(self):
+        # A source wav whose own name starts with a duration still matches
+        # whole -- the stripped key is only ever a fallback.
+        gram = self.source_gram("Doc", "Gram 1")
+        glc = self.write_wav_glc(gram, "Lofar 1.glc", "9m WAV 1.wav")
+        self.incoming_image("Doc", "Gram 1", "9m WAV 1.jpg")
+        self.run_ingest(apply=True)
+        self.assertEqual(parse_glc(glc).image_filename, "9m WAV 1.jpg")
+
+    def test_duration_variants_of_one_wav_are_ambiguous(self):
+        # Two screenshots folding onto one wav is still never guessed.
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
+        self.incoming_image("Doc", "Gram 1", "9m WAV 1.jpg")
+        self.incoming_image("Doc", "Gram 1", "WAV 1.jpg")
+        outcomes, _tally = self.run_ingest(apply=False)
+        self.assertEqual(len(self.of_kind(outcomes, ingest.KIND_AMBIGUOUS)), 1)
+        self.assertEqual(self.of_kind(outcomes, ingest.KIND_MATCHED), [])
+
+    def test_genuine_drift_still_reported(self):
+        # Stripping a duration must not turn real drift into a false match.
+        gram = self.source_gram("Doc", "Gram 1")
+        self.write_wav_glc(gram, "Lofar 1.glc", "WAV 1.wav")
+        self.incoming_image("Doc", "Gram 1", "9m WAVE 3.jpg")
+        outcomes, _tally = self.run_ingest(apply=False)
+        self.assertEqual(
+            len(self.of_kind(outcomes, ingest.KIND_UNMATCHED_IMAGE)), 1)
 
 
 # ---------------------------------------------------------------------------
