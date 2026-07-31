@@ -160,10 +160,12 @@ class GenerateDitaTests(unittest.TestCase):
             [("lofar-1", "Lofar 1"), ("lofar-2", "Lofar 2")],
         )
 
-    def test_wav_glc_section_numbered_as_lofar(self) -> None:
-        """A ``.wav``-backed GLC section is a Lofar too: it joins the
-        numbering with a ``Lofar N`` title and a ``lofar-N`` anchor, while
-        the PPTX label survives as the inner xref text. Gram 05 has one."""
+    def test_wav_glc_section_numbered_as_wav_not_lofar(self) -> None:
+        """A ``.wav``-backed GLC section is *not* a Lofar — it resolves to no
+        spectrogram — so it is titled ``WAV N``, anchored ``wav-N`` and
+        classed ``wav-stage``. The PPTX label is not used: the legacy decks
+        label audio links ``Lofar N`` too, which is the mislabelling this
+        rule exists to correct. Gram 05 has one."""
         _run(self.out)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
         root = ET.parse(topic).getroot()
@@ -174,11 +176,73 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(xref_section,
                              "expected a section wrapping the GLC-viewer xref")
         title = xref_section.find("title")
-        self.assertIsNotNone(title, "WAV-typed Lofar section must carry a numbered <title>")
-        self.assertEqual(title.text, "Lofar 1")
-        self.assertEqual(xref_section.get("id"), "lofar-1")
-        self.assertEqual(xref_section.find("p/xref").text, "Audio sample",
-                         "the audio xref keeps the PPTX link label")
+        self.assertIsNotNone(title, "the audio section must carry a numbered <title>")
+        self.assertEqual(title.text, "WAV 1")
+        self.assertEqual(xref_section.get("id"), "wav-1")
+        self.assertEqual(xref_section.get("outputclass"), "wav-stage")
+        self.assertEqual(xref_section.find("p/xref").text, "WAV 1",
+                         "the audio xref label is synthesised, not the PPTX text")
+        self.assertNotIn(
+            "Lofar", "".join(xref_section.itertext()),
+            "an audio section must never be presented as a Lofar")
+
+    def test_lofar_and_wav_sections_numbered_independently(self) -> None:
+        """A gram interleaving image and audio GLCs numbers each kind on its
+        own contiguous 1..N sequence — image, audio, audio, image renders as
+        Lofar 1, WAV 1, WAV 2, Lofar 2 (issue: audio links were numbered off
+        the shared Lofar counter and came out as "Lofar 4")."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        base = {c: "" for c in cols}
+        base.update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "topic_type": "glc",
+            "topic_filename": "gram_12.dita",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+        })
+        img = dict(base, glc_path="supporting/gram12/config.glc",
+                   link_href="supporting/gram12/config.glc",
+                   png_path="images/gram12.png")
+        # The legacy decks label the audio links "Lofar N" as well — the
+        # generator must ignore that and synthesise its own WAV numbering.
+        wav = dict(base, glc_path="supporting/gram12/audio.glc",
+                   link_href="supporting/gram12/audio.glc",
+                   png_path="supporting/gram12/audio.wav")
+        rows = [
+            dict(img, sequence="1", display_text="Lofar 1"),
+            dict(wav, sequence="2", display_text="Lofar 2"),
+            dict(wav, sequence="3", display_text="Lofar 3"),
+            dict(img, sequence="4", display_text="Lofar 4"),
+        ]
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerows(rows)
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        sections = [s for s in root.findall(".//body/section")
+                    if s.get("outputclass") in ("lofar-stage", "wav-stage")]
+        self.assertEqual(
+            [(s.get("id"), s.find("title").text) for s in sections],
+            [("lofar-1", "Lofar 1"), ("wav-1", "WAV 1"),
+             ("wav-2", "WAV 2"), ("lofar-2", "Lofar 2")],
+            "each kind numbers 1..N over its own rows, in CSV sequence order",
+        )
+        # The nav panel reads down the page, interleaved the same way (after
+        # the leading 7 Questions entry the fixture run adds).
+        panel = root.find(".//body/p[@outputclass='gram-nav']")
+        stage_xrefs = [x for x in panel.findall("xref")
+                       if x.get("audience") is None]
+        self.assertEqual(
+            [x.text for x in stage_xrefs],
+            ["Lofar 1", "WAV 1", "WAV 2", "Lofar 2"],
+        )
+        ids = {s.get("id") for s in root.findall(".//body/section")}
+        for xref in panel.findall("xref"):
+            self.assertIn(xref.get("href").split("/")[-1], ids,
+                          "every nav entry must target a real section anchor")
 
     def test_gramframe_table_has_named_colspecs(self) -> None:
         """DITA-OT needs named colspecs so the image cell renders with
@@ -722,7 +786,9 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "config.glc")
         self.assertEqual(xref.get("format"), "glc")
         self.assertEqual(xref.get("scope"), "local")
-        self.assertEqual(xref.text, "Audio sample")
+        # The link text is the synthesised audio label, not the CSV's
+        # display_text (see test_wav_glc_section_numbered_as_wav_not_lofar).
+        self.assertEqual(xref.text, "WAV 1")
 
     def test_glc_row_without_classifiable_asset_is_skipped(self) -> None:
         """A GLC row whose png_path is empty (or carries an extension

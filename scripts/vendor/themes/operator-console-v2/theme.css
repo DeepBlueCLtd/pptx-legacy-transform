@@ -239,11 +239,12 @@ section.analysis-sheet .imagecenter img {
 
 /* ---------- Floating gram nav panel (both editions) ----------
    The generator emits one <p class="gram-nav"> per gram page, carrying an
-   in-page <a> per Lofar (#…/lofar-N) plus — instructor edition only — a
+   in-page <a> per stage section in page order — Lofars (#…/lofar-N), audio
+   links (#…/wav-N) and demons (#…/demon-N) — plus, instructor edition only, a
    final link to the Analysis Sheet (the student build's trainee filter
    strips that one entry, since its <xref> carries audience="-trainee").
    Pin it as a fixed panel in the lower-right so the reader can jump straight
-   to a numbered Lofar from anywhere on a long gram page. (This was the
+   to a numbered stage from anywhere on a long gram page. (This was the
    instructor-only "Analysis Sheet" pill, issue #91; it now serves students
    and instructors alike.) */
 article p.gram-nav {
@@ -298,8 +299,13 @@ article p.gram-nav a[href$="analysis-sheet"]:visited {
 }
 article p.gram-nav a[href$="analysis-sheet"]::before { content: "▤ "; color: var(--amber); }
 
-/* ---------- LOFAR stage: faux instrument trace ---------- */
-section.lofar-stage {
+/* ---------- LOFAR stage: faux instrument trace ----------
+   The audio (.wav-backed) sections carry section.wav-stage instead — no
+   spectrogram to render, just a link to the .glc — so they share the panel
+   chrome below but none of the gramframe-table rules, and their header
+   marker reads AUDIO rather than TRACE. */
+section.lofar-stage,
+section.wav-stage {
   background: var(--panel);
   border: 1px solid var(--rule);
   border-radius: 4px;
@@ -310,7 +316,8 @@ section.lofar-stage {
 }
 
 /* Stage header bar */
-section.lofar-stage > h2.sectiontitle {
+section.lofar-stage > h2.sectiontitle,
+section.wav-stage > h2.sectiontitle {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -325,6 +332,16 @@ section.lofar-stage > h2.sectiontitle::before {
   content: "● TRACE / STAGE";
   color: var(--amber);
   letter-spacing: 0.18em;
+}
+section.wav-stage > h2.sectiontitle::before {
+  content: "◈ AUDIO / GLC";
+  color: var(--amber);
+  letter-spacing: 0.18em;
+}
+/* The .glc link body sits under the header bar, inside the same panel. */
+section.wav-stage > p {
+  margin: 0;
+  padding: 14px;
 }
 
 /* Image cell — scanlines overlay */

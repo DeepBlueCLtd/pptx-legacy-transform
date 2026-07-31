@@ -87,9 +87,11 @@ holds a gram with the same `gram_id` without renumbering one of them.
    renders no GramFrame table — issue #148). No author
    intervention is required; the generator emits a §1.3 GLC-viewer
    link block automatically and copies both the `.glc` and the
-   companion `.wav` into the per-gram folder. `display_text` carries
-   the visible link label (`"Lofar 1"`, `"Lofar 2"`, etc.), never the
-   URL.
+   companion `.wav` into the per-gram folder — titled `WAV N` on its own
+   sequence, never `Lofar N` (see `dita-topic-schema.md` §1.3).
+   `display_text` carries the visible link label (`"Lofar 1"`,
+   `"Lofar 2"`, etc.), never the URL — and, because the decks label their
+   audio links `Lofar N` too, it is not used for the rendered heading.
    *Note:* in the audited corpus every `Lofar` text-run hyperlink
    targets a `.glc`; the historical "WAV-targeted link" case (a
    hyperlink whose target ends in `.wav`) has not been observed in
