@@ -108,6 +108,30 @@ class GlcParserTests(unittest.TestCase):
         self.assertIn("GLC missing bandcentre", doc.warnings)
         self.assertNotIn("GLC missing bandwidth", doc.warnings)
 
+    def test_parse_glc_reads_update_period(self) -> None:
+        """Seconds per scan line, when the GLC states one (issue #160)."""
+        path = TMP / "update_period.glc"
+        path.write_text(
+            "<GAPS_Lite_configuration>"
+            "<data_source><filename>g.png</filename></data_source>"
+            "<settings><lofar>"
+            "<bandwidth>400</bandwidth><bandcentre>200</bandcentre>"
+            "<update_period>2</update_period>"
+            "</lofar></settings>"
+            "</GAPS_Lite_configuration>",
+            encoding="utf-8",
+        )
+        doc = extract_to_csv.parse_glc(path)
+        self.assertEqual(doc.update_period, "2")
+        self.assertEqual(doc.warnings, [])
+
+    def test_parse_glc_absent_update_period_is_blank_and_silent(self) -> None:
+        # Most of the corpus omits the element and means the historical 1 s;
+        # that must not warn (the spurious-warning trap bottom_crop fell into).
+        doc = extract_to_csv.parse_glc(FIXTURES / "minimal.glc")
+        self.assertEqual(doc.update_period, "")
+        self.assertEqual(doc.warnings, [])
+
 
 if __name__ == "__main__":
     unittest.main()

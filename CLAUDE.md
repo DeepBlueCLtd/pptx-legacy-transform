@@ -164,7 +164,8 @@ the folder's first hyperlinked `.glc` — repointed at the demon image with the
 band overwritten to the fixed **0 – 40 Hz** (`bandwidth=40`, `bandcentre=20`).
 `extract_to_csv.py` then scans the gram's **first resolved Lofar folder** for
 `demon.glc` / `demon-2.glc` markers and emits a leading `topic_type="demon"` row
-per marker; its `time_end` is the demon image's **pixel height** (issue #148),
+per marker; its `time_end` is the demon image's **pixel height** scaled by the
+marker's `update_period` (issues #148/#160),
 its band is read from the marker. The generator (`emit_gram_topic`) renders each
 demon as an inline `demon-stage` GramFrame **before** the Lofars and after the
 instructor-only analysis sheet, with **no audience restriction** — so in the
@@ -298,10 +299,14 @@ independently, so each must be self-contained.
   only feed the image GramFrame table, so a `.wav` row (surfaced as a `.glc`
   link, never a GramFrame render) may leave them blank without error, and the
   dedup/generate view key reads them tolerantly (a blank degrades to `""`).
-  `time_end` (the gram's time period) is **not** taken from the `.glc` at all:
-  it is the referenced image's **pixel height** in scan lines, measured from the
-  file on disk at extraction (issue #148 — the legacy viewer's scan-line count ×
-  a per-line update period that is always `1` s, so seconds == rows). The GLC's
+  `time_end` (the gram's time period, in seconds) is **not** taken from the
+  `.glc`'s crop values at all: it is the referenced image's **pixel height** in
+  scan lines, measured from the file on disk at extraction, multiplied by the
+  GLC's `update_period` — the seconds one scan line represents (issues
+  #148/#160). Nearly every GLC omits `update_period` or states `1` (so seconds
+  == rows), but some carry `2`, and those grams are twice as long as their pixel
+  height; an absent value silently means `1`, a present-but-unusable one falls
+  back to `1` with a `GLC invalid update_period` row warning. The GLC's
   `bottom_crop` is ignored (many valid image GLCs omit it, which used to raise a
   spurious "invalid GLC" warning). Because it is now image-derived, a blank
   `time_end` is an asset problem that **dangles** (missing image → `ASSET_MISSING`

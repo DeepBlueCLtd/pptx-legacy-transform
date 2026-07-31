@@ -220,7 +220,9 @@ The stage runs in two phases:
   `0-1000 Hz.wav` → `0-1000 Hz.jpg`) and rewrites the `.glc`'s `<filename>` to
   point at it. Nothing else in the `.glc` changes — no `<bitmap_crop_values>` is
   written, because since issue #148 the time period (`time_end`) is measured
-  from the imported image's **pixel height** (scan lines), not the `.glc`.
+  from the imported image's **pixel height** (scan lines), not the `.glc`. Any
+  `<update_period>` the `.glc` already carries survives the rewrite untouched,
+  so the scan rate it states still scales that height at extraction (#160).
 
 Ambiguity is never guessed: two images folding onto one wav, an image folding
 onto two distinct wavs, an image with no matching wav, or a `.glc` already
@@ -247,7 +249,8 @@ the image into the source gram folder (original name kept) and writes a
 **0 – 40 Hz** range. Several demons in one folder get `demon.glc`, `demon-2.glc`,
 … markers. Later, `extract.py` finds each `demon.glc` in the gram's first Lofar
 folder and emits a leading `topic_type="demon"` row (time period = the demon
-image's pixel height, per issue #148; band = 0 – 40 Hz from the marker), which
+image's pixel height × the marker's `update_period`, per issues #148/#160;
+band = 0 – 40 Hz from the marker), which
 the generator renders as the gram's first GramFrame — shown to every audience,
 before the Lofars and after the instructor-only analysis sheet. A
 `demon_stock.png` at the repo root is the sample image for building demon test
@@ -526,9 +529,12 @@ installs, not the user-folder install.
    GramFrame needs the full time + frequency coordinate system to render a
    gram, so an **image GLC-backed gram** (its inner asset a pre-rendered
    `.png`/`.jpg` embedded inline) requires its `time_end`, `bandwidth`, and
-   `bandcentre` view fields. `time_end` (the time period) is measured from the
-   image's **pixel height** (scan lines) at extraction, not read from the
-   `.glc` (issue #148); `bandwidth`/`bandcentre` come from the `.glc`. A
+   `bandcentre` view fields. `time_end` (the time period, in seconds) is
+   measured from the image's **pixel height** (scan lines) at extraction, not
+   read from the `.glc` (issue #148), then multiplied by the `.glc`'s
+   `update_period` — the seconds one scan line represents — where it states one
+   (issue #160; absent means `1`, i.e. seconds == rows);
+   `bandwidth`/`bandcentre` come from the `.glc`. A
    **`.wav`-backed gram is exempt**: it is surfaced as a plain link to its
    `.glc` (the on-PC GLC viewer renders it live, reading the `.glc` directly),
    so no GramFrame table is emitted and the view fields are never consumed — a
@@ -680,8 +686,9 @@ Self-Authored Data"). The view fields
 the image GramFrame table, so a `.wav` row — surfaced as a `.glc` link, never a
 GramFrame render — may leave them blank. `time_end` is additionally special: it
 is measured from the referenced image's pixel height at extraction rather than
-read from the `.glc` (issue #148), so it is populated automatically for image
-grams and blank when there is no measurable image. The dedup/generate view key
+read from the `.glc` (issue #148) — scaled by the `.glc`'s `update_period` where
+one is stated (issue #160) — so it is populated automatically for image grams
+and blank when there is no measurable image. The dedup/generate view key
 still uses the three to keep two grams with *different* windows from merging,
 but reads them tolerantly (a blank degrades to empty, so blank-view rows simply
 share a key) rather than hard-failing.
@@ -698,7 +705,7 @@ share a key) rather than hard-failing.
 | 8 | `display_text` | yes (rare) | Human-readable link label from the PPTX run. |
 | 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run; always a `.glc` in the audited corpus. |
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
-| 11 | `time_end` | yes | The gram's time period. Measured from the referenced image's **pixel height** (scan lines) at extraction, **not** the GLC's `bottom_crop` (issue #148); numeric string, blank for `.wav` rows and when the image cannot be measured. |
+| 11 | `time_end` | yes | The gram's time period in seconds. Measured at extraction as the referenced image's **pixel height** (scan lines) × the GLC's `update_period` (seconds per scan line), **not** the GLC's `bottom_crop` (issues #148/#160). A GLC that states no `update_period` means `1`, so the value equals the pixel height — the historical case. Numeric string, blank for `.wav` rows and when the image cannot be measured. |
 | 12 | `bandwidth` | yes | From GLC `bandwidth`; numeric string. Width of the frequency band. |
 | 13 | `bandcentre` | yes | From GLC `bandcentre`; numeric string. Centre of the band. The frequency axis is derived from the pair: `freq_start = bandcentre − bandwidth/2`, `freq_end = bandcentre + bandwidth/2` (issue #87). Replaces the former single `freq_end` column. |
 | 14 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg`/`.gif` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
@@ -909,6 +916,8 @@ canonical air-gapped test surface.
 | Oxygen / DITA-OT reports `[DOTX008E] The resource '…analysis-20sheet-20.png' cannot be loaded`. | The topic references an asset (here an analysis sheet PNG) that is not present in the built tree — the source file was missing at generate time, so the generator dangled the href. (`-20` is DITA-OT's rendering of the URL-escaped space `%20` in the original filename.) | Catch it upstream: `extract_to_csv.py` now flags any referenced-but-missing asset with `asset file missing on disk` in the CSV `warnings` column and an enumerated `extract.log` list, so re-run extraction and triage those rows (restore the source file, or drop the row) before publishing. To map a published `week-N/gram-NN` back to the source deck/gram it came from, read the source-provenance block at the top of the gram page (on by default for now; `--no-debug-provenance` suppresses it). |
 | `GLC missing bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those band elements (R6). | An **image** GLC-backed gram needs `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (`time_end` is measured from the image, not the GLC — issue #148 — so a missing `bottom_crop` is no longer warned. `.wav` rows, analysis-sheet rows and dangling GLC rows are exempt.) |
 | `gram time period unknown — could not read image height` warning in CSV. | The gram's image is present on disk but its pixel height couldn't be read (unrecognised/corrupt PNG/JPEG/GIF), so `time_end` is blank (issue #148). | Confirm the file is a valid image in the expected format and re-run; if the image itself is missing you'll instead see `asset file missing on disk` (drop the correct image in). This is a warning, not a fail-fast. |
+| `GLC invalid update_period '…' — assumed 1 s per scan line` warning in CSV. | The GLC states an `update_period` that isn't a positive number, so the seconds-per-scan-line scaling can't be applied and extraction fell back to `1` (issue #160). | Open the `.glc` and fix the value (`<update_period>2</update_period>`), then re-run — the affected gram's `time_end` is otherwise too short by that factor. A GLC with **no** `update_period` is normal and never warns. |
+| A gram's time axis reads half (or double) its true length. | The GLC carries an `update_period` other than `1` — e.g. `2`, meaning each scan line is 2 s — and the CSV predates issue #160, when `time_end` was the raw pixel height. | Re-run `extract.py` on the current code and re-generate; `time_end` is now height × `update_period`. Check `extract.log` for the `… x update_period …` INFO lines listing every scaled gram. |
 | `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | An **image** GLC-backed gram's GLC has no band fields; GramFrame can't render without them. (`.wav`-backed grams are exempt — they link to the `.glc` and never render a GramFrame table. `time_end` is image-derived and dangles rather than failing fast.) | Fix the offending GLC(s) listed in the error so they carry `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
 | Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |

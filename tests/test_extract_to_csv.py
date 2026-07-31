@@ -12,6 +12,7 @@ import csv
 import shutil
 import sys
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -437,6 +438,40 @@ class ImagePixelHeightTests(unittest.TestCase):
         self.assertIsNone(extract_to_csv._image_pixel_height("", self.tmp))
 
 
+class UpdatePeriodTests(unittest.TestCase):
+    """Scan lines are seconds only when update_period is 1 (issue #160)."""
+
+    def _period(self, raw: str):
+        value, warning = extract_to_csv._parse_update_period(raw)
+        return extract_to_csv._format_seconds(value), warning
+
+    def test_absent_period_defaults_to_one_without_warning(self) -> None:
+        self.assertEqual(self._period(""), ("1", None))
+        self.assertEqual(self._period("   "), ("1", None))
+
+    def test_stated_period_is_honoured(self) -> None:
+        self.assertEqual(self._period("2"), ("2", None))
+        self.assertEqual(self._period(" 0.5 "), ("0.5", None))
+
+    def test_unparsable_period_falls_back_with_warning(self) -> None:
+        formatted, warning = self._period("two")
+        self.assertEqual(formatted, "1")
+        self.assertIn("invalid update_period", warning)
+
+    def test_non_positive_period_falls_back_with_warning(self) -> None:
+        for raw in ("0", "-2"):
+            formatted, warning = self._period(raw)
+            self.assertEqual(formatted, "1")
+            self.assertIn("invalid update_period", warning)
+
+    def test_seconds_format_drops_trailing_zeros_and_exponents(self) -> None:
+        fmt = extract_to_csv._format_seconds
+        self.assertEqual(fmt(Decimal("180.0")), "180")
+        self.assertEqual(fmt(Decimal("720")), "720")
+        self.assertEqual(fmt(Decimal("1000000")), "1000000")
+        self.assertEqual(fmt(Decimal("90.50")), "90.5")
+
+
 class GramToRowsTests(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -474,6 +509,50 @@ class GramToRowsTests(unittest.TestCase):
         self.assertEqual(rows[0]["bandcentre"], "200")
         self.assertEqual(rows[0]["png_path"], "gram12.PNG")
         self.assertEqual(rows[0]["link_href"], "supporting/gram12/config_1.glc")
+
+    def _glc_with_period(self, period: str) -> None:
+        """Rewrite the resolvable GLC to state ``period`` seconds per scan line."""
+        glc = self.tmp / "supporting/gram12/config_1.glc"
+        glc.write_text(
+            "<GAPS_Lite_configuration>"
+            "<data_source><filename>gram12.PNG</filename></data_source>"
+            "<settings><lofar>"
+            "<bandwidth>400</bandwidth><bandcentre>200</bandcentre>"
+            f"<update_period>{period}</update_period>"
+            "</lofar></settings>"
+            "</GAPS_Lite_configuration>",
+            encoding="utf-8",
+        )
+
+    def _first_row(self) -> dict:
+        gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
+        return extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )[0]
+
+    def test_update_period_scales_the_time_period(self) -> None:
+        # Issue #160: 123 scan lines at 2 s each is a 246 s gram, not 123 s.
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
+        self._glc_with_period("2")
+        row = self._first_row()
+        self.assertEqual(row["time_end"], "246")
+        self.assertEqual(row["warnings"], "")
+
+    def test_fractional_update_period_scales_the_time_period(self) -> None:
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
+        self._glc_with_period("0.5")
+        self.assertEqual(self._first_row()["time_end"], "61.5")
+
+    def test_invalid_update_period_defaults_to_one_and_warns(self) -> None:
+        # Forgiving at the boundary: an unusable authored value still yields a
+        # row (scan lines == seconds, as before) plus a warning for the author.
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
+        self._glc_with_period("later")
+        row = self._first_row()
+        self.assertEqual(row["time_end"], "123")
+        self.assertIn("invalid update_period", row["warnings"])
 
     def test_wav_targeted_link_is_treated_as_unresolvable_glc(self) -> None:
         # Backlog 007: the audited corpus has no Lofar text run targeting
@@ -1533,6 +1612,20 @@ class DemonRowsTests(unittest.TestCase):
         self.assertEqual(demon["topic_type"], "demon")
         self.assertEqual(demon["time_end"], "")
         self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, demon["warnings"])
+
+    def test_demon_honours_marker_update_period(self) -> None:
+        # The marker is cloned from the gram's first .glc, so it inherits any
+        # update_period; the demon's time period is scaled by it like any other
+        # image row (issue #160).
+        (self.gramdir / "demon.glc").write_text(
+            DEMON_GLC.format(name="Demon - 0-40Hz.png").replace(
+                "</lofar>", "  <update_period>2</update_period>\n    </lofar>"),
+            encoding="utf-8")
+        mock_pptx.emit_png(
+            self.gramdir / "Demon - 0-40Hz.png", width=978, height=232)
+        demon = self._rows()[0]
+        self.assertEqual(demon["topic_type"], "demon")
+        self.assertEqual(demon["time_end"], "464")
 
     def test_demon_row_not_gated_by_glc_view_problems(self) -> None:
         # A demon row is topic_type="demon", exempt from the band fail-fast gate.

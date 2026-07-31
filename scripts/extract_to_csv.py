@@ -24,6 +24,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Iterator
 
@@ -50,10 +51,19 @@ DEFAULT_JOINING_PATTERN: str = "joining"
 # emitted upper-case whatever case the folder uses.
 COURSE_CODES: tuple[str, ...] = ("AAAC", "SSAC")
 
+# Seconds represented by one horizontal scan line (one pixel row) of a gram
+# image, used when the ``.glc`` names no ``update_period`` of its own. The
+# legacy viewer multiplies the image's scan-line count by this period to get the
+# gram's time period; the audited corpus is overwhelmingly ``1`` (so seconds ==
+# rows), but some GLCs carry a different rate — e.g. ``2`` — and must be honoured
+# (issue #160). A GLC that omits the element keeps the historical assumption.
+DEFAULT_UPDATE_PERIOD: Decimal = Decimal("1")
+
 # GramFrame needs the full time + frequency coordinate system to render a gram,
 # so an *image* GLC-backed gram (pre-rendered .png/.jpg embedded inline) requires
-# these three "view" fields. ``time_end`` is the image's pixel height (issue
-# #148, derived at extraction from the file on disk); ``bandwidth``/``bandcentre``
+# these three "view" fields. ``time_end`` is the image's pixel height scaled by
+# the GLC's ``update_period`` (issues #148/#160, derived at extraction from the
+# file on disk plus the GLC); ``bandwidth``/``bandcentre``
 # come from the .glc. A .wav-backed gram does *not* need them: it is surfaced
 # downstream as a plain link to its .glc (the on-PC GLC viewer renders it live,
 # reading the .glc directly), so no GramFrame table is emitted and the view
@@ -153,6 +163,7 @@ class GlcDocument:
     image_filename: str = ""
     bandwidth: str = ""
     bandcentre: str = ""
+    update_period: str = ""
     warnings: list[str] = field(default_factory=list)
 
 
@@ -170,6 +181,13 @@ def parse_glc(path: Path) -> GlcDocument:
     image, not from the ``.glc`` (issue #148). Many valid image GLCs omit the
     element entirely, so reading it here only produced spurious "invalid GLC"
     warnings.
+
+    ``update_period`` — the seconds one scan line represents — *is* read (issue
+    #160): the scan-line count alone is only the time period when the period is
+    ``1``. It is returned raw (the caller scales the measured pixel height by it,
+    defaulting to ``DEFAULT_UPDATE_PERIOD``); an absent element is the common,
+    unremarkable case and earns **no** warning, exactly as ``bottom_crop``'s
+    absence used to.
     """
     doc = GlcDocument()
     try:
@@ -213,6 +231,12 @@ def parse_glc(path: Path) -> GlcDocument:
         doc.bandcentre = ""
     else:
         doc.bandcentre = bandcentre.strip()
+
+    # Seconds per scan line (issue #160). Optional: most GLCs omit it and mean
+    # the historical 1 s, so a missing element is silent — only a *present*
+    # value is carried forward, and only the caller judges whether it parses.
+    update_period = root.findtext("settings/lofar/update_period")
+    doc.update_period = (update_period or "").strip()
 
     return doc
 
@@ -1162,9 +1186,11 @@ def _image_pixel_height(png_path: str, content_root: Path) -> int | None:
 
     Issue #148: a pre-rendered gram's time period is derived from the image
     itself — the number of horizontal scan lines, i.e. the pixel height — not
-    from any value in the ``.glc`` (the legacy viewer multiplies the scan-line
-    count by an update period that is always ``1`` second, so seconds == pixel
-    rows). Reads only the header of PNG, JPEG and GIF files using the standard
+    from any crop value in the ``.glc``. The legacy viewer multiplies that count
+    by the GLC's ``update_period`` (seconds per scan line), which is ``1`` for
+    nearly all of the corpus but not all of it, so the caller scales this height
+    by the parsed period (issue #160) rather than treating rows as seconds.
+    Reads only the header of PNG, JPEG and GIF files using the standard
     library, keeping Pillow off the runtime path per the air-gap dependency
     budget. Returns ``None`` when the file is absent, truncated, or not a
     recognised/parsable format, so the caller leaves ``time_end`` blank and the
@@ -1188,6 +1214,74 @@ def _image_pixel_height(png_path: str, content_root: Path) -> int | None:
     except OSError:
         return None
     return None
+
+
+def _parse_update_period(raw: str) -> tuple[Decimal, str | None]:
+    """Return ``(seconds per scan line, warning or None)`` for a GLC's period.
+
+    Issue #160: the legacy viewer derives a gram's time period by multiplying
+    the image's scan-line count by the ``.glc``'s ``update_period``. The audited
+    corpus is nearly all ``1`` (which is why the count alone served until now),
+    but values such as ``2`` exist and halve the effective scan rate, so the
+    period has to be read rather than assumed.
+
+    Forgiving at the boundary (constitution VII): a blank/absent value is the
+    ordinary "no period stated" case and silently means
+    ``DEFAULT_UPDATE_PERIOD``; a present but unparsable or non-positive value is
+    an authoring defect that cannot be honoured, so it falls back to the same
+    default and returns a warning for the CSV rather than raising. ``Decimal``
+    (not ``float``) keeps the arithmetic exact and the output deterministic.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return DEFAULT_UPDATE_PERIOD, None
+    try:
+        value = Decimal(text)
+    except (InvalidOperation, ValueError):
+        value = None
+    if value is None or not value.is_finite() or value <= 0:
+        return (
+            DEFAULT_UPDATE_PERIOD,
+            f"GLC invalid update_period {text!r} — assumed "
+            f"{_format_seconds(DEFAULT_UPDATE_PERIOD)} s per scan line",
+        )
+    return value, None
+
+
+def _format_seconds(value: Decimal) -> str:
+    """Render a time period as the CSV's plain decimal string.
+
+    Trailing zeros are dropped (``180.0`` -> ``180``) and exponent notation is
+    never emitted, so an integral period reads exactly as it did before issue
+    #160 and a fractional one stays human-legible in Excel.
+    """
+    normalised = value.normalize()
+    if normalised == normalised.to_integral_value():
+        normalised = normalised.to_integral_value()
+    return format(normalised, "f")
+
+
+def _time_period(
+    png_path: str, content_root: Path, glc: GlcDocument,
+) -> tuple[str, list[str]]:
+    """Return ``(time_end, warnings)`` for an image-backed gram row.
+
+    The time period is the referenced image's scan-line count — its pixel
+    height (issue #148) — multiplied by the GLC's seconds-per-scan-line
+    ``update_period`` (issue #160). An unmeasurable image yields ``""`` so the
+    caller's existing dangling-asset handling applies unchanged.
+    """
+    height = _image_pixel_height(png_path, content_root)
+    if height is None:
+        return "", []
+    period, warning = _parse_update_period(glc.update_period)
+    seconds = _format_seconds(Decimal(height) * period)
+    if period != DEFAULT_UPDATE_PERIOD:
+        LOGGER.info(
+            "%s: %d scan lines x update_period %s -> time period %s s",
+            png_path, height, _format_seconds(period), seconds,
+        )
+    return seconds, ([warning] if warning else [])
 
 
 def _asset_file_missing(png_path: str, content_root: Path) -> bool:
@@ -1354,9 +1448,9 @@ def demon_rows_for_gram(
             png_path = resolve_asset_path(
                 glc.image_filename, content_root, source_dir=marker.parent)
             if Path(png_path).suffix.lower() in GRAMFRAME_GLC_EXTENSIONS:
-                height = _image_pixel_height(png_path, content_root)
-                if height is not None:
-                    time_end = str(height)
+                time_end, period_warnings = _time_period(
+                    png_path, content_root, glc)
+                warnings.extend(period_warnings)
 
         row = {
             "publication": publication,
@@ -1471,13 +1565,15 @@ def gram_to_rows(
                 )
                 # Issue #148: the gram's time period (the GramFrame y-axis,
                 # ``time_end``) is the image's scan-line count — its pixel
-                # height — not the GLC's ``bottom_crop``. Only a pre-rendered
-                # image carries this; a .wav-backed row is surfaced as a link
-                # to its .glc (no GramFrame table) and keeps a blank time_end.
+                # height — not the GLC's ``bottom_crop``, scaled by the GLC's
+                # seconds-per-scan-line ``update_period`` (issue #160). Only a
+                # pre-rendered image carries this; a .wav-backed row is surfaced
+                # as a link to its .glc (no GramFrame table) and keeps a blank
+                # time_end.
                 if Path(png_path).suffix.lower() in GRAMFRAME_GLC_EXTENSIONS:
-                    height = _image_pixel_height(png_path, content_root)
-                    if height is not None:
-                        time_end = str(height)
+                    time_end, period_warnings = _time_period(
+                        png_path, content_root, glc)
+                    warnings.extend(period_warnings)
 
         row = {
             "publication": publication,
