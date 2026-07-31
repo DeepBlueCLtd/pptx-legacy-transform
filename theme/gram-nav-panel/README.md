@@ -14,8 +14,12 @@ GramFrame overlay).
 Oxygen passes `outputclass` through to the HTML `@class`, so the published
 page carries `<p class="gram-nav">` holding:
 
-- one in-page link per **Lofar** (`href="#…/lofar-N"`, label `Lofar N`) — these
-  are unfiltered, so they appear in **both** editions; and
+- one in-page link per content section, **in page order** — **Lofar**
+  (`href="#…/lofar-N"`, label `Lofar N`), **audio** (`href="#…/wav-N"`, label
+  `WAV N`) and **demon** (`href="#…/demon-N"`) — these are unfiltered, so they
+  appear in **both** editions. The Lofar and WAV numbers are independent 1..N
+  sequences, so a gram whose deck interleaved them reads `Lofar 1`, `WAV 1`,
+  `Lofar 2`; and
 - **instructor edition only**, a final link to the **Analysis Sheet**. Its
   `<xref>` carries `audience="-trainee"`, so the trainee DITAVAL filter strips
   that one entry from the student build (its target section is instructor-only
@@ -78,10 +82,11 @@ Identical to `../oxygen-hide-search/`:
    entry survives.
 
 5. **Republish both editions and confirm:** on an instructor gram page the
-   panel lists `Lofar 1 … Lofar N` and a final amber **Analysis Sheet** entry;
-   on the matching student page it lists the Lofars only, with no Analysis
-   Sheet entry; clicking an entry scrolls to that Lofar (or the Analysis
-   Sheet); and a non-gram page (welcome/index) shows no panel.
+   panel lists the gram's stages in page order (`Lofar 1`, `WAV 1`, …) and a
+   final amber **Analysis Sheet** entry; on the matching student page it lists
+   the stages only, with no Analysis Sheet entry; clicking an entry scrolls to
+   that stage (or the Analysis Sheet); and a non-gram page (welcome/index)
+   shows no panel.
 
 ## Keep it in step with the dev preview
 

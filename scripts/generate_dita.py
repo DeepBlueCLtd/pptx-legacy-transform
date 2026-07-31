@@ -915,12 +915,13 @@ def _append_gramframe_table(
     ``colspan="2"`` on the image row — without them the image cell
     renders with ``colspan="1"`` and GramFrame rejects the table.
 
-    ``lofar_index`` is the 1-based position of this Lofar within its gram
-    (assigned in render order, see ``emit_gram_topic``). It drives a stable
-    ``<title>`` (``Lofar N``) and section ``id`` (``lofar-N``) so the source
-    decks' inconsistent labels (some "Lofar 1/2", some bare "Lofar", some a
-    single numbered one) become a uniform incremental sequence, and so the
-    floating nav panel can target each Lofar with an in-page anchor.
+    ``lofar_index`` is the 1-based position of this Lofar among its gram's
+    *image* GLC rows (assigned in render order, see ``emit_gram_topic``;
+    ``.wav``-backed rows are numbered separately as ``WAV N``). It drives a
+    stable ``<title>`` (``Lofar N``) and section ``id`` (``lofar-N``) so the
+    source decks' inconsistent labels (some "Lofar 1/2", some bare "Lofar",
+    some a single numbered one) become a uniform incremental sequence, and so
+    the floating nav panel can target each Lofar with an in-page anchor.
     """
     return _append_gramframe_section(
         parent, image_href, time_end, bandwidth, bandcentre,
@@ -1000,11 +1001,22 @@ ANALYSIS_SECTION_ID = "analysis-sheet"
 def _lofar_anchor_id(index: int) -> str:
     """Stable id for the *index*-th Lofar section within a gram.
 
-    Each gram's Lofars are numbered incrementally in render order
-    (``Lofar 1`` … ``Lofar N``); this anchors section ``id="lofar-N"`` so
-    the floating nav panel's ``#topic/lofar-N`` xref scrolls straight to it.
+    Each gram's *image*-backed Lofars are numbered incrementally in render
+    order (``Lofar 1`` … ``Lofar N``); this anchors section ``id="lofar-N"``
+    so the floating nav panel's ``#topic/lofar-N`` xref scrolls straight to
+    it. Audio rows have their own sequence — see ``_wav_anchor_id``.
     """
     return f"lofar-{index}"
+
+
+def _wav_anchor_id(index: int) -> str:
+    """Stable id for the *index*-th audio (``.wav``-backed) section in a gram.
+
+    Audio sections are numbered independently of the Lofars (``WAV 1`` …
+    ``WAV M``), so a gram of image, audio, audio, image renders as Lofar 1,
+    WAV 1, WAV 2, Lofar 2 — each sequence contiguous.
+    """
+    return f"wav-{index}"
 
 
 def _append_edition_marker(body: ET.Element) -> None:
@@ -1116,18 +1128,23 @@ def _append_seven_questions_section(body: ET.Element, href: str) -> None:
 
 
 def _append_gram_nav_panel(
-    parent: ET.Element, topic_id: str, lofar_count: int, has_analysis: bool,
-    has_seven_q: bool = False, demon_count: int = 0,
+    parent: ET.Element, topic_id: str, stage_entries: list[tuple[str, str]],
+    has_analysis: bool, has_seven_q: bool = False,
 ) -> None:
     """Append the floating gram navigation panel.
 
     On a long gram page the reader wants to jump straight to a numbered
     Lofar — and, for the instructor, the Analysis Sheet — from anywhere.
     We emit a single ``<p outputclass="gram-nav">`` carrying one in-page
-    ``<xref>`` per Lofar section (``#topic/lofar-N``, label ``Lofar N``),
-    which the theme pins as a fixed panel.
+    ``<xref>`` per content section, which the theme pins as a fixed panel.
 
-    The Lofar links are unfiltered, so the panel ships in *both* the
+    ``stage_entries`` is the gram's demon/Lofar/WAV sections as
+    ``(anchor_id, label)`` in the order they were rendered, so the panel
+    reads down the page rather than re-deriving an order of its own — the
+    Lofar and WAV sequences interleave (``Lofar 1``, ``WAV 1``, ``Lofar 2``)
+    whenever the source deck interleaved them.
+
+    The stage links are unfiltered, so the panel ships in *both* the
     instructor and student editions. A final ``<xref audience="-trainee">``
     to the analysis-sheet section is appended only when the gram has one;
     the trainee profile elides just that entry (its target section is
@@ -1143,8 +1160,7 @@ def _append_gram_nav_panel(
 
     Emitted only when there is something to jump to.
     """
-    if (lofar_count == 0 and demon_count == 0
-            and not has_analysis and not has_seven_q):
+    if not stage_entries and not has_analysis and not has_seven_q:
         return
     panel = ET.SubElement(parent, "p", {"outputclass": "gram-nav"})
     if has_seven_q:
@@ -1153,16 +1169,11 @@ def _append_gram_nav_panel(
             "href": f"#{topic_id}/{SEVEN_QUESTIONS_SECTION_ID}",
         })
         xref.text = SEVEN_QUESTIONS_TOPIC_TITLE
-    for n in range(1, demon_count + 1):
+    for anchor_id, label in stage_entries:
         xref = ET.SubElement(panel, "xref", {
-            "href": f"#{topic_id}/{_demon_anchor_id(n)}",
+            "href": f"#{topic_id}/{anchor_id}",
         })
-        xref.text = "Demon" if n == 1 else f"Demon {n}"
-    for n in range(1, lofar_count + 1):
-        xref = ET.SubElement(panel, "xref", {
-            "href": f"#{topic_id}/{_lofar_anchor_id(n)}",
-        })
-        xref.text = f"Lofar {n}"
+        xref.text = label
     if has_analysis:
         xref = ET.SubElement(panel, "xref", {
             "audience": "-trainee",
@@ -1203,8 +1214,7 @@ def _append_analysis_section(
 
 
 def _append_glc_viewer_link(
-    parent: ET.Element, glc_href: str, lofar_index: int,
-    display_text: str = "",
+    parent: ET.Element, glc_href: str, wav_index: int,
 ) -> ET.Element:
     """Append a GLC-viewer link block (§1.3) to the gram body.
 
@@ -1215,21 +1225,28 @@ def _append_glc_viewer_link(
     ``.wav`` for live aural analysis. The companion ``.wav`` is copied
     next to the ``.glc`` by the caller.
 
-    A ``.wav``-backed GLC is still a Lofar, so it joins the gram's
-    incremental Lofar numbering: ``lofar_index`` drives the section
-    ``<title>`` (``Lofar N``) and ``id`` (``lofar-N``), matching the
-    spectrogram sections. The PPTX link label (``display_text``) survives
-    as the inner ``<xref>`` text so the audio link itself stays labelled.
+    An audio link is **not** a Lofar — it resolves to no spectrogram image —
+    so it is titled ``WAV N`` on its own 1..M sequence (``wav_index``,
+    assigned in render order by ``emit_gram_topic``) and anchored at
+    ``id="wav-N"``. Labelling it ``Lofar N`` off the shared image counter
+    misled readers into expecting a LOFAR gram behind the link.
+
+    The title is synthesised rather than taken from the row's
+    ``display_text``: the legacy decks label the audio links ``Lofar N``
+    too (every one of them in the audited corpus), which is the very
+    mislabelling this block exists to correct. ``display_text`` stays in the
+    CSV for round-tripping; it is not rendered.
     """
+    label = f"WAV {wav_index}"
     section = ET.SubElement(parent, "section", {
-        "id": _lofar_anchor_id(lofar_index), "outputclass": "lofar-stage",
+        "id": _wav_anchor_id(wav_index), "outputclass": "wav-stage",
     })
-    ET.SubElement(section, "title").text = f"Lofar {lofar_index}"
+    ET.SubElement(section, "title").text = label
     p = ET.SubElement(section, "p")
     xref = ET.SubElement(p, "xref", {
         "href": glc_href, "format": "glc", "scope": "local",
     })
-    xref.text = display_text or glc_href
+    xref.text = label
     return section
 
 
@@ -1265,6 +1282,11 @@ def emit_gram_topic(
          (§1.3); both the ``.glc`` and the named ``.wav`` are copied
          into the per-gram folder so the on-PC GLC viewer can find
          the audio when a student opens the link.
+
+       The two shapes are titled and numbered on **independent** 1..N
+       sequences — ``Lofar 1``…``Lofar N`` for the images, ``WAV 1``…
+       ``WAV M`` for the audio — so an audio link is never presented as a
+       LOFAR gram it cannot show.
 
     Rows whose ``png_path`` is empty or carries any other extension
     are skipped with a warning recorded in ``skipped.txt``.
@@ -1353,6 +1375,9 @@ def emit_gram_topic(
     # -- the demon is the first block on the page. Each demon image is copied
     # beside the topic under a stable ``demon.png`` / ``demon-N.png`` name so its
     # href needs no ``../`` traversal.
+    # (anchor id, label) for every stage section actually rendered, in render
+    # order — the floating nav panel is built from this at the end.
+    stage_entries: list[tuple[str, str]] = []
     demon_count = 0
     for row in demon_rows:
         png_path = row.get("png_path", "") or ""
@@ -1372,14 +1397,21 @@ def emit_gram_topic(
             png_path, image_root, topic_dir, target_name=target_name)
         if copied is not None:
             written.append(copied)
-        _append_demon_gramframe(
+        demon_section = _append_demon_gramframe(
             body, image_href,
             row.get("time_end", ""),
             row.get("bandwidth", ""), row.get("bandcentre", ""),
             demon_count,
         )
+        stage_entries.append(
+            (demon_section.get("id"), demon_section.find("title").text))
 
+    # The Lofars (image-backed) and the WAV links (audio-backed) carry
+    # *independent* 1..N sequences: a ``.wav`` GLC resolves to no spectrogram,
+    # so numbering it off the Lofar counter labelled audio links "Lofar 4" and
+    # promised a LOFAR gram that does not exist behind the link.
     lofar_index = 0
+    wav_index = 0
     for row in glc_rows:
         png_path = row.get("png_path", "") or ""
         asset_suffix = Path(png_path).suffix.lower()
@@ -1398,6 +1430,8 @@ def emit_gram_topic(
                     lofar_index,
                 )
                 _append_provenance_data(section, png_path)
+                stage_entries.append(
+                    (_lofar_anchor_id(lofar_index), f"Lofar {lofar_index}"))
                 redirected += 1
                 continue
             image_href, copied = copy_asset(png_path, image_root, topic_dir)
@@ -1410,6 +1444,8 @@ def emit_gram_topic(
                 row.get("bandwidth", ""), row.get("bandcentre", ""),
                 lofar_index,
             )
+            stage_entries.append(
+                (_lofar_anchor_id(lofar_index), f"Lofar {lofar_index}"))
             continue
 
         if asset_suffix == ".wav":
@@ -1432,11 +1468,11 @@ def emit_gram_topic(
                 glc_href = _relpath_posix(
                     master.topic_dir / master.link_basename, topic_dir,
                 )
-                lofar_index += 1
-                section = _append_glc_viewer_link(
-                    body, glc_href, lofar_index, row.get("display_text", ""),
-                )
+                wav_index += 1
+                section = _append_glc_viewer_link(body, glc_href, wav_index)
                 _append_provenance_data(section, glc_path)
+                stage_entries.append(
+                    (_wav_anchor_id(wav_index), f"WAV {wav_index}"))
                 redirected += 1
                 continue
             glc_href, glc_copied = copy_asset(glc_path, image_root, topic_dir)
@@ -1445,10 +1481,10 @@ def emit_gram_topic(
                 written.append(glc_copied)
             if wav_copied is not None:
                 written.append(wav_copied)
-            lofar_index += 1
-            _append_glc_viewer_link(
-                body, glc_href, lofar_index, row.get("display_text", ""),
-            )
+            wav_index += 1
+            _append_glc_viewer_link(body, glc_href, wav_index)
+            stage_entries.append(
+                (_wav_anchor_id(wav_index), f"WAV {wav_index}"))
             continue
 
         if not png_path:
@@ -1462,14 +1498,14 @@ def emit_gram_topic(
         )
         skipped.append(_skip_record(row, reason))
 
-    # Floating nav panel: one in-page jump per rendered Lofar (both editions)
-    # plus an instructor-only Analysis Sheet link, and (when present) a leading
-    # 7 Questions link. Appended last so it counts only the Lofars that actually
-    # rendered (a skipped row claims no number); position:fixed in the theme
-    # means DOM order doesn't affect placement.
+    # Floating nav panel: one in-page jump per rendered stage section — demon,
+    # Lofar, WAV — in page order (both editions), plus an instructor-only
+    # Analysis Sheet link and (when present) a leading 7 Questions link.
+    # Appended last so it lists only the sections that actually rendered (a
+    # skipped row claims no number); position:fixed in the theme means DOM
+    # order doesn't affect placement.
     _append_gram_nav_panel(
-        body, topic_id, lofar_index, bool(analysis_rows), has_seven_q=seven_q,
-        demon_count=demon_count,
+        body, topic_id, stage_entries, bool(analysis_rows), has_seven_q=seven_q,
     )
 
     # Navigation back to the publication index is delivered by the page

@@ -124,9 +124,19 @@ Each gram has hyperlinks; the `Lofar`-labelled ones **always** point to a `.glc`
 config file, which in turn names a sibling asset. **The generator dispatches on
 the GLC's inner asset extension, not on any CSV flag:**
 
-- `.png` / `.jpg` (~82%, pre-rendered spectrogram) → embedded inline in the topic.
+- `.png` / `.jpg` (~82%, pre-rendered spectrogram) → embedded inline in the topic,
+  titled `Lofar N`, anchored `id="lofar-N"`, classed `lofar-stage`.
 - `.wav` (~18%, rendered live by the on-PC GLC viewer) → surfaced as a link to
-  the `.glc`, with both the `.glc` and `.wav` copied beside the topic.
+  the `.glc`, with both the `.glc` and `.wav` copied beside the topic; titled
+  `WAV N`, anchored `id="wav-N"`, classed `wav-stage`.
+
+The two kinds are numbered on **independent 1..N sequences** (image, audio,
+audio, image → `Lofar 1`, `WAV 1`, `WAV 2`, `Lofar 2`). An audio link is not a
+Lofar — it resolves to no spectrogram — so it must never take a number off the
+Lofar counter and render as `Lofar 4`, promising a LOFAR gram the link cannot
+show. Both titles are **synthesised**, never taken from the CSV `display_text`:
+in the audited corpus the legacy decks label *every* `.glc` hyperlink `Lofar N`,
+audio ones included, so the source label cannot distinguish them.
 
 The `wav_treatment` CSV column is **deprecated and ignored** — retained only for
 round-trip compatibility. No author decision selects the treatment.

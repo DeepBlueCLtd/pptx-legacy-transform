@@ -56,6 +56,8 @@ DITA `outputclass` values that the theme styles (DITA-OT copies these
 through to HTML `class`):
 
 - `lofar-stage`     — the faux instrument trace look for each LOFAR section
+- `wav-stage`       — the same panel chrome for an audio (`.wav`) GLC link
+                      section, header marked `AUDIO / GLC` instead of `TRACE`
 - `analysis-sheet`  — the analyst's worksheet section (instructor only)
 - `gram-config`     — table picked up by the GramFrame plugin
 - `vessel-name`     — the amber target-name pill on a gram heading

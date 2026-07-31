@@ -396,8 +396,9 @@ fragment) the operator installs once into the Oxygen WebHelp template so the
 that hides the useless search box in the **student** edition only, wired in
 through the student transformation scenario — see that folder's `README.md`.
 `theme\gram-nav-panel\` is a third overlay (one CSS file) that pins the
-floating per-gram navigation panel — the in-page Lofar jump links (both
-editions) plus the instructor-only Analysis Sheet link — to the lower-right
+floating per-gram navigation panel — the in-page stage jump links, `Lofar N`
+and `WAV N` in page order (both editions), plus the instructor-only
+Analysis Sheet link — to the lower-right
 corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
 overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
 compact top-right overlay on gram pages, so it stops reserving a full-height
@@ -607,6 +608,10 @@ installs, not the user-folder install.
    per gram** at `dita/<publication>/<chapter>/gram-NN/gram_NN.dita`
    (the N+1 CSV rows for the gram are merged — Analysis Sheet
    section first, then one section per Lofar in `sequence` order).
+   Image-backed sections are titled `Lofar 1…N` and audio (`.wav`)
+   sections `WAV 1…M`, each on its own contiguous sequence: an audio
+   link resolves to no spectrogram, so numbering it off the Lofar
+   counter promised a LOFAR gram the link cannot show.
    For `main`, the chapter is the **week** (feature 008): a bare-integer
    `target_chapter` of `1`…`4` becomes `dita/main/week-N/`, headed
    `Week N`, and the per-gram `NN` is the effective gram number

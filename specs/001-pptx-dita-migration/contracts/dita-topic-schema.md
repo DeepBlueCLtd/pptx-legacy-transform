@@ -81,14 +81,14 @@ only and is ignored by the generator (see csv-schema.md §column 15).
       </table>
     </section>
 
-    <section id="lofar-2" outputclass="lofar-stage">      <!-- §1.3 GLC-viewer link, when GLC names a WAV -->
-      <title>Lofar 2</title>                              <!-- continues the same numbering -->
-      <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
+    <section id="wav-1" outputclass="wav-stage">         <!-- §1.3 GLC-viewer link, when GLC names a WAV -->
+      <title>WAV 1</title>                                <!-- own sequence, NOT the Lofar counter -->
+      <p><xref href="{slug}.glc" format="glc" scope="local">WAV 1</xref></p>
     </section>
 
     <p outputclass="gram-nav">                             <!-- §1.1a floating nav panel, emitted last -->
       <xref href="#gram_NN/lofar-1">Lofar 1</xref>
-      <xref href="#gram_NN/lofar-2">Lofar 2</xref>
+      <xref href="#gram_NN/wav-1">WAV 1</xref>
       <xref audience="-trainee" href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
     </p>
   </body>
@@ -120,32 +120,37 @@ panel (§1.1a) can target it with an in-page `<xref>`.
 ### 1.1a Floating gram nav panel
 
 The body ends with a single floating navigation panel — one in-page link
-per Lofar, plus (instructor only) a link to the analysis sheet:
+per content section **in render order**, plus (instructor only) a link to the
+analysis sheet:
 
 ```xml
 <p outputclass="gram-nav">
   <xref href="#gram_NN/lofar-1">Lofar 1</xref>
-  <xref href="#gram_NN/lofar-2">Lofar 2</xref>
-  <!-- … one xref per Lofar (§1.2 / §1.3), in render order … -->
+  <xref href="#gram_NN/wav-1">WAV 1</xref>
+  <!-- … one xref per demon (§1.2a) / Lofar (§1.2) / audio link (§1.3),
+       in render order — so the panel reads down the page … -->
   <xref audience="-trainee" href="#gram_NN/analysis-sheet">Analysis Sheet</xref>
 </p>
 ```
 
-Every Lofar section carries an incremental `id="lofar-N"` (§1.2 / §1.3), so
-each panel link scrolls straight to its Lofar. The Lofar links are
+Every stage section carries a stable anchor — `id="lofar-N"` (§1.2),
+`id="wav-N"` (§1.3), `id="demon-N"` (§1.2a) — so each panel link scrolls
+straight to its section. The entries are listed in the order the sections were
+rendered rather than grouped by kind, so a gram whose deck interleaved images
+and audio reads `Lofar 1`, `WAV 1`, `Lofar 2`. The stage links are
 **unfiltered**, so the panel appears in **both** editions — students and
-instructors alike navigate the Lofars. The trailing Analysis Sheet link is
+instructors alike navigate the gram. The trailing Analysis Sheet link is
 emitted only when the gram has an analysis sheet, and carries
 `audience="-trainee"`: the trainee profile elides just that one entry (its
 target section is instructor-only too, so the student edition never ships a
 dangling anchor). DITA-OT renders the paragraph as `<p class="gram-nav">`;
 the publisher theme pins it as a fixed panel in the lower-right so a reader
-can reach a numbered Lofar (or, for the instructor, the analysis image) fast
+can reach a numbered stage (or, for the instructor, the analysis image) fast
 from anywhere on a long gram page.
 
 Earlier this was the instructor-only "jump to Analysis Sheet" pill
 (`outputclass="analysis-jump"`, issue #91); it now serves both editions and
-links every Lofar.
+links every stage.
 
 ### 1.2 GramFrame table block
 
@@ -167,29 +172,41 @@ Placeholders:
 | `freq_end` | CSV column; if empty, literal `""` is written |
 
 The section is titled and anchored by its **incremental Lofar number**, not
-by the CSV `display_text`. Each `topic_type="glc"` row that renders (image
-or audio) takes the next Lofar number `N` in render order, giving section
+by the CSV `display_text`. Each **image**-backed `topic_type="glc"` row takes
+the next Lofar number `N` in render order, giving section
 `<title>Lofar N</title>` and `id="lofar-N"`. This makes the source decks'
 inconsistent labels (some "Lofar 1/2", some bare "Lofar", some a single
 numbered one) a uniform sequence, and gives the floating nav panel (§1.1a)
 a stable anchor per Lofar. The `display_text` column is no longer used for
 the spectrogram heading.
 
+**Audio rows do not consume a Lofar number.** A `.wav`-backed row is numbered
+on its own `WAV 1..M` sequence (§1.3), so both sequences stay contiguous:
+a gram of image, audio, audio, image renders `Lofar 1`, `WAV 1`, `WAV 2`,
+`Lofar 2`.
+
 ### 1.3 GLC-viewer link block
 
 One `<xref>` block per `topic_type="glc"` row whose inner-GLC asset is
-audio (i.e. `png_path` ends in `.wav`). A `.wav`-backed GLC is still a
-Lofar, so it joins the same incremental numbering (§1.2): the section is
-titled `Lofar N` and anchored `id="lofar-N"`. The block is a single
-paragraph linking to the `.glc` file; the PPTX label (`display_text`)
-survives as the inner `<xref>` text:
+audio (i.e. `png_path` ends in `.wav`). An audio link is **not** a Lofar —
+it resolves to no spectrogram image — so it is numbered on its own
+`WAV 1..M` sequence, independent of the Lofar counter (§1.2): the section is
+titled `WAV N`, anchored `id="wav-N"` and classed `outputclass="wav-stage"`.
+The block is a single paragraph linking to the `.glc` file, labelled with the
+same synthesised `WAV N`:
 
 ```xml
-<section id="lofar-N" outputclass="lofar-stage">
-  <title>Lofar N</title>
-  <p><xref href="{slug}.glc" format="glc" scope="local">{display_text}</xref></p>
+<section id="wav-N" outputclass="wav-stage">
+  <title>WAV N</title>
+  <p><xref href="{slug}.glc" format="glc" scope="local">WAV N</xref></p>
 </section>
 ```
+
+The label is **not** taken from the CSV `display_text`: in the audited corpus
+the legacy decks label every `.glc` hyperlink `Lofar N`, audio ones included,
+which is exactly the mislabelling this rule corrects — a reader clicking
+"Lofar 4" expected a LOFAR gram and got an audio file. `display_text` is
+retained in the CSV for round-tripping only.
 
 The student PC has a GLC-viewer application installed which opens the
 `.glc` file, reads its inner `data_source/filename`, and loads the
@@ -206,7 +223,9 @@ already lives inside the GLC for the viewer to consume directly.
 
 `display_text` is the human-readable label exactly as it appeared in
 the PPTX run (e.g. `"Lofar 1"`), distinct from `link_href` which is
-the raw URI from the PPTX hyperlink.
+the raw URI from the PPTX hyperlink. It is carried through the CSV for
+round-tripping and diagnostics; no rendered heading or link text is derived
+from it.
 
 ### 1.4 Redirected lofar — `<data>` provenance (feature 006)
 
