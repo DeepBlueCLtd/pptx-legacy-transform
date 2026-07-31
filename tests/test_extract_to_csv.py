@@ -87,6 +87,67 @@ class ClassificationTests(unittest.TestCase):
             Path("/root/y/Progress Test Beta.pptx"), "progress test", allocated)
         self.assertEqual((first, second), ("progress-test-1", "progress-test-2"))
 
+    def test_final_assessment_named_from_course_code(self) -> None:
+        """The two course-specific final assessments get distinct, stable,
+        counter-free publication names — not a per-run ``final-assessment-1``
+        each (the real corpus folder titles, one per course)."""
+        ssac, chapter, slug = extract_to_csv.classify_publication(
+            Path("/root/Instructor SSAC - Final Assessment_UPDATED/"
+                 "Instructor SSAC - Final Assessment_UPDATED.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, {})
+        self.assertEqual(ssac, "SSAC-final-assessment")
+        self.assertIsNone(chapter)
+        self.assertIsNone(slug)
+        # A *separate* allocation map (a second --only run) still disagrees.
+        aaac, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor AAAC Final Assessment Updated/"
+                 "Instructor AAAC Final Assessment Updated.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, {})
+        self.assertEqual(aaac, "AAAC-final-assessment")
+
+    def test_course_code_read_from_folder_title_and_case_folded(self) -> None:
+        """The code is taken from the deck's folder title when the filename
+        lacks it, and is emitted upper-case whatever case the corpus uses."""
+        pub, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor ssac - Final Assessment/"
+                 "Final Assessment Grams.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, {})
+        self.assertEqual(pub, "SSAC-final-assessment")
+
+    def test_final_assessment_falls_back_to_counter_without_a_code(self) -> None:
+        """A final-assessment deck naming no known course keeps the legacy
+        encounter-order ``final-assessment-N`` name."""
+        final_allocated: dict[str, int] = {}
+        first, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor Progress Final Assessment Grams/"
+                 "Instructor Progress Final Assessment Grams.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, final_allocated)
+        second, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Other Final Assessment/Other Final Assessment.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, final_allocated)
+        self.assertEqual((first, second),
+                         ("final-assessment-1", "final-assessment-2"))
+
+    def test_course_code_matches_whole_token_only(self) -> None:
+        """A code embedded in a longer word is not a course code."""
+        self.assertEqual(extract_to_csv.course_code_from_name("Instructor AAACX Final"), "")
+        self.assertEqual(extract_to_csv.course_code_from_name("Instructor xSSAC Final"), "")
+        # Punctuation still delimits: "SSAC - Final" and "SSAC_Final" both match.
+        self.assertEqual(extract_to_csv.course_code_from_name("SSAC_Final Assessment"), "SSAC")
+        self.assertEqual(
+            extract_to_csv.course_code_from_name("no code here", "Week 1 AAAC"), "AAAC")
+
+    def test_joining_assessment_named_from_course_code(self) -> None:
+        """The joining assessment shares the final assessment's naming rule, so
+        two course-specific joining decks never collide either."""
+        pub, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor AAAC Joining Assessment/"
+                 "Instructor AAAC Joining Assessment.pptx"),
+            "progress test", {},
+            extract_to_csv.DEFAULT_FINAL_PATTERN, {},
+            extract_to_csv.DEFAULT_JOINING_PATTERN, {})
+        self.assertEqual(pub, "AAAC-joining-assessment")
+
     def test_joining_assessment_routing(self) -> None:
         """A deck whose filename contains the joining pattern routes to its own
         joining-assessment-N publication, never to main."""

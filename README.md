@@ -673,7 +673,7 @@ share a key) rather than hard-failing.
 
 | # | Column | Editable? | Notes |
 |---|---|---|---|
-| 1 | `publication` | no | `main` or `progress-test-N`. |
+| 1 | `publication` | no | `main`, `progress-test-N`, or a standalone assessment (`AAAC-final-assessment`, `SSAC-final-assessment`, … — see the course-code rule below). |
 | 2 | `chapter` | no | Empty for progress-test rows. |
 | 3 | `gram_id` | no | Format `Gram NN`. |
 | 4 | `vessel_name` | yes | Instructor-only content. |
@@ -777,14 +777,27 @@ extractor and `introspect_pptx.py` share, so a fix here flows to both.)
   hidden from the per-gram view (with the count surfaced); the header-only
   rows are still emitted for downstream visibility.
 - **Final-assessment routing** — a deck matching `--final-pattern` (default
-  `final assessment`) routes to its own `final-assessment-N` publication
-  instead of falling through to `main`.
+  `final assessment`) routes to its own final-assessment publication instead of
+  falling through to `main`.
 - **Joining-assessment routing** — a deck matching `--joining-pattern` (default
-  `joining`) routes to its own `joining-assessment-N` publication (the initial
+  `joining`) routes to its own joining-assessment publication (the initial
   joining assessment) instead of falling through to `main`. The joining pattern
   is checked before the final and test patterns, so a deck deliberately named
   for the joining assessment never lands in those buckets. As with the other
   standalone assessments, `--exclude-tests` drops it.
+- **Course-code naming for the standalone assessments** — the corpus holds one
+  final assessment (and one joining assessment) *per course*, so both are named
+  from the **course code** found in the deck's own name or its folder title:
+  `Instructor SSAC - Final Assessment_UPDATED` → publication
+  `SSAC-final-assessment`, `Instructor AAAC Final Assessment Updated` →
+  `AAAC-final-assessment` (map title `AAAC Final Assessment`). The recognised
+  codes are the `COURSE_CODES` tuple in `extract_to_csv.py` (`AAAC`, `SSAC`) —
+  matched case-insensitively and whole-token, emitted upper-case; add a course
+  by adding its code there. A deck carrying **no** recognised code keeps the
+  legacy encounter-order `final-assessment-N` / `joining-assessment-N` name.
+  The counter is per-run, so before this rule two coded decks extracted in
+  separate `--only` runs both came out as `final-assessment-1` and collided on
+  publish; the code makes each name stable and scope-independent.
 
 ### Design lessons worth keeping
 

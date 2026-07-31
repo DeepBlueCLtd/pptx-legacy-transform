@@ -597,8 +597,8 @@ def _effective_doc(row: dict) -> str:
 
     No publication carries a per-document folder tier. ``main`` is flat at
     ``main/week-N/gram-NN/``; every **non-main** publication
-    (``progress-test-N``, ``final-assessment-N``) is allocated per source-deck
-    stem in ``classify_publication``, so each maps to exactly **one** deck and a
+    (``progress-test-N``, ``AAAC-final-assessment``, …) is named per source deck
+    in ``classify_publication``, so each maps to exactly **one** deck and a
     ``doc`` tier could never disambiguate two decks — it only ever added a
     redundant folder echoing the publication name (e.g.
     ``progress-test-1/instructor-progress-test-1-grams/``).
@@ -1858,15 +1858,21 @@ def _flat_publication_title(publication: str) -> str:
     """Human-readable map title for a non-``main`` (flat) publication.
 
     ``progress-test-N`` → ``"Progress Test N"`` (preserves the legacy
-    title style from feature 001). Any other slug is title-cased with
-    hyphens turned into spaces (e.g. ``progress-final-assessment`` →
-    ``"Progress Final Assessment"``). This is what gets emitted into
-    the ditamap's ``<title>`` child element; the audience-tagged
-    " — Instructor Version" suffix is appended by ``_append_map_title``.
+    title style from feature 001). A course-code-prefixed assessment keeps
+    its code upper-case (``AAAC-final-assessment`` → ``"AAAC Final
+    Assessment"``) — ``str.title()`` alone would render it ``"Aaac …"``.
+    Any other slug is title-cased with hyphens turned into spaces (e.g.
+    ``progress-final-assessment`` → ``"Progress Final Assessment"``). This
+    is what gets emitted into the ditamap's ``<title>`` child element; the
+    audience-tagged " — Instructor Version" suffix is appended by
+    ``_append_map_title``.
     """
     if publication.startswith("progress-test-"):
         n = publication.removeprefix("progress-test-")
         return f"Progress Test {n}"
+    head, sep, tail = publication.partition("-")
+    if sep and head.isalpha() and head.isupper():
+        return f"{head} {tail.replace('-', ' ').title()}"
     return publication.replace("-", " ").title()
 
 
