@@ -168,10 +168,12 @@ has **only** a `.wav`: students only inspect the spectrogram visually, so the
 author opens each `.wav` in the analysis tool, screenshots the displayed gram,
 and saves it in a **parallel *incoming* tree** under the **wav's own name** —
 e.g. `WAV 1.jpg`, `WAVE 3.png`, or `0 - 600 Hz.jpg`. The whole filename stem is
-matched against the wav basename; there is **no duration token** to strip, since
-issue #148 measures the gram's time period (`time_end`) from the imported
-image's pixel height, not from the filename. The **prep-time** stage
-`ingest_gram_images.py` (wrapper `ingest.py`) imports these.
+matched against the wav basename. Since issue #148 measures the gram's time
+period (`time_end`) from the imported image's pixel height rather than from the
+filename, a **duration prefix carries no information** — but the author still
+types one on many screenshots (`9m WAV 1.jpg`, `7m20s_0 - 1000 Hz.jpg`), so a
+leading duration token is **tolerated** as a fallback (below). The **prep-time**
+stage `ingest_gram_images.py` (wrapper `ingest.py`) imports these.
 
 The incoming tree mirrors `source/` but **omits the per-document container
 folder**: `incoming/<doc>/<gram>/<image>` maps to
@@ -182,16 +184,24 @@ directly under the document folder; a document folder with a large flat set of
 sub-folders (eight or more) is read as that container-less layout, while an
 in-between count (2–7) is reported as ambiguous and skipped.
 
-Matching **folds two systematic kinds of drift** so the operator never hand-fixes
-them — at every folder level and image-stem-to-wav:
+Matching **folds three systematic kinds of drift** so the operator never
+hand-fixes them — at every folder level and image-stem-to-wav:
 
 - **case** — an incoming `WAV 2` matches a source `Wav 2.wav`;
 - **hyphen spacing** — an incoming `0 - 1000 Hz` matches a source `0-1000 Hz.wav`
   *and* vice versa (the author is inconsistent about the spaces flanking the
-  frequency-range dash).
+  frequency-range dash);
+- **leading duration** — an incoming `9m WAV 1`, `4m10s WAV 2` or
+  `7m20s_0 - 1000 Hz` matches a source `WAV 1.wav`, `WAV 2.wav` or
+  `0 - 1000 Hz.wav`. The token is whole minutes, optionally minutes-plus-
+  seconds, followed by a space or an underscore.
 
-Both are folded by a `match_key` (casefold + collapsed whitespace + spaces
-stripped from around hyphens) applied to **both** sides. Everything else —
+Case and hyphen spacing are folded by a `match_key` (casefold + collapsed
+whitespace + spaces stripped from around hyphens) applied to **both** sides. The
+duration is handled by `candidate_keys` as a **fallback only** — the whole stem
+is tried first and the prefix stripped just for a second attempt, so a source
+wav whose own name begins with a duration still matches whole. The copied image
+takes the wav's name, so the duration is dropped on import. Everything else —
 different tokens, a missing digit — stays exact, so real mistakes are still
 reported for the operator to fix.
 
@@ -251,7 +261,7 @@ data.
 | `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
 | `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/relink_glc_to_image.py` | **Prep-time** stage: rewrite each `.glc` that still points at a `.wav` to reference the matching author-supplied `Image <N>-…` image in the same folder, moving the old `.wav` aside to `.wav.bak`; idempotent and re-runnable. See [Relinking `.wav` grams to pre-rendered images](#relinking-wav-grams-to-pre-rendered-images). |
-| `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<duration> <wav-stem>.<ext>`), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem/duration mismatches; `--apply` copies each image beside its `.glc`, repoints the `.glc`, and records the duration as `<bottom_crop>`. Also seeds `demon.glc` markers for any *demon* images in the delivery (issue #151). Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
+| `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<wav-stem>.<ext>`, optionally with a tolerated `<duration> ` prefix), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem mismatches; `--apply` copies each image beside its `.glc` under the wav's own name and repoints the `.glc` (no `<bottom_crop>` — `time_end` is image-derived, issue #148). Also seeds `demon.glc` markers for any *demon* images in the delivery (issue #151). Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |

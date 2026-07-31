@@ -9,26 +9,33 @@ saves it -- in a *parallel incoming tree* -- under the **wav's own name**::
     WAVE 3.png               # screenshot of "WAVE 3.wav"
     0 - 600 Hz.jpg           # screenshot of "0 - 600 Hz.wav"
 
-The whole filename stem is matched against the wav basename -- there is **no
-duration token to strip**. Since issue #148 the gram's time period (``time_end``)
-is measured from the imported image's pixel height, so the author no longer
-prefixes a duration and this tool no longer parses one.
+The whole filename stem is matched against the wav basename. Since issue #148
+the gram's time period (``time_end``) is measured from the imported image's
+pixel height, so a duration in the filename carries no information -- but the
+author still types one on many screenshots, so a **leading duration token is
+tolerated** (see below).
 
-Matching is **tolerant of the two systematic ways the hand-typed incoming names
-drift** from the wav basenames in ``source\\``; neither is worth making the
+Matching is **tolerant of the three systematic ways the hand-typed incoming
+names drift** from the wav basenames in ``source\\``; none is worth making the
 operator hand-fix:
 
 * **case** -- an incoming ``WAV 2`` matches a source ``Wav 2.wav``;
 * **hyphen spacing** -- an incoming ``0 - 1000 Hz`` matches a source
   ``0-1000 Hz.wav`` *and* vice versa (the author is inconsistent about the
-  spaces flanking the frequency-range dash).
+  spaces flanking the frequency-range dash);
+* **leading duration** -- an incoming ``9m WAV 1``, ``4m10s WAV 2`` or
+  ``7m20s_0 - 1000 Hz`` matches a source ``WAV 1.wav`` / ``WAV 2.wav`` /
+  ``0 - 1000 Hz.wav``.
 
-Both are folded by ``match_key`` (casefold + collapsed whitespace + spaces
-stripped from around hyphens), applied to **both** sides so every spelling lands
-on one key. The copied image takes the *wav's* own casing and spacing, keeping
-each gram folder internally consistent. Genuine drift (a mistyped token, a
-missing digit) still yields a different key and is reported for the operator to
-fix.
+Case and hyphen spacing are folded by ``match_key`` (casefold + collapsed
+whitespace + spaces stripped from around hyphens), applied to **both** sides so
+every spelling lands on one key. The duration is handled by ``candidate_keys``
+as a **fallback only**: the whole stem is tried first, and the duration prefix
+is stripped just for a second attempt, so a source wav whose own name begins
+with a duration still matches whole. The copied image takes the *wav's* own
+casing and spacing -- and drops the duration -- keeping each gram folder
+internally consistent. Genuine drift (a mistyped token, a missing digit) still
+yields a different key and is reported for the operator to fix.
 
 The incoming tree mirrors ``source\\`` but **omits the per-document container
 folder**: ``incoming\\<doc>\\<gram>\\<image>`` maps to
@@ -117,6 +124,19 @@ GLC_IMAGE_EXTENSIONS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif")
 DEMON_PREFIX_RE = re.compile(
     r"^(?:\d+m(?:\d{1,2}s)?[ _])?demon\d*(?![a-z])", re.IGNORECASE)
 
+# A *leading duration token* -- whole minutes, optionally minutes-plus-seconds,
+# followed by a space or underscore (``9m WAV 1.jpg``, ``4m10s WAV 2.jpg``,
+# ``7m20s_0 - 1000 Hz.jpg``). Issue #148 made the gram's time period
+# image-derived, so the duration carries no information and the author was
+# expected to stop prefixing it -- but delivered batches still do, on roughly
+# half the images. It is therefore *tolerated*, never required: the whole stem
+# is tried first and this prefix is stripped only as a **fallback** when the
+# whole stem matched no wav, so a source wav genuinely named with a leading
+# duration still matches whole. Same grammar as DEMON_PREFIX_RE's optional
+# prefix. Anchored and requiring the ``m``, so a frequency range like
+# ``0 - 1322 Hz`` or a stem like ``WAV 2`` is never mistaken for a duration.
+DURATION_PREFIX_RE = re.compile(r"^\d+m(?:\d{1,2}s)?[ _]", re.IGNORECASE)
+
 # The demon GramFrame's frequency range is always 0 - 40 Hz (issue #151). The
 # generator derives the band from ``bandwidth``/``bandcentre`` the way it does
 # for every gram (band spans bandwidth/2 either side of bandcentre), so a 0..40
@@ -150,9 +170,10 @@ FLAT_DOC_MIN_GRAMS = 8
 class CandidateImage:
     """An incoming author screenshot: its path, match stem, and extension.
 
-    The whole filename stem is the match key -- there is no duration token to
-    strip (issue #148 derives the gram's time period from the image height), so
-    ``stem`` is simply ``path.stem``.
+    ``stem`` is simply ``path.stem`` -- the whole filename stem is the primary
+    match key (issue #148 derives the gram's time period from the image height,
+    not from any duration in the name). A leading duration token, if present, is
+    stripped later by ``candidate_keys`` as a fallback key, never here.
     """
 
     path: Path
@@ -252,13 +273,61 @@ def match_key(stem: str) -> str:
     return dehyphenated.casefold()
 
 
+def strip_duration_prefix(stem: str) -> Optional[str]:
+    """Return ``stem`` without a leading duration token, or None if it has none.
+
+    ``"9m WAV 1"`` -> ``"WAV 1"``; ``"7m20s_0 - 1000 Hz"`` -> ``"0 - 1000 Hz"``.
+    A stem with no duration prefix -- or one that is *nothing but* a duration
+    token, leaving an empty remainder -- yields None, so the caller falls back
+    to the whole stem.
+    """
+    match = DURATION_PREFIX_RE.match(stem)
+    if match is None:
+        return None
+    remainder = stem[match.end():].strip()
+    return remainder or None
+
+
+def candidate_keys(stem: str) -> Tuple[str, ...]:
+    """Match keys to try for an incoming stem, most-specific first.
+
+    The whole stem always comes first, so the established whole-stem match wins
+    and a source wav that genuinely carries a leading duration keeps matching.
+    A duration-stripped key follows only when the stem has such a prefix, as a
+    fallback for the delivered batches that still name screenshots
+    ``<duration> <wav-stem>`` (issue #148 dropped the duration's meaning, not
+    the author's habit of typing it).
+    """
+    keys = [match_key(stem)]
+    stripped = strip_duration_prefix(stem)
+    if stripped is not None:
+        stripped_key = match_key(stripped)
+        if stripped_key not in keys:
+            keys.append(stripped_key)
+    return tuple(keys)
+
+
+def resolve_match_key(stem: str, view: "GramFolderView") -> str:
+    """Pick the key a candidate stem matches in ``view``, else its whole-stem key.
+
+    Tries ``candidate_keys`` in order against the folder's wav and image
+    buckets; the first that is present wins. With nothing matched the whole-stem
+    key is returned, so the unmatched report still names what the author typed.
+    """
+    for key in candidate_keys(stem):
+        if key in view.wav_refs or key in view.image_refs:
+            return key
+    return match_key(stem)
+
+
 def parse_image_filename(path: Path) -> Optional[CandidateImage]:
     """Parse an incoming file into a CandidateImage, or None if not an image.
 
-    The whole filename stem is the match key -- there is no duration token to
-    strip (issue #148 measures the gram's time period from the image height, so
-    the author no longer prefixes a duration). A file whose extension is not an
-    accepted image type returns None (the caller debug-logs and ignores it).
+    The whole filename stem is the primary match key (issue #148 measures the
+    gram's time period from the image height, so a duration in the name carries
+    no information); a leading duration token is stripped only as a fallback key
+    by ``candidate_keys``. A file whose extension is not an accepted image type
+    returns None (the caller debug-logs and ignores it).
     """
     ext = path.suffix
     if ext.lower() not in IMAGE_EXTENSIONS:
@@ -490,10 +559,12 @@ def process_gram(
 
     # Group images by canonical match key so case and hyphen-spacing drift
     # collapse onto one key (and two variant screenshots of one wav collide as
-    # ambiguous rather than both being applied).
+    # ambiguous rather than both being applied). The key is resolved against
+    # this folder's own assets so a tolerated leading duration token is stripped
+    # only when the whole stem matched nothing.
     grouped: Dict[str, List[CandidateImage]] = defaultdict(list)
     for candidate in images:
-        grouped[match_key(candidate.stem)].append(candidate)
+        grouped[resolve_match_key(candidate.stem, view)].append(candidate)
 
     available_wavs = ", ".join(sorted(
         Path(ref.referenced_basename).stem
