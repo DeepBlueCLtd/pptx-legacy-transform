@@ -1389,6 +1389,23 @@ class AudienceShapeTests(unittest.TestCase):
         self.assertIsNotNone(pt_ph)
         self.assertEqual(pt_ph.text, " — Instructor Version")
 
+    def test_flat_publication_title_keeps_course_code_upper_case(self) -> None:
+        """A course-code-prefixed assessment titles as ``AAAC Final Assessment``
+        — plain ``str.title()`` would mangle the acronym to ``Aaac``."""
+        self.assertEqual(
+            generate_dita._flat_publication_title("AAAC-final-assessment"),
+            "AAAC Final Assessment")
+        self.assertEqual(
+            generate_dita._flat_publication_title("SSAC-joining-assessment"),
+            "SSAC Joining Assessment")
+        # Un-coded publications keep the legacy title-casing.
+        self.assertEqual(
+            generate_dita._flat_publication_title("final-assessment-1"),
+            "Final Assessment 1")
+        self.assertEqual(
+            generate_dita._flat_publication_title("progress-test-2"),
+            "Progress Test 2")
+
     def test_chapter_topic_title_carries_audience_prefix(self) -> None:
         """Each main chapter is a real chapter topic (a week *sub-document*),
         and its ``<title>`` carries the audience-tagged decomposition the

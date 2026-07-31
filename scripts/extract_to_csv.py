@@ -41,6 +41,15 @@ DEFAULT_TEST_PATTERN: str = "progress test"
 DEFAULT_FINAL_PATTERN: str = "final assessment"
 DEFAULT_JOINING_PATTERN: str = "joining"
 
+# Course codes that identify which course a standalone assessment deck belongs
+# to. The corpus carries one final assessment per course (e.g. "Instructor SSAC
+# - Final Assessment_UPDATED" and "Instructor AAAC Final Assessment Updated"),
+# so the code — not an encounter-order counter — is the stable publication name:
+# ``SSAC-final-assessment`` / ``AAAC-final-assessment``. Add a course by adding
+# its code here; matching is case-insensitive and whole-token, and the code is
+# emitted upper-case whatever case the folder uses.
+COURSE_CODES: tuple[str, ...] = ("AAAC", "SSAC")
+
 # GramFrame needs the full time + frequency coordinate system to render a gram,
 # so an *image* GLC-backed gram (pre-rendered .png/.jpg embedded inline) requires
 # these three "view" fields. ``time_end`` is the image's pixel height (issue
@@ -374,6 +383,26 @@ def test_number_from_name(name: str) -> int | None:
     return None
 
 
+_COURSE_CODE_RE = re.compile(
+    r"(?<![A-Za-z])(" + "|".join(COURSE_CODES) + r")(?![A-Za-z])", re.IGNORECASE)
+
+
+def course_code_from_name(*names: str) -> str:
+    """Return the first ``COURSE_CODES`` token found in ``names``, upper-cased.
+
+    ``names`` is searched in order (deck stem first, then its folder title), so
+    a code carried only by the containing folder still identifies the course.
+    Matching is case-insensitive and whole-token — ``AAACX`` or ``pre-ssac1``
+    do not match — and returns ``""`` when no code is present, leaving the
+    caller on its encounter-order fallback.
+    """
+    for name in names:
+        match = _COURSE_CODE_RE.search(name or "")
+        if match:
+            return match.group(1).upper()
+    return ""
+
+
 def classify_publication(
     pptx: Path,
     test_pattern: str,
@@ -393,23 +422,38 @@ def classify_publication(
 
     Final-assessment PPTXs (matched against ``final_pattern`` when
     non-empty and a separate ``final_allocated`` map is supplied) get
-    their own ``final-assessment-N`` publication prefix. The final
-    pattern is checked first so a filename containing both phrases
-    routes to the final-assessment bucket.
+    their own final-assessment publication. The final pattern is checked
+    first so a filename containing both phrases routes to the
+    final-assessment bucket.
 
     Joining-assessment PPTXs (the initial joining assessment, matched
     against ``joining_pattern`` when non-empty with its own
-    ``joining_allocated`` map) get a ``joining-assessment-N`` prefix.
+    ``joining_allocated`` map) get a joining-assessment publication.
     The joining pattern is checked first so a deck deliberately named
     for the joining assessment never falls through to the final or test
     buckets.
+
+    Both standalone assessments are named from the **course code** in the
+    deck's own name or its folder title when one is present
+    (``SSAC-final-assessment``, ``AAAC-final-assessment``) — the corpus holds
+    one of each per course, so the code is the stable identity. An
+    encounter-order counter (``final-assessment-N``) is only the fallback for a
+    deck carrying no recognised code; that counter is per-run, so two coded
+    decks extracted in separate ``--only`` runs would otherwise both land on
+    ``…-1`` and collide on publish.
     """
     name = pptx.name.lower()
     if joining_pattern and joining_allocated is not None and joining_pattern.lower() in name:
+        code = course_code_from_name(pptx.stem, pptx.parent.name)
+        if code:
+            return (f"{code}-joining-assessment", None, None)
         if pptx.stem not in joining_allocated:
             joining_allocated[pptx.stem] = len(joining_allocated) + 1
         return (f"joining-assessment-{joining_allocated[pptx.stem]}", None, None)
     if final_pattern and final_allocated is not None and final_pattern.lower() in name:
+        code = course_code_from_name(pptx.stem, pptx.parent.name)
+        if code:
+            return (f"{code}-final-assessment", None, None)
         if pptx.stem not in final_allocated:
             final_allocated[pptx.stem] = len(final_allocated) + 1
         return (f"final-assessment-{final_allocated[pptx.stem]}", None, None)
