@@ -795,7 +795,10 @@ extractor and `introspect_pptx.py` share, so a fix here flows to both.)
   from the **course code** found in the deck's own name or its folder title:
   `Instructor SSAC - Final Assessment_UPDATED` → publication
   `SSAC-final-assessment`, `Instructor AAAC Final Assessment Updated` →
-  `AAAC-final-assessment` (map title `AAAC Final Assessment`). The recognised
+  `AAAC-final-assessment` (map title `AAAC Final Assessment`), and likewise
+  `Instructor_SSAC_Joining Assessment` → `SSAC-joining-assessment`. Any
+  separator around the code works — space, `-` or `_` — since matching only
+  requires the code not be part of a longer word. The recognised
   codes are the `COURSE_CODES` tuple in `extract_to_csv.py` (`AAAC`, `SSAC`) —
   matched case-insensitively and whole-token, emitted upper-case; add a course
   by adding its code there. A deck carrying **no** recognised code keeps the
