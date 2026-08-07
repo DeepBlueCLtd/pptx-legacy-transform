@@ -115,8 +115,7 @@ analysis sheet has no rendered `.png` yet.
   (`pip download Pillow -d wheels/`); it is **not** installed on the
   pipeline runtime path.
 
-The rendered PNG (and, for a PNG-only sheet, a reverse-wrapped `.docx`,
-FR-018) is a **committed source asset**: the snapshotter is idempotent
+The rendered PNG is a **committed source asset**: the snapshotter is idempotent
 (it skips any sheet that already has its sibling `.png`), so the renderer
 never runs inside the re-runnable generate/publish loop and re-runs are
 byte-identical. The snapshotter renders the **first page** and **detects
@@ -128,6 +127,59 @@ defers (the run continues, exit 0) and surfaces in `snapshot.log`, the
 end-of-run summary, and the analysis row's `warnings` column — the image
 then dangles as an intended local `<image>` href, resolved by dropping
 the PNG in and re-running.
+
+The conversion runs in **one direction only**: Word document → PNG. Feature 007
+also used to synthesise a `.docx` around any analysis PNG that had no Word
+sibling (its FR-018), so that "every sheet exists in both forms". Feature 013
+**supersedes that**: the pipeline no longer creates Word documents at all, so
+every `.doc`/`.docx` in a source tree is one an author wrote. The reasoning is
+in [specs/013-analysis-word-originals/spec.md](specs/013-analysis-word-originals/spec.md)
+— in short, the wrapper was only ever created where no editable original
+existed, its content was the same picture the gram page already showed, and
+once the generator started carrying genuine originals into the DITA tree
+(below), a fabricated one made "there is a Word document here" mean nothing.
+
+#### Sweeping the fabricated wrappers
+
+Removing the step does not retract the files earlier runs already wrote. To
+clear them from a source tree:
+
+```bash
+# Report what would be deleted — the default; deletes nothing.
+python scripts/snapshot_analysis_docs.py --content-root source/ --sweep-wrappers
+
+# Delete them, once you have read the list.
+python scripts/snapshot_analysis_docs.py --content-root source/ --sweep-wrappers --apply
+```
+
+Detection is by **content signature** — the exact five-part zip structure and
+drawing name the removed generator wrote — never by filename, timestamp, or
+size. An author's own Word document is never matched, even one whose only
+visible content is a full-page image; a real `.docx` always carries
+styles/settings/docProps parts the fabricated one never had. The sweep is
+idempotent, and its failure mode is leaving a file alone rather than deleting
+something it should not have.
+
+### The analysis sheet's editable Word original
+
+The analysis image on a gram page is a dead end: it is what the reader sees,
+but nobody can amend it. Where the author's Word document still exists,
+`generate_dita.py` copies it into the gram's topic folder as
+`analysis.doc` / `analysis.docx`, beside the `analysis*.png` it produced —
+so an analyst who has to correct a bearing or an identification finds the
+source next to the page, instead of hunting the legacy source tree for it.
+
+The copied document is deliberately **unreferenced**: no link, no button, no
+mention in the topic XML. The published HTML is byte-identical to what it was
+before the feature, and because DITA-OT does not carry unreferenced files into
+its output, the Word original lives in `dita/` only — which is where analysts
+work. A gram whose sheet only ever existed as an image gets no Word file, and
+that is a normal outcome, not a warning; `extract_to_csv.py`'s end-of-run
+summary reports how many grams are in that position:
+
+```text
+Extraction summary: … analysis_sheets=375 without_word_original=202
+```
 
 ### Relinking `.wav` grams to pre-rendered images
 
@@ -262,7 +314,7 @@ data.
 |---|---|
 | `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` `relink.py` `ingest.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
 | `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
-| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
+| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline (feature 007). Word → PNG only: the pipeline never creates Word documents (feature 013 supersedes FR-018), and `--sweep-wrappers` retracts the picture-only `.docx` files earlier runs fabricated. External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/relink_glc_to_image.py` | **Prep-time** stage: rewrite each `.glc` that still points at a `.wav` to reference the matching author-supplied `Image <N>-…` image in the same folder, moving the old `.wav` aside to `.wav.bak`; idempotent and re-runnable. See [Relinking `.wav` grams to pre-rendered images](#relinking-wav-grams-to-pre-rendered-images). |
 | `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<wav-stem>.<ext>`, optionally with a tolerated `<duration> ` prefix), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem mismatches; `--apply` copies each image beside its `.glc` under the wav's own name and repoints the `.glc` (no `<bottom_crop>` — `time_end` is image-derived, issue #148). Also seeds `demon.glc` markers for any *demon* images in the delivery (issue #151). Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
@@ -719,6 +771,7 @@ empty default, so a CSV without them behaves exactly as before:
 |---|---|---|
 | `target_chapter` | extractor / author | **Feature 008/009:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; for a **no-week** deck (e.g. Pub10, Legacy Pub 10) extraction now **even-slices** the deck's grams across the four weeks (`floor(G/4)` per week, remainder to the earliest weeks, in source order) instead of leaving it blank (feature 009). Remains author-editable. The generator expands a bare integer to heading `Week N` and folder `main/week-N/` (`main` carries no per-document tier). Empty falls back to the source `chapter`. |
 | `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected; for `.wav` rows "genuinely duplicate" also requires identical `time_end`/`bandwidth`/`bandcentre` — two `.glc` files windowing the same recording differently are never merged, so neither student view is lost (issues #78, #87). Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
+| `analysis_doc_path` | extractor | **Feature 013:** path to the analysis sheet's editable Word original (`.doc`/`.docx`), relative to the source folder, or empty when the sheet only ever existed as an image. The generator copies the named file into the gram's topic folder as `analysis.doc`/`analysis.docx` and references it from nothing — it is parked there for an analyst who later has to amend the sheet. Resolved at extraction from the deck's own hyperlink where that names a Word file, otherwise by same-stem sibling probe (`.doc` before `.docx`) beside the resolved analysis image, including a sheet recovered from a Lofar folder. Author-editable and empty-allowed; a recorded file that is absent at generate time warns and continues, and because nothing links it there is no dangling href to repair. |
 | `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) numbers each week's `main` grams as contiguous `1..k` — no gaps and restart at 1 per week, so a week reads gram 1, 2, 3 … with no holes even when its decks' native numbers are gappy or jump (issue #102); within a week the native-`Week N` deck takes the low numbers and any sliced no-week deck (Pub10) follows as the contiguous tail. **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-`(publication, chapter, doc)` bump-on-collision rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. The gh-pages and PR-preview builds use the default `per-week`. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong

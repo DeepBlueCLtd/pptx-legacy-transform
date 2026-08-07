@@ -66,6 +66,8 @@ os.chdir(r"C:\dev\aaac")     # project ROOT on the target (illustrative path)
 os.getcwd()                   # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): analysis sheets -> PNGs
+                                     #   (Word -> PNG only; never PNG -> Word. --sweep-wrappers
+                                     #    retracts the .docx files feature 007 used to fabricate)
 exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc -> image (moves .wav aside)
 exec(open(r"ingest.py").read())      # prep (when an incoming screenshot tree arrives): verify names, then APPLY=True to import + relink (leaves .wav in place)
 exec(open(r"extract.py").read())     # Stage 3: source\  -> extract.csv at ROOT
@@ -150,6 +152,28 @@ demon GramFrame(s), then one section per Lofar in `sequence` order). Every
 referenced asset is copied beside the topic with a stable name (`analysis.png`,
 `demon.png`, `lofar-1.png`, `lofar-2-i.png`, …) so every `href` is a bare
 filename — no `../` traversal.
+
+### The analysis sheet's Word original (feature 013)
+
+The analysis image cannot be amended, so where the author's Word document still
+exists the generator copies it beside the topic as `analysis.doc`/`analysis.docx`
+— **unreferenced**. Nothing in the topic XML links it, so published output is
+byte-identical and DITA-OT never carries it into `html/`; it is parked in
+`dita/` for the analyst who later has to correct the sheet. The path rides an
+optional right-edge `analysis_doc_path` CSV column resolved at extraction: the
+deck's own hyperlink when that names a Word file, else a same-stem sibling probe
+(`.doc` before `.docx`) beside the *final* analysis image, so a sheet recovered
+from a Lofar folder is probed where it was recovered. Empty is normal (the newer
+decks only ever had an image) and is counted, not warned, in the extract summary.
+
+Feature 007's FR-018 reverse wrap — synthesising a `.docx` around any analysis
+PNG lacking one — is **superseded and removed**, not defaulted off. It fired
+exactly where no editable original existed, so it produced an uneditable picture
+in a document-shaped shell and made "is there a Word document here?" mean
+nothing. `snapshot_analysis_docs.py --sweep-wrappers [--apply]` retracts the
+files earlier runs wrote, detecting them by full content signature (the exact
+five-part zip + `AnalysisSheet` drawing name) so an author's document is never
+matched. **The pipeline must never create a Word document.**
 
 ### Demon images (issue #151, feature 012)
 

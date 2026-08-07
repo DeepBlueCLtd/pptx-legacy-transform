@@ -871,6 +871,30 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
         self.assertEqual(len(analysis_rows), len(gram_ids),
                          "Expected exactly one analysis row per gram")
 
+    def test_summary_reports_grams_without_a_word_original(self) -> None:
+        """Feature 013 FR-019: the operator can see, from the summary alone,
+        how many grams show an analysis sheet nobody can amend. The mock corpus
+        deliberately mixes sheets that have a Word original with sheets that
+        only ever existed as an image, so both counts are non-zero."""
+        out_csv = TMP / "extract_corpus_word_coverage.csv"
+        with self.assertLogs(extract_to_csv.LOGGER, level="INFO") as cm:
+            rc = extract_to_csv.main([
+                "--input-root", str(self.week1_dir),
+                "--out", str(out_csv),
+            ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        analysis_rows = [r for r in rows if r["topic_type"] == "analysis"]
+        without = [r for r in analysis_rows if not r["analysis_doc_path"].strip()]
+        self.assertTrue(without, "fixture should include image-only sheets")
+        self.assertLess(len(without), len(analysis_rows),
+                        "fixture should also include sheets with a Word original")
+        summary = [m for m in cm.output if "Extraction summary" in m]
+        self.assertEqual(len(summary), 1)
+        self.assertIn(f"analysis_sheets={len(analysis_rows)}", summary[0])
+        self.assertIn(f"without_word_original={len(without)}", summary[0])
+
     def test_gram_id_is_normalized_integer_form(self) -> None:
         """Per csv-schema.md the canonical ``gram_id`` cell is a plain
         integer string so authors can renumber by typing a bare number
@@ -1276,6 +1300,124 @@ class OrphanGlcAnalysisRecoveryTests(unittest.TestCase):
         self.assertIn("no matching header", "\n".join(cm.output))
         self.assertEqual([link.href for link in grams[0].glc_links], [],
                          "no sibling sheet -> the orphaned .glc stays dropped")
+
+
+class AnalysisWordOriginalTests(unittest.TestCase):
+    """Feature 013 (US1): the analysis sheet's editable Word original is
+    recorded so the generator can park it beside the gram's topic.
+
+    The rendered image the reader sees cannot be amended; where the author's
+    Word document still exists, an analyst has to be able to find it. These
+    cover which file is chosen, and the cases where there is none.
+    """
+
+    def setUp(self) -> None:
+        self.root = TMP / "analysis_word_original" / self._testMethodName
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        self.gram_dir = self.root / "Gram 12"
+        self.gram_dir.mkdir(parents=True)
+        glc = self.root / "supporting/gram12/config_1.glc"
+        glc.parent.mkdir(parents=True)
+        shutil.copy(FIXTURES / "minimal.glc", glc)
+        mock_pptx.emit_png(self.root / "gram12.PNG", width=4, height=123)
+
+    def _png(self, name: str = "Analysis Sheet.png") -> None:
+        mock_pptx.emit_png(self.gram_dir / name, width=8, height=8)
+
+    def _word(self, name: str) -> Path:
+        path = self.gram_dir / name
+        path.write_bytes(b"genuine word bytes")
+        return path
+
+    def _analysis_row(self, png_href: str = "Gram 12/Analysis Sheet.png") -> dict:
+        gram = _gram(png=png_href)
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.root, source_dir=self.root,
+        )
+        return [r for r in rows if r["topic_type"] == "analysis"][0]
+
+    def test_docx_sibling_of_an_image_sheet_is_recorded(self) -> None:
+        """The newer decks hyperlink the image directly; the Word original is
+        found by same-stem sibling probe."""
+        self._png()
+        self._word("Analysis Sheet.docx")
+        self.assertEqual(
+            self._analysis_row()["analysis_doc_path"],
+            "Gram 12/Analysis Sheet.docx")
+
+    def test_legacy_doc_sibling_is_recorded_in_its_own_format(self) -> None:
+        """FR-003: a binary .doc is carried as a .doc, never normalised."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        self.assertEqual(
+            self._analysis_row()["analysis_doc_path"],
+            "Gram 12/Analysis Sheet.doc")
+
+    def test_word_hyperlink_redirects_to_image_but_keeps_the_original(self) -> None:
+        """The older decks hyperlink the .doc itself. Extraction redirects the
+        row to the rendered image (feature 007) — but the Word path must not be
+        lost on the way, which is the defect feature 013 fixes."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        row = self._analysis_row(png_href="Gram 12/Analysis Sheet.doc")
+        self.assertEqual(row["png_path"], "Gram 12/Analysis Sheet.png",
+                         "the row still points at the rendered image")
+        self.assertEqual(row["analysis_doc_path"], "Gram 12/Analysis Sheet.doc")
+
+    def test_hyperlinked_suffix_outranks_the_probe_order(self) -> None:
+        """An un-swept legacy tree can hold a genuine .doc and a fabricated
+        .docx side by side. When the deck's own hyperlink names one of them,
+        the author's statement wins over the probe order."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        self._word("Analysis Sheet.docx")
+        row = self._analysis_row(png_href="Gram 12/Analysis Sheet.docx")
+        self.assertEqual(row["analysis_doc_path"], "Gram 12/Analysis Sheet.docx")
+
+    def test_probe_prefers_doc_when_the_deck_links_the_image(self) -> None:
+        """With no hyperlink to arbitrate, .doc leads: in an un-swept legacy
+        tree the .doc is the genuine sheet and the .docx is the fabrication."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        self._word("Analysis Sheet.docx")
+        self.assertEqual(
+            self._analysis_row()["analysis_doc_path"],
+            "Gram 12/Analysis Sheet.doc")
+
+    def test_image_only_sheet_records_nothing_and_does_not_warn(self) -> None:
+        """The expected outcome for decks that never had a Word form. Not a
+        warning — an absent original is honest, not an error."""
+        self._png()
+        row = self._analysis_row()
+        self.assertEqual(row["analysis_doc_path"], "")
+        self.assertNotIn("word", row["warnings"].lower())
+
+    def test_unrelated_word_doc_in_the_folder_is_not_claimed(self) -> None:
+        """Selection is same-stem, so a chapter folder's other Word documents
+        are never mistaken for the analysis sheet's original."""
+        self._png()
+        self._word("source_data.doc")
+        self.assertEqual(self._analysis_row()["analysis_doc_path"], "")
+
+    def test_original_is_probed_where_the_sheet_was_recovered(self) -> None:
+        """A stale analysis hyperlink is recovered to a sheet in the gram's
+        Lofar folder; the Word original must be looked for *there*, not at the
+        dead link target."""
+        lofar_dir = self.root / "supporting/gram12"
+        mock_pptx.emit_png(lofar_dir / "Gram 12 ANALYSIS.png", width=8, height=8)
+        (lofar_dir / "Gram 12 ANALYSIS.docx").write_bytes(b"recovered original")
+        row = self._analysis_row(png_href="Stale Folder/Analysis Sheet.png")
+        self.assertEqual(row["png_path"], "supporting/gram12/Gram 12 ANALYSIS.png",
+                         "sanity: the sheet was recovered from the Lofar folder")
+        self.assertEqual(row["analysis_doc_path"],
+                         "supporting/gram12/Gram 12 ANALYSIS.docx")
+
+    def test_column_is_at_the_right_edge_of_the_schema(self) -> None:
+        """FR-006: appended last so older CSVs read forward-compatibly."""
+        self.assertEqual(extract_to_csv.CSV_COLUMNS[-1], "analysis_doc_path")
 
 
 class QuestionsLabelFilterTests(unittest.TestCase):

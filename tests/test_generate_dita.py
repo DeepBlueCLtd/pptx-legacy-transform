@@ -440,6 +440,144 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "analysis.docx")
         self.assertEqual(xref.get("format"), "docx")
 
+    # -------------------------------------------------------------------------
+    # Feature 013 (US1): the editable Word original travels with the gram
+    # -------------------------------------------------------------------------
+
+    def _word_original_csv(self, doc_name: str, *, image_root: Path) -> Path:
+        """Write a two-row CSV (one lofar + one analysis) naming ``doc_name``
+        as the analysis sheet's Word original."""
+        csv_path = TMP / f"{self._testMethodName}_{doc_name}.csv"
+        cols = generate_dita.CSV_COLUMNS + ("analysis_doc_path",)
+        rows = [{c: "" for c in cols}, {c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "link_href": "supporting/gram12/config_1.glc",
+            "glc_path": "supporting/gram12/config_1.glc",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+            "png_path": "images/gram12.png",
+        })
+        rows[1].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "analysis", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "png_path": "images/gram12_analysis.png",
+            "analysis_doc_path": doc_name,
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        return csv_path
+
+    def _word_original_image_root(self, doc_name: str, payload: bytes) -> Path:
+        """A scratch image root carrying the lofar/analysis images plus the
+        Word original under ``doc_name``.
+
+        The ``.glc`` the CSV names is deliberately absent, exactly as in
+        ``minimal.csv`` — a dangling GLC is the pre-existing fixture shape and
+        is orthogonal to what these tests assert.
+        """
+        root = TMP / f"imgroot_{self._testMethodName}"
+        if root.exists():
+            shutil.rmtree(root)
+        (root / "images").mkdir(parents=True)
+        for name in ("gram12.png", "gram12_analysis.png"):
+            shutil.copy(FIXTURES / "images" / name, root / "images" / name)
+        (root / doc_name).write_bytes(payload)
+        return root
+
+    def _gram_dir(self) -> Path:
+        return self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+
+    def test_word_original_is_copied_beside_the_topic(self) -> None:
+        """FR-001/002: the editable source lands in the gram's own folder under
+        a stable name, so an analyst finds it beside the page it produced."""
+        payload = b"the author's editable analysis sheet"
+        image_root = self._word_original_image_root("Analysis Sheet.docx", payload)
+        csv_path = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        rc = _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertEqual(rc, 0)
+        copied = self._gram_dir() / "analysis.docx"
+        self.assertTrue(copied.is_file(), "the Word original must be copied")
+        self.assertEqual(copied.read_bytes(), payload,
+                         "the copy must be byte-identical to the source")
+
+    def test_legacy_doc_keeps_its_extension(self) -> None:
+        """FR-003: a binary .doc is carried as a .doc, not converted."""
+        image_root = self._word_original_image_root("Analysis Sheet.doc", b"legacy")
+        csv_path = self._word_original_csv("Analysis Sheet.doc", image_root=image_root)
+        _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertTrue((self._gram_dir() / "analysis.doc").is_file())
+        self.assertFalse((self._gram_dir() / "analysis.docx").exists(),
+                         "a .doc must not be renamed to .docx")
+
+    def test_word_original_is_not_referenced_by_the_topic(self) -> None:
+        """FR-004: the document is parked, not linked. The topic XML must be
+        byte-identical to the same run without a Word original, so no reader
+        sees any change and the published HTML is untouched."""
+        image_root = self._word_original_image_root("Analysis Sheet.docx", b"x")
+        with_doc = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        without_doc = self._word_original_csv("", image_root=image_root)
+
+        _run(self.out, csv_path=with_doc, image_root=image_root)
+        topic_with = (self._gram_dir() / "gram_12.dita").read_bytes()
+        self.assertTrue((self._gram_dir() / "analysis.docx").is_file())
+
+        other = TMP / f"out_{self._testMethodName}_without"
+        _run(other, csv_path=without_doc, image_root=image_root)
+        topic_without = (
+            other / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        ).read_bytes()
+
+        self.assertEqual(topic_with, topic_without,
+                         "parking the Word original must not change the topic XML")
+        self.assertNotIn(b"analysis.docx", topic_with,
+                         "nothing in the topic may reference the Word original")
+
+    def test_absent_word_original_warns_and_continues(self) -> None:
+        """FR-008: a recorded original that is not on disk dangles like any
+        other external asset — a warning, never an abort. Nothing references
+        it, so there is no dangling href to repair either."""
+        image_root = self._word_original_image_root("Analysis Sheet.docx", b"x")
+        (image_root / "Analysis Sheet.docx").unlink()
+        csv_path = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        with self.assertLogs(generate_dita.LOGGER, level="WARNING") as cm:
+            rc = _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertEqual(rc, 0, "a missing Word original must not fail the run")
+        self.assertTrue((self._gram_dir() / "gram_12.dita").is_file(),
+                        "the topic must still be emitted")
+        self.assertTrue(any("Analysis Sheet.docx" in m for m in cm.output))
+
+    def test_no_word_original_column_is_forward_compatible(self) -> None:
+        """FR-006: a CSV written before this feature has no such cell, which
+        reads as 'no Word original' and produces the output it always did."""
+        rc = _run(self.out)  # minimal.csv predates the column
+        self.assertEqual(rc, 0)
+        gram_dir = self._gram_dir()
+        self.assertTrue((gram_dir / "gram_12.dita").is_file())
+        self.assertEqual(
+            [p.name for p in gram_dir.iterdir() if p.suffix in (".doc", ".docx")], [],
+            "no Word document should appear when the column is absent")
+
+    def test_word_original_copy_is_deterministic(self) -> None:
+        """FR-009 / Principle V: two runs produce byte- and mtime-identical
+        copies, so regeneration diffs stay meaningful."""
+        image_root = self._word_original_image_root("Analysis Sheet.docx", b"stable")
+        csv_path = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        _run(self.out, csv_path=csv_path, image_root=image_root)
+        copied = self._gram_dir() / "analysis.docx"
+        first, mtime = copied.read_bytes(), copied.stat().st_mtime_ns
+        _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertEqual(copied.read_bytes(), first)
+        self.assertEqual(copied.stat().st_mtime_ns, mtime)
+
     def test_jpg_analysis_renders_as_inline_image(self) -> None:
         """JPG and JPEG analysis assets embed as <image>, not <xref>."""
         for ext in ("jpg", "jpeg"):

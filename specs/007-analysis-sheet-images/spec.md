@@ -229,7 +229,7 @@ flagged in the CSV, and the un-affected grams are produced normally.
   post-processing MUST degrade gracefully — if the image-processing
   capability is unavailable on the host, the step MUST fall back to the
   untrimmed full-page render (logging that it did so) rather than fail.
-- **FR-018**: The pipeline MUST guarantee that every analysis sheet
+- **FR-018**: ~~The pipeline MUST guarantee that every analysis sheet
   exists in **both** forms — an image (`.png`) for inline display and a
   Word document (`.docx`) — so a downstream consumer that needs the Word
   form always finds one. Where only an image exists, the step MUST
@@ -237,7 +237,27 @@ flagged in the CSV, and the un-affected grams are produced normally.
   a Word document exists, the rendered `.png` (FR-001) already satisfies
   the image side. This reverse wrapping MUST use the project's existing
   standard-library document-authoring approach (no new dependency) and
-  MUST be deterministic (idempotent, byte-stable across runs).
+  MUST be deterministic (idempotent, byte-stable across runs).~~
+
+  > **SUPERSEDED by feature 013** (`specs/013-analysis-word-originals/`,
+  > FR-010/FR-011). The guarantee is narrowed to the image side only; the
+  > Word side is now "present if an author wrote one, absent otherwise",
+  > and the pipeline no longer creates Word documents at all.
+  >
+  > The reverse wrapper fired *precisely where no editable original had
+  > ever existed*, and its entire content was the same picture the gram
+  > page already showed — so it could never satisfy the need it was
+  > written for. Once feature 013 began carrying genuine Word originals
+  > into the DITA tree, the presence of a Word file in a gram folder
+  > became the signal an analyst reads as "there is a source here I can
+  > amend", and a fabricated one made that signal always true and
+  > therefore worthless. The wrapper also only ever checked for a
+  > same-stem `.docx`, never a `.doc`, so in the legacy `.doc` decks it
+  > fabricated a bogus `.docx` beside the genuine original.
+  >
+  > The synthesis code is removed and
+  > `snapshot_analysis_docs.py --sweep-wrappers` retracts the files it
+  > already wrote.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -265,8 +285,9 @@ flagged in the CSV, and the un-affected grams are produced normally.
 
 - **SC-001**: 100% of analysis documents (`*analysis*.doc`/`.docx`) end
   up with an analysis PNG available for inline embedding, except those
-  explicitly flagged as render failures; and 100% of analysis sheets end
-  up with both an image and a `.docx` form (FR-018).
+  explicitly flagged as render failures. ~~and 100% of analysis sheets end
+  up with both an image and a `.docx` form (FR-018).~~ *(the second clause
+  is superseded by feature 013 along with FR-018 — see above)*
 - **SC-002**: Across a representative corpus, the proportion of grams
   whose analysis table opens instantly inline (rather than via a Word
   launch) rises from today's PNG-only subset to effectively all grams

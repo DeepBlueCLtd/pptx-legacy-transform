@@ -67,14 +67,33 @@
   Principle II prefers extending an existing stage), and a deferral to planning
   respectively.
 
-**Open for `/speckit-plan`**
+**Resolved during implementation**
 
-- Where the sweep lives: a new prep script, or an extension of the existing
-  snapshot stage. Principle II ("smallest change to an existing stage over new
-  scripts") points at the latter.
-- The new CSV column's name and its position in the schema documentation.
-- Whether the mock corpus generator needs a PNG-only-analysis variant so the
-  coverage count (FR-019) and the no-original path (US1 scenario 5) have test
-  fixtures.
-- Whether the 202 wrapper documents currently committed in this repository's
-  mock `source/` tree are swept in the implementing PR or in a follow-up.
+The four questions left open above were decided as follows:
+
+- **Where the sweep lives** — `snapshot_analysis_docs.py --sweep-wrappers`,
+  per Principle II. It also keeps the wrapper's content signature in the same
+  file whose history produced it. `--apply` opts into deletion.
+- **The CSV column** — `analysis_doc_path`, appended at the right edge of
+  `CSV_COLUMNS`, and added to the generator's `OPTIONAL_CSV_COLUMNS` so a CSV
+  written before this feature reads forward-compatibly.
+- **Mock corpus fixtures** — no change needed. `mock_pptx._emit_analysis_sheet`
+  already emits all three shapes: `.doc` + rendered `.png`, `.docx` alone, and
+  a PNG-only `Analysis.png`. The third gives the no-original path its fixture.
+- **The committed wrappers** — swept in the implementing PR. 202 fabricated
+  `Analysis.docx` files were found and deleted; the 173 genuine
+  `Analysis Sheet.docx` documents were untouched, and a re-run reported zero.
+
+**Verified end-to-end against the mock corpus**
+
+- Extraction reports `analysis_sheets=375 without_word_original=202` — the 202
+  matching the swept fakes exactly. Before the sweep all 375 would have claimed
+  an original, which is the signal corruption FR-010/FR-011 exist to stop.
+- After `dedupe` → `write`, all **173** genuine Word originals reach the DITA
+  tree (SC-001). Running `write` on an *un-deduped* CSV lands 161: five topics
+  are two colliding grams merged into one, where the surviving row's sheet is
+  image-only. That is the pre-existing within-week collision the dedupe step
+  exists to fix (the analysis *image* was already chosen the same way), and
+  the documented pipeline order resolves it.
+- Two consecutive generator runs produced byte- and mtime-identical trees
+  (SC-007), copied Word documents included.
