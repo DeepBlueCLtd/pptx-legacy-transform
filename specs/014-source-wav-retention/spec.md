@@ -24,7 +24,7 @@ This feature retains the source audio alongside the image it produced, on the
 same principle as the analysis sheet's Word original (feature 013): the working
 folder should carry what its deliverables were derived from.
 
-Three things follow:
+Two things follow:
 
 1. **The audio travels with the converted gram** — copied into the gram's topic
    folder beside the image, referenced by nothing.
@@ -33,8 +33,29 @@ Three things follow:
    OS will not hand a `.bak` to the spectrogram tool) and asserts the file is
    discardable. It becomes `<name>.bac.wav` — still marked as the superseded
    original, but still a `.wav` the analyst can double-click.
-3. **Existing `.wav.bak` files are migrated** to the new name, because renaming
-   the behaviour does not rename what earlier runs already produced.
+
+### `relink` appears never to have run
+
+Both the committed corpus and the target show **no evidence of `relink` ever
+having been used**: zero `.wav.bak` files, zero `Image <N>-…` candidate images,
+and every `.wav` still unconverted. The author's deliveries go through
+`ingest`'s parallel incoming tree.
+
+Two consequences, both simplifications:
+
+- **The pairing question is settled at no cost.** `relink` will name the
+  retained audio after the **image's** stem, so both routes leave the image and
+  its audio sharing one stem and a single probe finds it. The objection to that
+  choice was that it discards the wav's original filename — but no file in
+  existence carries that name, because the conversion has never happened. There
+  is nothing to lose.
+- **No migration is needed.** An earlier draft carried a third user story to
+  rename existing `.wav.bak` files. There are none. It is dropped rather than
+  built speculatively; the reasoning is recorded here in case one ever surfaces.
+
+`relink`'s own behaviour is still corrected (US2) so that the route produces a
+usable result if it is ever picked up again. Whether to retire the script
+altogether is a **separate decision**, deliberately out of scope here.
 
 ### What this does *not* change
 
@@ -110,34 +131,6 @@ audio is named `<stem>.bac.wav`, with a `.wav` extension, and that no
 
 ---
 
-### User Story 3 — Existing `.wav.bak` files are migrated (Priority: P2)
-
-An operator upgrades, runs a one-off migration, and the `.wav.bak` files
-earlier `relink` runs left behind become `.bac.wav` — openable, and findable
-by the copy step.
-
-**Why this priority**: P2 — required before an already-converted tree benefits
-from US1, but separable from the code change and safe to run at any point
-after it.
-
-**Independent Test**: Over a tree holding `.wav.bak` files, run the migration
-in report mode and confirm it names them all; run it in apply mode and confirm
-each is renamed with its bytes intact.
-
-**Acceptance Scenarios**:
-
-1. **Given** a tree containing `.wav.bak` files, **When** the migration runs in
-   its default mode, **Then** it reports each one and renames nothing.
-2. **Given** the same tree, **When** it runs in apply mode, **Then** each
-   becomes `<stem>.bac.wav` with byte-identical content.
-3. **Given** a migrated tree, **When** it runs again, **Then** it reports
-   nothing and changes nothing.
-4. **Given** a `.bac.wav` that would collide with an existing file, **When**
-   the migration runs, **Then** it reports the collision and leaves both files
-   alone rather than overwriting.
-
----
-
 ### Edge Cases
 
 - **A gram that was always image-backed.** ~82% of the corpus. No audio exists,
@@ -156,10 +149,12 @@ each is renamed with its bytes intact.
 - **The suppression flag is set.** No audio is copied; everything else is
   identical, and the run says how many files it skipped so the omission is
   visible rather than silent.
-- **An author's own `.wav.bak`.** The migration renames on the extension alone,
-  so a `.bak` that was never `relink`'s output is still renamed. This is
-  acceptable — the change is a rename, not a deletion, and is reversible — but
-  the report lists every file before anything happens.
+- **A `.wav.bak` turns up after all.** None exist today, which is why no
+  migration is specced. If one surfaces, its audio is simply not retained — the
+  probe finds no `.wav`/`.bac.wav` beside the image — and it is counted in
+  FR-010's "without retained audio" figure rather than silently ignored. That
+  visibility is the safety net; a migration can be added if the count is ever
+  non-zero for that reason.
 
 ## Requirements *(mandatory)*
 
@@ -202,18 +197,6 @@ each is renamed with its bytes intact.
 - **FR-013**: `relink` MUST remain idempotent — a converted folder reconverted
   changes nothing.
 
-### Migrating what exists (US3)
-
-- **FR-014**: The pipeline MUST provide a migration that renames existing
-  `.wav.bak` files to the retained-audio name.
-- **FR-015**: The migration MUST default to reporting only, and MUST require an
-  explicit opt-in to rename — matching the verify-then-apply convention used by
-  `ingest` and by feature 013's sweep.
-- **FR-016**: The migration MUST NOT overwrite an existing file; a collision is
-  reported and both files are left alone.
-- **FR-017**: The migration MUST be idempotent and MUST preserve file contents
-  exactly.
-
 ### Key Entities
 
 - **Source Audio**: The `.wav` a gram was originally rendered from live by the
@@ -235,8 +218,8 @@ each is renamed with its bytes intact.
   folder, in the spectrogram tool, without renaming it first.
 - **SC-003**: The published output for every edition is byte-identical before
   and after this feature — no reader sees any change.
-- **SC-004**: After migration, zero `.wav.bak` files remain and zero bytes of
-  audio are lost.
+- **SC-004**: Zero retained originals require renaming before an analyst can
+  open them in the spectrogram tool.
 - **SC-005**: The operator can see, before transferring, how much audio the
   tree carries and can produce a tree without it in one flag.
 - **SC-006**: Two consecutive pipeline runs over unchanged input produce
@@ -250,12 +233,10 @@ each is renamed with its bytes intact.
 - **The pairing is recorded at conversion time, not re-derived later.** `ingest`
   already names the imported image after the wav's stem, so the two share a
   stem. `relink` does not — its Pattern B maps `WAV 1.wav` to
-  `Image 1-0-110 Hz.jpg` — so **`relink` will name the retained audio after the
-  image's stem** (`Image 1-0-110 Hz.bac.wav`), making the association hold by
-  construction in both routes rather than forcing extraction to re-run relink's
-  matching rules. *This is an inference, not a stated requirement — flagged for
-  review, because it means the retained file no longer carries the wav's
-  original name. That name remains recoverable from version control.*
+  `Image 1-0-110 Hz.jpg` — so `relink` will name the retained audio after the
+  image's stem, making the association hold by construction in both routes. This
+  was an open trade-off while it implied discarding the wav's original filename;
+  it is now free, because `relink` has never run and no file carries that name.
 - **Real `.wav` files are substantial.** The committed corpus holds 844-byte
   stubs, so the true size impact cannot be measured here; the existence of
   `--stub-wav` and feature 006's 10 MiB redirect implies real audio is large.
@@ -263,9 +244,10 @@ each is renamed with its bytes intact.
 - **The retained audio reaches `dita/` only, not the published HTML** — nothing
   references it, and unreferenced files are not carried into rendered output.
   Intended: analysts work in the DITA source.
-- **`.wav.bak` is `relink`'s own output.** The corpus is not expected to contain
-  author-created `.bak` files; the migration reports before acting so any
-  surprise is visible.
+- **`relink` is not a live delivery route.** No `.wav.bak` files and no
+  `Image <N>-…` candidates exist in either tree, and the author delivers through
+  `ingest`. `relink` is corrected rather than exercised; whether to retire it is
+  a separate decision.
 
 ## Dependencies
 

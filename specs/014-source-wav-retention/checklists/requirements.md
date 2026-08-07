@@ -42,20 +42,30 @@
   hands the file to the spectrogram tool, while the `.bac` infix still marks it
   as the superseded original.
 
-**One inference flagged for review**
+**The inference is now resolved**
 
-`relink` will name the retained audio after the **image's** stem rather than
-keeping the wav's own name. Rationale is in Assumptions: `ingest` already makes
-the two share a stem (it names the image after the wav), but `relink`'s Pattern B
-does not, so without this the copy step would have to re-run relink's matching
-rules at extraction time to work out which audio belongs to which image.
-Encoding the pairing at the moment it is known is simpler and cannot drift.
+An earlier draft flagged a trade-off: `relink` naming the retained audio after
+the **image's** stem (so the pairing holds by construction in both routes) at
+the cost of discarding the wav's original filename.
 
-The cost is that the retained file no longer carries the wav's original
-filename. That name stays recoverable from version control, since the sources
-are committed. **If that trade is unwanted**, the alternative is to keep the
-wav's name and have extraction re-derive the pairing via relink's Pattern A/B
-rules — more moving parts, and a second place those rules must stay correct.
+Investigation closed it. Neither tree contains a single `.wav.bak` or
+`Image <N>-…` candidate, and the user confirmed no evidence of `relink` ever
+being called — the author delivers through `ingest`. So no file in existence
+carries the name the choice would discard, and the trade-off costs nothing.
+Adopted.
+
+The same finding removed a user story: the `.wav.bak` migration is dropped
+rather than built speculatively, since there is nothing to migrate. If one ever
+surfaces, its gram is counted in FR-010's "without retained audio" figure rather
+than failing silently.
+
+**Deliberately left out of scope**
+
+Whether to retire `relink_glc_to_image.py` altogether. It is superseded in
+practice by `ingest`, and the constitution's pre-production posture favours
+deleting superseded shapes — but that is a decision about the pipeline's
+surface, not about audio retention, and it belongs in its own change. This
+feature corrects `relink`'s behaviour so the route works if picked up again.
 
 **Scope boundary worth confirming on review**
 
