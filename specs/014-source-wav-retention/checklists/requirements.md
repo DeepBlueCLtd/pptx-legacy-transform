@@ -37,9 +37,9 @@
   always-on and over opt-in. Opt-in was rejected for the same reason feature 013
   removed the reverse-wrap flag: a working folder that is only complete when
   someone remembers a flag is the failure mode we just designed out.
-- **`.back.wav`, not `.wav.bak`** (FR-011) — the user's own suggestion, and
+- **`.bac.wav`, not `.wav.bak`** (FR-011) — the user's own suggestion, and
   better than the two options offered. It keeps the `.wav` extension so the OS
-  hands the file to the spectrogram tool, while the `.back` infix still marks it
+  hands the file to the spectrogram tool, while the `.bac` infix still marks it
   as the superseded original.
 
 **One inference flagged for review**
