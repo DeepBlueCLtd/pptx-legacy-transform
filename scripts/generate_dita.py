@@ -47,10 +47,20 @@ CSV_COLUMNS: tuple[str, ...] = (
 # it (the current 16-column ``source.csv`` or any legacy CSV) stays valid
 # and produces byte-identical output — the deduplication feature is inert
 # by default (FR-010, SC-005).
+#
+# ``analysis_doc_path`` (feature 013) is likewise optional: a CSV written before
+# that feature simply has no such cell, which reads as "no Word original
+# recorded" and produces exactly the output it did before.
 OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
     "target_doc", "target_chapter", "target_ext", "master_png_path",
-    "target_gram_id",
+    "target_gram_id", "analysis_doc_path",
 )
+
+# Stable basename stem for the analysis sheet's editable Word original, copied
+# beside the topic under its source extension (feature 013). Mirrors the
+# ``analysis.png`` convention so the gram folder is self-describing: the picture
+# the page shows and the document it was rendered from, side by side.
+ANALYSIS_DOC_STEM = "analysis"
 
 # In-memory-only row annotation: the 1-based line number each row occupied in
 # the source CSV (header is line 1, so the first data row is line 2). Stamped
@@ -1359,6 +1369,21 @@ def emit_gram_topic(
         if copied is not None:
             written.append(copied)
         _append_analysis_section(body, href)
+        # Feature 013: park the sheet's editable Word original beside the image
+        # it produced. Deliberately *unreferenced* — the topic XML does not link
+        # it, so the published output is unchanged and no reader ever sees it.
+        # It is here for the analyst who later has to amend the sheet and would
+        # otherwise be hunting the legacy source tree for it. Empty for the
+        # decks that only ever supplied an image; the pipeline never invents one.
+        analysis_doc = (analysis_row.get("analysis_doc_path", "") or "").strip()
+        if analysis_doc:
+            doc_ext = Path(analysis_doc).suffix.lower()
+            _, doc_copied = copy_asset(
+                analysis_doc, image_root, topic_dir,
+                target_name=f"{ANALYSIS_DOC_STEM}{doc_ext}",
+            )
+            if doc_copied is not None:
+                written.append(doc_copied)
 
     if seven_q:
         # Relative path from the per-gram topic folder up to the publication

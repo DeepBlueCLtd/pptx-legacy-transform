@@ -36,6 +36,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "target_doc", "target_chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
     "time_end", "bandwidth", "bandcentre", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
+    "analysis_doc_path",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
@@ -122,6 +123,16 @@ ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", "
 ANALYSIS_NAME_TOKEN = "analysis"
 ANALYSIS_NAME_MISSPELLINGS: tuple[str, ...] = ("analaysis",)
 ANALYSIS_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg")
+
+# Word forms an analysis sheet can take on disk, in the order the sibling probe
+# below tries them (feature 013). ``.doc`` leads deliberately: the removed
+# reverse-wrap step (feature 007 FR-018) only ever checked for a same-stem
+# ``.docx`` before fabricating one, so a legacy ``.doc`` deck that has not yet
+# been swept can hold a genuine ``analysis.doc`` *and* a fabricated
+# ``analysis.docx`` side by side. Probing ``.doc`` first picks the real document
+# in that tree; in a swept or modern tree only one of the two exists, so the
+# order makes no difference.
+ANALYSIS_WORD_EXTENSIONS: tuple[str, ...] = (".doc", ".docx")
 
 # Some legacy decks carry navigation buttons labelled like "N Questions"
 # that link to an image (a self-test slide), not a gram. Their shape-level
@@ -1382,6 +1393,48 @@ def _recover_analysis_sheet(
     return None
 
 
+def _find_analysis_word_original(
+    image_relpath: str, content_root: Path, preferred: str = "",
+) -> str:
+    """Return the editable Word original behind an analysis image, or ``""``.
+
+    Feature 013: the analysis sheet the reader sees is a *rendered image*, which
+    cannot be amended. Where the author's Word document still exists it is
+    carried into the gram's DITA folder so an analyst who later needs to correct
+    the sheet finds the source beside the page it produced. This resolves which
+    file that is; the copy itself happens in ``generate_dita.py``.
+
+    ``image_relpath`` is the analysis row's final ``content_root``-relative image
+    path — *after* any Word-to-image redirect and after the stale-link recovery
+    below, so a sheet recovered from a Lofar folder is probed at the location it
+    was actually recovered from, not at the dead hyperlink target.
+
+    ``preferred`` is the suffix the deck's own hyperlink named, when that
+    hyperlink pointed at a Word document. It is authoritative — the author told
+    us which form the sheet takes — so it is tried before the generic probe.
+    Otherwise (the newer decks hyperlink the image directly) the sheet's Word
+    sibling is looked for by same stem in ``ANALYSIS_WORD_EXTENSIONS`` order.
+
+    Returns ``""`` when no Word original exists. That is an ordinary, expected
+    outcome — the newer decks supply the analysis sheet as an image and never had
+    a Word form — not a warning and not an error. The count of such grams is
+    reported in the extraction summary so the operator can see the gap.
+    """
+    if not image_relpath:
+        return ""
+    base = PurePosixPath(image_relpath)
+    suffixes: tuple[str, ...] = ANALYSIS_WORD_EXTENSIONS
+    if preferred:
+        # Authoritative suffix first, then the rest of the probe order.
+        suffixes = (preferred,) + tuple(
+            s for s in ANALYSIS_WORD_EXTENSIONS if s != preferred)
+    for suffix in suffixes:
+        candidate = base.with_suffix(suffix)
+        if (content_root / candidate).is_file():
+            return str(candidate)
+    return ""
+
+
 # A demon marker's stem is exactly ``demon`` (the first) or ``demon-N`` (the
 # Nth, N>=2). Anchored so ``demonstrate.glc`` and other ``demon``-prefixed files
 # never match. Case-insensitive.
@@ -1649,6 +1702,11 @@ def gram_to_rows(
 
     analysis_warnings: list[str] = []
     analysis_png = gram.png_href or ""
+    # The suffix the deck's own hyperlink named, when it named a Word document.
+    # Captured before the redirect below rewrites the path to the rendered
+    # image, because it is the author's own statement of which form the sheet
+    # takes and so outranks the sibling probe (feature 013).
+    analysis_word_suffix = ""
     if not analysis_png:
         analysis_warnings.append("missing analysis PNG hyperlink")
         analysis_png_resolved = ""
@@ -1662,7 +1720,8 @@ def gram_to_rows(
         # snapshotter hasn't run, or its render failed) keep the intended
         # .png href so the image dangles -- never a Word <xref> -- and record
         # a warning the author sees in Excel (FR-009/FR-010).
-        if Path(analysis_png_resolved).suffix.lower() in (".doc", ".docx"):
+        if Path(analysis_png_resolved).suffix.lower() in ANALYSIS_WORD_EXTENSIONS:
+            analysis_word_suffix = Path(analysis_png_resolved).suffix.lower()
             analysis_png_resolved = str(
                 PurePosixPath(analysis_png_resolved).with_suffix(".png"))
             if not (content_root / analysis_png_resolved).is_file():
@@ -1723,6 +1782,12 @@ def gram_to_rows(
         "file_size": _png_file_size(analysis_png_resolved, content_root),
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
+        # Probed against the *final* image path, so a sheet recovered from a
+        # Lofar folder above is looked up where it was recovered from. Empty
+        # when the sheet never had a Word form -- an ordinary outcome, counted
+        # (not warned) in the extraction summary (feature 013).
+        "analysis_doc_path": _find_analysis_word_original(
+            analysis_png_resolved, content_root, analysis_word_suffix),
     })
     return demon_rows + rows
 
@@ -2020,13 +2085,31 @@ def main(argv: Iterable[str] | None = None) -> int:
             skipped_deleted_grams, ASSET_MISSING_WARNING,
         )
 
+    # Feature 013 (FR-019): how many grams show an analysis sheet nobody can
+    # amend. Not a warning -- the newer decks legitimately supply the sheet as
+    # an image and never had a Word form -- but the operator cannot see the
+    # scale of the gap without a number, and it is how the real corpus's
+    # proportions become known at all.
+    analysis_rows = [r for r in rows if r.get("topic_type") == "analysis"]
+    without_word = sum(
+        1 for r in analysis_rows if not (r.get("analysis_doc_path") or "").strip())
+
     distinct = ", ".join(f"{w}={c}" for w, c in sorted(warning_counter.items()))
     LOGGER.info(
         "Extraction summary: pptx=%d rows=%d skipped_deleted_grams=%d "
-        "warnings=%d distinct=[%s]",
+        "warnings=%d distinct=[%s] analysis_sheets=%d without_word_original=%d",
         pptx_count, len(rows), skipped_deleted_grams,
         sum(warning_counter.values()), distinct,
+        len(analysis_rows), without_word,
     )
+    if without_word:
+        LOGGER.info(
+            "%d of %d gram(s) with an analysis sheet have no editable Word "
+            "original, so their sheet cannot be amended at source — the "
+            "rendered image is all there is. This is expected for decks that "
+            "supplied the sheet as an image; no action is required.",
+            without_word, len(analysis_rows),
+        )
     return 0
 
 
