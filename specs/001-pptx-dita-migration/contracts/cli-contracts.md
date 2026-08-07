@@ -118,7 +118,6 @@ topics + ditamaps.
 
 ```text
 python generate_dita.py --csv PATH --out PATH --image-root PATH
-                        [--clean]
 ```
 
 | Flag | Required | Type | Description |
@@ -126,7 +125,6 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 | `--csv` | yes | path | Reviewed CSV file |
 | `--out` | yes | path | Output directory; created if missing |
 | `--image-root` | yes | path | Root used to resolve `png_path` columns |
-| `--clean` | no | flag | If set, deletes the existing output directory tree before writing |
 
 **Side effects**:
 
@@ -143,10 +141,11 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 **Exit codes**: `0` on success (even if some rows are skipped); `1` on
 any unhandled error (e.g. CSV missing, malformed CSV, write failure).
 
-**Idempotency contract** (FR-013, R9, SC-004): With `--clean` *not*
-set, running twice with the same CSV produces byte-identical output
-files for every file the second run also produces. With `--clean` set,
-the output tree is deleted before writing on each run.
+**Idempotency contract** (FR-013, R9, SC-004): Running twice with the
+same CSV produces byte-identical output files for every file the second
+run also produces. No invocation deletes the whole `--out` tree — the
+wipe is scoped to the publication folders the CSV produces, and clearing
+`--out` outright is a manual act performed by hand.
 
 **Logging contract** (FR-014):
 

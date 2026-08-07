@@ -24,7 +24,7 @@ echo Review extracted.csv now. Press any key to continue with DITA generation.
 pause > nul
 
 echo [Stage 4] Generating DITA into dita\ ...
-python scripts\generate_dita.py --csv extracted.csv --out dita\ --image-root %1 --clean
+python scripts\generate_dita.py --csv extracted.csv --out dita\ --image-root %1
 if errorlevel 1 goto error
 
 goto end
