@@ -694,7 +694,7 @@ installs, not the user-folder install.
    is a bare filename — no `../` traversal. Each publication's ditamap
    is written **inside its folder** (`dita/<pub>/<pub>.ditamap` with
    folder-relative hrefs — nothing at the `dita/` root except the
-   manifest, skipped report, and DITAVAL profile), so a publication
+   skipped report and DITAVAL profiles), so a publication
    folder is self-contained and can be opened in Oxygen as-is. Output
    is deterministic: re-running the same CSV
    produces byte-identical files (including the copied assets). If a
@@ -1311,8 +1311,11 @@ This matches the `publish_html.py` dev-preview layout
   PR-preview build, the gh-pages regenerate job and `run_pipeline.bat`
   all pass it, so their determinism comparison starts from a bare tree.
   On the target, set `CLEAN_ALL = True` in `write.py`/`pipeline.py`.
-  Note `manifest.txt` and `skipped.txt` are rewritten each run either
-  way, so they describe the current run, not the accumulated tree.
+  Note `skipped.txt` is rewritten each run either way, so it describes
+  the current run, not the accumulated tree. (A `manifest.txt` listing
+  every file produced used to be written beside it; it was removed
+  because nothing consumed it and, sitting at the root of a tree built
+  up over several scoped runs, it described only the last one.)
 - **Windows orchestrator only.** `run_pipeline.bat` is a Windows batch
   file; on POSIX systems run the Python scripts directly.
 - **One third-party dependency.** Only `python-pptx` is required at

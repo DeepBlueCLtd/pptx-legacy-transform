@@ -259,6 +259,14 @@ same CSV. Walking and deleting unconditionally would risk wiping
 hand-edited files; the manifest plus opt-in `--clean` keeps the default
 safe and the destructive behaviour explicit.
 
+**Superseded (manifest only)**: the determinism half of this decision
+stands, but the manifest is gone. Every run now wipes and rebuilds each
+publication folder it touches, which removes stale output at the source
+rather than reporting it for manual cleanup, and `--clean` still widens
+that to the whole tree. Nothing consumed the manifest, and because it
+was rewritten wholesale each run it described only the latest run while
+sitting at the root of a tree several scoped runs may have built.
+
 **Alternatives considered**:
 
 - *Always wipe output*. Rejected — destructive default conflicts with the

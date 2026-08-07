@@ -114,7 +114,7 @@ total warnings, distinct warning types with counts.
 ## `generate_dita.py`
 
 **Purpose** (Story 1): Consume the signed-off CSV and write DITA
-topics + ditamaps + manifest.
+topics + ditamaps.
 
 ```text
 python generate_dita.py --csv PATH --out PATH --image-root PATH
@@ -135,7 +135,6 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 - Writes one ditamap per publication at the `--out/` root
   (e.g. `--out/main.ditamap`, `--out/progress-test-1.ditamap`), each
   alongside its similarly-named content folder.
-- Writes `--out/manifest.txt` listing every file produced.
 - Writes `--out/skipped.txt` listing every row skipped (only if there
   is at least one).
 - Writes `generate.log` (mode `"w"`, UTF-8) in the current working
@@ -151,7 +150,7 @@ the output tree is deleted before writing on each run.
 
 **Logging contract** (FR-014):
 
-- INFO: each topic written, each ditamap written, manifest written,
+- INFO: each topic written, each ditamap written,
   skipped count, end-of-run summary (total topics, total ditamaps,
   total skipped, total errors).
 - WARNING: image not found at the resolved `png_path`; row uses the
