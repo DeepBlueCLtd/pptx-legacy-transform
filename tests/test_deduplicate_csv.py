@@ -284,6 +284,77 @@ class DeduplicateCsvTests(unittest.TestCase):
         log = Path("dedup.log").read_text(encoding="utf-8")
         self.assertIn("missing/unreadable", log)
 
+    def test_duplicate_across_publications_is_not_redirected(self) -> None:
+        """A duplicate group must never span publications (issue #164).
+
+        The generator renders a redirect as a relative href from the
+        redirected gram's folder to the master's, so a cross-publication
+        master emits ``../../<other-pub>/…`` and the publication folder stops
+        being self-contained. DITA-OT then roots the job at the parent of the
+        map's folder and publishes the whole publication one tier below its
+        own index.html and links, 404-ing every page. The grams an assessment
+        deck reuses from the week it came from are exactly the byte-identical
+        ones, so this is the ordinary case."""
+        cross = self.tmp / "cross.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "display_text", "link_href",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path",
+                "file_size", "wav_treatment", "warnings"]
+        with cross.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            # Byte-identical assets, one per publication.
+            for pub, gid, png in (
+                ("main", "30", "dedup/img/shared.png"),
+                ("progress-test-1", "31", "dedup/img/shared_b.png"),
+            ):
+                w.writerow({c: "" for c in cols} | {
+                    "publication": pub, "chapter": "X", "gram_id": gid,
+                    "topic_type": "glc", "sequence": "1", "png_path": png,
+                    "file_size": "11000000",
+                })
+        out = self.tmp / "cross_out.csv"
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(cross), "--image-root", str(FIXTURES), "--out", str(out)]), 0)
+        _, rows = _read(out)
+        self.assertTrue(
+            all(r["master_png_path"] == "" for r in rows),
+            "byte-identical assets in different publications must each keep "
+            f"their own copy, got {self._by_png(rows)}",
+        )
+
+    def test_no_dedupe_skips_detection_but_still_renumbers(self) -> None:
+        """``--no-dedupe`` turns off duplicate detection only.
+
+        The script does two jobs; the renumbering is required (the generator
+        fail-fasts on un-renumbered within-week collisions) while the
+        deduplication is a disk-space optimisation. Turning the optimisation
+        off must leave the renumbering, and the column, intact."""
+        out = self.tmp / "nodedupe.csv"
+        self.assertEqual(deduplicate_csv.main([
+            "--csv", str(SOURCE), "--image-root", str(FIXTURES),
+            "--out", str(out), "--no-dedupe",
+        ]), 0)
+        fieldnames, rows = _read(out)
+        self.assertIn("master_png_path", fieldnames,
+                      "the column is still emitted, so the CSV round-trips")
+        self.assertTrue(
+            all(r["master_png_path"] == "" for r in rows),
+            f"no row may be redirected, got {self._by_png(rows)}")
+        self.assertIn("target_gram_id", fieldnames,
+                      "renumbering still runs with detection off")
+        log = Path("dedup.log").read_text(encoding="utf-8")
+        self.assertIn("Deduplication skipped", log)
+
+    def test_duplicate_within_one_publication_still_redirects(self) -> None:
+        """The publication scoping must not disable deduplication itself:
+        two copies inside one publication still collapse to a master."""
+        _, rows = _read(self._run())
+        m = self._by_png(rows)
+        self.assertEqual(m["dedup/img/shared.png"], "")
+        self.assertEqual(m["dedup/img/shared_b.png"], "dedup/img/shared.png")
+
     # -- T034: round-trip fidelity + idempotency ----------------------------
     def test_csv_roundtrip_and_idempotent(self) -> None:
         out1 = self._run("once.csv")

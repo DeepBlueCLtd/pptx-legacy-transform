@@ -300,15 +300,31 @@ def deduplicate(
     """Populate each row's ``master_png_path`` in place; return redirect count.
 
     Candidacy: ``file_size`` strictly greater than ``threshold_bytes``
-    (FR-003). Candidates are grouped by ``file_size`` first; only within a
-    size-collision group of >=2 is content confirmed by ``sha256`` (a
-    unique-size large file is never hashed). Confirmed byte-identical
-    rows are then split by ``_view_key`` so ``.wav`` rows merge only when
-    their ``(time_end, bandwidth, bandcentre)`` view also matches (issues
+    (FR-003). Candidates are grouped by ``(publication, file_size)`` first;
+    only within a size-collision group of >=2 is content confirmed by
+    ``sha256`` (a unique-size large file is never hashed). Confirmed
+    byte-identical rows are then split by ``_view_key`` so ``.wav`` rows
+    merge only when their ``(time_end, bandwidth, bandcentre)`` view also
+    matches (issues
     #78, #87). Within
     each resulting group of >=2, the first row by ``_identity_key`` is
     the master (empty ``master_png_path``); the rest carry the master's
     ``png_path``.
+
+    **A duplicate group never spans publications** (issue #164). A redirect
+    is rendered by the generator as a relative href from the redirected
+    gram's folder to the master's, so redirecting across a publication
+    boundary emits ``../../../<other-pub>/…`` — a reference that leaves the
+    publication folder. That breaks the self-contained-publication invariant
+    the whole layout rests on, and it breaks publishing outright: DITA-OT
+    resolves the job root to the *parent* of the map's folder, mirrors that
+    extra tier into the output, and strands ``index.html`` and every
+    generated link one level above the content, so every page 404s. The
+    grams reused between an assessment deck and the week it came from are
+    exactly the ones that collide, so this is the common case, not a corner
+    one. Redirects *within* a publication (e.g. between two weeks of
+    ``main``) still traverse folders and remain correct — they stay inside
+    the publication.
     """
     # Every row starts non-redirected; this also repopulates (clears stale
     # values from) a CSV that already carries the column, keeping the
@@ -316,19 +332,19 @@ def deduplicate(
     for row in rows:
         row[MASTER_PNG_PATH] = ""
 
-    # 1) Candidate filter + size pre-grouping.
-    by_size: dict[int, list[dict]] = defaultdict(list)
+    # 1) Candidate filter + (publication, size) pre-grouping.
+    by_size: dict[tuple, list[dict]] = defaultdict(list)
     for row in rows:
         size = _parse_size(row)
         png = (row.get("png_path", "") or "").strip()
         if size is not None and size > threshold_bytes and png:
-            by_size[size].append(row)
+            by_size[(require_field(row, "publication"), size)].append(row)
 
     redirected = 0
     total_reclaimed = 0
     # 2) Confirm content identity only inside size-collision groups of >=2.
-    for size in sorted(by_size):
-        members = by_size[size]
+    for pub, size in sorted(by_size):
+        members = by_size[(pub, size)]
         if len(members) < 2:
             continue  # unique size — cannot have a byte-identical twin
         by_hash: dict[str, list[dict]] = defaultdict(list)
@@ -364,8 +380,9 @@ def deduplicate(
                 reclaimed = count * size
                 total_reclaimed += reclaimed
                 LOGGER.info(
-                    "Duplicate group: master=%s%s redirected=%d bytes_reclaimed=%d",
-                    master_png,
+                    "Duplicate group in %s: master=%s%s redirected=%d "
+                    "bytes_reclaimed=%d",
+                    pub, master_png,
                     " view=%s/%s/%s" % (view[1], view[2], view[3]) if view[0] == "wav-view" else "",
                     count, reclaimed,
                 )
@@ -642,6 +659,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                         default=DEFAULT_THRESHOLD_BYTES, dest="threshold_bytes",
                         help="candidacy cut-off; only rows with file_size "
                              "strictly greater are eligible (default 10 MiB)")
+    parser.add_argument("--no-dedupe", action="store_true", dest="no_dedupe",
+                        help="skip duplicate detection entirely — no row is "
+                             "redirected and every gram keeps its own copy of "
+                             "every asset. The gram renumbering this script "
+                             "also performs still runs, so this is the way to "
+                             "get renumbering without deduplication. Use it "
+                             "when disk space is not the constraint: "
+                             "deduplication trades a self-contained gram "
+                             "folder for saved bytes, and only the bytes are "
+                             "optional.")
     parser.add_argument("--main-numbering", choices=("per-week", "continuous"),
                         default="per-week", dest="main_numbering",
                         help="how the main publication's grams are numbered "
@@ -682,7 +709,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     # emitting a CSV the generator would reject (constitution VII).
     try:
         renumber_grams(rows, main_numbering=args.main_numbering)
-        deduplicate(rows, args.image_root, args.threshold_bytes)
+        if args.no_dedupe:
+            # Still normalise the column, so the output CSV carries it (empty)
+            # exactly as a dedupe run would and stays round-trip/idempotent.
+            for row in rows:
+                row[MASTER_PNG_PATH] = ""
+            LOGGER.info(
+                "Deduplication skipped (--no-dedupe): every gram keeps its own "
+                "copy of every asset.")
+        else:
+            deduplicate(rows, args.image_root, args.threshold_bytes)
     except PipelineDataError as exc:
         LOGGER.error("Aborting: %s", exc)
         return 1
