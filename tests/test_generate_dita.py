@@ -33,7 +33,7 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          stub_wav: "Path | None" = None,
          static_root: "Path | None" = STATIC_ROOT,
          seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG,
-         no_clean: bool = False) -> int:
+         clean_all: bool = False) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -41,10 +41,10 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
         "--out", str(out_dir),
         "--image-root", str(image_root),
     ]
-    # ``no_clean`` drives the generator's own --no-clean flag (keep the tree);
-    # ``clean`` above is the harness wiping out_dir before the run.
-    if no_clean:
-        argv += ["--no-clean"]
+    # ``clean_all`` drives the generator's own --clean flag (wipe the whole
+    # tree); ``clean`` above is the harness wiping out_dir before the run.
+    if clean_all:
+        argv += ["--clean"]
     if stub_wav is not None:
         argv += ["--stub-wav", str(stub_wav)]
     # Pin --static-root so the feature-010 common pages are sourced from a
@@ -1135,48 +1135,61 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertNotIn("spectrogram", skipped.read_text(encoding="utf-8"),
                              "a .gif Lofar must not be skipped")
 
-    def test_stale_tree_wiped_without_clean_flag(self) -> None:
-        """The output tree is always rebuilt from scratch (clean is now the
-        default, not opt-in): a leftover file from a previous document's build
-        must not survive a run, even when ``--clean`` isn't passed."""
+    def test_dropped_gram_folder_is_wiped_from_its_publication(self) -> None:
+        """A gram deleted from the PPTX must disappear from the DITA tree: the
+        run rebuilds each publication folder it owns from scratch, so a topic
+        folder the CSV no longer produces cannot survive."""
         self.out.mkdir(parents=True, exist_ok=True)
-        stale = self.out / "stale_from_other_document.dita"
+        stale = self.out / "main" / "gram-99" / "gram_99.dita"
+        stale.parent.mkdir(parents=True, exist_ok=True)
         stale.write_text("<topic/>", encoding="utf-8")
         # _run defaults to clean=False here so only the generator's own wipe acts.
         rc = _run(self.out, clean=False)
         self.assertEqual(rc, 0)
-        self.assertFalse(stale.exists(),
-                         "a stale file must be wiped even without --clean")
+        self.assertFalse(stale.parent.exists(),
+                         "a dropped gram's folder must not survive a rebuild "
+                         "of its own publication")
 
-    def test_no_clean_preserves_existing_tree(self) -> None:
-        """``--no-clean`` keeps whatever is already under --out, so several
-        documents can be accumulated into one dita/ tree across runs and
-        published one by one."""
+    def test_other_publications_are_left_untouched(self) -> None:
+        """The wipe is scoped to the publications in *this* CSV, so a suite of
+        documents can be built up across runs and published one by one."""
         self.out.mkdir(parents=True, exist_ok=True)
         earlier = self.out / "progress-test-9" / "progress-test-9.ditamap"
         earlier.parent.mkdir(parents=True, exist_ok=True)
         earlier.write_text("<map/>", encoding="utf-8")
-        rc = _run(self.out, clean=False, no_clean=True)
+        rc = _run(self.out, clean=False)
         self.assertEqual(rc, 0)
         self.assertTrue(earlier.is_file(),
-                        "--no-clean must leave an earlier run's publication "
-                        "folder in place")
+                        "a publication this CSV does not produce must survive")
         self.assertEqual(earlier.read_text(encoding="utf-8"), "<map/>",
                          "the earlier ditamap must be untouched")
         self.assertTrue((self.out / "main" / "main.ditamap").is_file(),
                         "this run's own publication is still written")
 
-    def test_no_clean_output_matches_a_clean_run(self) -> None:
-        """``--no-clean`` changes only what survives from *before* the run: the
-        files this run writes must be byte-identical to a wiped run's, so the
-        determinism invariant holds across the accumulate workflow."""
-        rc1 = _run(self.out, clean=True)
+    def test_clean_wipes_other_publications_too(self) -> None:
+        """``--clean`` is the from-scratch rebuild of the whole tree, so it
+        removes publications this CSV does not produce."""
+        self.out.mkdir(parents=True, exist_ok=True)
+        earlier = self.out / "progress-test-9" / "progress-test-9.ditamap"
+        earlier.parent.mkdir(parents=True, exist_ok=True)
+        earlier.write_text("<map/>", encoding="utf-8")
+        rc = _run(self.out, clean=False, clean_all=True)
+        self.assertEqual(rc, 0)
+        self.assertFalse(earlier.parent.exists(),
+                         "--clean must wipe the whole tree, other "
+                         "publications included")
+
+    def test_scoped_wipe_output_matches_a_full_wipe(self) -> None:
+        """The per-publication wipe changes only what survives from *before*
+        the run: the files a run writes must be byte-identical either way, so
+        the determinism invariant holds across the accumulate workflow."""
+        rc1 = _run(self.out, clean=True, clean_all=True)
         self.assertEqual(rc1, 0)
         snapshot = TMP / f"{self._testMethodName}_snapshot"
         if snapshot.exists():
             shutil.rmtree(snapshot)
         shutil.copytree(self.out, snapshot)
-        rc2 = _run(self.out, clean=False, no_clean=True)
+        rc2 = _run(self.out, clean=False)
         self.assertEqual(rc2, 0)
         differing = self._collect_diffs(filecmp.dircmp(self.out, snapshot))
         self.assertEqual(differing, [], f"non-idempotent files: {differing}")
