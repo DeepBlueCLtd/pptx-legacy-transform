@@ -2158,6 +2158,51 @@ class DedupGenerateDitaTests(unittest.TestCase):
         topic = ET.parse(g31 / "gram_31.dita").getroot()
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
 
+    # -- issue #164: a redirect never leaves its publication folder ----------
+    def test_cross_publication_master_falls_back_locally(self) -> None:
+        """A master in another publication must not be linked, even when the
+        CSV asks for it.
+
+        ``deduplicate_csv.py`` no longer groups across publications, but a CSV
+        deduplicated by an older build still carries such targets. Honouring
+        one emits ``../../<other-pub>/…`` out of the publication folder, and
+        DITA-OT answers that by rooting the job at the parent of the map's
+        folder: the whole publication publishes one tier below its own
+        index.html and generated links, so every page 404s. Self-contained
+        beats deduplicated — copy the asset locally and warn."""
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                master="dedup/img/shared.png"),
+        ]
+        rows[1]["publication"] = "progress-test-1"
+        rows[1]["chapter"] = ""
+        csv_path = self._write_csv(rows)
+        out = self._generate(csv_path)
+        log_text = Path("generate.log").read_text(encoding="utf-8")
+        self.assertIn("outside the publication", log_text)
+        g31 = out / "progress-test-1" / "gram-31"
+        self.assertTrue((g31 / "shared-b.png").is_file(),
+                        "the asset must be copied into its own publication")
+        topic = ET.parse(g31 / "gram_31.dita").getroot()
+        self.assertIsNone(
+            topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"),
+            "a refused redirect records no provenance — nothing was redirected")
+        # The invariant that matters is containment, not depth: an href may
+        # traverse folders (../7_questions.png is a legitimate publication-root
+        # reference) but must never leave the publication folder.
+        pub_dir = (out / "progress-test-1").resolve()
+        escaping = []
+        for el in topic.iter():
+            href = el.get("href") or ""
+            if not href or href.startswith("#"):
+                continue
+            target = (g31 / href).resolve()
+            if pub_dir != target and pub_dir not in target.parents:
+                escaping.append(href)
+        self.assertEqual(escaping, [],
+                         "no href may resolve outside the publication folder")
+
     # -- issue #78: .wav redirects are gated on the (time, freq) view --------
     def test_wav_redirect_view_mismatch_falls_back_locally(self) -> None:
         """A stale or hand-edited redirect onto a master whose .glc presents

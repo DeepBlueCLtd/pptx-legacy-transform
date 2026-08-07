@@ -1344,6 +1344,17 @@ def emit_gram_topic(
         (missing/blank master, or no master with the matching view) is
         logged as a WARNING and treated as non-redirected so the asset is
         copied locally instead (FR-014).
+
+        A master in a *different publication* is refused the same way
+        (issue #164). The redirect href is relative from this gram's folder
+        to the master's, so a cross-publication master emits
+        ``../../../<other-pub>/…`` — a reference out of the publication
+        folder, which costs far more than the bytes it saves: DITA-OT then
+        roots the job at the parent of the map's folder and pushes the whole
+        publication a tier deeper than its own ``index.html`` and links, so
+        every page 404s. ``deduplicate_csv.py`` no longer groups across
+        publications, but a CSV deduplicated by an older build still carries
+        such targets, and self-contained beats deduplicated every time.
         """
         key = (r.get("master_png_path", "") or "").strip()
         if not key:
@@ -1359,6 +1370,20 @@ def emit_gram_topic(
                 "has no master row with a matching (time_end, bandwidth, bandcentre) view"
                 if suffix == ".wav" else "not found",
             )
+            return None
+        pub_root = (out_dir / require_field(r, "publication")).resolve(strict=False)
+        master_dir = target.topic_dir.resolve(strict=False)
+        if pub_root not in master_dir.parents and master_dir != pub_root:
+            LOGGER.warning(
+                "Redirect target for %s/%s/%s seq=%s lies outside the "
+                "publication: master_png_path=%r resolves to %s. Copying the "
+                "asset locally instead — a cross-publication redirect would "
+                "leave %s referencing another publication's folder, which "
+                "nests the published output an extra level deep.",
+                r["publication"], r["gram_id"], r["topic_type"],
+                r["sequence"], key, master_dir, r["publication"],
+            )
+            return None
         return target
 
     if analysis_rows:
