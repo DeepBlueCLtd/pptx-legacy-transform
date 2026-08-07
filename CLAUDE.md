@@ -280,6 +280,19 @@ The generator therefore shapes every ditamap:
   `main` opens **Welcome · Security · Week 1 · Week 2 · …** and each progress
   test opens **Welcome · Security · Grams**.
 
+### The Oxygen project file (`aaac.xpr`)
+
+`generate_dita.py` writes `<out>/aaac.xpr` beside the DITAVAL profiles — on the
+target, `Z:\dita\aaac.xpr`. It is how the technical author opens the content:
+one **File → Open Project…** shows every publication, ditamap, topic and asset
+in Oxygen's Project view, instead of opening each `<pub>/<pub>.ditamap` by hand.
+Its tree is a single `<folder path="."/>`, which Oxygen expands from the
+directory live — so the file is **content-independent** (byte-identical
+whatever the CSV held, preserving determinism) and needs no rewrite when a later
+incremental run adds a publication. It is generated, not hand-placed on the
+target, because `--clean` wipes the whole `--out` tree; and it is inert
+downstream — `publish_html.py` copies it into staging and DITA-OT ignores it.
+
 The pages live in `static/` at the repo root (`--static-root`, default
 `static/`): top-level `*.dita` plus their image subfolders. The generator
 **copies the whole tree into each publication folder** and references it by

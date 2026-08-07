@@ -694,8 +694,11 @@ installs, not the user-folder install.
    is a bare filename — no `../` traversal. Each publication's ditamap
    is written **inside its folder** (`dita/<pub>/<pub>.ditamap` with
    folder-relative hrefs — nothing at the `dita/` root except the
-   skipped report and DITAVAL profiles), so a publication
-   folder is self-contained and can be opened in Oxygen as-is. Output
+   skipped report, the DITAVAL profiles and the `aaac.xpr` Oxygen
+   project file), so a publication
+   folder is self-contained and can be opened in Oxygen as-is; open
+   `aaac.xpr` instead to browse and edit the whole tree at once (see
+   [Opening the content in Oxygen](#opening-the-content-in-oxygen-aaacxpr)). Output
    is deterministic: re-running the same CSV
    produces byte-identical files (including the copied assets). If a
    referenced asset is missing on disk, the generator logs a warning
@@ -1187,6 +1190,47 @@ Point elsewhere with `--static-root <dir>` (default `static/`); a missing folder
 simply omits the pages (logged warning) rather than failing the build. Edit
 `static/welcome.dita` and `static/security.dita` in Oxygen like any topic — the
 committed copies are mock development content. See [`static/README.md`](static/README.md).
+
+### Opening the content in Oxygen (`aaac.xpr`)
+
+`generate_dita.py` writes an Oxygen **project file** at the root of its
+`--out` folder — on the target, `Z:\dita\aaac.xpr`. It is the technical
+author's entry point: **File → Open Project…**, pick `Z:\dita\aaac.xpr`, and
+Oxygen's **Project** view shows the whole tree — every publication folder, its
+ditamap, its topics and images, plus the two DITAVAL profiles — in one place,
+instead of opening each `<pub>\<pub>.ditamap` by hand. Leave the project open
+across sessions; Oxygen reopens the last one on startup.
+
+The project tree is a single self-relative entry:
+
+```xml
+<projectTree name="aaac.xpr">
+  <folder path="."/>
+</projectTree>
+```
+
+Oxygen expands that from the directory itself, which has two consequences worth
+knowing:
+
+- **It never needs regenerating to "see" new content.** Publications built up
+  over successive incremental runs (`CLEAN_ALL = False`) appear in the Project
+  view on **Refresh** — the project file itself does not change.
+- **It is content-independent**, so the generator can rewrite it every run
+  without ever churning the bytes, and the determinism invariant holds.
+
+It is generated rather than dropped on the target by hand precisely because
+`--clean` (`CLEAN_ALL = True` in `write.py`) wipes the whole of `Z:\dita`: a
+hand-placed project file would vanish on the next full rebuild. Being a plain
+view over the folder, it is inert to everything downstream — `publish_html.py`
+copies it into the staging folder and DITA-OT never looks at it.
+
+> **Editing here edits generated output.** `Z:\dita` is rebuilt from the CSV by
+> every `write.py` run, and each run wipes the publication folders it produces.
+> Corrections made in Oxygen to a *gram* topic are therefore overwritten on the
+> next generate — fix those upstream, in `extract.csv`. The `static/` common
+> pages (`welcome.dita`, `security.dita`) are the exception worth editing as
+> documents, but edit the **repo's** `static/` copies, which the generator then
+> copies into each publication folder.
 
 ### Configuring Oxygen transformation scenarios (production publisher)
 

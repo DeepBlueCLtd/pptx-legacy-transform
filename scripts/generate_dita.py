@@ -2014,6 +2014,50 @@ def write_instructor_ditaval(out_dir: Path) -> Path:
     return path
 
 
+PROJECT_FILE_NAME = "aaac.xpr"
+
+PROJECT_XPR = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<project>\n'
+    '  <meta>\n'
+    '    <filters directoryPatterns="" filePatterns=""\n'
+    '      positiveFilePatterns="" showHiddenFiles="false"/>\n'
+    '    <options/>\n'
+    '  </meta>\n'
+    '  <projectTree name="' + PROJECT_FILE_NAME + '">\n'
+    '    <folder path="."/>\n'
+    '  </projectTree>\n'
+    '</project>\n'
+)
+
+
+def write_project_file(out_dir: Path) -> Path:
+    """Emit the Oxygen project file the technical author opens to edit.
+
+    Oxygen's Project view is the author's entry point into the tree: open
+    ``<out_dir>/aaac.xpr`` once and every publication folder, ditamap,
+    topic and DITAVAL is browsable and editable in one place, instead of
+    opening each ``<pub>/<pub>.ditamap`` by hand.
+
+    The tree is a single ``<folder path="."/>`` — Oxygen expands it live
+    from the directory, so the file never has to enumerate publications.
+    That keeps it *content-independent*: the same bytes whatever the CSV
+    held, so it satisfies the determinism invariant, and it still shows
+    publications accumulated across successive incremental runs (the ones
+    ``clean_publication_folders`` deliberately leaves alone).
+
+    It is written here, beside the DITAVALs, rather than dropped on the
+    target by hand, because ``--clean`` wipes the whole ``--out`` tree: a
+    hand-placed project file would vanish on the next full rebuild, while
+    a generated one is simply rewritten. Being a plain view over the
+    folder, it is inert to the rest of the pipeline — ``publish_html.py``
+    copies it into the staging folder and DITA-OT never looks at it.
+    """
+    path = out_dir / PROJECT_FILE_NAME
+    _write_text(path, PROJECT_XPR)
+    return path
+
+
 def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
     """Write ``skipped.txt`` only when at least one row was skipped."""
     if not skipped:
@@ -2293,6 +2337,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
     instructor_ditaval_path = write_instructor_ditaval(args.out)
     LOGGER.info("Wrote DITAVAL profile %s", instructor_ditaval_path)
+
+    project_path = write_project_file(args.out)
+    LOGGER.info("Wrote Oxygen project file %s", project_path)
 
     skipped_path = write_skipped_report(args.out, skipped)
     if skipped_path is not None:

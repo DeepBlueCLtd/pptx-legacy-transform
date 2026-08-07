@@ -1228,6 +1228,61 @@ class GenerateDitaTests(unittest.TestCase):
             '</val>\n',
         )
 
+    def test_oxygen_project_file_emitted_with_exact_bytes(self) -> None:
+        """The author opens ``<dita>/aaac.xpr`` in Oxygen to maintain the
+        content, so the generator must produce it every run — including
+        after ``--clean`` wipes the whole tree, which would otherwise
+        delete a project file placed on the target by hand."""
+        _run(self.out, clean_all=True)
+        xpr = self.out / "aaac.xpr"
+        self.assertTrue(xpr.is_file(), f"missing {xpr}")
+        self.assertEqual(
+            xpr.read_text(encoding="utf-8"),
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<project>\n'
+            '  <meta>\n'
+            '    <filters directoryPatterns="" filePatterns=""\n'
+            '      positiveFilePatterns="" showHiddenFiles="false"/>\n'
+            '    <options/>\n'
+            '  </meta>\n'
+            '  <projectTree name="aaac.xpr">\n'
+            '    <folder path="."/>\n'
+            '  </projectTree>\n'
+            '</project>\n',
+        )
+
+    def test_oxygen_project_tree_is_the_whole_out_folder(self) -> None:
+        """The project tree is one self-relative folder, not an enumeration.
+
+        Oxygen expands ``<folder path="."/>`` from the directory itself, so
+        the file needs no per-publication entries: publications built up by
+        successive incremental runs appear without the project file being
+        rewritten to mention them.
+        """
+        _run(self.out)
+        root = ET.parse(self.out / "aaac.xpr").getroot()
+        self.assertEqual(root.tag, "project")
+        tree = root.find("projectTree")
+        self.assertIsNotNone(tree)
+        self.assertEqual(tree.get("name"), "aaac.xpr")
+        self.assertEqual(
+            [(child.tag, child.get("path")) for child in tree],
+            [("folder", ".")],
+        )
+
+    def test_oxygen_project_file_is_content_independent(self) -> None:
+        """Two runs over *different* CSVs yield a byte-identical project file.
+
+        This is what lets the generator rewrite it every run without ever
+        churning it: it is a view over the folder, not a description of the
+        rows, so it cannot break the byte-determinism invariant.
+        """
+        _run(self.out)
+        first = (self.out / "aaac.xpr").read_bytes()
+        other = TMP / f"{self._testMethodName}_other"
+        _run(other, csv_path=FIXTURES / "audience_minimal.csv")
+        self.assertEqual((other / "aaac.xpr").read_bytes(), first)
+
     def test_no_manifest_written(self) -> None:
         """No ``manifest.txt`` at the ``--out`` root.
 
