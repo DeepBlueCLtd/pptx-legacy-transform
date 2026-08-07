@@ -38,8 +38,7 @@ profile.
 python generate_dita.py \
     --csv source.csv \
     --out dita/ \
-    --image-root <path-to-source-pptx-tree> \
-    --clean
+    --image-root <path-to-source-pptx-tree>
 ```
 
 Expected behaviour:

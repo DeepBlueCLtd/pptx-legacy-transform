@@ -9,8 +9,9 @@ Reads extract.dedupe.csv from the cwd and rebuilds, from scratch, each
 publication folder that CSV produces under DITA_OUT — so a gram dropped
 from the PPTX drops out of the DITA tree too. Other publications already
 in DITA_OUT are left alone, so a suite of documents can be built up over
-successive runs and published one by one; set CLEAN_ALL = True in the
-Config block to wipe the whole of DITA_OUT instead. Common static pages
+successive runs and published one by one. Nothing here ever wipes the
+whole of DITA_OUT: clearing Z:\\dita is a deliberate manual act, done by
+hand when you want it. Common static pages
 come from .\\static (the
 generator's cwd-relative default). --stub-wav stock.wav swaps every
 .wav asset for the committed silent stub to slim the tree for
@@ -44,14 +45,11 @@ for mod in ("extract_to_csv", "introspect_pptx", "deduplicate_csv",
 WRITE    = SCRIPTS / "generate_dita.py"
 DITA_OUT = Path(r"Z:\dita")
 
-# Either way, every publication folder this run produces is rebuilt from
-# scratch, so a gram dropped from the PPTX disappears from the DITA tree.
-# CLEAN_ALL only decides what happens to the *other* publications:
-#   False -> leave them alone, so a suite of documents can be built up in
-#            DITA_OUT over successive runs and published one by one.
-#   True  -> wipe the whole of DITA_OUT first, for a from-scratch rebuild
-#            of every publication at once.
-CLEAN_ALL = False
+# Every publication folder this run produces is rebuilt from scratch, so a
+# gram dropped from the PPTX disappears from the DITA tree. Publications
+# *not* in this CSV are always left alone, so a suite of documents can be
+# built up in DITA_OUT over successive runs and published one by one. For a
+# from-scratch rebuild of everything, delete DITA_OUT by hand first.
 # ----------------------------------------------------------------
 
 sys.argv = [
@@ -68,6 +66,4 @@ sys.argv = [
     # off once the debugging phase is over, uncomment the line below:
     # "--no-debug-provenance",
 ]
-if CLEAN_ALL:
-    sys.argv.append("--clean")
 runpy.run_path(str(WRITE), run_name="__main__")

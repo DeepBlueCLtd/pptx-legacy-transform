@@ -88,8 +88,7 @@ Open `extracted.csv` in Excel. The reviewer:
 ```bash
 python generate_dita.py --csv extracted.csv \
                         --out dita/ \
-                        --image-root tests/fixtures/sample-content \
-                        --clean
+                        --image-root tests/fixtures/sample-content
 ```
 
 Expected output under `dita/`:

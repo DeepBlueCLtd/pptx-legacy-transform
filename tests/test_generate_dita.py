@@ -33,7 +33,7 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          stub_wav: "Path | None" = None,
          static_root: "Path | None" = STATIC_ROOT,
          seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG,
-         clean_all: bool = False) -> int:
+         extra_argv: "list[str] | None" = None) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -41,10 +41,11 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
         "--out", str(out_dir),
         "--image-root", str(image_root),
     ]
-    # ``clean_all`` drives the generator's own --clean flag (wipe the whole
-    # tree); ``clean`` above is the harness wiping out_dir before the run.
-    if clean_all:
-        argv += ["--clean"]
+    # ``clean`` is the *harness* wiping out_dir before the run — the generator
+    # itself has no whole-tree wipe. ``extra_argv`` appends raw options, for
+    # asserting on argparse's own handling (e.g. that --clean is rejected).
+    if extra_argv:
+        argv += extra_argv
     if stub_wav is not None:
         argv += ["--stub-wav", str(stub_wav)]
     # Pin --static-root so the feature-010 common pages are sourced from a
@@ -1166,24 +1167,24 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertTrue((self.out / "main" / "main.ditamap").is_file(),
                         "this run's own publication is still written")
 
-    def test_clean_wipes_other_publications_too(self) -> None:
-        """``--clean`` is the from-scratch rebuild of the whole tree, so it
-        removes publications this CSV does not produce."""
-        self.out.mkdir(parents=True, exist_ok=True)
-        earlier = self.out / "progress-test-9" / "progress-test-9.ditamap"
-        earlier.parent.mkdir(parents=True, exist_ok=True)
-        earlier.write_text("<map/>", encoding="utf-8")
-        rc = _run(self.out, clean=False, clean_all=True)
-        self.assertEqual(rc, 0)
-        self.assertFalse(earlier.parent.exists(),
-                         "--clean must wipe the whole tree, other "
-                         "publications included")
+    def test_no_flag_can_wipe_the_whole_out_tree(self) -> None:
+        """``--clean`` is gone, and nothing replaced it.
 
-    def test_scoped_wipe_output_matches_a_full_wipe(self) -> None:
+        The generator's blast radius is exactly the publication folders its
+        own CSV produces. On the target ``--out`` is ``Z:\\dita``, whose other
+        contents belong to the operator, so clearing it outright is a manual
+        act — not something a tuned wrapper can carry a flag for. argparse
+        must therefore *reject* the old flag rather than silently ignore it.
+        """
+        with self.assertRaises(SystemExit) as caught:
+            _run(self.out, extra_argv=["--clean"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_scoped_wipe_output_matches_a_from_scratch_run(self) -> None:
         """The per-publication wipe changes only what survives from *before*
         the run: the files a run writes must be byte-identical either way, so
         the determinism invariant holds across the accumulate workflow."""
-        rc1 = _run(self.out, clean=True, clean_all=True)
+        rc1 = _run(self.out, clean=True)
         self.assertEqual(rc1, 0)
         snapshot = TMP / f"{self._testMethodName}_snapshot"
         if snapshot.exists():
@@ -1216,7 +1217,7 @@ class GenerateDitaTests(unittest.TestCase):
     def test_trainee_ditaval_emitted_with_exact_bytes(self) -> None:
         """``publish_html.py`` aborts unless ``<dita>/trainee.ditaval`` exists
         with the audience-exclude rule, so the generator must produce it
-        every run — even after ``--clean`` wipes the tree."""
+        every run — including the first run into an emptied tree."""
         _run(self.out)
         ditaval = self.out / "trainee.ditaval"
         self.assertTrue(ditaval.is_file(), f"missing {ditaval}")
