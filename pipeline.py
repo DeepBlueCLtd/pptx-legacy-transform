@@ -51,18 +51,10 @@ PUBLISH = SCRIPTS / "publish_html.py"
 # source\, i.e. a single document), or None to process the entire corpus.
 # Mirrors extract_to_csv.py --only: extract writes a scoped extract.csv
 # that dedupe/write/publish carry through, so only that document is
-# rebuilt. With CLEAN_ALL below left False, successive scoped runs
-# accumulate into one dita\ tree, each run rebuilding the publication
-# folder(s) its own document lands in.
+# rebuilt. Successive scoped runs accumulate into one dita\ tree, each run
+# rebuilding the publication folder(s) its own document lands in and
+# leaving every other publication alone.
 ONLY = "Instructor Week 1 Grams"
-
-# Passed to the write stage; keep in step with write.py. Either way the
-# publication folder(s) this run produces are rebuilt from scratch, so a
-# gram dropped from the PPTX drops out of dita\ too. CLEAN_ALL only
-# decides the fate of the *other* publications: False leaves them (build
-# a suite up over successive scoped runs), True wipes the whole of
-# DITA_OUT for a from-scratch rebuild of everything at once.
-CLEAN_ALL = False
 
 # Output locations — keep these in step with write.py and publish.py.
 DITA_OUT       = Path(r"Z:\dita")
@@ -88,15 +80,17 @@ _STAGE_LOGS = {"extract": "extract.log", "dedupe": "dedup.log",
                "write": "generate.log", "publish": "(console only)"}
 
 
-def build_stages(only=ONLY, stages=STAGES, clean_all=CLEAN_ALL):
+def build_stages(only=ONLY, stages=STAGES):
     """Return the ordered ``[(label, script_path, argv), ...]`` to run.
 
     ``only`` scopes the *extract* stage via ``extract_to_csv --only``; the
-    scoped CSV carries through, so no later stage needs the flag.
-    ``clean_all`` adds the write stage's ``--clean``, widening its wipe
-    from this document's own publication folder(s) to the whole of
-    DITA_OUT. Each ``argv`` is a bare option list (no program name) — the
-    canonical ``main()`` parses it with argparse.
+    scoped CSV carries through, so no later stage needs the flag. Each
+    ``argv`` is a bare option list (no program name) — the canonical
+    ``main()`` parses it with argparse.
+
+    No stage ever wipes the whole of DITA_OUT; the write stage's blast
+    radius is the publication folder(s) its own CSV produces. Clearing
+    DITA_OUT outright is a manual act, done by hand.
     """
     extract_argv = ["--input-root", str(SOURCE), "--out", str(ROOT / "extract.csv")]
     if only:
@@ -109,8 +103,7 @@ def build_stages(only=ONLY, stages=STAGES, clean_all=CLEAN_ALL):
         "write":   (WRITE,   ["--csv", "extract.dedupe.csv",
                               "--out", str(DITA_OUT),
                               "--image-root", str(SOURCE),
-                              "--stub-wav", "stock.wav"]
-                             + (["--clean"] if clean_all else [])),
+                              "--stub-wav", "stock.wav"]),
         "publish": (PUBLISH, ["--dita", str(DITA_OUT), "--out", str(HTML_OUT),
                               "--dita-ot", str(DITA_OT),
                               "--staged", str(STAGING_FOLDER)]),
@@ -173,7 +166,7 @@ def _prepare_environment():
 
 if __name__ == "__main__":
     _prepare_environment()
-    _rc = run_pipeline(build_stages(ONLY, STAGES, CLEAN_ALL))
+    _rc = run_pipeline(build_stages(ONLY, STAGES))
     # REPL-safe exit, exactly as the canonical scripts do: surface a
     # non-zero code to a CLI / automation caller so the failure is not
     # swallowed, but never sys.exit when driven interactively via exec()

@@ -1291,7 +1291,8 @@ This matches the `publish_html.py` dev-preview layout
   technical author is the sole authority.
 - **Output is always rebuilt from scratch.** `extract_to_csv.py`,
   `deduplicate_csv.py`, and `generate_dita.py` each clear their target
-  (the output CSV, the deduped CSV, and the DITA tree respectively) at
+  (the output CSV, the deduped CSV, and — for the generator — each
+  publication folder its CSV produces) at
   the start of a run. This verifies the target isn't locked (e.g. open
   in Excel or Oxygen) and guarantees a failed or re-pointed run can't
   leave a previous document's output behind for a later stage to
@@ -1307,11 +1308,18 @@ This matches the `publish_html.py` dev-preview layout
   Publications *not* in the CSV are left untouched, which is what lets a
   suite of documents be built up in one `dita/` tree over successive
   scoped runs and published one by one.
-- **`generate_dita.py --clean` widens that to the whole tree.** Use it
-  for a from-scratch rebuild of every publication at once; CI, the
-  PR-preview build, the gh-pages regenerate job and `run_pipeline.bat`
-  all pass it, so their determinism comparison starts from a bare tree.
-  On the target, set `CLEAN_ALL = True` in `write.py`/`pipeline.py`.
+- **Nothing wipes the whole `dita/` tree.** There is no flag for it and no
+  wrapper toggle: the generator's blast radius is exactly the publication
+  folders its own CSV produces. On the target `--out` is `Z:\dita`, whose
+  other contents — anything the author keeps alongside the generated
+  publications — belong to the operator, so clearing it outright is a
+  deliberate manual act: **delete the folder by hand** before the run when
+  you want a from-scratch rebuild of everything. (`generate_dita.py` used
+  to take a `--clean` flag that did this; it was removed because a wipe
+  that broad is too easy to carry accidentally in a tuned wrapper. Passing
+  it now fails fast with argparse's `unrecognized arguments: --clean` —
+  if you see that, delete the flag, and any `CLEAN_ALL` line, from your
+  tuned `write.py` or `pipeline.py`.)
   Note `skipped.txt` is rewritten each run either way, so it describes
   the current run, not the accumulated tree. (A `manifest.txt` listing
   every file produced used to be written beside it; it was removed

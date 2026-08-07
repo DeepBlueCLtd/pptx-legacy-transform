@@ -2089,13 +2089,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
     parser.add_argument(
-        "--clean", action="store_true", dest="clean_all",
-        help="Wipe the whole --out tree before writing, not just this run's "
-             "own publication folder(s). Use for a from-scratch rebuild of "
-             "every publication at once; omit it to build a suite of "
-             "documents into one tree over successive runs (the default, "
-             "which still rebuilds each publication it touches).")
-    parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
              "(keeps slugified per-gram filenames so paired .glc references "
@@ -2155,13 +2148,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    # ``--clean`` wipes the whole --out tree up-front, as every run once did.
-    # It stays available for a from-scratch rebuild of every publication at
-    # once (CI and the gh-pages determinism check use it), and an older tuned
-    # wrapper that still passes it keeps its original behaviour exactly.
-    if args.clean_all and args.out.exists():
-        LOGGER.info("--clean: wiping the whole output tree at %s", args.out)
-        shutil.rmtree(args.out)
+    # No run ever wipes the whole --out tree. The generator's blast radius is
+    # exactly the publication folders its own CSV produces (below); anything
+    # else in the tree belongs to the operator — including, on the target, the
+    # hand-maintained content of Z:\dita. Clearing the whole tree is a manual
+    # act, done deliberately by hand, not a flag a wrapper can carry.
     args.out.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -2210,20 +2201,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     # wholesale per publication — so the folder and its map are cleared and
     # rebuilt together. Publications *not* in this CSV are left untouched, so a
     # suite of documents can be built up across runs and published one by one.
-    if not args.clean_all:
-        removed = clean_publication_folders(args.out, publications)
-        if removed:
-            LOGGER.info(
-                "Rebuilding publication folder(s) from scratch: %s",
-                ", ".join(removed))
-        preserved = sorted(
-            p.name for p in args.out.iterdir()
-            if p.is_dir() and p.name not in publications)
-        if preserved:
-            LOGGER.info(
-                "Leaving %d other publication folder(s) in %s untouched: %s "
-                "(pass --clean to wipe the whole tree instead)",
-                len(preserved), args.out, ", ".join(preserved))
+    removed = clean_publication_folders(args.out, publications)
+    if removed:
+        LOGGER.info(
+            "Rebuilding publication folder(s) from scratch: %s",
+            ", ".join(removed))
+    preserved = sorted(
+        p.name for p in args.out.iterdir()
+        if p.is_dir() and p.name not in publications)
+    if preserved:
+        LOGGER.info(
+            "Leaving %d other publication folder(s) in %s untouched: %s "
+            "(delete them by hand for a from-scratch rebuild)",
+            len(preserved), args.out, ", ".join(preserved))
 
     written: list[Path] = []
     skipped: list[dict] = []

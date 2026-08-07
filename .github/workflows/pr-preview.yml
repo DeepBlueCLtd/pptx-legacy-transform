@@ -83,7 +83,7 @@ jobs:
             --incoming-root demo/demon-incoming --source-root source/ --apply
           python scripts/extract_to_csv.py --input-root source/ --out source.csv
           python scripts/deduplicate_csv.py --csv source.csv --image-root source/ --out source.dedup.csv
-          python scripts/generate_dita.py --csv source.dedup.csv --out dita/ --image-root source/ --clean
+          python scripts/generate_dita.py --csv source.dedup.csv --out dita/ --image-root source/
           export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
           python scripts/publish_html.py --dita-ot "dita-ot-${DITA_OT_VERSION}"
 
