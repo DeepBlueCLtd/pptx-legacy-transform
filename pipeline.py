@@ -51,9 +51,20 @@ PUBLISH = SCRIPTS / "publish_html.py"
 # source\, i.e. a single document), or None to process the entire corpus.
 # Mirrors extract_to_csv.py --only: extract writes a scoped extract.csv
 # that dedupe/write/publish carry through, so only that document is
-# rebuilt. Note write runs with --clean, so a scoped run rebuilds dita\
-# to contain only that document.
+# rebuilt. With CLEAN below left True, a scoped run rebuilds dita\ to
+# contain only that document; set CLEAN = False to accumulate several
+# scoped runs into one dita\ tree instead.
 ONLY = "Instructor Week 1 Grams"
+
+# Passed to the write stage. True wipes DITA_OUT and rebuilds it from
+# scratch; False keeps it and writes this run's publication folder(s)
+# into it, so a suite of documents can be built up over successive
+# scoped runs and published one by one. Nothing is removed under False,
+# so a run landing in a publication folder an earlier run already built
+# overwrites that map and orphans the earlier gram folders — accumulate
+# distinct publications, and switch back to True to rebuild one. Keep in
+# step with write.py.
+CLEAN = True
 
 # Output locations — keep these in step with write.py and publish.py.
 DITA_OUT       = Path(r"Z:\dita")
@@ -79,13 +90,15 @@ _STAGE_LOGS = {"extract": "extract.log", "dedupe": "dedup.log",
                "write": "generate.log", "publish": "(console only)"}
 
 
-def build_stages(only=ONLY, stages=STAGES):
+def build_stages(only=ONLY, stages=STAGES, clean=CLEAN):
     """Return the ordered ``[(label, script_path, argv), ...]`` to run.
 
     ``only`` scopes the *extract* stage via ``extract_to_csv --only``; the
-    scoped CSV carries through, so no later stage needs the flag. Each
-    ``argv`` is a bare option list (no program name) — the canonical
-    ``main()`` parses it with argparse.
+    scoped CSV carries through, so no later stage needs the flag.
+    ``clean`` selects the write stage's ``--clean`` / ``--no-clean``: wipe
+    DITA_OUT and rebuild, or keep it and accumulate this run's output
+    alongside earlier runs'. Each ``argv`` is a bare option list (no
+    program name) — the canonical ``main()`` parses it with argparse.
     """
     extract_argv = ["--input-root", str(SOURCE), "--out", str(ROOT / "extract.csv")]
     if only:
@@ -96,7 +109,8 @@ def build_stages(only=ONLY, stages=STAGES):
                               "--image-root", str(SOURCE),
                               "--out", "extract.dedupe.csv"]),
         "write":   (WRITE,   ["--csv", "extract.dedupe.csv",
-                              "--out", str(DITA_OUT), "--clean",
+                              "--out", str(DITA_OUT),
+                              "--clean" if clean else "--no-clean",
                               "--image-root", str(SOURCE),
                               "--stub-wav", "stock.wav"]),
         "publish": (PUBLISH, ["--dita", str(DITA_OUT), "--out", str(HTML_OUT),
@@ -161,7 +175,7 @@ def _prepare_environment():
 
 if __name__ == "__main__":
     _prepare_environment()
-    _rc = run_pipeline(build_stages(ONLY, STAGES))
+    _rc = run_pipeline(build_stages(ONLY, STAGES, CLEAN))
     # REPL-safe exit, exactly as the canonical scripts do: surface a
     # non-zero code to a CLI / automation caller so the failure is not
     # swallowed, but never sys.exit when driven interactively via exec()

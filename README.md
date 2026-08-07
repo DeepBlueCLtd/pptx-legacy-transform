@@ -1294,9 +1294,22 @@ This matches the `publish_html.py` dev-preview layout
   the start of a run. This verifies the target isn't locked (e.g. open
   in Excel or Oxygen) and guarantees a failed or re-pointed run can't
   leave a previous document's output behind for a later stage to
-  silently consume. `generate_dita.py`'s `--clean` flag is now a
-  deprecated no-op (cleaning is unconditional); `deduplicate_csv.py`
-  skips the wipe when `--out` rewrites `--csv` in place.
+  silently consume. `generate_dita.py`'s `--clean` flag is the default
+  (the flag itself is redundant, still accepted so tuned wrappers keep
+  parsing); `deduplicate_csv.py` skips the wipe when `--out` rewrites
+  `--csv` in place.
+- **`generate_dita.py --no-clean` opts out of the DITA wipe.** For the
+  accumulate-then-publish workflow — build several documents into one
+  `dita/` tree over successive runs, then publish them one by one — pass
+  `--no-clean` (or set `CLEAN = False` in `write.py`/`pipeline.py`). It
+  keeps everything already under `--out` and writes this run's
+  publication folder(s) alongside. The trade-off is the guarantee above:
+  nothing is removed, so if a run lands in a publication folder an
+  earlier run already built (e.g. two `main` decks, both writing
+  `dita/main/`), the earlier map is overwritten with this run's content
+  while the earlier run's gram folders survive as orphans. Use it to
+  accumulate *distinct* publications; wipe whenever a publication is
+  rebuilt. `manifest.txt` still lists only the current run's files.
 - **Windows orchestrator only.** `run_pipeline.bat` is a Windows batch
   file; on POSIX systems run the Python scripts directly.
 - **One third-party dependency.** Only `python-pptx` is required at

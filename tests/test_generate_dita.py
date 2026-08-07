@@ -32,7 +32,8 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          image_root: Path = FIXTURES, clean: bool = True,
          stub_wav: "Path | None" = None,
          static_root: "Path | None" = STATIC_ROOT,
-         seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG) -> int:
+         seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG,
+         no_clean: bool = False) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -40,6 +41,10 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
         "--out", str(out_dir),
         "--image-root", str(image_root),
     ]
+    # ``no_clean`` drives the generator's own --no-clean flag (keep the tree);
+    # ``clean`` above is the harness wiping out_dir before the run.
+    if no_clean:
+        argv += ["--no-clean"]
     if stub_wav is not None:
         argv += ["--stub-wav", str(stub_wav)]
     # Pin --static-root so the feature-010 common pages are sourced from a
@@ -1142,6 +1147,39 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertFalse(stale.exists(),
                          "a stale file must be wiped even without --clean")
+
+    def test_no_clean_preserves_existing_tree(self) -> None:
+        """``--no-clean`` keeps whatever is already under --out, so several
+        documents can be accumulated into one dita/ tree across runs and
+        published one by one."""
+        self.out.mkdir(parents=True, exist_ok=True)
+        earlier = self.out / "progress-test-9" / "progress-test-9.ditamap"
+        earlier.parent.mkdir(parents=True, exist_ok=True)
+        earlier.write_text("<map/>", encoding="utf-8")
+        rc = _run(self.out, clean=False, no_clean=True)
+        self.assertEqual(rc, 0)
+        self.assertTrue(earlier.is_file(),
+                        "--no-clean must leave an earlier run's publication "
+                        "folder in place")
+        self.assertEqual(earlier.read_text(encoding="utf-8"), "<map/>",
+                         "the earlier ditamap must be untouched")
+        self.assertTrue((self.out / "main" / "main.ditamap").is_file(),
+                        "this run's own publication is still written")
+
+    def test_no_clean_output_matches_a_clean_run(self) -> None:
+        """``--no-clean`` changes only what survives from *before* the run: the
+        files this run writes must be byte-identical to a wiped run's, so the
+        determinism invariant holds across the accumulate workflow."""
+        rc1 = _run(self.out, clean=True)
+        self.assertEqual(rc1, 0)
+        snapshot = TMP / f"{self._testMethodName}_snapshot"
+        if snapshot.exists():
+            shutil.rmtree(snapshot)
+        shutil.copytree(self.out, snapshot)
+        rc2 = _run(self.out, clean=False, no_clean=True)
+        self.assertEqual(rc2, 0)
+        differing = self._collect_diffs(filecmp.dircmp(self.out, snapshot))
+        self.assertEqual(differing, [], f"non-idempotent files: {differing}")
 
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)

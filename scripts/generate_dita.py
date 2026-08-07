@@ -2048,9 +2048,21 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
     parser.add_argument(
-        "--clean", action="store_true",
-        help="Deprecated no-op: the output tree is now always wiped and rebuilt "
-             "from scratch. Accepted only so existing wrappers keep parsing.")
+        "--clean", action="store_true", dest="clean", default=True,
+        help="Wipe and rebuild the output tree from scratch. This is the "
+             "default, so the flag is redundant; it is still accepted so "
+             "existing tuned wrappers keep parsing. Pass --no-clean for the "
+             "opposite.")
+    parser.add_argument(
+        "--no-clean", action="store_false", dest="clean",
+        help="Keep the existing --out tree and write this run's publication "
+             "folder(s) into it, so several documents can be accumulated "
+             "across runs and published one by one. Caveat: nothing is "
+             "removed, so a re-run that lands in a publication folder built "
+             "by an earlier run overwrites that folder's ditamap with this "
+             "run's content while the earlier run's leftover topic folders "
+             "survive. Use it to build up *distinct* publications; use the "
+             "default wipe whenever a publication is rebuilt.")
     parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
@@ -2111,15 +2123,29 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    # Always rebuild the output tree from scratch. Wiping it up-front verifies
-    # it isn't locked (e.g. a publication folder open in Oxygen) and guarantees
-    # a run can never blend fresh topics with a previous document's leftovers —
-    # the failure mode where a stale dita/ tree silently survives a switch of
-    # input CSV. (``--clean`` is now the default and the flag is a deprecated
-    # no-op, retained only so existing tuned wrappers keep parsing.)
+    # By default rebuild the output tree from scratch. Wiping it up-front
+    # verifies it isn't locked (e.g. a publication folder open in Oxygen) and
+    # guarantees a run can never blend fresh topics with a previous document's
+    # leftovers — the failure mode where a stale dita/ tree silently survives a
+    # switch of input CSV. (``--clean`` is the default; the flag is retained
+    # only so existing tuned wrappers keep parsing.)
+    #
+    # ``--no-clean`` opts out, for the accumulate-then-publish workflow: build
+    # several documents into one dita/ tree across runs, then publish them one
+    # by one. It trades the guarantee above away — nothing is removed, so a
+    # rebuilt publication keeps its earlier run's orphan topic folders — hence
+    # the warning rather than a silent skip.
     if args.out.exists():
-        LOGGER.info("Cleaning existing output tree at %s", args.out)
-        shutil.rmtree(args.out)
+        if args.clean:
+            LOGGER.info("Cleaning existing output tree at %s", args.out)
+            shutil.rmtree(args.out)
+        else:
+            LOGGER.warning(
+                "--no-clean: keeping the existing output tree at %s. This "
+                "run's files are written into it alongside earlier runs' "
+                "output; nothing is removed, so topics from a previous build "
+                "of the same publication survive as orphans and manifest.txt "
+                "lists only this run's files.", args.out)
     args.out.mkdir(parents=True, exist_ok=True)
 
     try:
