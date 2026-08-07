@@ -116,7 +116,7 @@ root. Data flows strictly forward; the only branch point is a human.
    row per resulting DITA topic.
 4. **(human)** — technical author triages the CSV in Excel.
 5. **`scripts/generate_dita.py`** — consumes the signed-off CSV, emits the DITA
-   tree, ditamaps, DITAVAL profiles, manifest, and skipped report.
+   tree, ditamaps, DITAVAL profiles, and skipped report.
 6. **`scripts/publish_html.py`** — renders DITA → HTML via DITA-OT (dev preview
    only; Oxygen is the production publisher).
 

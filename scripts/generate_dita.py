@@ -1,7 +1,7 @@
 """DITA generator (User Story 1, MVP).
 
 Consumes the signed-off intermediate CSV and writes the DITA topic tree,
-ditamaps, manifest, and skipped report under ``--out``. This is the
+ditamaps, and skipped report under ``--out``. This is the
 deliverable the migration pipeline exists to produce; everything before
 this script feeds it.
 
@@ -2014,14 +2014,6 @@ def write_instructor_ditaval(out_dir: Path) -> Path:
     return path
 
 
-def write_manifest(out_dir: Path, files: list[Path]) -> Path:
-    """Write ``manifest.txt`` listing every produced file (sorted)."""
-    manifest_path = out_dir / "manifest.txt"
-    rels = sorted(p.relative_to(out_dir).as_posix() for p in files)
-    _write_text(manifest_path, "\n".join(rels) + "\n")
-    return manifest_path
-
-
 def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
     """Write ``skipped.txt`` only when at least one row was skipped."""
     if not skipped:
@@ -2258,20 +2250,16 @@ def main(argv: Iterable[str] | None = None) -> int:
             "content nav (top-level Week folders for main, the Grams folder "
             "for progress tests), no shared Welcome/Security pages.",
             args.static_root)
-    static_copied: list[Path] = []
     for pub in publications:
         copied = copy_static_tree(args.static_root, args.out / pub)
-        static_copied.extend(copied)
         if copied:
             LOGGER.info("Copied %d static file(s) into %s/", len(copied), pub)
 
     # 7 Questions topic: copy the PNG and emit a thin wrapper topic into every
     # publication folder, then reference it as a root-level ditamap entry
     # (after static pages, before gram content).
-    seven_q_pub_paths: list[Path] = []
     for pub in publications:
         pub_paths = emit_seven_questions_topic(args.out / pub, seven_q_src)
-        seven_q_pub_paths.extend(pub_paths)
         LOGGER.info(
             "Wrote 7 Questions topic/image into %s/ (%d file(s))",
             pub, len(pub_paths),
@@ -2305,12 +2293,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
     instructor_ditaval_path = write_instructor_ditaval(args.out)
     LOGGER.info("Wrote DITAVAL profile %s", instructor_ditaval_path)
-
-    manifest_path = write_manifest(
-        args.out,
-        written + static_copied + seven_q_pub_paths + ditamap_paths
-        + [ditaval_path, instructor_ditaval_path])
-    LOGGER.info("Wrote manifest %s", manifest_path)
 
     skipped_path = write_skipped_report(args.out, skipped)
     if skipped_path is not None:

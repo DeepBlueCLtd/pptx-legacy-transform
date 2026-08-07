@@ -1227,22 +1227,21 @@ class GenerateDitaTests(unittest.TestCase):
             '  <prop att="audience" val="-trainee" action="exclude"/>\n'
             '</val>\n',
         )
-        manifest_lines = (self.out / "manifest.txt").read_text(encoding="utf-8").splitlines()
-        self.assertIn("trainee.ditaval", manifest_lines)
 
-    def test_manifest_lists_every_output_file(self) -> None:
+    def test_no_manifest_written(self) -> None:
+        """No ``manifest.txt`` at the ``--out`` root.
+
+        It used to list every file a run produced, but nothing consumed it:
+        not the publisher, not DITA-OT, not Oxygen. Worse, it was rewritten
+        wholesale every run, so after a scoped run (one publication) it
+        described that run while sitting at the root of a tree built up over
+        several — a file named for the tree that told the truth about only
+        part of it. The per-publication wipe already handles stale output,
+        which was the manifest's original justification.
+        """
         _run(self.out)
-        manifest = self.out / "manifest.txt"
-        self.assertTrue(manifest.is_file())
-        listed = set(manifest.read_text(encoding="utf-8").splitlines())
-        listed.discard("")
-        actual = set()
-        for path in self.out.rglob("*"):
-            if path.is_file() and path.name not in {"manifest.txt", "skipped.txt"}:
-                actual.add(path.relative_to(self.out).as_posix())
-        self.assertEqual(listed, actual)
-        self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
-                         "manifest must be sorted")
+        self.assertFalse((self.out / "manifest.txt").exists(),
+                         "generate_dita.py must not write manifest.txt")
 
 
     # ------------------------------------------------------------------
@@ -1355,14 +1354,13 @@ class GenerateDitaTests(unittest.TestCase):
         section = root.find(".//body/section[@id='seven-questions']")
         self.assertIsNotNone(section, "seven-questions section must still be emitted")
 
-    def test_seven_questions_in_manifest(self) -> None:
-        """The 7_questions.dita topic and PNG are listed in the manifest."""
+    def test_seven_questions_emitted_into_every_publication(self) -> None:
+        """The 7_questions topic and PNG land in each publication folder."""
         _run(self.out)
-        manifest = (self.out / "manifest.txt").read_text(encoding="utf-8")
-        self.assertIn("main/7_questions.dita", manifest)
-        self.assertIn("main/7_questions.png", manifest)
-        self.assertIn("progress-test-1/7_questions.dita", manifest)
-        self.assertIn("progress-test-1/7_questions.png", manifest)
+        for pub in ("main", "progress-test-1"):
+            for name in ("7_questions.dita", "7_questions.png"):
+                path = self.out / pub / name
+                self.assertTrue(path.is_file(), f"missing {path}")
 
 
 class SlugifyAssetNameTests(unittest.TestCase):
