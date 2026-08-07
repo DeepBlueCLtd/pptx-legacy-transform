@@ -15,8 +15,137 @@
     Pin this bundle to the SAME GramFrame release as scripts/vendor/gramframe/
     (see resources/VERSION) so the Oxygen production output and the
     publish_html.py dev preview render grams identically.
+
+    THIS FRAGMENT ALSO CARRIES THE GRAM-PAGE LAYOUT CSS (see the <style> below).
+    The bundle styles the gram viewer itself, but the PAGE around it — how wide
+    the gram is allowed to be, and where the two link panels sit — is the
+    template's business, and those rules live in three standalone stylesheets
+    (../../gram-nav-panel/, ../../gram-toc-overlay/, ../../gram-fill-width/)
+    that each needed their own .opt <resources> entry. On the target only this
+    fragment was ever wired, so the grams went interactive while the layout
+    rules never arrived: the gram rendered at its natural size in a full-width
+    column, and neither the in-page jump links nor the "On this page" mini-TOC
+    floated. Inlining the rules here means installing the fragment installs the
+    layout too, with no .opt surgery. See ../../../README.md.
 -->
 <head xmlns:whc="http://www.oxygenxml.com/webhelp/components" whc:version="22.0">
+    <style type="text/css">
+/* ===================================================================
+ * Gram-page layout — inlined from the standalone stylesheets so it
+ * travels with this (already-wired) fragment. Those files remain the
+ * editable source and carry the full rationale in their comments:
+ *
+ *   theme/gram-nav-panel/resources/gram-nav.css
+ *   theme/gram-toc-overlay/resources/gram-toc-overlay.css
+ *   theme/gram-fill-width/resources/gram-fill-width.css
+ *
+ * Do not hand-edit the rules below in isolation — edit the source file
+ * and copy the change across. tests/test_theme_head_fragment.py fails
+ * the build if the two copies drift.
+ * =================================================================== */
+
+/* --- gram-nav.css : float the in-page jump links bottom-right --- */
+p.gram-nav {
+  position: fixed;
+  right: 22px;
+  bottom: 24px;
+  z-index: 1100;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 220px;
+  padding: 12px 14px;
+  background: rgba(13, 17, 23, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+p.gram-nav::before {
+  content: "JUMP TO";
+  font: 600 10px/1 "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.22em;
+  color: rgba(230, 237, 243, 0.55);
+  margin-bottom: 2px;
+}
+p.gram-nav a,
+p.gram-nav a:link,
+p.gram-nav a:visited {
+  display: block;
+  text-decoration: none;
+  color: #4dd0e1;
+  font: 600 11px/1.2 "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+p.gram-nav a:hover,
+p.gram-nav a:focus {
+  color: #ffb27a;
+  background: rgba(255, 138, 61, 0.12);
+  border-color: #ff8a3d;
+}
+p.gram-nav a[href$="analysis-sheet"],
+p.gram-nav a[href$="analysis-sheet"]:link,
+p.gram-nav a[href$="analysis-sheet"]:visited {
+  color: #ff8a3d;
+  border-color: rgba(255, 138, 61, 0.5);
+}
+p.gram-nav a[href$="analysis-sheet"]::before {
+  content: "\25A4  ";
+  color: #ff8a3d;
+}
+
+/* --- gram-toc-overlay.css : full-width column, viewport-pinned mini-TOC --- */
+body:has(p.gram-nav) #wh_topic_body,
+body:has(.gram-frame-container) #wh_topic_body {
+  flex: 0 0 100%;
+  max-width: 100%;
+  width: 100%;
+}
+body:has(p.gram-nav) #wh_topic_toc,
+body:has(.gram-frame-container) #wh_topic_toc {
+  position: fixed;
+  top: 150px;
+  right: 22px;
+  width: auto;
+  max-width: 240px;
+  height: auto;
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  z-index: 1100;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(27, 31, 35, 0.12);
+}
+body:has(p.gram-nav) #wh_topic_toc #wh_topic_toc_content,
+body:has(.gram-frame-container) #wh_topic_toc #wh_topic_toc_content {
+  width: auto !important;
+  min-width: 190px;
+  padding: 6px 10px;
+}
+body:has(p.gram-nav) #wh_topic_toc .wh_topic_toc,
+body:has(.gram-frame-container) #wh_topic_toc .wh_topic_toc {
+  display: block !important;
+}
+body:has(.gram-frame-container) [class*="col-"]:has(.gram-frame-container) {
+  flex: 0 0 100%;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* --- gram-fill-width.css : the gram fills the width its column offers --- */
+.gram-frame-container {
+  width: 100% !important;
+}
+svg.gram-frame-svg {
+  width: 100% !important;
+  height: auto !important;
+}
+    </style>
     <script defer="defer"
         src="${oxygen-webhelp-assets-dir}/template/resources/gramframe.bundle.js?buildId=${oxygen-webhelp-build-number}"></script>
 </head>

@@ -57,6 +57,16 @@ arrangement `../oxygen-hide-search/README.md` describes.
 
 ## Wiring it into the (single, shared) template
 
+> **You probably don't need to.** These rules are now inlined verbatim into the
+> GramFrame head fragment
+> (`../gramframe-oxygen/page-templates-fragments/libraries/gramframe.xml`),
+> which is already wired into the target's template — that is how
+> `gramframe.bundle.js` gets loaded. Installing that one fragment installs this
+> stylesheet too, with **no `.opt` `<resources>` entry to add**; see
+> *"Installing into your Oxygen template"* in `../gramframe-oxygen/README.md`.
+> `tests/test_theme_head_fragment.py` keeps the two copies identical. The steps
+> below remain valid if you'd rather wire the file on its own.
+
 Identical to `../oxygen-hide-search/`:
 
 1. **Use your existing publishing template** (the Fi3ldMan-derived one that
