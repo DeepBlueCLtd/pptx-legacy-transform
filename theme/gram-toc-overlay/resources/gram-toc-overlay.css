@@ -9,20 +9,19 @@
  *   edge of the page for its ENTIRE scroll length — even though its own
  *   content is just a couple of links ("7 Questions", "Lofar 1"). On a gram
  *   page the gramframe lives in wh_topic_body and sizes itself to that column,
- *   so the reserved strip squeezes the gramframe narrower (and, because the
- *   gramframe keeps its aspect ratio, shorter). Collapsing the TOC with its
- *   own toggle button visibly lets the gramframe reclaim the space — this
- *   overlay makes that reclaim the default while KEEPING the TOC visible.
+ *   so the reserved strip squeezes the gramframe narrower. Collapsing the TOC
+ *   with its own toggle button visibly lets the gramframe reclaim the space —
+ *   this overlay makes that reclaim the default while KEEPING the TOC visible.
  *
  * WHAT IT DOES
  *   1. Gives the content column the full row width (overrides the col-md-9 /
  *      col-lg-* Bootstrap width), so the gramframe spans the whole page.
- *   2. Lifts #wh_topic_toc out of the flex flow and pins it as a compact
- *      overlay in the TOP-RIGHT of the content area, only as tall as its own
- *      links — so it no longer steals a full-height column. It sits above the
- *      gramframe (which is lower down the page, under the Lofar heading), not
- *      over it, and scrolls up out of the way as the reader moves to the
- *      gramframe. Oxygen's own collapse/expand toggle still works.
+ *   2. Lifts #wh_topic_toc out of the flex flow and pins it to the VIEWPORT as
+ *      a compact top-right panel, only as tall as its own links — so it no
+ *      longer steals a full-height column. Being viewport-fixed it FOLLOWS the
+ *      reader down the page and floats OVER the full-width gramframe, which is
+ *      the point: the links stay reachable from anywhere on a long gram page
+ *      instead of scrolling away at the top of the topic.
  *
  * SCOPE — gram pages only
  *   Two independent markers, either of which is enough — the rules below are
@@ -71,12 +70,15 @@
  *
  * TUNING (per target, in this file)
  *   - Vertical/horizontal offset of the floated panel: the `top` / `right` on
- *     rule 3 below.
- *   - Panel width cap: `max-width` on rule 3.
- *   - Prefer it to FOLLOW the scroll (viewport-sticky) instead of sitting at
- *     the top of the topic? Swap `position: absolute` for `position: fixed` on
- *     rule 3 and drop rule 2 — but note a fixed panel will then float OVER the
- *     full-width gramframe as you scroll past it.
+ *     rule 2 below. `top` has to clear the header and the sticky breadcrumb
+ *     bar; raise it if the page chrome grows.
+ *   - Panel width cap: `max-width` on rule 2. Its height is capped by
+ *     `max-height` so a gram with many Lofars scrolls inside the panel rather
+ *     than running off the bottom of the screen.
+ *   - Prefer it to sit at the top of the topic and scroll away with the
+ *     content? Swap `position: fixed` back to `position: absolute`, drop the
+ *     `top`/`right` offsets to 0, and add `position: relative` to
+ *     `.wh_content_area` so the panel resolves against the content area.
  */
 
 /* 1. Content column takes the full row width (overrides col-md-9 / col-lg-*).
@@ -88,33 +90,35 @@ body:has(.gram-frame-container) #wh_topic_body {
   width: 100%;
 }
 
-/* 2. Anchor the overlay: make the content area the positioned ancestor so the
- *    absolutely-positioned TOC below resolves against it. */
-body:has(p.gram-nav) .wh_content_area,
-body:has(.gram-frame-container) .wh_content_area {
-  position: relative;
-}
-
-/* 3. Lift the mini-TOC out of the flex flow into a compact top-right overlay
- *    that is only as tall as its own links. */
+/* 2. Lift the mini-TOC out of the flex flow and pin it to the VIEWPORT, so it
+ *    follows the reader down the page and floats OVER the now-full-width
+ *    gramframe rather than sitting above it and scrolling away.
+ *
+ *    `top` clears the page chrome: the header plus the sticky breadcrumb bar,
+ *    which Oxygen positions at `top: 123.75px` on the target. Tune it here if
+ *    the chrome's height changes.
+ *
+ *    z-index must beat the gramframe, whose own stack tops out at 1000 (see
+ *    gramframe.bundle.js) — hence 1100, not the 400 that sufficed while this
+ *    panel merely sat above the component in the flow. */
 body:has(p.gram-nav) #wh_topic_toc,
 body:has(.gram-frame-container) #wh_topic_toc {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: fixed;
+  top: 150px;
+  right: 22px;
   width: auto;
   max-width: 240px;
   height: auto;
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - 300px);
   overflow-y: auto;
-  z-index: 400;
+  z-index: 1100;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid #d0d7de;
   border-radius: 6px;
   box-shadow: 0 4px 14px rgba(27, 31, 35, 0.12);
 }
 
-/* 4. Force the panel OPEN. Oxygen's topic-TOC script measures the room the
+/* 3. Force the panel OPEN. Oxygen's topic-TOC script measures the room the
  *    layout leaves for the TOC and pins the inner container to that width via
  *    an inline `style="width: …px"`. Now that rule 1 gives the content column
  *    the full row width, that measurement is zero, so the script collapses the
@@ -122,7 +126,7 @@ body:has(.gram-frame-container) #wh_topic_toc {
  *    load. Override the inline width so the links always show. `!important`
  *    beats the inline style the script keeps re-setting. This makes the
  *    collapse button inert — the panel simply stays open (hide the button with
- *    rule 5 if the dead control bothers you). */
+ *    rule 4 if the dead control bothers you). */
 body:has(p.gram-nav) #wh_topic_toc #wh_topic_toc_content,
 body:has(.gram-frame-container) #wh_topic_toc #wh_topic_toc_content {
   width: auto !important;
@@ -134,9 +138,9 @@ body:has(.gram-frame-container) #wh_topic_toc .wh_topic_toc {
   display: block !important;
 }
 
-/* 4b. ID-INDEPENDENT FALLBACK for rule 1.
+/* 3b. ID-INDEPENDENT FALLBACK for rule 1.
  *
- *     Rules 1-4 name the ids Oxygen WebHelp Responsive is documented to give
+ *     Rules 1-3 name the ids Oxygen WebHelp Responsive is documented to give
  *     the topic layout (#wh_topic_body, #wh_topic_toc). Those ids cannot be
  *     verified from this side of the air gap, and the target publishes with
  *     Oxygen 28.1 — so if a future (or current) version renames them, rule 1
@@ -158,7 +162,7 @@ body:has(.gram-frame-container) [class*="col-"]:has(.gram-frame-container) {
   width: 100%;
 }
 
-/* 5. OPTIONAL — the collapse button no longer does anything useful once the
+/* 4. OPTIONAL — the collapse button no longer does anything useful once the
  *    panel is pinned open. Uncomment to hide it.
 body:has(p.gram-nav) #wh_topic_toc #wh_close_topic_toc_button,
 body:has(.gram-frame-container) #wh_topic_toc #wh_close_topic_toc_button {

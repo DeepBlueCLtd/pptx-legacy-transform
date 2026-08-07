@@ -34,11 +34,13 @@ visible**.
 
 1. Gives the content column the **full row width** (overrides the `col-md-9` /
    `col-lg-*` Bootstrap width), so the gramframe spans the whole page.
-2. **Lifts `#wh_topic_toc` out of the flex flow** and pins it as a compact
-   overlay in the **top-right** of the content area, only as tall as its own
-   links — so it no longer steals a full-height column. It sits above the
-   gramframe (which is lower down the page, under the Lofar heading), not over
-   it, and scrolls up out of the way as the reader moves to the gramframe.
+2. **Lifts `#wh_topic_toc` out of the flex flow** and pins it to the
+   **viewport** as a compact top-right panel, only as tall as its own links —
+   so it no longer steals a full-height column. Being viewport-fixed it
+   **follows the reader down the page and floats over the gram**, which is the
+   point: the links stay reachable from anywhere on a long gram page instead of
+   scrolling away at the top of the topic. Its `z-index` clears the gramframe's
+   own stack, which tops out at 1000.
 3. **Pins the panel open.** Oxygen's topic-TOC script sizes the mini-TOC to the
    room the layout leaves for it (an inline `style="width: …px"` on
    `#wh_topic_toc_content`). Now that step 1 gives the content column the full

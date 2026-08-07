@@ -31,7 +31,12 @@ FRAGMENT = (
 SOURCES = (
     THEME / "gram-nav-panel" / "resources" / "gram-nav.css",
     THEME / "gram-toc-overlay" / "resources" / "gram-toc-overlay.css",
+    THEME / "gram-fill-width" / "resources" / "gram-fill-width.css",
 )
+
+# The gramframe bundle's own styles top out here; anything meant to float OVER
+# a gram has to clear it. Kept as a named constant so the reason survives.
+GRAMFRAME_MAX_Z_INDEX = 1000
 
 
 def _rules(css: str) -> str:
@@ -110,7 +115,7 @@ class ThemeHeadFragmentTests(unittest.TestCase):
         A page needing the full width is a page with a gram on it.
         """
         overlay = _rules(SOURCES[1].read_text(encoding="utf-8"))
-        for selector in ("#wh_topic_body", "#wh_topic_toc", ".wh_content_area"):
+        for selector in ("#wh_topic_body", "#wh_topic_toc"):
             with self.subTest(selector=selector):
                 targeting = [
                     line for line in overlay.splitlines() if selector in line
@@ -125,6 +130,54 @@ class ThemeHeadFragmentTests(unittest.TestCase):
                         for line in targeting),
                     f"{selector} is not scoped by the rendered marker",
                 )
+
+
+    def test_floating_panels_stack_above_the_gramframe(self) -> None:
+        """Both floating panels must outrank the gramframe's own z-indexes.
+
+        They are pinned to the viewport and a full-width gram now runs under
+        them, so a tie with the bundle's top layer (1000) would let the gram
+        paint over the links on some pages and not others.
+        """
+        panels = {
+            "gram-nav.css": SOURCES[0],
+            "gram-toc-overlay.css": SOURCES[1],
+        }
+        for name, source in panels.items():
+            with self.subTest(stylesheet=name):
+                found = [
+                    int(value)
+                    for value in re.findall(
+                        r"z-index:\s*(\d+)",
+                        _rules(source.read_text(encoding="utf-8")),
+                    )
+                ]
+                self.assertTrue(found, f"{name} declares no z-index")
+                self.assertTrue(
+                    all(z > GRAMFRAME_MAX_Z_INDEX for z in found),
+                    f"{name} has a z-index at or below the gramframe's "
+                    f"{GRAMFRAME_MAX_Z_INDEX}: {found}",
+                )
+
+    def test_gram_fills_its_column_width_over_the_inline_sizes(self) -> None:
+        """The width fix has to beat the inline styles GramFrame re-applies.
+
+        ``updateSVGLayout`` writes ``width``/``height`` straight onto the
+        elements on every relayout, so only an important author declaration
+        survives. ``height: auto`` is equally load-bearing: with the height
+        pinned, ``preserveAspectRatio="xMidYMid meet"`` would letterbox the
+        drawing instead of growing it, and ``screenToSVG`` would then scale
+        cursor positions against a box the drawing no longer fills.
+        """
+        css = _rules(SOURCES[2].read_text(encoding="utf-8"))
+        for declaration in (
+            "width: 100% !important",
+            "height: auto !important",
+        ):
+            with self.subTest(declaration=declaration):
+                self.assertIn(declaration, css)
+        self.assertIn(".gram-frame-container", css)
+        self.assertIn("svg.gram-frame-svg", css)
 
 
 if __name__ == "__main__":  # pragma: no cover

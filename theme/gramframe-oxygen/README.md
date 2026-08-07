@@ -20,14 +20,14 @@ contract `scripts/vendor/themes/operator-console-v2/README.md` calls out under
 *"What the host must still do"*, item 3.
 
 **2 — The page around it.** The bundle styles the *viewer*; the *page* is the
-template's business — how wide the content column is, and where the "On this
-page" mini-TOC and the in-page jump links sit. Those rules live in two
-standalone stylesheets (`../gram-nav-panel/`, `../gram-toc-overlay/`), each of
+template's business — how wide the gram is allowed to be, and where the two
+link panels sit. Those rules live in three standalone stylesheets
+(`../gram-nav-panel/`, `../gram-toc-overlay/`, `../gram-fill-width/`), each of
 which needed its own `.opt` `<resources>` entry, and on the target only this
 fragment was ever wired. The grams therefore went interactive while the layout
-rules never arrived: the mini-TOC kept reserving a **full-height right-hand
-column**, which squeezed the gramframe out of the full page width, and the
-in-page jump links never floated.
+rules never arrived: the gram rendered at its **natural size** in an
+already-full-width column, and neither the in-page jump links nor the "On this
+page" mini-TOC floated.
 
 So the fragment now **inlines those rules in a `<style>` element**. Installing
 this one already-wired file installs the layout too — no `.opt` surgery. The
@@ -106,11 +106,12 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
    browser, and confirm**, on the gram page:
 
    - the static gram image upgrades to the **interactive viewer**;
-   - the viewer spans the **full page width** — no longer stopping short of a
-     reserved right-hand strip;
-   - **"On this page"** floats as a compact box in the top-right instead of
-     reserving a full-height column;
-   - the **JUMP TO** panel of in-page Lofar links floats in the lower-right;
+   - the viewer spans the **full width of its column** — no whitespace band
+     down either side;
+   - **"On this page"** floats as a compact box pinned to the top-right of the
+     viewport, following the scroll and sitting **over** the gram;
+   - the **JUMP TO** panel of in-page Lofar links floats in the lower-right,
+     also over the gram;
 
    and that a page with no gram table (welcome / index) is unaffected.
 

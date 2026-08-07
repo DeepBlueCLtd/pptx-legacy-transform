@@ -1,0 +1,72 @@
+/* Make the gram consume the full width its container offers.
+ *
+ * THE PROBLEM
+ *   GramFrame renders at the spectrogram's NATURAL pixel size, not at the
+ *   width of the column it sits in, so a 896x373 gram leaves a band of
+ *   whitespace down the side of a content column half again as wide. This is
+ *   deliberate in the component, not a layout accident: `updateSVGLayout`
+ *   sizes the SVG from `getRenderDimensions()`, and `renderSize()` is
+ *   `renderWidth || naturalWidth` with `renderWidth` initialised to 0 — so it
+ *   is the natural size unless something sets it. The only thing that ever
+ *   does is the Expand toggle, whose `computeAvailableRenderSize()` is the
+ *   sole place the container's `clientWidth` is consulted. The component
+ *   fills the width when the reader clicks Expand, and not before.
+ *
+ *   The published training material wants that fill by DEFAULT, without the
+ *   reader having to click anything on every gram of every page.
+ *
+ * WHAT IT DOES
+ *   Overrides the two inline sizes the component writes on itself:
+ *
+ *     .gram-frame-container   inline `width: auto`  -> 100%
+ *     svg.gram-frame-svg      inline `width: NNNpx` -> 100%, height auto
+ *
+ *   `!important` is load-bearing here, and legitimately so: an important
+ *   author declaration outranks a normal inline one, which is what lets these
+ *   rules survive `updateSVGLayout` re-writing the inline styles on every
+ *   relayout (zoom, expand, resize).
+ *
+ * WHY height: auto IS NOT OPTIONAL
+ *   The SVG carries `viewBox="0 0 W H"` and `preserveAspectRatio="xMidYMid
+ *   meet"`. Widen it while its height stays pinned at the inline pixel value
+ *   and `meet` letterboxes the drawing inside the taller box — the gram would
+ *   not actually grow, and worse, the cursor readouts would go wrong:
+ *   `screenToSVG()` derives its scale as `viewBox.width / rect.width`, which
+ *   assumes the drawing fills the element's box. `height: auto` lets the
+ *   browser take the height from the viewBox's intrinsic ratio, so the
+ *   drawing fills the box edge to edge and that assumption holds.
+ *
+ * WHAT IT COSTS
+ *   The source spectrogram is a fixed-resolution PNG either way — drawing it
+ *   wider upscales it, exactly as the Expand toggle's own re-render does, so
+ *   there is no image quality lost RELATIVE to expanding. What does differ:
+ *   scaling the SVG scales its axes, tick labels and stroke widths with it
+ *   (they grow ~proportionally), where Expand would re-render that chrome
+ *   crisply at the new size. The trade is deliberate: this is width-only and
+ *   leaves the gram's height alone, where Expand also grows the gram to fill
+ *   the viewport height and turns a nine-Lofar page into nine screens.
+ *
+ * SCOPE
+ *   Keyed on `.gram-frame-container`, which the bundle only ever creates for
+ *   a gram it has upgraded, so there is nothing to scope to gram pages —
+ *   no other page has the class.
+ *
+ * INSTALL
+ *   These rules are inlined into the GramFrame head fragment
+ *   (../gramframe-oxygen/page-templates-fragments/libraries/gramframe.xml),
+ *   which is already wired into the target's publishing template. Installing
+ *   that fragment installs this stylesheet too — no .opt <resources> entry.
+ *   A test keeps the two copies identical.
+ */
+
+/* 1. The component box: shrink-to-fit around the SVG becomes fill-the-column. */
+.gram-frame-container {
+  width: 100% !important;
+}
+
+/* 2. The spectrogram surface: fill that width, and take the height from the
+ *    viewBox ratio so the drawing is never letterboxed (see above). */
+svg.gram-frame-svg {
+  width: 100% !important;
+  height: auto !important;
+}
