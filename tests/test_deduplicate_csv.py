@@ -324,6 +324,29 @@ class DeduplicateCsvTests(unittest.TestCase):
             f"their own copy, got {self._by_png(rows)}",
         )
 
+    def test_no_dedupe_skips_detection_but_still_renumbers(self) -> None:
+        """``--no-dedupe`` turns off duplicate detection only.
+
+        The script does two jobs; the renumbering is required (the generator
+        fail-fasts on un-renumbered within-week collisions) while the
+        deduplication is a disk-space optimisation. Turning the optimisation
+        off must leave the renumbering, and the column, intact."""
+        out = self.tmp / "nodedupe.csv"
+        self.assertEqual(deduplicate_csv.main([
+            "--csv", str(SOURCE), "--image-root", str(FIXTURES),
+            "--out", str(out), "--no-dedupe",
+        ]), 0)
+        fieldnames, rows = _read(out)
+        self.assertIn("master_png_path", fieldnames,
+                      "the column is still emitted, so the CSV round-trips")
+        self.assertTrue(
+            all(r["master_png_path"] == "" for r in rows),
+            f"no row may be redirected, got {self._by_png(rows)}")
+        self.assertIn("target_gram_id", fieldnames,
+                      "renumbering still runs with detection off")
+        log = Path("dedup.log").read_text(encoding="utf-8")
+        self.assertIn("Deduplication skipped", log)
+
     def test_duplicate_within_one_publication_still_redirects(self) -> None:
         """The publication scoping must not disable deduplication itself:
         two copies inside one publication still collapse to a master."""

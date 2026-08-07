@@ -659,6 +659,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                         default=DEFAULT_THRESHOLD_BYTES, dest="threshold_bytes",
                         help="candidacy cut-off; only rows with file_size "
                              "strictly greater are eligible (default 10 MiB)")
+    parser.add_argument("--no-dedupe", action="store_true", dest="no_dedupe",
+                        help="skip duplicate detection entirely — no row is "
+                             "redirected and every gram keeps its own copy of "
+                             "every asset. The gram renumbering this script "
+                             "also performs still runs, so this is the way to "
+                             "get renumbering without deduplication. Use it "
+                             "when disk space is not the constraint: "
+                             "deduplication trades a self-contained gram "
+                             "folder for saved bytes, and only the bytes are "
+                             "optional.")
     parser.add_argument("--main-numbering", choices=("per-week", "continuous"),
                         default="per-week", dest="main_numbering",
                         help="how the main publication's grams are numbered "
@@ -699,7 +709,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     # emitting a CSV the generator would reject (constitution VII).
     try:
         renumber_grams(rows, main_numbering=args.main_numbering)
-        deduplicate(rows, args.image_root, args.threshold_bytes)
+        if args.no_dedupe:
+            # Still normalise the column, so the output CSV carries it (empty)
+            # exactly as a dedupe run would and stays round-trip/idempotent.
+            for row in rows:
+                row[MASTER_PNG_PATH] = ""
+            LOGGER.info(
+                "Deduplication skipped (--no-dedupe): every gram keeps its own "
+                "copy of every asset.")
+        else:
+            deduplicate(rows, args.image_root, args.threshold_bytes)
     except PipelineDataError as exc:
         LOGGER.error("Aborting: %s", exc)
         return 1
