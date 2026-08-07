@@ -62,12 +62,22 @@ straight in.
 
 ## How it tells gram pages apart (no template divergence)
 
-It scopes to gram pages with `body:has(p.gram-nav)`. Every gram page carries
-`<p class="gram-nav">` — the unfiltered in-page Lofar jump links — in **both**
-editions (see `../gram-nav-panel/`). Non-gram pages (welcome, security, week /
-publication indexes) carry none, so the overlay matches gram pages exactly and
-leaves every other page's mini-TOC untouched. `:has()` is the same selector
-mechanism `../oxygen-hide-search/` already relies on.
+Every rule is written as a selector list against **two independent markers**,
+either of which is enough:
+
+| Marker | Where it comes from | Why it might not be there |
+| --- | --- | --- |
+| `body:has(p.gram-nav)` | the DITA `outputclass` `generate_dita.py` emits on every gram page, in **both** editions (see `../gram-nav-panel/`) | depends on Oxygen passing `@outputclass` through to the HTML `@class` — not verifiable from the dev side of the air gap |
+| `body:has(.gram-frame-container)` | the wrapper `gramframe.bundle.js` puts around every gram it upgrades | depends on the bundle having run — but if it hasn't, there is no gramframe to widen anyway |
+
+Belt and braces on purpose. The second marker is the useful one when
+diagnosing on the target, because it is visible in the browser's own inspector.
+`:has()` re-evaluates as the DOM changes, so it starts matching the moment the
+bundle runs.
+
+Non-gram pages (welcome, security, week / publication indexes) carry neither
+marker, so the overlay leaves every other page's mini-TOC untouched. `:has()`
+is the same selector mechanism `../oxygen-hide-search/` already relies on.
 
 ## Oxygen-only — no dev-preview counterpart
 
@@ -78,6 +88,16 @@ Responsive feature; `publish_html.py`'s DITA-OT HTML5 preview never emits
 `scripts/vendor/themes/operator-console-v2/theme.css`.
 
 ## Wiring it into the (single, shared) template
+
+> **You probably don't need to.** These rules are now inlined verbatim into the
+> GramFrame head fragment
+> (`../gramframe-oxygen/page-templates-fragments/libraries/gramframe.xml`),
+> which is already wired into the target's template — that is how
+> `gramframe.bundle.js` gets loaded. Installing that one fragment installs this
+> stylesheet too, with **no `.opt` `<resources>` entry to add**; see
+> *"Installing into your Oxygen template"* in `../gramframe-oxygen/README.md`.
+> `tests/test_theme_head_fragment.py` keeps the two copies identical. The steps
+> below remain valid if you'd rather wire the file on its own.
 
 Identical to `../gram-nav-panel/`:
 

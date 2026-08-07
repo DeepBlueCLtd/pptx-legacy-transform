@@ -25,12 +25,31 @@
  *      gramframe. Oxygen's own collapse/expand toggle still works.
  *
  * SCOPE — gram pages only
- *   Every gram page carries <p class="gram-nav"> in BOTH editions (the
- *   unfiltered in-page Lofar jump links; see ../gram-nav-panel/). Non-gram
- *   pages (welcome, security, week / publication indexes) carry none, so
- *   `body:has(p.gram-nav)` matches gram pages exactly and leaves every other
- *   page's mini-TOC untouched. `:has()` is the same selector mechanism
- *   ../oxygen-hide-search/ already relies on.
+ *   Two independent markers, either of which is enough — the rules below are
+ *   written as a selector list so a page matching EITHER gets the layout:
+ *
+ *     body:has(p.gram-nav)            the DITA marker. Every gram page carries
+ *                                     <p class="gram-nav"> in BOTH editions
+ *                                     (the unfiltered in-page Lofar jump
+ *                                     links; see ../gram-nav-panel/), from the
+ *                                     outputclass generate_dita.py emits.
+ *     body:has(.gram-frame-container) the RENDERED marker. gramframe.bundle.js
+ *                                     wraps every gram it upgrades in
+ *                                     <div class="gram-frame-container">, so
+ *                                     this matches any page where a gram
+ *                                     actually rendered. `:has()` re-evaluates
+ *                                     as the DOM changes, so it starts
+ *                                     matching the moment the bundle runs.
+ *
+ *   Belt and braces on purpose: the DITA marker depends on Oxygen passing
+ *   @outputclass through to @class, which we cannot verify from this side of
+ *   the air gap, while the rendered marker is observable in the target's own
+ *   browser inspector. A page needing the full width is a page with a gram on
+ *   it, and the second selector says exactly that.
+ *
+ *   Non-gram pages (welcome, security, week / publication indexes) carry
+ *   neither marker, so their mini-TOC is left untouched. `:has()` is the same
+ *   selector mechanism ../oxygen-hide-search/ already relies on.
  *
  * OXYGEN-ONLY
  *   Unlike ../gram-nav-panel/, this overlay has no dev/CI-preview counterpart:
@@ -40,9 +59,15 @@
  *
  * Self-contained (literal colours, no CSS custom properties) because the
  * Oxygen WebHelp Responsive output does not load the operator-console theme.
- * Install per ../README.md (copy into your publishing template's resources/
- * and reference it from the .opt <resources> so it loads last and wins the
- * cascade).
+ *
+ * INSTALL — you almost certainly do NOT need to wire this file
+ *   These rules are inlined verbatim into the GramFrame head fragment
+ *   (../gramframe-oxygen/page-templates-fragments/libraries/gramframe.xml),
+ *   which is already wired into the target's publishing template — that is how
+ *   gramframe.bundle.js gets loaded. Installing the fragment therefore installs
+ *   this stylesheet too, with no .opt <resources> entry to add. A test keeps
+ *   the two copies identical. This standalone file remains the editable source
+ *   and is still usable on its own via a .opt <css> entry; see ../README.md.
  *
  * TUNING (per target, in this file)
  *   - Vertical/horizontal offset of the floated panel: the `top` / `right` on
@@ -56,7 +81,8 @@
 
 /* 1. Content column takes the full row width (overrides col-md-9 / col-lg-*).
  *    The #id selector outranks any .col-* class rule in every breakpoint. */
-body:has(p.gram-nav) #wh_topic_body {
+body:has(p.gram-nav) #wh_topic_body,
+body:has(.gram-frame-container) #wh_topic_body {
   flex: 0 0 100%;
   max-width: 100%;
   width: 100%;
@@ -64,13 +90,15 @@ body:has(p.gram-nav) #wh_topic_body {
 
 /* 2. Anchor the overlay: make the content area the positioned ancestor so the
  *    absolutely-positioned TOC below resolves against it. */
-body:has(p.gram-nav) .wh_content_area {
+body:has(p.gram-nav) .wh_content_area,
+body:has(.gram-frame-container) .wh_content_area {
   position: relative;
 }
 
 /* 3. Lift the mini-TOC out of the flex flow into a compact top-right overlay
  *    that is only as tall as its own links. */
-body:has(p.gram-nav) #wh_topic_toc {
+body:has(p.gram-nav) #wh_topic_toc,
+body:has(.gram-frame-container) #wh_topic_toc {
   position: absolute;
   top: 0;
   right: 0;
@@ -95,18 +123,45 @@ body:has(p.gram-nav) #wh_topic_toc {
  *    beats the inline style the script keeps re-setting. This makes the
  *    collapse button inert — the panel simply stays open (hide the button with
  *    rule 5 if the dead control bothers you). */
-body:has(p.gram-nav) #wh_topic_toc #wh_topic_toc_content {
+body:has(p.gram-nav) #wh_topic_toc #wh_topic_toc_content,
+body:has(.gram-frame-container) #wh_topic_toc #wh_topic_toc_content {
   width: auto !important;
   min-width: 190px;
   padding: 6px 10px;
 }
-body:has(p.gram-nav) #wh_topic_toc .wh_topic_toc {
+body:has(p.gram-nav) #wh_topic_toc .wh_topic_toc,
+body:has(.gram-frame-container) #wh_topic_toc .wh_topic_toc {
   display: block !important;
+}
+
+/* 4b. ID-INDEPENDENT FALLBACK for rule 1.
+ *
+ *     Rules 1-4 name the ids Oxygen WebHelp Responsive is documented to give
+ *     the topic layout (#wh_topic_body, #wh_topic_toc). Those ids cannot be
+ *     verified from this side of the air gap, and the target publishes with
+ *     Oxygen 28.1 — so if a future (or current) version renames them, rule 1
+ *     silently stops matching and the gramframe stays narrow with no clue why.
+ *
+ *     This rule needs no id at all. Whatever Bootstrap column the gramframe
+ *     ends up inside, widen THAT column: `[class*="col-"]` matches any
+ *     Bootstrap grid column, and `:has(.gram-frame-container)` narrows it to
+ *     the one actually holding a gram. Bootstrap's col-* sets
+ *     `flex: 0 0 <n>%; max-width: <n>%`, which is precisely what has to give.
+ *
+ *     Scoped to gram pages by the same `:has()` on the container, so no other
+ *     page's grid is touched. Harmless when rule 1 already matched — it sets
+ *     the same three declarations on (usually) the same element.
+ */
+body:has(.gram-frame-container) [class*="col-"]:has(.gram-frame-container) {
+  flex: 0 0 100%;
+  max-width: 100%;
+  width: 100%;
 }
 
 /* 5. OPTIONAL — the collapse button no longer does anything useful once the
  *    panel is pinned open. Uncomment to hide it.
-body:has(p.gram-nav) #wh_topic_toc #wh_close_topic_toc_button {
+body:has(p.gram-nav) #wh_topic_toc #wh_close_topic_toc_button,
+body:has(.gram-frame-container) #wh_topic_toc #wh_close_topic_toc_button {
   display: none !important;
 }
 */
