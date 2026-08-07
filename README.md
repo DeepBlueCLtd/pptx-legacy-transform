@@ -1294,9 +1294,25 @@ This matches the `publish_html.py` dev-preview layout
   the start of a run. This verifies the target isn't locked (e.g. open
   in Excel or Oxygen) and guarantees a failed or re-pointed run can't
   leave a previous document's output behind for a later stage to
-  silently consume. `generate_dita.py`'s `--clean` flag is now a
-  deprecated no-op (cleaning is unconditional); `deduplicate_csv.py`
-  skips the wipe when `--out` rewrites `--csv` in place.
+  silently consume. `deduplicate_csv.py` skips the wipe when `--out`
+  rewrites `--csv` in place.
+- **`generate_dita.py` rebuilds each publication it produces, and only
+  those.** Every run wipes `dita/<pub>/` for each publication in its CSV
+  before writing it — so a gram deleted from the PPTX disappears from the
+  DITA tree rather than lingering as an orphan the regenerated ditamap no
+  longer references. The publication folder is the unit because the
+  ditamap is rewritten wholesale per publication: folder and map are
+  rebuilt together, so the tree and its nav can never disagree.
+  Publications *not* in the CSV are left untouched, which is what lets a
+  suite of documents be built up in one `dita/` tree over successive
+  scoped runs and published one by one.
+- **`generate_dita.py --clean` widens that to the whole tree.** Use it
+  for a from-scratch rebuild of every publication at once; CI, the
+  PR-preview build, the gh-pages regenerate job and `run_pipeline.bat`
+  all pass it, so their determinism comparison starts from a bare tree.
+  On the target, set `CLEAN_ALL = True` in `write.py`/`pipeline.py`.
+  Note `manifest.txt` and `skipped.txt` are rewritten each run either
+  way, so they describe the current run, not the accumulated tree.
 - **Windows orchestrator only.** `run_pipeline.bat` is a Windows batch
   file; on POSIX systems run the Python scripts directly.
 - **One third-party dependency.** Only `python-pptx` is required at

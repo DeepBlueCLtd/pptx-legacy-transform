@@ -2042,15 +2042,42 @@ def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
 # Orchestration
 # -----------------------------------------------------------------------------
 
+def clean_publication_folders(out_dir: Path, publications: list[str]) -> list[str]:
+    """Remove each ``out_dir/<pub>`` this run is about to rebuild.
+
+    The publication folder — not the whole ``--out`` tree — is the correct
+    unit of the wipe, and the reason is the ditamap. Every run regenerates
+    ``<pub>/<pub>.ditamap`` wholesale from the rows it was given, so the folder
+    and its map must be rebuilt together: clearing the folder first is what
+    makes a gram *deleted from the PPTX* disappear from the DITA tree instead
+    of lingering as an orphan the map no longer references. Wiping less than a
+    whole publication would leave the tree and its map disagreeing; wiping more
+    would destroy the other documents in a suite built up across runs.
+
+    Returns the publications whose folders actually existed and were removed,
+    for the caller to log.
+    """
+    removed = []
+    for pub in publications:
+        pub_dir = out_dir / pub
+        if pub_dir.exists():
+            shutil.rmtree(pub_dir)
+            removed.append(pub)
+    return removed
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate DITA from the signed-off CSV")
     parser.add_argument("--csv", required=True, type=Path, dest="csv_path")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
     parser.add_argument(
-        "--clean", action="store_true",
-        help="Deprecated no-op: the output tree is now always wiped and rebuilt "
-             "from scratch. Accepted only so existing wrappers keep parsing.")
+        "--clean", action="store_true", dest="clean_all",
+        help="Wipe the whole --out tree before writing, not just this run's "
+             "own publication folder(s). Use for a from-scratch rebuild of "
+             "every publication at once; omit it to build a suite of "
+             "documents into one tree over successive runs (the default, "
+             "which still rebuilds each publication it touches).")
     parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
@@ -2111,14 +2138,12 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    # Always rebuild the output tree from scratch. Wiping it up-front verifies
-    # it isn't locked (e.g. a publication folder open in Oxygen) and guarantees
-    # a run can never blend fresh topics with a previous document's leftovers —
-    # the failure mode where a stale dita/ tree silently survives a switch of
-    # input CSV. (``--clean`` is now the default and the flag is a deprecated
-    # no-op, retained only so existing tuned wrappers keep parsing.)
-    if args.out.exists():
-        LOGGER.info("Cleaning existing output tree at %s", args.out)
+    # ``--clean`` wipes the whole --out tree up-front, as every run once did.
+    # It stays available for a from-scratch rebuild of every publication at
+    # once (CI and the gh-pages determinism check use it), and an older tuned
+    # wrapper that still passes it keeps its original behaviour exactly.
+    if args.clean_all and args.out.exists():
+        LOGGER.info("--clean: wiping the whole output tree at %s", args.out)
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -2158,6 +2183,31 @@ def main(argv: Iterable[str] | None = None) -> int:
             len(duplicates), "y" if len(duplicates) == 1 else "ies",
         )
 
+    # Every publication this run emits, known before anything is written so
+    # each one's folder can be rebuilt from scratch. ``publication`` is a
+    # Zone-A identity column already proven non-blank by check_row_identity.
+    publications = sorted({r["publication"] for r in rows})
+
+    # Rebuild only the publication folders this run owns. A gram dropped from
+    # the PPTX must disappear from the DITA tree, and the ditamap is rewritten
+    # wholesale per publication — so the folder and its map are cleared and
+    # rebuilt together. Publications *not* in this CSV are left untouched, so a
+    # suite of documents can be built up across runs and published one by one.
+    if not args.clean_all:
+        removed = clean_publication_folders(args.out, publications)
+        if removed:
+            LOGGER.info(
+                "Rebuilding publication folder(s) from scratch: %s",
+                ", ".join(removed))
+        preserved = sorted(
+            p.name for p in args.out.iterdir()
+            if p.is_dir() and p.name not in publications)
+        if preserved:
+            LOGGER.info(
+                "Leaving %d other publication folder(s) in %s untouched: %s "
+                "(pass --clean to wipe the whole tree instead)",
+                len(preserved), args.out, ", ".join(preserved))
+
     written: list[Path] = []
     skipped: list[dict] = []
     errors = 0
@@ -2195,8 +2245,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         except Exception as exc:
             errors += 1
             LOGGER.error("Failed to emit gram %s: %s", key, exc)
-
-    publications = sorted({r["publication"] for r in rows})
 
     # Common static pages (feature 010): copy the static tree into each
     # publication folder, then reference them as the first ditamap entries.

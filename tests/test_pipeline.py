@@ -119,6 +119,17 @@ class BuildStagesTests(unittest.TestCase):
         self.assertEqual([label for label, _, _ in stages],
                          ["extract", "dedupe", "write"])
 
+    def test_clean_all_toggles_the_write_stage_flag(self):
+        """CLEAN_ALL=False omits --clean, so the write stage rebuilds only its
+        own publication folder(s) and successive scoped runs accumulate into
+        one dita\\ tree instead of wiping it."""
+        for clean_all in (True, False):
+            with self.subTest(clean_all=clean_all):
+                stages = pipeline.build_stages(only=None, clean_all=clean_all)
+                write_argv = next(argv for label, _, argv in stages
+                                  if label == "write")
+                self.assertEqual("--clean" in write_argv, clean_all)
+
     def test_argv_lists_carry_no_program_name(self):
         # main() parses argv with argparse, which does NOT skip element 0;
         # every list must start with an option flag, not a script path.
