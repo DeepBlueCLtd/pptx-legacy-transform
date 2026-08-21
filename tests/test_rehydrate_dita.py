@@ -138,6 +138,14 @@ class RehydrateDitaTests(unittest.TestCase):
         # <data> element is gone.
         root = ET.parse(g21 / "gram_21.dita").getroot()
         self.assertIsNone(root.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
+        # ...and the companion-audio reference is back (issue #177): the pair
+        # is local again, so the topic must name the .wav or the restored
+        # audio would never reach published output.
+        companion = root.find(
+            f".//data[@name='{generate_dita.COMPANION_AUDIO_PATH}']")
+        self.assertIsNotNone(companion)
+        self.assertEqual(companion.get("href"), "lofar.wav")
+        self.assertTrue((g21 / companion.get("href")).is_file())
 
     # -- T022: no-op on un-redirected lofar + idempotent --------------------
     def test_noop_on_unredirected_lofar(self) -> None:

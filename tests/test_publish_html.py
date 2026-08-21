@@ -1547,5 +1547,105 @@ class PublishedImagePresenceTests(unittest.TestCase):
         self.assertEqual(mismatched, [], "\n".join(mismatched))
 
 
+class PublishedAudioPresenceTests(unittest.TestCase):
+    """Walk the shipped ``dita/`` and ``html/`` trees and assert the
+    ``.wav``-backed grams survive end-to-end (issue #177).
+
+    Such a gram is a *pair*: the page links a ``.glc`` config, and the
+    on-PC GLC viewer reads the audio the config names beside it. The pair
+    used to break in two independent ways — the copied ``.glc`` still named
+    the original corpus filename while the audio had been slugified, and no
+    publisher carried the audio out of ``dita/`` at all, because nothing but
+    the opaque ``.glc`` mentioned it. Neither half is any use alone, so both
+    are asserted here, at the layer where the whole journey is visible.
+
+    Skips (like its image twin) when the trees are absent; CI's web job
+    builds both from ``source/`` and re-runs it.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not DITA_ROOT.is_dir() or not HTML_ROOT.is_dir():
+            raise unittest.SkipTest(
+                "dita/ or html/ tree missing — run the pipeline first"
+            )
+        cls.glc_files = sorted(DITA_ROOT.rglob("*.glc"))
+        if not cls.glc_files:
+            raise unittest.SkipTest("no .glc files under dita/ — no audio grams")
+
+    @staticmethod
+    def _named_audio(glc_path: Path) -> str:
+        """The filename the ``.glc`` names in ``data_source/filename``."""
+        try:
+            root = ET.parse(glc_path).getroot()
+        except ET.ParseError:
+            return ""
+        return (root.findtext("data_source/filename") or "").strip()
+
+    def test_dita_glc_names_the_wav_beside_it(self) -> None:
+        """Defect 1: the copied ``.glc`` must name its slugified sibling.
+
+        A ``.glc`` naming ``Lofar 1_b.wav`` next to a ``lofar-1-b.wav``
+        resolves to nothing — in the DITA tree and in every publication
+        rendered from it.
+        """
+        bad: list[str] = []
+        for glc_path in self.glc_files:
+            named = self._named_audio(glc_path)
+            if not named:
+                continue  # anomalous config, copied verbatim with a warning
+            if not (glc_path.parent / named).is_file():
+                bad.append(
+                    f"{glc_path.relative_to(REPO_ROOT)}: names {named!r}, "
+                    f"which is not beside it "
+                    f"(present: {sorted(p.name for p in glc_path.parent.glob('*.wav'))})"
+                )
+        self.assertEqual(bad, [], f"\n{len(bad)} unresolvable .glc:\n" + "\n".join(bad))
+
+    def test_wav_reaches_every_published_edition(self) -> None:
+        """Defect 2: both halves of the pair must be in the output.
+
+        DITA-OT copies the ``.glc`` because a topic links it; the audio is
+        named only *inside* that config, which the toolchain never parses,
+        so the topic names it too (``<data name="companion-audio">``). Every
+        published ``.glc`` must therefore have its audio beside it, in each
+        edition, byte-identical to the ``dita/`` copy.
+        """
+        published = sorted(HTML_ROOT.rglob("*.glc"))
+        self.assertTrue(
+            published,
+            "no .glc reached html/ — the audio grams lost their config files",
+        )
+        editions = {p.relative_to(HTML_ROOT).parts[0] for p in published}
+        self.assertEqual(
+            editions, {e.output_subdir for e in publish_html.EDITIONS},
+            "every edition must publish the audio grams",
+        )
+        missing: list[str] = []
+        mismatched: list[str] = []
+        for glc_path in published:
+            named = self._named_audio(glc_path)
+            if not named:
+                continue
+            html_audio = glc_path.parent / named
+            if not html_audio.is_file():
+                missing.append(
+                    f"{glc_path.relative_to(REPO_ROOT)}: audio {named!r} was "
+                    f"not copied into the published tree — the GLC link "
+                    f"resolves to a config with no audio behind it"
+                )
+                continue
+            # html/<edition>/<pub>/<rest> ⇄ dita/<pub>/<rest> (see _html_twin).
+            rel = glc_path.relative_to(HTML_ROOT)
+            dita_audio = DITA_ROOT / Path(*rel.parts[1:]).parent / named
+            if dita_audio.is_file() and dita_audio.read_bytes() != html_audio.read_bytes():
+                mismatched.append(
+                    f"{named}: dita and html copies differ "
+                    f"({dita_audio} vs {html_audio})"
+                )
+        self.assertEqual(missing, [], "\n".join(missing))
+        self.assertEqual(mismatched, [], "\n".join(mismatched))
+
+
 if __name__ == "__main__":
     unittest.main()
