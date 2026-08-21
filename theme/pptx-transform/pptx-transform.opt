@@ -56,11 +56,12 @@
 
             <!-- ===== Search box, per edition (issue #178) ================
                  There is deliberately NO parameter here. Search visibility is
-                 derived by xslt/inc/customSearchFlag.xsl from `args.filter`:
-                 the student edition is by definition the trainee.ditaval pass,
-                 so the setting that MAKES it the student edition is also what
-                 identifies it. Nothing extra to set, and nothing to forget when
-                 the scenarios are rebuilt from scratch.
+                 derived by xslt/inc/customSearchFlag.xsl from `args.filter`,
+                 by opening the DITAVAL and asking whether it excludes the
+                 instructor audience. The student edition is by definition the
+                 filtered pass, so the setting that MAKES it the student edition
+                 is also what identifies it. Nothing extra to set, and nothing
+                 to forget when the scenarios are rebuilt from scratch.
 
                  A dedicated webhelp.show.search parameter was tried and
                  rejected: forgetting it would silently give the student a dead

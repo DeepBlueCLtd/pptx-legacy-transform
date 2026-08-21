@@ -7,21 +7,33 @@
  * ever returns "no results" and should be hidden. The instructor edition keeps
  * its search box — it carries searchable text.
  *
- * WHICH edition is being published is decided at BUILD time, from the DITAVAL
- * the transformation scenario already passes:
+ * WHICH edition is being published is decided at BUILD time, from what the
+ * DITAVAL the scenario already passes actually DOES:
  *
- *   instructor scenario  →  args.filter is not trainee.ditaval  →  box shown
- *   student scenario     →  args.filter IS trainee.ditaval      →  box hidden
+ *   instructor  →  args.filter does not exclude audience -trainee  →  box shown
+ *   student     →  args.filter DOES exclude audience -trainee      →  box hidden
  *
- * xslt/inc/customSearchFlag.xsl reads `args.filter` and, for the student pass,
- * injects the hidden `.wh-search-hidden` marker on EVERY generated page via the
- * `webhelp.fragment.after.header` fragment point. The rule below keys off the
- * marker.
+ * xslt/inc/customSearchFlag.xsl reads `args.filter`, opens the DITAVAL, and
+ * injects a hidden marker on EVERY generated page via the
+ * `webhelp.fragment.after.header` fragment point. The marker is always present
+ * and carries one of two classes:
+ *
+ *   .wh-search-hidden  → student edition; the rule below fires
+ *   .wh-search-shown   → instructor edition; nothing below matches it
+ *
+ * `.wh-search-shown` deliberately has no rule. It exists so a published page
+ * can be grepped to confirm the mechanism ran at all — this only executes
+ * inside a real Oxygen publish, so an always-absent marker could not
+ * distinguish "the fragment never arrived" from "it decided to show".
  *
  * No dedicated parameter, deliberately: the student edition IS the
  * trainee-filtered pass, so the setting that makes it so is also what
  * identifies it — there is nothing extra to remember when the scenarios are
- * rebuilt. See that stylesheet's header for the full argument.
+ * rebuilt. And the test is on what the DITAVAL *does*, not what it is called:
+ * matching the filename `trainee.ditaval` was tried and failed in a real
+ * publish, because DITA-OT merges the filter into its own
+ * `ditaot.generated.ditaval` before these pages are built. See that
+ * stylesheet's header for the full argument.
  *
  * WHAT CHANGED, AND WHY (issue #178). This file used to infer the edition from
  * the page content instead:
@@ -54,8 +66,9 @@
 }
 
 /* Hide the search box only where the student edition is positively identified,
-   i.e. where the scenario filtered through trainee.ditaval. Applies to every
-   page type, the tiles landing page and the search-results page included. */
+   i.e. where the scenario's DITAVAL excludes the instructor audience. Applies
+   to every page type, the tiles landing page and the search-results page
+   included. */
 body:has(.wh-search-hidden) #searchForm {
     display: none !important;
 }

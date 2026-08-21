@@ -304,9 +304,9 @@ Two things are decided at **build time**, not inferred from page content:
   and bottom of every page, the same text and colour in both editions. These
   *are* scenario parameters, and the template ships working defaults.
 - **Search-box visibility** — hidden in the student edition, shown in the
-  instructor's. Derived from **`args.filter`**: the student edition is by
-  definition the `trainee.ditaval` pass. There is **no parameter of our own**,
-  by design (see below).
+  instructor's. Derived from **`args.filter`**, by opening the DITAVAL and
+  asking whether it excludes `audience="-trainee"`. There is **no parameter of
+  our own**, by design (see below).
 
 Both work the same way: a fragment file holds **one empty placeholder element**,
 an XSLT include matches it in `mode="copy_template"` and fills it or drops it.
@@ -331,6 +331,18 @@ Three rules follow, all learned the hard way:
   `args.filter` yields a student build full of instructor content. Derive from
   the setting they cannot omit. Parameters are fine where a *default* is
   correct and the override is optional, as the marking's are.
+- **Test what a file does, not what it is called.** Matching the DITAVAL
+  *filename* `trainee.ditaval` was tried and failed in a real publish: DITA-OT's
+  preprocess merges the filter into `<temp>/ditaot.generated.ditaval`
+  (`MergeDitavalModule`), and Oxygen's Filters tab generates its own name, so by
+  page-generation time the name is not ours. Opening the DITAVAL and asking
+  whether it excludes `audience="-trainee"` is immune to both.
+- **Make an Oxygen-only mechanism visible in its output.** The search flag is
+  emitted on *both* editions (`wh-search-hidden` / `wh-search-shown`), though
+  only the first has a CSS rule. Nothing here can be exercised without a real
+  Oxygen publish, so a marker that is simply absent cannot distinguish "the
+  fragment never arrived" from "the test said no" — which is what made the
+  first failure slow to diagnose. Leave a trace that can be grepped.
 - **Anything that might change per export belongs in a scenario parameter, not
   in the template.** The target is behind a one-way air-gap gateway: editing
   CSS/XSLT/page layouts/`.opt` costs a full package re-transfer, while a

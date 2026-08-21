@@ -20,10 +20,39 @@ scenario already passes — there is **nothing extra to configure**:
 | instructor | `instructor.ditaval`, or blank | box shown on every page |
 | student | `…\trainee.ditaval` | box hidden on every page |
 
-`customSearchFlag.xsl` reads `args.filter` and, on the student pass, injects a
-hidden `.wh-search-hidden` marker on every page via the
-`webhelp.fragment.after.header` placeholder; `hide-search.css` hides
-`#searchForm` wherever that marker appears.
+`customSearchFlag.xsl` reads `args.filter`, **opens the DITAVAL**, and asks
+whether it excludes `audience="-trainee"`. It then injects a hidden marker on
+every page via the `webhelp.fragment.after.header` placeholder —
+`.wh-search-hidden` for the student edition, `.wh-search-shown` for the
+instructor's — and `hide-search.css` hides `#searchForm` wherever the first
+appears.
+
+### Test what the DITAVAL does, not what it is called
+
+An earlier version matched the **filename** `trainee.ditaval`. It failed in a
+real publish, and the failure is worth remembering: by the time these pages are
+generated the filename is no longer ours.
+
+- DITA-OT's preprocess merges the supplied DITAVAL(s) and writes
+  `<temp>\ditaot.generated.ditaval` (`org.dita.dost.module.MergeDitavalModule`),
+  so `args.filter` no longer names your file.
+- Oxygen's scenario **Filters** tab, used instead of an explicit `args.filter`,
+  generates a DITAVAL under a name of its own choosing.
+
+Reading the file and asking whether it excludes `audience="-trainee"` is immune
+to both, and says exactly what is meant: *this is the pass with the instructor
+content taken out*. `-trainee` is the token `generate_dita.py` stamps and
+`trainee.ditaval` excludes — a pipeline constant, not an operator choice.
+
+### Why the instructor marker is emitted too
+
+`.wh-search-shown` has no CSS rule attached; it exists to make the mechanism
+**visible in the output**. This XSLT only ever runs inside a real Oxygen
+publish, which needs a licence this project does not have, so the only way to
+answer *"did the fragment arrive, and how did the test evaluate?"* is to grep a
+published page. A marker that is simply absent cannot tell "never got here"
+apart from "decided to show" — which is precisely what made the first failure
+hard to diagnose.
 
 ### Why `args.filter` and not a parameter of our own
 
@@ -42,13 +71,9 @@ Oxygen makes this readable because its `whr-create-props-file` step serialises
 `oxyf:getParameter` reads that file — so DITA-OT's own parameters are visible to
 the template alongside its own.
 
-`trainee.ditaval` is a pipeline constant, not an operator choice:
-`generate_dita.py` always writes it at the root of its output tree. The match is
-on the **filename**, case-insensitively (the target filesystem is), across each
-entry of a `;`-separated list — so a directory that happens to contain
-"trainee" cannot flip the instructor edition. Anything unrecognised leaves the
-search box **visible**: a student edition with a useless search box is a wart,
-an instructor edition without one is a defect.
+Each entry of a `;`-separated `args.filter` is tested. An unreadable, absent or
+unrecognised DITAVAL leaves the search box **visible** — a student edition with
+a useless search box is a wart, an instructor edition without one is a defect.
 
 There is still **one shared template** and no student-variant to keep in step.
 
@@ -134,6 +159,16 @@ Point *both* scenarios' **Templates** tab at `pptx-transform.opt` and publish.
 There is nothing to set: the student scenario's existing
 `args.filter` = `…\trainee.ditaval` is the whole configuration.
 
+To confirm a publish, grep any page of each edition for the marker:
+
+```bash
+grep -c wh-search-hidden index.html   # student: 1, instructor: 0
+grep -c wh-search-shown  index.html   # student: 0, instructor: 1
+```
+
+Neither present on either edition means the fragment never reached the page —
+check the `<html-fragments>` binding in the `.opt`, not this logic.
+
 ## Wiring it into a different template
 
 1. Copy `resources/hide-search.css`,
@@ -153,9 +188,10 @@ There is nothing to set: the student scenario's existing
    `../oxygen-protection/README.md`, which lists them). Miss the main-page one
    and `index.html` regresses to exactly the #178 bug.
 5. Republish both editions to confirm. No new parameter to declare or set — if
-   your student scenario already filters through `trainee.ditaval`, it is done.
-   (If your student DITAVAL is named something else, change
-   `$trainee-ditaval` at the top of `customSearchFlag.xsl`.)
+   your student scenario already filters out the instructor audience, it is
+   done, whatever the DITAVAL is called. (If your instructor content is marked
+   with an audience token other than `-trainee`, change `$trainee-audience` at
+   the top of `customSearchFlag.xsl`.)
 
 > Dropping the CSS into `webhelp.custom.resources` instead will **not** work:
 > that parameter only *copies* the file to the output, it does not link it into

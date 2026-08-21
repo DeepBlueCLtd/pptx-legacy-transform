@@ -369,14 +369,40 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn(
             "args.filter", search_flag,
             "customSearchFlag.xsl must derive the edition from args.filter")
+        # ...and off what that DITAVAL DOES, not its filename. Matching the name
+        # `trainee.ditaval` was tried and failed in a real publish: DITA-OT's
+        # preprocess merges the filter into <temp>/ditaot.generated.ditaval, so
+        # by page-generation time the name is not ours.
         self.assertIn(
-            "trainee.ditaval", search_flag,
-            "the student edition is the trainee.ditaval pass; name it")
+            "'-trainee'", search_flag,
+            "identify the student edition by the audience its DITAVAL excludes")
+        # The header comment documents the rejected filename approach, so look
+        # only at live markup.
+        live_search_flag = re.sub(r"<!--.*?-->", "", search_flag, flags=re.DOTALL)
+        self.assertNotIn(
+            "trainee.ditaval", live_search_flag,
+            "matching the DITAVAL filename breaks once DITA-OT merges it into "
+            "ditaot.generated.ditaval; test what the DITAVAL excludes instead")
 
-        # 4. The class the search XSLT *emits* is the class the CSS selects.
-        self.assertIn("wh-search-hidden", search_flag)
-        self.assertIn("wh-search-hidden", read("resources/hide-search.css"))
-        # The old content-inferred rule is what #178 was: it hid the box
+        # 5. Both marker classes are emitted, and only the student one is
+        #    styled. This mechanism runs ONLY inside a real Oxygen publish, so
+        #    the instructor marker is what makes "the fragment arrived and chose
+        #    to show" distinguishable from "the fragment never arrived" in a
+        #    published page. Dropping it costs a diagnosis cycle, not a feature.
+        hide_css = read("resources/hide-search.css")
+        for marker in ("wh-search-hidden", "wh-search-shown"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, live_search_flag,
+                              f"{marker} must be emitted so a publish can be "
+                              "checked by grepping a page")
+        live_hide_css = re.sub(r"/\*.*?\*/", "", hide_css, flags=re.DOTALL)
+        self.assertIn("wh-search-hidden", live_hide_css)
+        self.assertNotIn(
+            "wh-search-shown", live_hide_css,
+            "the instructor marker is a diagnostic, not a style hook; giving "
+            "it a rule would make it load-bearing")
+
+        # 4. The old content-inferred rule is what #178 was: it hid the box
         # wherever the instructor marker was absent, which on index.html and
         # search.html is BOTH editions. It must not creep back — as a live
         # rule. The stylesheet quotes it in a comment explaining the fix, so
