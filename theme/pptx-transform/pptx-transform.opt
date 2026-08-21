@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<publishing-template>
+    <name>pptx-transform</name>
+    <description>Oxygen WebHelp Responsive "tiles" template with the AAAC gram
+        pipeline overlays: GramFrame turns each spectrogram table into an
+        interactive viewer, and one edition-aware stylesheet hides the search
+        box in the student build. Point BOTH the instructor and the trainee-
+        filtered scenario at this single template.</description>
+    <webhelp>
+        <preview-image file="oxygen-tiles.png"/>
+        <parameters>
+            <parameter name="webhelp.show.main.page.tiles" value="yes"/>
+            <parameter name="webhelp.show.main.page.toc" value="no"/>
+            <parameter name="webhelp.top.menu.depth" value="3"/>
+            <!-- Stock default is "no". Without this, a week_N.dita page renders
+                 as a bare <h1>Week N</h1> — it is a nav container with no body
+                 of its own, so its grams are reachable only via the side TOC.
+                 Turning it on gives each week a linked list of its grams.
+                 No effect on topics with no children (grams, welcome,
+                 security). -->
+            <parameter name="webhelp.show.child.links" value="yes"/>
+            <!-- Stock default is "yes", which spends col-lg-3 (25% of the
+                 viewport) on a left sidebar listing every gram in the week.
+                 A gram page is a wide spectrogram driven by GramFrame, so that
+                 width matters more here than a persistent tree. Grams stay
+                 reachable via the week page's child links (above), the top
+                 menu, and the prev/next navigation links. -->
+            <parameter name="webhelp.show.publication.toc" value="no"/>
+            <parameter name="webhelp.enable.dark.mode" value="yes"/>
+            <parameter name="args.figurelink.style" value="TITLE"/>
+            <parameter name="args.tablelink.style" value="TITLE"/>
+            <parameter name="force-unique" value="true"/>
+        </parameters>
+        <resources>
+            <css file="oxygen-theme.css"/>
+            <css file="oxygen.css"/>
+            <css file="notes.css"/>
+            <!-- Last, so it wins the cascade: hides #searchForm on any page
+                 lacking the instructor marker (i.e. the student edition).
+                 See theme/oxygen-hide-search/README.md. -->
+            <css file="resources/hide-search.css"/>
+            <fileset>
+                <include name="resources/**/*"/>
+                <exclude name="resources/**/*.svn"/>
+                <exclude name="resources/**/*.git"/>
+            </fileset>
+        </resources>
+        <!-- Loads gramframe.bundle.js into every topic page <head>; it upgrades
+             each <table class="gram-config"> into an interactive spectrogram
+             viewer and no-ops on pages with none. The wrapper element must be
+             html-fragments (a bare <fragments>, or a <fragment> directly under
+             <webhelp>, fails the publish with "Build failed with an exception:
+             null"). See theme/gramframe-oxygen/README.md. -->
+        <html-fragments>
+            <fragment file="page-templates-fragments/libraries/gramframe.xml"
+                      placeholder="webhelp.fragment.head.topic.page"/>
+        </html-fragments>
+        <online-preview-url>https://www.oxygenxml.com/samples/DITA-WebHelp-Responsive/tiles/oxygen/</online-preview-url>
+        <tags>
+            <tag type="layout">tiles</tag>
+            <tag type="color">blue</tag>
+            <tag type="other">dark-mode</tag>
+        </tags>
+    </webhelp>
+    <pdf>
+        <preview-image file="oxygen.png"/>
+        <tags>
+            <tag type="color">white</tag>
+        </tags>
+        <resources>
+            <css file="oxygen-theme.css"/>
+            <css file="oxygen-print.css"/>
+            <css file="notes.css"/>
+            <fileset>
+                <include name="*.css"/>
+                <include name="resources/**/*.ttf"/>
+            </fileset>
+        </resources>
+    </pdf>
+</publishing-template>

@@ -95,18 +95,65 @@ class PackageReleaseTests(unittest.TestCase):
                          "vendor assets must not ship in the archive")
 
     def test_theme_bundle_matches_vendored_bundle(self):
-        # The Oxygen overlay's GramFrame bundle must stay byte-identical to the
-        # one publish_html.py vendors, so the production publish and the dev
-        # preview render grams the same way.
+        # Every GramFrame bundle in the tree must stay byte-identical to the one
+        # publish_html.py vendors, so the production publish and the dev preview
+        # render grams the same way. Three copies exist: the vendored original,
+        # the standalone overlay (install instructions for a foreign template),
+        # and the ready-to-publish pptx-transform template.
         vendored = REPO_ROOT / "scripts" / "vendor" / "gramframe" / "gramframe.bundle.js"
-        overlay = (REPO_ROOT / "theme" / "gramframe-oxygen" / "resources"
-                   / "gramframe.bundle.js")
         self.assertTrue(vendored.is_file(), "vendored GramFrame bundle missing")
-        self.assertTrue(overlay.is_file(), "overlay GramFrame bundle missing")
+        expected = vendored.read_bytes()
+        for label, copy in (
+            ("theme/gramframe-oxygen",
+             REPO_ROOT / "theme" / "gramframe-oxygen" / "resources"
+             / "gramframe.bundle.js"),
+            ("theme/pptx-transform",
+             REPO_ROOT / "theme" / "pptx-transform" / "resources"
+             / "gramframe.bundle.js"),
+        ):
+            with self.subTest(copy=label):
+                self.assertTrue(copy.is_file(),
+                                f"{label} GramFrame bundle missing")
+                self.assertEqual(
+                    expected, copy.read_bytes(),
+                    f"{label} GramFrame bundle has drifted from "
+                    "scripts/vendor/gramframe/; update every copy (and their "
+                    "VERSION files) together")
+
+    def test_publishing_template_wires_the_overlays(self):
+        # pptx-transform is the template the operator actually publishes with,
+        # so it must carry both overlays wired in — not just the payload files.
+        # A fragment under a bare <fragments>, or directly under <webhelp>,
+        # fails the Oxygen publish with "Build failed with an exception: null".
+        import xml.etree.ElementTree as ET
+
+        opt = (REPO_ROOT / "theme" / "pptx-transform" / "pptx-transform.opt")
+        self.assertTrue(opt.is_file(), "pptx-transform.opt missing")
+        webhelp = ET.parse(opt).getroot().find("webhelp")
+
+        # Stock default is "no", which leaves each week_N.dita page an empty
+        # <h1> and its grams reachable only from the side TOC.
+        params = {p.get("name"): p.get("value")
+                  for p in webhelp.findall("parameters/parameter")}
+        self.assertEqual(params.get("webhelp.show.child.links"), "yes")
+
+        css = [c.get("file") for c in webhelp.findall("resources/css")]
+        self.assertIn("resources/hide-search.css", css)
+        self.assertEqual(css[-1], "resources/hide-search.css",
+                         "hide-search.css must load last to win the cascade")
+
+        fragments = webhelp.findall("html-fragments/fragment")
         self.assertEqual(
-            vendored.read_bytes(), overlay.read_bytes(),
-            "theme/ GramFrame bundle has drifted from scripts/vendor/gramframe/; "
-            "update both copies (and their VERSION files) together")
+            [(f.get("file"), f.get("placeholder")) for f in fragments],
+            [("page-templates-fragments/libraries/gramframe.xml",
+              "webhelp.fragment.head.topic.page")])
+
+        # Oxygen's schematron asserts every referenced file resolves on disk.
+        for el in webhelp.iter():
+            ref = el.get("file")
+            if ref:
+                self.assertTrue((opt.parent / ref).is_file(),
+                                f"{el.tag} references missing file: {ref}")
 
     def test_rebuild_is_byte_identical(self):
         first = self._build("first.zip")

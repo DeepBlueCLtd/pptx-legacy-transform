@@ -30,6 +30,19 @@ gramframe-oxygen/
 
 The folder names mirror the Fi3ldMan template so the files drop straight in.
 
+## Already done for you in `theme/pptx-transform/`
+
+If you publish with this repo's own template — **`theme/pptx-transform/`**, a
+copy of Oxygen's stock WebHelp Responsive *tiles* template — the steps below
+are **already wired in**: the bundle sits at `resources/gramframe.bundle.js`
+and `pptx-transform.opt` carries the `<html-fragments>` entry. Just point the
+transformation scenario's **Templates** tab at `pptx-transform.opt` and
+publish. `tests/test_package_release.py` guards both the wiring and the
+bundle's byte-identity with `scripts/vendor/gramframe/`.
+
+The section below is for installing this overlay into a **different**
+(e.g. Fi3ldMan-derived) template.
+
 ## Installing into your Oxygen template
 
 1. **Copy the bundle** into your template's custom resources folder:
