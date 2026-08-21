@@ -20,11 +20,14 @@
  * cascade).
  */
 
+/* z-index clears the gramframe, whose own stack tops out at 1000 (see
+   gramframe.bundle.js). At 1000 the panel tied with it and could be painted
+   under a full-width gram it now overlaps. */
 p.gram-nav {
   position: fixed;
   right: 22px;
   bottom: 24px;
-  z-index: 1000;
+  z-index: 1100;
   margin: 0;
   display: flex;
   flex-direction: column;

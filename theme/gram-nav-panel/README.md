@@ -57,6 +57,10 @@ arrangement `../oxygen-hide-search/README.md` describes.
 
 ## Wiring it into the (single, shared) template
 
+> **Already wired in `../pptx-transform/`**, this repo's own publishing
+> template — a verbatim copy at `resources/gram-nav.css`, referenced from the
+> `.opt`. The steps below are for installing into a **different** template.
+
 Identical to `../oxygen-hide-search/`:
 
 1. **Use your existing publishing template** (the Fi3ldMan-derived one that
@@ -100,7 +104,7 @@ When you restyle one, restyle the other.
 ## How it ships to the air-gapped target
 
 This overlay travels in the pipeline release zip under `theme/` (alongside
-`gramframe-oxygen/` and `oxygen-hide-search/`), so it lands at
+the other overlays), so it lands at
 `ROOT\theme\gram-nav-panel\` on the target. The operator installs it into the
 Oxygen template once, per step 2 above. See README.md, *"Getting pipeline
 updates onto the target"*.
