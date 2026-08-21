@@ -458,9 +458,9 @@ fragment) the operator installs once into the Oxygen WebHelp template so the
 **production** publish renders interactive grams, mirroring what
 `publish_html.py` already does for the dev preview — see that folder's
 `README.md`. `theme\oxygen-hide-search\` is a second overlay that hides the
-useless search box in the **student** edition only, switched by the
-`webhelp.show.search` parameter on the student transformation scenario — see
-that folder's `README.md`.
+useless search box in the **student** edition only, recognising that edition
+from the `trainee.ditaval` its scenario already passes — nothing extra to
+configure; see that folder's `README.md`.
 `theme\gram-nav-panel\` is a third overlay (one CSS file) that pins the
 floating per-gram navigation panel — the in-page stage jump links, `Lofar N`
 and `WAV N` in page order (both editions), plus the instructor-only
@@ -1238,8 +1238,9 @@ never overwrites a previous publication's output.
      in the scenario reintroduces a machine-local absolute path into every
      published page. (Fi3ldMan calls this "the most common way to break an
      otherwise correct setup".)
-   - The template ships `webhelp.show.search` = `yes`, which is what the
-     instructor edition wants. Only the *student* scenario changes it.
+   - There is **no** search-visibility parameter to set. The template works
+     that out from `args.filter`, so a scenario rebuilt from scratch behaves
+     correctly with no extra step.
 
 ##### Changing the protective marking
 
@@ -1272,22 +1273,23 @@ local edit here. See `theme/oxygen-protection/README.md`.
    | Output directory | `Z:\html\student\${cfn}` |
    | Temporary files directory | `Z:\dita-temp\student-${cfn}` |
 
-7. On the **Parameters** tab, add or edit **two** parameters:
+7. On the **Parameters** tab, add or edit:
 
-   | Parameter | Value | Why |
-   |---|---|---|
-   | `args.filter` | `Z:\dita\trainee.ditaval` | Strips the instructor-only content |
-   | `webhelp.show.search` | `no` | Hides the search box (see below) |
+   | Parameter | Value |
+   |---|---|
+   | `args.filter` | `Z:\dita\trainee.ditaval` |
 
    Use the absolute drive-letter path to the `trainee.ditaval` file that
    `generate_dita.py` writes at the root of its `--out` folder (i.e., one level
    above the per-publication subfolders).
 
-   `webhelp.show.search` = `no` is the **only** other difference between the two
-   scenarios. The trainee filter strips the searchable text, leaving grams that
-   are images with no body text, so the student edition's search box would only
-   ever return "no results". Only the literal `no` hides it — a typo leaves the
-   box visible rather than silently removing the instructor's.
+   This is the **only** difference between the two scenarios. The template reads
+   `args.filter` to recognise the student edition, and hides the search box
+   accordingly — the trainee filter strips the searchable text, leaving grams
+   that are images with no body text, so the box would only ever return "no
+   results". There is deliberately no second parameter to remember: if you ever
+   rebuild this scenario from the stock built-in, getting `args.filter` right is
+   enough, and getting it *wrong* is obvious the moment you look at the output.
 
    If you change the protective marking (see the instructor scenario above), set
    the same values here too: the marking must be identical on both editions.

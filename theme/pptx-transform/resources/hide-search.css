@@ -7,16 +7,21 @@
  * ever returns "no results" and should be hidden. The instructor edition keeps
  * its search box — it carries searchable text.
  *
- * WHICH edition is being published is decided at BUILD time, by the
- * `webhelp.show.search` parameter on the transformation scenario:
+ * WHICH edition is being published is decided at BUILD time, from the DITAVAL
+ * the transformation scenario already passes:
  *
- *   instructor scenario  →  template default, "yes"  →  no marker  →  box shown
- *   student scenario     →  "no"                     →  marker     →  box hidden
+ *   instructor scenario  →  args.filter is not trainee.ditaval  →  box shown
+ *   student scenario     →  args.filter IS trainee.ditaval      →  box hidden
  *
- * xslt/inc/customSearchFlag.xsl turns that parameter into the hidden
- * `.wh-search-hidden` marker, injected on EVERY generated page via the
+ * xslt/inc/customSearchFlag.xsl reads `args.filter` and, for the student pass,
+ * injects the hidden `.wh-search-hidden` marker on EVERY generated page via the
  * `webhelp.fragment.after.header` fragment point. The rule below keys off the
  * marker.
+ *
+ * No dedicated parameter, deliberately: the student edition IS the
+ * trainee-filtered pass, so the setting that makes it so is also what
+ * identifies it — there is nothing extra to remember when the scenarios are
+ * rebuilt. See that stylesheet's header for the full argument.
  *
  * WHAT CHANGED, AND WHY (issue #178). This file used to infer the edition from
  * the page content instead:
@@ -49,8 +54,8 @@
 }
 
 /* Hide the search box only where the student edition is positively identified,
-   i.e. where the scenario set webhelp.show.search=no. Applies to every page
-   type, the tiles landing page and the search-results page included. */
+   i.e. where the scenario filtered through trainee.ditaval. Applies to every
+   page type, the tiles landing page and the search-results page included. */
 body:has(.wh-search-hidden) #searchForm {
     display: none !important;
 }

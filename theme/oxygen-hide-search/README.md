@@ -12,24 +12,45 @@ carry searchable text, so search stays useful there.
 ## How it tells the editions apart
 
 The two editions publish as **two transformation scenarios**, so which edition
-is being built is known at **build time**. One parameter says so:
+is being built is known at **build time**. It is read from the DITAVAL the
+scenario already passes — there is **nothing extra to configure**:
 
-| Scenario | `webhelp.show.search` | Result |
+| Scenario | `args.filter` | Result |
 | --- | --- | --- |
-| instructor | *(template default)* `yes` | box shown on every page |
-| student | `no` | box hidden on every page |
+| instructor | `instructor.ditaval`, or blank | box shown on every page |
+| student | `…\trainee.ditaval` | box hidden on every page |
 
-`customSearchFlag.xsl` turns that parameter into a hidden `.wh-search-hidden`
-marker, injected on every page via the `webhelp.fragment.after.header`
-placeholder; `hide-search.css` hides `#searchForm` wherever the marker appears.
+`customSearchFlag.xsl` reads `args.filter` and, on the student pass, injects a
+hidden `.wh-search-hidden` marker on every page via the
+`webhelp.fragment.after.header` placeholder; `hide-search.css` hides
+`#searchForm` wherever that marker appears.
 
-Only the exact value `no` hides the box. A misspelled or unset parameter leaves
-the stock behaviour — a student edition with a useless search box is a wart, an
-instructor edition without one is a defect.
+### Why `args.filter` and not a parameter of our own
 
-There is still **one shared template**: the two scenarios differ only in their
-`args.filter` DITAVAL and this one parameter. No student-variant template to
-keep in step.
+A dedicated `webhelp.show.search` parameter was tried first and **rejected**.
+An operator who rebuilds the student scenario from the stock built-in — which
+they must, periodically — and forgets to re-add it gets a student edition with
+a dead search box, and *nothing says so*.
+
+Forgetting `args.filter` is impossible to miss: the student build comes out
+carrying the instructor's Analysis Sheets and vessel names. So the setting that
+**makes** it the student edition is the right thing to identify it by. The
+student edition is, by definition, the trainee-filtered pass.
+
+Oxygen makes this readable because its `whr-create-props-file` step serialises
+*every* Ant property of the build (an `<echoproperties>` with no `@prefix`), and
+`oxyf:getParameter` reads that file — so DITA-OT's own parameters are visible to
+the template alongside its own.
+
+`trainee.ditaval` is a pipeline constant, not an operator choice:
+`generate_dita.py` always writes it at the root of its output tree. The match is
+on the **filename**, case-insensitively (the target filesystem is), across each
+entry of a `;`-separated list — so a directory that happens to contain
+"trainee" cannot flip the instructor edition. Anything unrecognised leaves the
+search box **visible**: a student edition with a useless search box is a wart,
+an instructor edition without one is a defect.
+
+There is still **one shared template** and no student-variant to keep in step.
 
 ## What changed in #178, and why
 
@@ -103,37 +124,38 @@ empty paragraph must never show.
 
 Oxygen WebHelp Responsive has **no built-in parameter that disables search**
 (confirmed against the WebHelp Responsive parameter list and the Oxygen forum),
-which is why this overlay defines its own and applies it with a small CSS rule
-rather than editing stock templates.
+which is why this overlay works it out from `args.filter` and applies it with a
+small CSS rule rather than editing stock templates.
 
 ## Already done for you in `theme/pptx-transform/`
 
 If you publish with this repo's own template, this is **already wired in**.
-Point *both* scenarios' **Templates** tab at `pptx-transform.opt`, then set
-`webhelp.show.search` = `no` on the **student** scenario only. Leave the
-instructor scenario alone.
+Point *both* scenarios' **Templates** tab at `pptx-transform.opt` and publish.
+There is nothing to set: the student scenario's existing
+`args.filter` = `…\trainee.ditaval` is the whole configuration.
 
 ## Wiring it into a different template
 
 1. Copy `resources/hide-search.css`,
    `page-templates-fragments/search-flag.xml` and
    `xslt/inc/customSearchFlag.xsl` into that template.
-2. Declare `<parameter name="webhelp.show.search" value="yes"/>` in its `.opt`.
-3. Add `<css file="resources/hide-search.css"/>` after the stock stylesheets so
+2. Add `<css file="resources/hide-search.css"/>` after the stock stylesheets so
    it wins the cascade.
-4. Bind the fragment:
+3. Bind the fragment:
 
    ```xml
    <fragment file="page-templates-fragments/search-flag.xml"
              placeholder="webhelp.fragment.after.header"/>
    ```
 
-5. Import `inc/customSearchFlag.xsl` from a stylesheet bound to **each** of the
+4. Import `inc/customSearchFlag.xsl` from a stylesheet bound to **each** of the
    four page-type XSLT extension points (see
    `../oxygen-protection/README.md`, which lists them). Miss the main-page one
    and `index.html` regresses to exactly the #178 bug.
-6. Set `webhelp.show.search` = `no` on the student scenario, and republish both
-   editions to confirm.
+5. Republish both editions to confirm. No new parameter to declare or set — if
+   your student scenario already filters through `trainee.ditaval`, it is done.
+   (If your student DITAVAL is named something else, change
+   `$trainee-ditaval` at the top of `customSearchFlag.xsl`.)
 
 > Dropping the CSS into `webhelp.custom.resources` instead will **not** work:
 > that parameter only *copies* the file to the output, it does not link it into

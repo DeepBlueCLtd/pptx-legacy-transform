@@ -249,10 +249,16 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn("webhelp.protection.background.color", params,
                       "the per-export colour override must be declared")
 
-        # Search visibility (#178). "yes" is the INSTRUCTOR default; only the
-        # student scenario overrides it, so a template shipping "no" would
-        # silently cost the instructor their search box on every page.
-        self.assertEqual(params.get("webhelp.show.search"), "yes")
+        # Search visibility (#178) must NOT become a parameter of our own.
+        # Operators rebuild scenarios from the stock built-in, and a parameter
+        # they have to remember to re-add is one they will eventually forget —
+        # silently, since a missing one just reads as empty. It is derived from
+        # args.filter instead, which they cannot omit without the student build
+        # coming out full of instructor content.
+        self.assertNotIn(
+            "webhelp.show.search", params,
+            "derive search visibility from args.filter, not a parameter an "
+            "operator must remember to set on a rebuilt scenario")
 
         # Every page type needs the customizations, so every page-type XSLT
         # extension point must be wired. Missing createMainPage is exactly how
@@ -338,18 +344,34 @@ class PackageReleaseTests(unittest.TestCase):
                     ["{http://www.w3.org/1999/xhtml}body"],
                     "the placeholder must sit inside a <body> wrapper")
 
-        # 3. Every parameter the XSLT reads is declared in the .opt. An
-        #    undeclared one reads as empty, which for show.protection means
-        #    silently no marking at all.
+        # 3. Every parameter the XSLT reads is one it can actually get a value
+        #    for. An undeclared one reads as empty, which for show.protection
+        #    would mean silently no marking at all.
+        #
+        #    DITA-OT's own build properties are readable too — Oxygen's
+        #    whr-create-props-file serialises every Ant property — and are
+        #    deliberately NOT declared in the .opt, because declaring them would
+        #    override what the scenario set. args.filter is the search flag's
+        #    whole mechanism (#178), so allow it by name rather than loosening
+        #    the check.
+        dita_ot_supplied = {"args.filter"}
         for xslt, name in ((protection, "customProtection.xsl"),
                            (search_flag, "customSearchFlag.xsl")):
             used = set(re.findall(r"oxyf:getParameter\('([^']+)'\)", xslt))
             self.assertTrue(used, f"{name} reads no parameters at all")
             with self.subTest(xslt=name):
                 self.assertLessEqual(
-                    used, declared,
-                    f"{name} reads parameters the .opt never declares: "
-                    f"{sorted(used - declared)}")
+                    used, declared | dita_ot_supplied,
+                    f"{name} reads parameters that are neither declared in the "
+                    f".opt nor supplied by DITA-OT: "
+                    f"{sorted(used - declared - dita_ot_supplied)}")
+        # The search flag must key off the DITAVAL, not a parameter of its own.
+        self.assertIn(
+            "args.filter", search_flag,
+            "customSearchFlag.xsl must derive the edition from args.filter")
+        self.assertIn(
+            "trainee.ditaval", search_flag,
+            "the student edition is the trainee.ditaval pass; name it")
 
         # 4. The class the search XSLT *emits* is the class the CSS selects.
         self.assertIn("wh-search-hidden", search_flag)
