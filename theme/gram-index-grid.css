@@ -1,0 +1,117 @@
+/* ===========================================================================
+ * Gram index — re-flowing tile grid  (PASTE-IN SLUG, no template wiring)
+ * ===========================================================================
+ *
+ * WHAT THIS IS
+ *   The week / chapter landing pages and progress tests render their gram
+ *   index as <ul class="gram-index"> of <a class="enterBtn"> links, which the
+ *   stock Oxygen WebHelp stylesheet lays out as a tall single-column bullet
+ *   list (Gram 01, Gram 02, … one per line). The rules below turn that same
+ *   list into a re-flowing grid of rounded tiles that wrap to the content
+ *   column, so a 30-gram week reads as a compact, scannable board.
+ *
+ * HOW TO INSTALL (by hand — no .opt <resources> entry, no new theme)
+ *   Open your Oxygen publishing template's existing "oxygen.css" and paste
+ *   EVERYTHING BELOW THE LINE OF ===== at the very END of that file, so it
+ *   loads after the stock rules and wins the cascade. That's it — republish.
+ *
+ *   Nothing else in the pipeline references this file; it is a self-contained
+ *   snippet kept here (and shipped in the release zip under theme\) purely so
+ *   the operator has a copy to paste from on the air-gapped box. The dev/CI
+ *   HTML preview gets the same layout from the matching ul.gram-index rule in
+ *   scripts/vendor/themes/operator-console-v2/theme.css — keep the two in step
+ *   (same grid; colours differ because this snippet dresses the light stock
+ *   template and the dev theme is the dark operator console).
+ *
+ * NOTES
+ *   - Literal colours (no CSS custom properties); the accent #0d6cfd matches
+ *     the stock template's own link colour so the tiles sit inside its palette.
+ *   - Instructor tiles carry a vessel name (<span class="vessel-name">, which
+ *     the student build's trainee DITAVAL strips); each tile is a centred
+ *     COLUMN so the vessel name stacks under the number and the tile grows
+ *     downward, never sideways. Grid stretch keeps a row's tiles one height.
+ *
+ * ======= PASTE FROM HERE ================================================== */
+
+ul.gram-index {
+  list-style: none;
+  margin: 1.4em 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+ul.gram-index > li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
+/* The whole tile is the link, so the entire rectangle is the click target. */
+ul.gram-index > li > a.enterBtn,
+ul.gram-index > li > a.enterBtn:link,
+ul.gram-index > li > a.enterBtn:visited {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: #1f2933;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(27, 31, 35, 0.06);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease,
+              background-color 0.12s ease, transform 0.12s ease;
+}
+
+/* Vessel name (instructor edition only): a quieter subtitle under the number,
+ * free to wrap over two or three lines for a long name. */
+ul.gram-index > li > a.enterBtn .vessel-name {
+  font-size: 0.82em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  color: #57606a;
+}
+
+ul.gram-index > li > a.enterBtn:hover,
+ul.gram-index > li > a.enterBtn:focus {
+  color: #0b57d0;
+  background: #eaf1ff;
+  border-color: #0d6cfd;
+  box-shadow: 0 4px 12px rgba(13, 108, 253, 0.18);
+  transform: translateY(-1px);
+}
+
+ul.gram-index > li > a.enterBtn:hover .vessel-name,
+ul.gram-index > li > a.enterBtn:focus .vessel-name {
+  color: #0b57d0;
+}
+
+/* Keyboard focus stays visible even though hover shares the accent. */
+ul.gram-index > li > a.enterBtn:focus-visible {
+  outline: 2px solid #0d6cfd;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ul.gram-index > li > a.enterBtn {
+    transition: none;
+  }
+  ul.gram-index > li > a.enterBtn:hover,
+  ul.gram-index > li > a.enterBtn:focus {
+    transform: none;
+  }
+}

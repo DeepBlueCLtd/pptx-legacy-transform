@@ -57,6 +57,14 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn(
             "theme/gramframe-oxygen/page-templates-fragments/libraries/gramframe.xml",
             names)
+        # The dark-mode overlay travels the same way: the operator installs it
+        # into the Oxygen template so the production publish is dark with no
+        # theme picker (issue #173).
+        self.assertIn("theme/oxygen-dark-mode/resources/dark-mode.js", names)
+        self.assertIn("theme/oxygen-dark-mode/resources/dark-mode.css", names)
+        self.assertIn(
+            "theme/oxygen-dark-mode/page-templates-fragments/libraries/dark-mode.xml",
+            names)
         self.assertIn("stock.wav", names)
         self.assertIn("requirements.txt", names)
         self.assertIn("README.md", names)

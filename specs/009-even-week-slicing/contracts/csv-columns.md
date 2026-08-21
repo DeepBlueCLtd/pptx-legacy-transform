@@ -23,7 +23,7 @@ columns (`publication`, `chapter`, `gram_id`, `topic_type`, `sequence`,
 | Aspect | Before | After |
 |---|---|---|
 | Non-`main` publications | bump a taken number to bucket max+1 within `(publication, chapter, doc)` | unchanged |
-| **`main`** | per-`(publication, chapter, doc)` bump | reassigned per the chosen scheme over `main` (see `dedupe-cli.md`): **continuous** = `1..N` over `(week, source-chapter, row-order)`; **per-week** = `1..k` within each week |
+| **`main`** | per-`(publication, chapter, doc)` bump | reassigned per the chosen scheme over `main` (see `dedupe-cli.md`): **per-week** (default) = contiguous `1..k` within each week, native-week deck first; **continuous** = `1..N` over `(week, source-chapter, row-order)` |
 | `gram_id` | never mutated | never mutated |
 | Effective number | `target_gram_id or gram_id` | unchanged |
 

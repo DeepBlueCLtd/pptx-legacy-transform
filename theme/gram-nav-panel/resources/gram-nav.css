@@ -1,0 +1,81 @@
+/* Floating gram navigation panel — production Oxygen WebHelp overlay.
+ *
+ * generate_dita.py emits one <p outputclass="gram-nav"> on every gram page.
+ * Oxygen passes outputclass through to the HTML @class, so the published
+ * page carries <p class="gram-nav"> holding one <a> per Lofar (href
+ * "#…/lofar-N") plus — instructor edition only — a final link to the
+ * Analysis Sheet. The trainee DITAVAL strips that one instructor-only entry
+ * from the student build, so the student panel lists only the Lofars.
+ *
+ * This file pins the panel to the lower-right corner so a reader can jump
+ * straight to a numbered Lofar from anywhere on a long gram page. It is the
+ * production-publish counterpart of the rule in
+ * scripts/vendor/themes/operator-console-v2/theme.css that styles the dev/CI
+ * HTML preview; keep the two visually in step.
+ *
+ * Self-contained (literal colours, no CSS custom properties) because the
+ * Oxygen WebHelp Responsive output does not load the operator-console theme.
+ * Install per ../README.md (copy into your publishing template's resources/
+ * and reference it from the .opt <resources> so it loads last and wins the
+ * cascade).
+ */
+
+p.gram-nav {
+  position: fixed;
+  right: 22px;
+  bottom: 24px;
+  z-index: 1000;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 220px;
+  padding: 12px 14px;
+  background: rgba(13, 17, 23, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+p.gram-nav::before {
+  content: "JUMP TO";
+  font: 600 10px/1 "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.22em;
+  color: rgba(230, 237, 243, 0.55);
+  margin-bottom: 2px;
+}
+
+p.gram-nav a,
+p.gram-nav a:link,
+p.gram-nav a:visited {
+  display: block;
+  text-decoration: none;
+  color: #4dd0e1;
+  font: 600 11px/1.2 "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+p.gram-nav a:hover,
+p.gram-nav a:focus {
+  color: #ffb27a;
+  background: rgba(255, 138, 61, 0.12);
+  border-color: #ff8a3d;
+}
+
+/* The Analysis Sheet entry (instructor edition only) keeps the amber accent
+   so it still reads as the instructor affordance it has always been. */
+p.gram-nav a[href$="analysis-sheet"],
+p.gram-nav a[href$="analysis-sheet"]:link,
+p.gram-nav a[href$="analysis-sheet"]:visited {
+  color: #ff8a3d;
+  border-color: rgba(255, 138, 61, 0.5);
+}
+
+p.gram-nav a[href$="analysis-sheet"]::before {
+  content: "\25A4  ";
+  color: #ff8a3d;
+}

@@ -25,10 +25,15 @@ TMP = REPO_ROOT / "tests" / "_tmp"
 STATIC_ROOT = REPO_ROOT / "static"
 
 
+SEVEN_QUESTIONS_PNG = FIXTURES / "7_questions.png"
+
+
 def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          image_root: Path = FIXTURES, clean: bool = True,
          stub_wav: "Path | None" = None,
-         static_root: "Path | None" = STATIC_ROOT) -> int:
+         static_root: "Path | None" = STATIC_ROOT,
+         seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG,
+         extra_argv: "list[str] | None" = None) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -36,6 +41,11 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
         "--out", str(out_dir),
         "--image-root", str(image_root),
     ]
+    # ``clean`` is the *harness* wiping out_dir before the run — the generator
+    # itself has no whole-tree wipe. ``extra_argv`` appends raw options, for
+    # asserting on argparse's own handling (e.g. that --clean is rejected).
+    if extra_argv:
+        argv += extra_argv
     if stub_wav is not None:
         argv += ["--stub-wav", str(stub_wav)]
     # Pin --static-root so the feature-010 common pages are sourced from a
@@ -43,6 +53,10 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
     # static_root=None to exercise the "no static root" degradation path.
     if static_root is not None:
         argv += ["--static-root", str(static_root)]
+    # Pin --seven-questions so the 7 Questions PNG is sourced from a known
+    # location. Pass seven_questions=None to exercise the missing-PNG path.
+    if seven_questions is not None:
+        argv += ["--seven-questions", str(seven_questions)]
     return generate_dita.main(argv)
 
 
@@ -102,54 +116,62 @@ class GenerateDitaTests(unittest.TestCase):
             "expected at least one gram-stage section with outputclass='lofar-stage'",
         )
 
-    def test_glc_section_carries_display_text_title(self) -> None:
-        """Each GLC section in a gram topic carries a ``<title>`` set to the
-        PPTX link label (``display_text``) so multi-gram pages render a
-        clear heading per spectrogram. The minimal fixture's Gram 12 row
-        has ``display_text="LOFAR 1"``."""
+    def test_glc_section_carries_incremental_lofar_title_and_anchor(self) -> None:
+        """Each spectrogram section is numbered incrementally — ``Lofar N``
+        — regardless of the source deck's inconsistent link labels, and
+        carries the matching ``id="lofar-N"`` anchor so the floating nav
+        panel can target it. The minimal fixture's Gram 12 has one Lofar."""
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
         section = root.find(".//body/section[table]")
         self.assertIsNotNone(section, "expected a section wrapping the gramframe table")
         title = section.find("title")
-        self.assertIsNotNone(title,
-                             "GLC section must carry a <title> taken from display_text")
-        self.assertEqual(title.text, "LOFAR 1")
+        self.assertIsNotNone(title, "Lofar section must carry a numbered <title>")
+        self.assertEqual(title.text, "Lofar 1")
+        self.assertEqual(section.get("id"), "lofar-1",
+                         "Lofar section must carry its incremental anchor id")
 
-    def test_glc_section_omits_title_when_display_text_blank(self) -> None:
-        """When ``display_text`` is empty, the section emits no ``<title>``
-        — we don't want a blank heading polluting the page."""
+    def test_lofar_sections_numbered_incrementally(self) -> None:
+        """Two spectrogram rows on one gram become Lofar 1 / Lofar 2 with
+        anchors lofar-1 / lofar-2, in CSV ``sequence`` order — even when the
+        source labels are inconsistent (one "Lofar", one blank here)."""
         csv_path = TMP / f"{self._testMethodName}.csv"
         cols = generate_dita.CSV_COLUMNS
-        rows = [{c: "" for c in cols}]
-        rows[0].update({
+        base = {c: "" for c in cols}
+        base.update({
             "publication": "main", "chapter": "Nordic Fishing Vessels",
             "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
-            "topic_type": "glc", "sequence": "1",
-            "topic_filename": "gram_12.dita",
-            "link_href": "supporting/gram12/config_1.glc",
-            "glc_path": "supporting/gram12/config_1.glc",
+            "topic_type": "glc", "topic_filename": "gram_12.dita",
+            "glc_path": "supporting/gram12/config.glc",
+            "link_href": "supporting/gram12/config.glc",
             "time_end": "271", "bandwidth": "400", "bandcentre": "200",
             "png_path": "images/gram12.png",
         })
+        r1 = dict(base, sequence="1", display_text="Lofar")
+        r2 = dict(base, sequence="2", display_text="")
         with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(cols),
                                quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
             w.writeheader()
-            w.writerow(rows[0])
+            w.writerow(r1)
+            w.writerow(r2)
         _run(self.out, csv_path=csv_path)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
-        section = root.find(".//body/section[table]")
-        self.assertIsNotNone(section)
-        self.assertIsNone(section.find("title"),
-                          "section must not emit an empty <title>")
+        sections = [s for s in root.findall(".//body/section")
+                    if s.get("outputclass") == "lofar-stage"]
+        self.assertEqual(
+            [(s.get("id"), s.find("title").text) for s in sections],
+            [("lofar-1", "Lofar 1"), ("lofar-2", "Lofar 2")],
+        )
 
-    def test_wav_glc_section_carries_display_text_title(self) -> None:
-        """The §1.3 GLC-viewer-link section also carries the display_text
-        as its ``<title>`` (in addition to the xref's link text), so the
-        section heading identifies the link on multi-gram pages."""
+    def test_wav_glc_section_numbered_as_wav_not_lofar(self) -> None:
+        """A ``.wav``-backed GLC section is *not* a Lofar — it resolves to no
+        spectrogram — so it is titled ``WAV N``, anchored ``wav-N`` and
+        classed ``wav-stage``. The PPTX label is not used: the legacy decks
+        label audio links ``Lofar N`` too, which is the mislabelling this
+        rule exists to correct. Gram 05 has one."""
         _run(self.out)
         topic = self.out / "main" / "arctic-survey" / "gram-05" / "gram_05.dita"
         root = ET.parse(topic).getroot()
@@ -160,9 +182,73 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(xref_section,
                              "expected a section wrapping the GLC-viewer xref")
         title = xref_section.find("title")
-        self.assertIsNotNone(title,
-                             "WAV-typed GLC section must carry a <title> from display_text")
-        self.assertEqual(title.text, "Audio sample")
+        self.assertIsNotNone(title, "the audio section must carry a numbered <title>")
+        self.assertEqual(title.text, "WAV 1")
+        self.assertEqual(xref_section.get("id"), "wav-1")
+        self.assertEqual(xref_section.get("outputclass"), "wav-stage")
+        self.assertEqual(xref_section.find("p/xref").text, "WAV 1",
+                         "the audio xref label is synthesised, not the PPTX text")
+        self.assertNotIn(
+            "Lofar", "".join(xref_section.itertext()),
+            "an audio section must never be presented as a Lofar")
+
+    def test_lofar_and_wav_sections_numbered_independently(self) -> None:
+        """A gram interleaving image and audio GLCs numbers each kind on its
+        own contiguous 1..N sequence — image, audio, audio, image renders as
+        Lofar 1, WAV 1, WAV 2, Lofar 2 (issue: audio links were numbered off
+        the shared Lofar counter and came out as "Lofar 4")."""
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        cols = generate_dita.CSV_COLUMNS
+        base = {c: "" for c in cols}
+        base.update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "topic_type": "glc",
+            "topic_filename": "gram_12.dita",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+        })
+        img = dict(base, glc_path="supporting/gram12/config.glc",
+                   link_href="supporting/gram12/config.glc",
+                   png_path="images/gram12.png")
+        # The legacy decks label the audio links "Lofar N" as well — the
+        # generator must ignore that and synthesise its own WAV numbering.
+        wav = dict(base, glc_path="supporting/gram12/audio.glc",
+                   link_href="supporting/gram12/audio.glc",
+                   png_path="supporting/gram12/audio.wav")
+        rows = [
+            dict(img, sequence="1", display_text="Lofar 1"),
+            dict(wav, sequence="2", display_text="Lofar 2"),
+            dict(wav, sequence="3", display_text="Lofar 3"),
+            dict(img, sequence="4", display_text="Lofar 4"),
+        ]
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerows(rows)
+        _run(self.out, csv_path=csv_path)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        sections = [s for s in root.findall(".//body/section")
+                    if s.get("outputclass") in ("lofar-stage", "wav-stage")]
+        self.assertEqual(
+            [(s.get("id"), s.find("title").text) for s in sections],
+            [("lofar-1", "Lofar 1"), ("wav-1", "WAV 1"),
+             ("wav-2", "WAV 2"), ("lofar-2", "Lofar 2")],
+            "each kind numbers 1..N over its own rows, in CSV sequence order",
+        )
+        # The nav panel reads down the page, interleaved the same way (after
+        # the leading 7 Questions entry the fixture run adds).
+        panel = root.find(".//body/p[@outputclass='gram-nav']")
+        stage_xrefs = [x for x in panel.findall("xref")
+                       if x.get("audience") is None]
+        self.assertEqual(
+            [x.text for x in stage_xrefs],
+            ["Lofar 1", "WAV 1", "WAV 2", "Lofar 2"],
+        )
+        ids = {s.get("id") for s in root.findall(".//body/section")}
+        for xref in panel.findall("xref"):
+            self.assertIn(xref.get("href").split("/")[-1], ids,
+                          "every nav entry must target a real section anchor")
 
     def test_gramframe_table_has_named_colspecs(self) -> None:
         """DITA-OT needs named colspecs so the image cell renders with
@@ -194,14 +280,23 @@ class GenerateDitaTests(unittest.TestCase):
         """Regression guard: the gramframe block must carry an <image> element
         with a non-empty href pointing at a file that actually exists next to
         the topic. Without this, the published HTML would render an empty
-        gram cell — the failure mode that motivated this test."""
+        gram cell — the failure mode that motivated this test.
+        The 7 Questions image (in the publication root, not the gram folder)
+        is excluded — its relative ``../..`` href is expected and tested
+        separately."""
         _run(self.out)
         gram_dir = self.out / "main" / "nordic-fishing-vessels" / "gram-12"
         topic = gram_dir / "gram_12.dita"
         root = ET.parse(topic).getroot()
-        images = root.findall(".//image")
+        # Only images inside gramframe sections are gram-local assets.
+        images = root.findall(".//section[@outputclass='lofar-stage']//image") + \
+                 root.findall(".//table[@outputclass='gram-config']//image")
+        if not images:
+            # Fall back: any image whose href is gram-local (no leading ..)
+            images = [img for img in root.findall(".//image")
+                      if not (img.get("href") or "").startswith("..")]
         self.assertGreaterEqual(len(images), 1,
-                                "generated DITA must contain at least one <image>")
+                                "generated DITA must contain at least one gramframe <image>")
         for img in images:
             href = img.get("href")
             self.assertTrue(href, f"<image> is missing href: {ET.tostring(img)!r}")
@@ -227,41 +322,87 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertIsNotNone(image, "PNG analysis assets render as <image>")
         self.assertEqual(image.get("href"), "gram12-analysis.png")
 
-    def test_analysis_jump_link_is_instructor_only_and_targets_section(self) -> None:
-        """Issue #91: a gram with an analysis sheet carries a floating
-        in-page jump link. It is instructor-only (``audience="-trainee"``),
-        rendered as ``<p class="analysis-jump">`` by the theme, and its
-        ``<xref>`` targets the analysis-sheet section by id within the
-        same topic. The target section must carry that id."""
+    def test_debug_provenance_block_on_by_default_maps_published_to_source(self) -> None:
+        """The source-provenance block is ON by default (current debugging
+        phase): a plain build stamps each gram with an instructor-only note
+        mapping its published path back to the source publication, chapter/deck
+        and original gram number, plus the analysis image's source path."""
+        rc = _run(self.out)  # no flag -> default on
+        self.assertEqual(rc, 0)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        note = root.find(".//body/note[@outputclass='debug-provenance']")
+        self.assertIsNotNone(note, "provenance note should be present by default")
+        # Instructor-only so it never leaks into a student edition.
+        self.assertEqual(note.get("audience"), "-trainee")
+        text = " ".join(p.text or "" for p in note.findall("p"))
+        self.assertIn("main", text)                    # source publication
+        self.assertIn("Nordic Fishing Vessels", text)  # source chapter/deck title
+        self.assertIn("12", text)                       # source gram number
+        self.assertIn("gram12_analysis.png", text)      # analysis image source path
+
+    def test_no_debug_provenance_block_when_suppressed(self) -> None:
+        """--no-debug-provenance suppresses the temporary block, so a build
+        passed that flag carries no debug note."""
+        rc = generate_dita.main([
+            "--csv", str(FIXTURES / "minimal.csv"),
+            "--out", str(self.out),
+            "--image-root", str(FIXTURES),
+            "--static-root", str(STATIC_ROOT),
+            "--no-debug-provenance",
+        ])
+        self.assertEqual(rc, 0)
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        root = ET.parse(topic).getroot()
+        self.assertIsNone(
+            root.find(".//note[@outputclass='debug-provenance']"),
+            "no debug provenance block should appear with --no-debug-provenance")
+
+    def test_gram_nav_panel_links_lofars_for_all_and_analysis_instructor_only(self) -> None:
+        """A gram carries a single floating nav panel (``<p class="gram-nav">``).
+        It lists a leading student-only 7 Questions xref
+        (``audience="student-only"``), then one xref per Lofar (both editions),
+        then for grams with an analysis sheet a trailing instructor-only
+        (``audience="-trainee"``) xref to the analysis section. Every xref
+        targets a real anchor within the same topic."""
         _run(self.out)
         topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
         root = ET.parse(topic).getroot()
+        topic_id = root.get("id")
 
-        jump = root.find(".//body/p[@outputclass='analysis-jump']")
-        self.assertIsNotNone(jump, "gram with an analysis sheet must emit a jump link")
-        self.assertEqual(jump.get("audience"), "-trainee",
-                         "the jump link must be instructor-only")
-        xref = jump.find("xref")
-        self.assertIsNotNone(xref)
+        panel = root.find(".//body/p[@outputclass='gram-nav']")
+        self.assertIsNotNone(panel, "gram page must carry the floating nav panel")
 
-        section = root.find(".//body/section[@outputclass='analysis-sheet']")
-        self.assertIsNotNone(section)
-        self.assertEqual(section.get("id"), "analysis-sheet",
-                         "the analysis section must carry the jump target id")
-        self.assertEqual(xref.get("href"), f"#{root.get('id')}/{section.get('id')}",
-                         "the jump xref must point at the analysis-sheet section")
+        xrefs = panel.findall("xref")
+        # Gram 12: 7Q + one Lofar + an analysis sheet => three panel entries.
+        self.assertEqual(
+            [(x.text, x.get("href"), x.get("audience")) for x in xrefs],
+            [
+                ("7 Questions", f"#{topic_id}/seven-questions", "student-only"),
+                ("Lofar 1", f"#{topic_id}/lofar-1", None),
+                ("Analysis Sheet", f"#{topic_id}/analysis-sheet", "-trainee"),
+            ],
+        )
+        # Each anchor resolves to a section that actually carries that id.
+        ids = {s.get("id") for s in root.findall(".//body/section")}
+        self.assertIn("seven-questions", ids)
+        self.assertIn("lofar-1", ids)
+        self.assertIn("analysis-sheet", ids)
 
-    def test_no_analysis_jump_link_without_analysis_section(self) -> None:
-        """A gram with no analysis sheet (e.g. a progress-test gram) emits
-        no jump link — both link and target are instructor-only, so there
-        is nothing to scroll to."""
+    def test_gram_nav_panel_without_analysis_omits_instructor_entry(self) -> None:
+        """A gram with no analysis sheet (e.g. a progress-test gram) still
+        gets the nav panel with a 7 Questions link (both editions) and a Lofar
+        link, but no instructor-only analysis entry."""
         _run(self.out)
         topic = self.out / "progress-test-1" / "gram-03" / "gram_03.dita"
         root = ET.parse(topic).getroot()
-        self.assertIsNone(
-            root.find(".//p[@outputclass='analysis-jump']"),
-            "no analysis section means no jump link",
-        )
+        panel = root.find(".//body/p[@outputclass='gram-nav']")
+        self.assertIsNotNone(panel, "a gram page must carry the nav panel for students too")
+        xrefs = panel.findall("xref")
+        self.assertEqual([x.text for x in xrefs], ["7 Questions", "Lofar 1"],
+                         "7 Questions + Lofar entry — no analysis sheet on this gram")
+        self.assertIsNone(panel.find("xref[@audience='-trainee']"),
+                          "no instructor-only analysis entry without an analysis sheet")
 
     def test_docx_analysis_renders_as_xref(self) -> None:
         """When the analysis asset is a .docx, the section emits an <xref>
@@ -305,23 +446,197 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "analysis.docx")
         self.assertEqual(xref.get("format"), "docx")
 
+    # -------------------------------------------------------------------------
+    # Feature 013 (US1): the editable Word original travels with the gram
+    # -------------------------------------------------------------------------
+
+    def _word_original_csv(self, doc_name: str, *, image_root: Path) -> Path:
+        """Write a two-row CSV (one lofar + one analysis) naming ``doc_name``
+        as the analysis sheet's Word original."""
+        csv_path = TMP / f"{self._testMethodName}_{doc_name}.csv"
+        cols = generate_dita.CSV_COLUMNS + ("analysis_doc_path",)
+        rows = [{c: "" for c in cols}, {c: "" for c in cols}]
+        rows[0].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "link_href": "supporting/gram12/config_1.glc",
+            "glc_path": "supporting/gram12/config_1.glc",
+            "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+            "png_path": "images/gram12.png",
+        })
+        rows[1].update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_type": "analysis", "sequence": "1",
+            "topic_filename": "gram_12.dita",
+            "png_path": "images/gram12_analysis.png",
+            "analysis_doc_path": doc_name,
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        return csv_path
+
+    def _word_original_image_root(self, doc_name: str, payload: bytes) -> Path:
+        """A scratch image root carrying the lofar/analysis images plus the
+        Word original under ``doc_name``.
+
+        The ``.glc`` the CSV names is deliberately absent, exactly as in
+        ``minimal.csv`` — a dangling GLC is the pre-existing fixture shape and
+        is orthogonal to what these tests assert.
+        """
+        root = TMP / f"imgroot_{self._testMethodName}"
+        if root.exists():
+            shutil.rmtree(root)
+        (root / "images").mkdir(parents=True)
+        for name in ("gram12.png", "gram12_analysis.png"):
+            shutil.copy(FIXTURES / "images" / name, root / "images" / name)
+        (root / doc_name).write_bytes(payload)
+        return root
+
+    def _gram_dir(self) -> Path:
+        return self.out / "main" / "nordic-fishing-vessels" / "gram-12"
+
+    def test_word_original_is_copied_beside_the_topic(self) -> None:
+        """FR-001/002: the editable source lands in the gram's own folder under
+        a stable name, so an analyst finds it beside the page it produced."""
+        payload = b"the author's editable analysis sheet"
+        image_root = self._word_original_image_root("Analysis Sheet.docx", payload)
+        csv_path = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        rc = _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertEqual(rc, 0)
+        copied = self._gram_dir() / "analysis.docx"
+        self.assertTrue(copied.is_file(), "the Word original must be copied")
+        self.assertEqual(copied.read_bytes(), payload,
+                         "the copy must be byte-identical to the source")
+
+    def test_legacy_doc_keeps_its_extension(self) -> None:
+        """FR-003: a binary .doc is carried as a .doc, not converted."""
+        image_root = self._word_original_image_root("Analysis Sheet.doc", b"legacy")
+        csv_path = self._word_original_csv("Analysis Sheet.doc", image_root=image_root)
+        _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertTrue((self._gram_dir() / "analysis.doc").is_file())
+        self.assertFalse((self._gram_dir() / "analysis.docx").exists(),
+                         "a .doc must not be renamed to .docx")
+
+    def test_word_original_is_not_referenced_by_the_topic(self) -> None:
+        """FR-004: the document is parked, not linked. The topic XML must be
+        byte-identical to the same run without a Word original, so no reader
+        sees any change and the published HTML is untouched."""
+        image_root = self._word_original_image_root("Analysis Sheet.docx", b"x")
+        with_doc = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        without_doc = self._word_original_csv("", image_root=image_root)
+
+        _run(self.out, csv_path=with_doc, image_root=image_root)
+        topic_with = (self._gram_dir() / "gram_12.dita").read_bytes()
+        self.assertTrue((self._gram_dir() / "analysis.docx").is_file())
+
+        other = TMP / f"out_{self._testMethodName}_without"
+        _run(other, csv_path=without_doc, image_root=image_root)
+        topic_without = (
+            other / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        ).read_bytes()
+
+        self.assertEqual(topic_with, topic_without,
+                         "parking the Word original must not change the topic XML")
+        self.assertNotIn(b"analysis.docx", topic_with,
+                         "nothing in the topic may reference the Word original")
+
+    def test_absent_word_original_warns_and_continues(self) -> None:
+        """FR-008: a recorded original that is not on disk dangles like any
+        other external asset — a warning, never an abort. Nothing references
+        it, so there is no dangling href to repair either."""
+        image_root = self._word_original_image_root("Analysis Sheet.docx", b"x")
+        (image_root / "Analysis Sheet.docx").unlink()
+        csv_path = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        with self.assertLogs(generate_dita.LOGGER, level="WARNING") as cm:
+            rc = _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertEqual(rc, 0, "a missing Word original must not fail the run")
+        self.assertTrue((self._gram_dir() / "gram_12.dita").is_file(),
+                        "the topic must still be emitted")
+        self.assertTrue(any("Analysis Sheet.docx" in m for m in cm.output))
+
+    def test_no_word_original_column_is_forward_compatible(self) -> None:
+        """FR-006: a CSV written before this feature has no such cell, which
+        reads as 'no Word original' and produces the output it always did."""
+        rc = _run(self.out)  # minimal.csv predates the column
+        self.assertEqual(rc, 0)
+        gram_dir = self._gram_dir()
+        self.assertTrue((gram_dir / "gram_12.dita").is_file())
+        self.assertEqual(
+            [p.name for p in gram_dir.iterdir() if p.suffix in (".doc", ".docx")], [],
+            "no Word document should appear when the column is absent")
+
+    def test_word_original_copy_is_deterministic(self) -> None:
+        """FR-009 / Principle V: two runs produce byte- and mtime-identical
+        copies, so regeneration diffs stay meaningful."""
+        image_root = self._word_original_image_root("Analysis Sheet.docx", b"stable")
+        csv_path = self._word_original_csv("Analysis Sheet.docx", image_root=image_root)
+        _run(self.out, csv_path=csv_path, image_root=image_root)
+        copied = self._gram_dir() / "analysis.docx"
+        first, mtime = copied.read_bytes(), copied.stat().st_mtime_ns
+        _run(self.out, csv_path=csv_path, image_root=image_root)
+        self.assertEqual(copied.read_bytes(), first)
+        self.assertEqual(copied.stat().st_mtime_ns, mtime)
+
+    def test_jpg_analysis_renders_as_inline_image(self) -> None:
+        """JPG and JPEG analysis assets embed as <image>, not <xref>."""
+        for ext in ("jpg", "jpeg"):
+            with self.subTest(ext=ext):
+                csv_path = TMP / f"{self._testMethodName}_{ext}.csv"
+                cols = generate_dita.CSV_COLUMNS
+                rows = [{c: "" for c in cols}, {c: "" for c in cols}]
+                rows[0].update({
+                    "publication": "main", "chapter": "Nordic Fishing Vessels",
+                    "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+                    "topic_type": "glc", "sequence": "1",
+                    "topic_filename": "gram_12.dita",
+                    "link_href": "supporting/gram12/config_1.glc",
+                    "glc_path": "supporting/gram12/config_1.glc",
+                    "time_end": "271", "bandwidth": "400", "bandcentre": "200",
+                    "png_path": "images/gram12.png",
+                })
+                rows[1].update({
+                    "publication": "main", "chapter": "Nordic Fishing Vessels",
+                    "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+                    "topic_type": "analysis", "sequence": "1",
+                    "topic_filename": "gram_12.dita",
+                    "png_path": f"analysis.{ext}",
+                })
+                with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+                    w = csv.DictWriter(fh, fieldnames=list(cols),
+                                       quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+                    w.writeheader()
+                    for r in rows:
+                        w.writerow(r)
+                out = TMP / f"{self._testMethodName}_{ext}_out"
+                _run(out, csv_path=csv_path)
+                topic = out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+                root = ET.parse(topic).getroot()
+                analysis_section = root.find(".//body/section[@audience='-trainee']")
+                self.assertIsNotNone(analysis_section)
+                image = analysis_section.find("image")
+                self.assertIsNotNone(image, f".{ext} analysis assets must render as <image>")
+                self.assertEqual(image.get("href"), f"analysis.{ext}")
+
     def test_main_ditamap_weeks_at_top_level(self) -> None:
         """Each main chapter (week) is a *sub-document* pulled up to the **top
-        level** of the map: a real chapter topic referenced by a top-level
-        ``<topicref>`` (beside the static pages, no enclosing ``Grams``
-        ``<topichead>``), with the chapter's gram topicrefs one tier below it."""
+        level** of the map: a real chapter topic referenced by a bare top-level
+        ``<topicref>`` with no nested gram topicrefs — grams are navigated via
+        the enterBtn links inside the chapter topic itself."""
         _run(self.out)
         ditamap = self.out / "main" / "main.ditamap"
         self.assertTrue(ditamap.is_file(),
                         "main.ditamap must live inside the main/ folder")
         root = ET.parse(ditamap).getroot()
         self.assertEqual(root.tag, "map")
-        # The weeks are pulled up to the top level — the single "Grams"
-        # <topichead> folder is gone from main.
         self.assertEqual(root.findall("topichead"), [],
                          "main has no Grams folder — weeks sit at the top level")
-        # A week topicref points at its chapter topic; static pages are bare
-        # filenames. The chapter topicrefs are the non-static root topicrefs.
         chapters = [tr for tr in root.findall("topicref")
                     if "/" in (tr.get("href") or "")]
         self.assertGreaterEqual(len(chapters), 1)
@@ -332,12 +647,10 @@ class GenerateDitaTests(unittest.TestCase):
             chapter_topic = ditamap.parent / href
             self.assertTrue(chapter_topic.is_file(),
                             f"chapter topic missing on disk: {chapter_topic}")
-            gram_refs = chapter_ref.findall("topicref")
-            self.assertGreaterEqual(len(gram_refs), 1,
-                                    "gram topicrefs nest inside the chapter")
-            for gram_ref in gram_refs:
-                self.assertTrue((ditamap.parent / gram_ref.get("href")).is_file(),
-                                "gram hrefs are relative to the ditamap folder")
+            # Grams are NOT nested in the ditamap; they live as enterBtn links
+            # in the chapter topic body.
+            self.assertEqual(chapter_ref.findall("topicref"), [],
+                             "no gram topicrefs nested under chapter in ditamap")
 
     def test_main_ditamap_one_topicref_per_gram(self) -> None:
         """The CSV carries N+1 rows per gram but the ditamap must point to
@@ -348,6 +661,29 @@ class GenerateDitaTests(unittest.TestCase):
         hrefs = [tr.get("href") for tr in root.findall(".//topicref")]
         self.assertEqual(len(hrefs), len(set(hrefs)),
                          f"duplicate topicrefs in ditamap: {hrefs}")
+
+    def test_chapter_topic_contains_enter_btn_links(self) -> None:
+        """The week chapter topic itself holds a ``<ul outputclass='gram-index'>``
+        with ``<xref outputclass='enterBtn'>`` links to the week's grams, so
+        clicking a week in the nav lands directly on the gram-selection page
+        without an extra hop (issue #130)."""
+        _run(self.out)
+        chapter_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "nordic_fishing_vessels.dita"
+        )
+        self.assertTrue(chapter_path.is_file())
+        root = ET.parse(chapter_path).getroot()
+        ul = root.find(".//ul[@outputclass='gram-index']")
+        self.assertIsNotNone(ul, "expected <ul outputclass='gram-index'> in chapter topic")
+        xrefs = ul.findall(".//xref[@outputclass='enterBtn']")
+        self.assertGreaterEqual(len(xrefs), 1, "expected at least one enterBtn link")
+        for xref in xrefs:
+            self.assertEqual(xref.get("format"), "dita")
+            href = xref.get("href", "")
+            self.assertTrue(href.endswith(".dita"),
+                            f"enterBtn href should point at a .dita topic: {href!r}")
+            # No explicit text — DITA pulls the target topic's title at publish time.
+            self.assertIsNone(xref.text)
 
     def test_no_ditamap_at_output_root(self) -> None:
         """Every ditamap lives inside its named publication folder; nothing
@@ -406,11 +742,11 @@ class GenerateDitaTests(unittest.TestCase):
                          "no main ditamap may be written when a week is unassigned")
 
     def test_main_ditamap_grams_sorted_by_effective_number(self) -> None:
-        """Within a week, gram topicrefs are emitted in ascending numeric
-        order — not CSV row order, which interleaves a week's native deck
-        with the even-sliced no-week decks' renumbered grams. The sort is
-        numeric (102 follows 23), and the effective number (target_gram_id)
-        is what's ordered."""
+        """Within a week, gram enterBtn links in the chapter topic are emitted
+        in ascending numeric order — not CSV row order. The sort is numeric
+        (102 follows 23), and the effective number (target_gram_id) is ordered.
+        (Grams no longer appear as topicrefs in the ditamap — they are links
+        inside the chapter topic body.)"""
         def row(gram_id, target="", chapter="2"):
             r = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
             r.update({
@@ -422,19 +758,22 @@ class GenerateDitaTests(unittest.TestCase):
             return r
 
         rows = [row("23"), row("7", target="102"), row("7")]
-        ditamap = generate_dita.emit_main_ditamap(rows, self.out)
-        hrefs = [tr.get("href")
-                 for tr in ET.parse(ditamap).getroot().iter("topicref")
-                 if "gram-" in (tr.get("href") or "")]
+        generate_dita.emit_main_chapter_topics(rows, self.out)
+        generate_dita.emit_main_ditamap(rows, self.out)
+        chapter_topic = self.out / "main" / "week-2" / "week_2.dita"
+        xrefs = ET.parse(chapter_topic).getroot().findall(
+            ".//ul[@outputclass='gram-index']/li/xref")
+        hrefs = [x.get("href") for x in xrefs]
         self.assertEqual(hrefs, [
-            "week-2/gram-07/gram_07.dita",
-            "week-2/gram-23/gram_23.dita",
-            "week-2/gram-102/gram_102.dita",
+            "gram-07/gram_07.dita",
+            "gram-23/gram_23.dita",
+            "gram-102/gram_102.dita",
         ], "grams must sort by effective number, numerically")
 
     def test_test_ditamap_grams_sorted_by_effective_number(self) -> None:
-        """The flat publications' gram topicrefs are number-ordered too,
-        regardless of CSV row order."""
+        """The flat publications' gram enterBtn links are number-ordered,
+        regardless of CSV row order. (Grams no longer appear as topicrefs
+        in the ditamap — they are links inside the grams.dita topic body.)"""
         def row(gram_id):
             r = {c: "" for c in generate_dita.CSV_COLUMNS + generate_dita.OPTIONAL_CSV_COLUMNS}
             r.update({
@@ -443,36 +782,41 @@ class GenerateDitaTests(unittest.TestCase):
             })
             return r
 
-        ditamap = generate_dita.emit_test_ditamap(
+        generate_dita.emit_test_grams_topic(
             "progress-test-9", [row("10"), row("2")], self.out)
-        hrefs = [tr.get("href")
-                 for tr in ET.parse(ditamap).getroot().iter("topicref")
-                 if "gram-" in (tr.get("href") or "")]
+        grams_topic = self.out / "progress-test-9" / "grams.dita"
+        xrefs = ET.parse(grams_topic).getroot().findall(
+            ".//ul[@outputclass='gram-index']/li/xref")
+        hrefs = [x.get("href") for x in xrefs]
         self.assertEqual(hrefs, ["gram-02/gram_02.dita", "gram-10/gram_10.dita"])
+        # The xref carries no hardcoded label: DITA-OT resolves the link text
+        # from the target topic's own <title> (Gram N - Vessel), so the real
+        # gram title — incl. the instructor-visible vessel name — shows on the
+        # index, matching the per-week main index behaviour.
+        for xref in xrefs:
+            self.assertIsNone(xref.text)
 
     def test_test_ditamap_grams_under_grams_folder(self) -> None:
-        """Feature 010: a progress-test ditamap's root children are the <title>,
-        the common static <topicref>s, then a single "Grams" <topichead> holding
-        every gram topicref — no gram sits at the ditamap root any more."""
+        """Feature 010 (updated): a progress-test ditamap's root children are
+        the <title>, the common static <topicref>s, then a bare
+        ``<topicref href="grams.dita">`` with no nested gram topicrefs —
+        grams are navigated via the enterBtn links inside grams.dita itself."""
         _run(self.out)
         ditamap = self.out / "progress-test-1" / "progress-test-1.ditamap"
         self.assertTrue(ditamap.is_file(),
                         "the test ditamap must live inside its publication folder")
         root = ET.parse(ditamap).getroot()
         for child in root:
-            self.assertIn(child.tag, {"title", "topicref", "topichead"},
+            self.assertIn(child.tag, {"title", "topicref"},
                           f"unexpected child {child.tag} in test ditamap")
-        topicheads = root.findall("topichead")
-        self.assertEqual(len(topicheads), 1,
-                         "exactly one root-level topichead — the Grams folder")
-        grams = topicheads[0]
-        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
-        # Grams holds the gram topicrefs directly — progress tests have no
-        # per-chapter tier below the Grams folder.
-        self.assertGreaterEqual(len(grams.findall("topicref")), 1)
-        self.assertIsNone(grams.find("topichead"),
-                          "progress-test grams sit flat under Grams, no chapter tier")
-        # No gram topicref leaks up to the ditamap root.
+        self.assertEqual(root.findall("topichead"), [],
+                         "no topichead — Grams is a real topic topicref")
+        grams_refs = [tr for tr in root.findall("topicref")
+                      if tr.get("href") == "grams.dita"]
+        self.assertEqual(len(grams_refs), 1, "exactly one grams.dita topicref at root")
+        # No gram topicrefs nested in the ditamap at all.
+        self.assertEqual(grams_refs[0].findall("topicref"), [],
+                         "no gram topicrefs nested under grams.dita in ditamap")
         self.assertEqual(
             [tr.get("href") for tr in root.findall("topicref")
              if "gram-" in (tr.get("href") or "")],
@@ -481,30 +825,27 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_static_pages_lead_every_ditamap(self) -> None:
         """Feature 010: Welcome then Security are the first root-level
-        topicrefs, bare-filename hrefs (the map sits beside the copied
-        pages). For progress tests they precede the Grams folder; for main
-        they precede the top-level Week folders."""
+        topicrefs, followed by the 7 Questions topic, bare-filename hrefs
+        (the map sits beside the copied pages). For progress tests they
+        precede the Grams folder; for main they precede the top-level
+        Week folders."""
         _run(self.out)
-        # Progress tests: static pages are the *only* root topicrefs, ahead
-        # of the single Grams <topichead>.
+        # Progress tests: static pages + 7Q then grams.dita are all root topicrefs.
         root = ET.parse(self.out / "progress-test-1"
                         / "progress-test-1.ditamap").getroot()
-        self.assertEqual(
-            [tr.get("href") for tr in root.findall("topicref")],
-            ["welcome.dita", "security.dita"],
-            "progress test: Welcome then Security must be the only root "
-            "topicrefs (grams live under the Grams folder)",
-        )
-        tags = [c.tag for c in root]
-        self.assertLess(tags.index("topicref"), tags.index("topichead"),
-                        "static pages must precede the Grams folder")
+        hrefs = [tr.get("href") for tr in root.findall("topicref")]
+        self.assertEqual(hrefs[:3], ["welcome.dita", "security.dita", "7_questions.dita"],
+                         "progress test: Welcome, Security, 7 Questions must lead "
+                         "the root topicrefs")
+        self.assertIn("grams.dita", hrefs,
+                      "grams.dita topicref must be present at the root")
         # Main: weeks are pulled up to the top level, so the root topicrefs are
-        # Welcome, Security, then the Week sub-documents — static pages lead.
+        # Welcome, Security, 7 Questions, then the Week sub-documents.
         root = ET.parse(self.out / "main" / "main.ditamap").getroot()
         hrefs = [tr.get("href") for tr in root.findall("topicref")]
-        self.assertEqual(hrefs[:2], ["welcome.dita", "security.dita"],
-                         "main: Welcome then Security must lead the top level")
-        self.assertGreater(len(hrefs), 2,
+        self.assertEqual(hrefs[:3], ["welcome.dita", "security.dita", "7_questions.dita"],
+                         "main: Welcome, Security, 7 Questions must lead the top level")
+        self.assertGreater(len(hrefs), 3,
                            "main: Week sub-documents follow the static pages")
 
     def test_static_tree_copied_into_each_publication(self) -> None:
@@ -529,21 +870,23 @@ class GenerateDitaTests(unittest.TestCase):
                 root = ET.parse(dst).getroot()
                 marker = root.find("body")[0]
                 self.assertEqual(marker.tag, "p")
-                self.assertEqual(marker.get("outputclass"), "edition-instructor")
+                self.assertEqual(marker.get("outputclass"), "gf-persistent")
                 self.assertEqual(marker.get("audience"), "-trainee")
 
     def test_missing_static_root_degrades_gracefully(self) -> None:
-        """An absent static root omits the common pages (no root topicref) but
-        still demotes grams under the Grams folder and succeeds (rc 0)."""
+        """An absent static root omits the Welcome/Security pages but the
+        7 Questions topicref and grams.dita topicref are still present;
+        the run succeeds (rc 0)."""
         rc = _run(self.out, static_root=TMP / "absent_static_dir")
         self.assertEqual(rc, 0)
         root = ET.parse(
             self.out / "progress-test-1" / "progress-test-1.ditamap").getroot()
-        self.assertEqual(root.findall("topicref"), [],
-                         "no static pages when the static root is absent")
-        grams = root.find("topichead")
-        self.assertIsNotNone(grams, "grams are still demoted under a Grams folder")
-        self.assertEqual(grams.find("topicmeta/navtitle").text, "Grams")
+        hrefs = [tr.get("href") for tr in root.findall("topicref")]
+        self.assertEqual(hrefs, ["7_questions.dita", "grams.dita"],
+                         "7 Questions then grams.dita when static root is absent")
+        grams_refs = [tr for tr in root.findall("topicref")
+                      if tr.get("href") == "grams.dita"]
+        self.assertEqual(len(grams_refs), 1, "grams.dita topicref present without static root")
 
     def test_every_topic_carries_instructor_edition_marker(self) -> None:
         """Every ``<topic>`` page — grams, chapter sub-documents, and the copied
@@ -564,7 +907,7 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertIsNotNone(body, f"{topic} has no body to mark")
             marker = body[0]
             self.assertEqual(marker.tag, "p", f"{topic} marker is not first")
-            self.assertEqual(marker.get("outputclass"), "edition-instructor", topic)
+            self.assertEqual(marker.get("outputclass"), "gf-persistent", topic)
             self.assertEqual(marker.get("audience"), "-trainee", topic)
 
     def test_glc_inner_wav_renders_as_glc_viewer_link(self) -> None:
@@ -578,8 +921,8 @@ class GenerateDitaTests(unittest.TestCase):
         root = ET.parse(topic).getroot()
         # No gramframe table for this row (no pre-rendered spectrogram).
         self.assertIsNone(root.find(".//table[@outputclass='gram-config']"))
-        # No <image> either — the WAV is not a renderable image.
-        self.assertIsNone(root.find(".//image"))
+        # No gramframe <image> — the WAV is not a renderable spectrogram.
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']//image"))
         xref = root.find(".//xref")
         self.assertIsNotNone(xref, "WAV-typed GLC row must emit an <xref>")
         # The href targets the .glc (slugified), not the .wav: the GLC
@@ -587,7 +930,9 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(xref.get("href"), "config.glc")
         self.assertEqual(xref.get("format"), "glc")
         self.assertEqual(xref.get("scope"), "local")
-        self.assertEqual(xref.text, "Audio sample")
+        # The link text is the synthesised audio label, not the CSV's
+        # display_text (see test_wav_glc_section_numbered_as_wav_not_lofar).
+        self.assertEqual(xref.text, "WAV 1")
 
     def test_glc_row_without_classifiable_asset_is_skipped(self) -> None:
         """A GLC row whose png_path is empty (or carries an extension
@@ -747,8 +1092,9 @@ class GenerateDitaTests(unittest.TestCase):
         topic = self.out / "main" / "arctic-survey" / "gram-08" / "gram_08.dita"
         self.assertTrue(topic.is_file())
         root = ET.parse(topic).getroot()
-        self.assertIsNone(root.find(".//image"))
-        self.assertIsNone(root.find(".//xref"))
+        # No gramframe image for the skipped row (7Q section image is expected).
+        self.assertIsNone(root.find(".//table[@outputclass='gram-config']//image"))
+        self.assertIsNone(root.find(".//xref[@format='glc']"))
         skipped = (self.out / "skipped.txt").read_text(encoding="utf-8")
         self.assertIn('gram_id="8"', skipped)
         self.assertIn(".bmp", skipped,
@@ -790,18 +1136,64 @@ class GenerateDitaTests(unittest.TestCase):
             self.assertNotIn("spectrogram", skipped.read_text(encoding="utf-8"),
                              "a .gif Lofar must not be skipped")
 
-    def test_stale_tree_wiped_without_clean_flag(self) -> None:
-        """The output tree is always rebuilt from scratch (clean is now the
-        default, not opt-in): a leftover file from a previous document's build
-        must not survive a run, even when ``--clean`` isn't passed."""
+    def test_dropped_gram_folder_is_wiped_from_its_publication(self) -> None:
+        """A gram deleted from the PPTX must disappear from the DITA tree: the
+        run rebuilds each publication folder it owns from scratch, so a topic
+        folder the CSV no longer produces cannot survive."""
         self.out.mkdir(parents=True, exist_ok=True)
-        stale = self.out / "stale_from_other_document.dita"
+        stale = self.out / "main" / "gram-99" / "gram_99.dita"
+        stale.parent.mkdir(parents=True, exist_ok=True)
         stale.write_text("<topic/>", encoding="utf-8")
         # _run defaults to clean=False here so only the generator's own wipe acts.
         rc = _run(self.out, clean=False)
         self.assertEqual(rc, 0)
-        self.assertFalse(stale.exists(),
-                         "a stale file must be wiped even without --clean")
+        self.assertFalse(stale.parent.exists(),
+                         "a dropped gram's folder must not survive a rebuild "
+                         "of its own publication")
+
+    def test_other_publications_are_left_untouched(self) -> None:
+        """The wipe is scoped to the publications in *this* CSV, so a suite of
+        documents can be built up across runs and published one by one."""
+        self.out.mkdir(parents=True, exist_ok=True)
+        earlier = self.out / "progress-test-9" / "progress-test-9.ditamap"
+        earlier.parent.mkdir(parents=True, exist_ok=True)
+        earlier.write_text("<map/>", encoding="utf-8")
+        rc = _run(self.out, clean=False)
+        self.assertEqual(rc, 0)
+        self.assertTrue(earlier.is_file(),
+                        "a publication this CSV does not produce must survive")
+        self.assertEqual(earlier.read_text(encoding="utf-8"), "<map/>",
+                         "the earlier ditamap must be untouched")
+        self.assertTrue((self.out / "main" / "main.ditamap").is_file(),
+                        "this run's own publication is still written")
+
+    def test_no_flag_can_wipe_the_whole_out_tree(self) -> None:
+        """``--clean`` is gone, and nothing replaced it.
+
+        The generator's blast radius is exactly the publication folders its
+        own CSV produces. On the target ``--out`` is ``Z:\\dita``, whose other
+        contents belong to the operator, so clearing it outright is a manual
+        act — not something a tuned wrapper can carry a flag for. argparse
+        must therefore *reject* the old flag rather than silently ignore it.
+        """
+        with self.assertRaises(SystemExit) as caught:
+            _run(self.out, extra_argv=["--clean"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_scoped_wipe_output_matches_a_from_scratch_run(self) -> None:
+        """The per-publication wipe changes only what survives from *before*
+        the run: the files a run writes must be byte-identical either way, so
+        the determinism invariant holds across the accumulate workflow."""
+        rc1 = _run(self.out, clean=True)
+        self.assertEqual(rc1, 0)
+        snapshot = TMP / f"{self._testMethodName}_snapshot"
+        if snapshot.exists():
+            shutil.rmtree(snapshot)
+        shutil.copytree(self.out, snapshot)
+        rc2 = _run(self.out, clean=False)
+        self.assertEqual(rc2, 0)
+        differing = self._collect_diffs(filecmp.dircmp(self.out, snapshot))
+        self.assertEqual(differing, [], f"non-idempotent files: {differing}")
 
     def test_idempotent_output(self) -> None:
         rc1 = _run(self.out, clean=True)
@@ -825,7 +1217,7 @@ class GenerateDitaTests(unittest.TestCase):
     def test_trainee_ditaval_emitted_with_exact_bytes(self) -> None:
         """``publish_html.py`` aborts unless ``<dita>/trainee.ditaval`` exists
         with the audience-exclude rule, so the generator must produce it
-        every run — even after ``--clean`` wipes the tree."""
+        every run — including the first run into an emptied tree."""
         _run(self.out)
         ditaval = self.out / "trainee.ditaval"
         self.assertTrue(ditaval.is_file(), f"missing {ditaval}")
@@ -836,22 +1228,181 @@ class GenerateDitaTests(unittest.TestCase):
             '  <prop att="audience" val="-trainee" action="exclude"/>\n'
             '</val>\n',
         )
-        manifest_lines = (self.out / "manifest.txt").read_text(encoding="utf-8").splitlines()
-        self.assertIn("trainee.ditaval", manifest_lines)
 
-    def test_manifest_lists_every_output_file(self) -> None:
+    def test_no_manifest_written(self) -> None:
+        """No ``manifest.txt`` at the ``--out`` root.
+
+        It used to list every file a run produced, but nothing consumed it:
+        not the publisher, not DITA-OT, not Oxygen. Worse, it was rewritten
+        wholesale every run, so after a scoped run (one publication) it
+        described that run while sitting at the root of a tree built up over
+        several — a file named for the tree that told the truth about only
+        part of it. The per-publication wipe already handles stale output,
+        which was the manifest's original justification.
+        """
         _run(self.out)
-        manifest = self.out / "manifest.txt"
-        self.assertTrue(manifest.is_file())
-        listed = set(manifest.read_text(encoding="utf-8").splitlines())
-        listed.discard("")
-        actual = set()
-        for path in self.out.rglob("*"):
-            if path.is_file() and path.name not in {"manifest.txt", "skipped.txt"}:
-                actual.add(path.relative_to(self.out).as_posix())
-        self.assertEqual(listed, actual)
-        self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
-                         "manifest must be sorted")
+        self.assertFalse((self.out / "manifest.txt").exists(),
+                         "generate_dita.py must not write manifest.txt")
+
+
+    # ------------------------------------------------------------------
+    # 7 Questions feature
+    # ------------------------------------------------------------------
+
+    def test_seven_questions_topic_emitted_per_publication(self) -> None:
+        """A ``7_questions.dita`` topic and a copy of ``7_questions.png`` are
+        written into every publication folder when the source PNG exists."""
+        _run(self.out)
+        for pub in ("main", "progress-test-1"):
+            pub_dir = self.out / pub
+            self.assertTrue((pub_dir / "7_questions.dita").is_file(),
+                            f"7_questions.dita must be in {pub}/")
+            self.assertTrue((pub_dir / "7_questions.png").is_file(),
+                            f"7_questions.png must be copied into {pub}/")
+
+    def test_seven_questions_topic_structure(self) -> None:
+        """``7_questions.dita`` embeds the image, carries the edition marker,
+        and uses the canonical topic id / title."""
+        _run(self.out)
+        topic_path = self.out / "main" / "7_questions.dita"
+        root = ET.parse(topic_path).getroot()
+        self.assertEqual(root.tag, "topic")
+        self.assertEqual(root.get("id"), "seven-questions")
+        self.assertEqual(root.findtext("title"), "7 Questions")
+        body = root.find("body")
+        self.assertIsNotNone(body)
+        # First body child is the edition marker.
+        marker = body[0]
+        self.assertEqual(marker.get("outputclass"), "gf-persistent")
+        self.assertEqual(marker.get("audience"), "-trainee")
+        # Image embeds the PNG by bare filename.
+        image = body.find("image")
+        self.assertIsNotNone(image, "7_questions.dita must embed the image")
+        self.assertEqual(image.get("href"), "7_questions.png")
+
+    def test_seven_questions_topicref_in_ditamaps(self) -> None:
+        """Both the main and progress-test ditamaps carry a ``7_questions.dita``
+        topicref after the static pages but before the gram/week content."""
+        _run(self.out)
+        for ditamap in (
+            self.out / "main" / "main.ditamap",
+            self.out / "progress-test-1" / "progress-test-1.ditamap",
+        ):
+            root = ET.parse(ditamap).getroot()
+            hrefs = [tr.get("href") for tr in root.findall("topicref")]
+            self.assertIn("7_questions.dita", hrefs,
+                          f"{ditamap.name}: 7_questions.dita must appear as a root topicref")
+            q_idx = hrefs.index("7_questions.dita")
+            # Static pages precede it.
+            self.assertGreater(q_idx, 0, "7 Questions must follow the static pages")
+
+    def test_seven_questions_section_in_gram_body(self) -> None:
+        """Each gram body carries a ``seven-questions`` section (student-only
+        via ``audience="student-only"``) embedding the 7 Questions image via a
+        publication-relative href. The instructor DITAVAL strips it, so the
+        image is not repeated on every instructor gram page."""
+        _run(self.out)
+        topic_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        )
+        root = ET.parse(topic_path).getroot()
+        section = root.find(".//body/section[@id='seven-questions']")
+        self.assertIsNotNone(section, "gram body must carry a seven-questions section")
+        self.assertEqual(section.get("outputclass"), "seven-questions")
+        self.assertEqual(section.get("audience"), "student-only",
+                         "seven-questions section must be student-only (instructor "
+                         "DITAVAL strips it)")
+        image = section.find("image")
+        self.assertIsNotNone(image, "section must embed the 7 Questions image")
+        href = image.get("href")
+        self.assertTrue(href, "image must have an href")
+        self.assertTrue(href.endswith("7_questions.png"),
+                        f"href must point at 7_questions.png, got {href!r}")
+
+    def test_seven_questions_section_after_analysis_section(self) -> None:
+        """In the gram body the analysis section (instructor-only) precedes the
+        7 Questions section, so instructors see analysis first and students see
+        7 Questions first (analysis is filtered for students)."""
+        _run(self.out)
+        topic_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        )
+        root = ET.parse(topic_path).getroot()
+        body = root.find("body")
+        self.assertIsNotNone(body)
+        ids = [s.get("id") for s in body.findall("section")]
+        self.assertIn("analysis-sheet", ids)
+        self.assertIn("seven-questions", ids)
+        self.assertLess(ids.index("analysis-sheet"), ids.index("seven-questions"),
+                        "analysis-sheet must precede seven-questions in the body")
+
+    def test_seven_questions_missing_png_degrades_gracefully(self) -> None:
+        """When ``7_questions.png`` is absent the generator still emits the
+        topic and section (dangling href), logs a warning, and exits with
+        rc 0 — consistent with the missing-asset dangle rule."""
+        rc = _run(self.out, seven_questions=TMP / "absent_7q.png")
+        self.assertEqual(rc, 0, "missing 7Q PNG must not abort generation")
+        topic_path = self.out / "main" / "7_questions.dita"
+        self.assertTrue(topic_path.is_file(), "7_questions.dita must still be emitted")
+        # The PNG copy is absent (nothing to copy).
+        self.assertFalse((self.out / "main" / "7_questions.png").is_file(),
+                         "7_questions.png must not exist when source is absent")
+        # Gram topic still carries the section with a dangling href.
+        gram_path = (
+            self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        )
+        root = ET.parse(gram_path).getroot()
+        section = root.find(".//body/section[@id='seven-questions']")
+        self.assertIsNotNone(section, "seven-questions section must still be emitted")
+
+    def test_seven_questions_emitted_into_every_publication(self) -> None:
+        """The 7_questions topic and PNG land in each publication folder."""
+        _run(self.out)
+        for pub in ("main", "progress-test-1"):
+            for name in ("7_questions.dita", "7_questions.png"):
+                path = self.out / pub / name
+                self.assertTrue(path.is_file(), f"missing {path}")
+
+
+class SlugifyAssetNameTests(unittest.TestCase):
+    """``slugify_asset_name`` URL-safes filenames and corrects known legacy
+    misspellings so the emitted asset name and every href read consistently."""
+
+    def test_slugify_preserves_extension_and_hyphenates(self) -> None:
+        self.assertEqual(
+            generate_dita.slugify_asset_name("Lofar 1 ABC.PNG"), "lofar-1-abc.png")
+
+    def test_misspelled_analysis_name_is_corrected(self) -> None:
+        # The source file is named ``analaysis.png`` (an 'analysis' typo); the
+        # emitted asset name / href must read ``analysis.png``.
+        self.assertEqual(
+            generate_dita.slugify_asset_name("analaysis.png"), "analysis.png")
+        self.assertEqual(
+            generate_dita.slugify_asset_name("Gram 4 analaysis.png"),
+            "gram-4-analysis.png")
+
+    def test_correctly_spelled_name_is_untouched(self) -> None:
+        self.assertEqual(
+            generate_dita.slugify_asset_name("analysis sheet.png"),
+            "analysis-sheet.png")
+
+    def test_copy_asset_reads_misspelled_source_writes_corrected_name(self) -> None:
+        # The on-disk asset keeps its misspelled name; copy_asset reads it
+        # from there but names the copied target ``analysis.png``.
+        tmp = TMP / "copy_misspelled"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        image_root = tmp / "src"
+        topic_dir = tmp / "out" / "gram-04"
+        image_root.mkdir(parents=True)
+        (image_root / "analaysis.png").write_bytes(b"\x89PNG\r\n\x1a\n rendered")
+        href, written = generate_dita.copy_asset("analaysis.png", image_root, topic_dir)
+        self.assertEqual(href, "analysis.png",
+                         "href must use the corrected spelling")
+        self.assertIsNotNone(written)
+        self.assertEqual(written.name, "analysis.png")
+        self.assertTrue((topic_dir / "analysis.png").is_file(),
+                        "copied file must land under the corrected name")
 
 
 class MainFlatLayoutTests(unittest.TestCase):
@@ -893,6 +1444,140 @@ class MainFlatLayoutTests(unittest.TestCase):
         self.assertIn("renumber", errors[0].lower())
 
 
+class DemonBlockTests(unittest.TestCase):
+    """Issue #151 — the demon GramFrame leads the gram, for all audiences."""
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.out = TMP / f"out_{self._testMethodName}"
+        self.image_root = TMP / f"img_{self._testMethodName}"
+        for d in (self.out, self.image_root):
+            if d.exists():
+                shutil.rmtree(d)
+        self.image_root.mkdir(parents=True)
+
+    def _png(self, rel: str) -> None:
+        p = self.image_root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    def _write_csv(self, rows: list[dict]) -> Path:
+        cols = generate_dita.CSV_COLUMNS
+        csv_path = TMP / f"{self._testMethodName}.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            for r in rows:
+                w.writerow({c: r.get(c, "") for c in cols})
+        return csv_path
+
+    def _base(self, **kw) -> dict:
+        base = {c: "" for c in generate_dita.CSV_COLUMNS}
+        base.update({
+            "publication": "main", "chapter": "Nordic Fishing Vessels",
+            "gram_id": "Gram 12", "vessel_name": "Nordik Jockey",
+            "topic_filename": "gram_12.dita",
+        })
+        base.update(kw)
+        return base
+
+    def _topic_root(self):
+        topic = self.out / "main" / "nordic-fishing-vessels" / "gram-12" / "gram_12.dita"
+        self.assertTrue(topic.is_file(), f"missing {topic}")
+        return ET.parse(topic).getroot(), topic.parent
+
+    def _rows(self):
+        self._png("supporting/gram12/Demon - 0-40Hz.png")
+        self._png("images/gram12.png")
+        return [
+            self._base(topic_type="demon", sequence="1",
+                       glc_path="supporting/gram12/demon.glc",
+                       time_end="232", bandwidth="40", bandcentre="20",
+                       png_path="supporting/gram12/Demon - 0-40Hz.png"),
+            self._base(topic_type="glc", sequence="1", display_text="Lofar",
+                       glc_path="supporting/gram12/config.glc",
+                       link_href="supporting/gram12/config.glc",
+                       time_end="271", bandwidth="400", bandcentre="200",
+                       png_path="images/gram12.png"),
+            self._base(topic_type="analysis", sequence="1",
+                       png_path="images/gram12.png"),
+        ]
+
+    def test_demon_section_shape_and_band(self) -> None:
+        rc = generate_dita.main([
+            "--csv", str(self._write_csv(self._rows())),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        self.assertEqual(rc, 0)
+        root, _ = self._topic_root()
+        demon = root.find(".//section[@outputclass='demon-stage']")
+        self.assertIsNotNone(demon, "expected a demon-stage section")
+        self.assertEqual(demon.get("id"), "demon")
+        self.assertEqual(demon.find("title").text, "Demon")
+        # no audience restriction -> shown to all editions
+        self.assertIsNone(demon.get("audience"))
+        vals = {r.find("entry").text: r.findall("entry")[1].text
+                for r in demon.findall(".//tbody/row")
+                if len(r.findall("entry")) == 2}
+        self.assertEqual(vals.get("time-end"), "232")
+        self.assertEqual(vals.get("freq-start"), "0")   # 0-40 Hz
+        self.assertEqual(vals.get("freq-end"), "40")
+
+    def test_demon_precedes_lofar_and_follows_analysis(self) -> None:
+        generate_dita.main([
+            "--csv", str(self._write_csv(self._rows())),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        root, _ = self._topic_root()
+        body = root.find("body")
+        classes = [s.get("outputclass") for s in body.findall("section")]
+        # analysis-sheet, then demon-stage, then lofar-stage — in that order
+        self.assertLess(classes.index("analysis-sheet"), classes.index("demon-stage"))
+        self.assertLess(classes.index("demon-stage"), classes.index("lofar-stage"))
+
+    def test_demon_image_copied_with_stable_name(self) -> None:
+        generate_dita.main([
+            "--csv", str(self._write_csv(self._rows())),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        root, topic_dir = self._topic_root()
+        self.assertTrue((topic_dir / "demon.png").is_file(),
+                        "demon image must be copied under the stable name demon.png")
+        image = root.find(".//section[@outputclass='demon-stage']//image")
+        self.assertEqual(image.get("href"), "demon.png")
+
+    def test_multiple_demons_numbered(self) -> None:
+        self._png("supporting/gram12/Demon - a.png")
+        self._png("supporting/gram12/Demon - b.png")
+        self._png("images/gram12.png")
+        rows = [
+            self._base(topic_type="demon", sequence="1",
+                       time_end="100", bandwidth="40", bandcentre="20",
+                       png_path="supporting/gram12/Demon - a.png"),
+            self._base(topic_type="demon", sequence="2",
+                       time_end="200", bandwidth="40", bandcentre="20",
+                       png_path="supporting/gram12/Demon - b.png"),
+            self._base(topic_type="glc", sequence="1",
+                       glc_path="supporting/gram12/config.glc",
+                       link_href="supporting/gram12/config.glc",
+                       time_end="271", bandwidth="400", bandcentre="200",
+                       png_path="images/gram12.png"),
+        ]
+        generate_dita.main([
+            "--csv", str(self._write_csv(rows)),
+            "--out", str(self.out), "--image-root", str(self.image_root),
+        ])
+        root, topic_dir = self._topic_root()
+        demons = [s for s in root.findall(".//section")
+                  if s.get("outputclass") == "demon-stage"]
+        self.assertEqual(
+            [(s.get("id"), s.find("title").text) for s in demons],
+            [("demon", "Demon"), ("demon-2", "Demon 2")])
+        self.assertTrue((topic_dir / "demon.png").is_file())
+        self.assertTrue((topic_dir / "demon-2.png").is_file())
+
+
 class AudienceShapeTests(unittest.TestCase):
     """Spec 003 — chapter slug normalisation and audience-tagged ditamap shape.
 
@@ -919,6 +1604,13 @@ class AudienceShapeTests(unittest.TestCase):
         self.assertFalse(legacy_chapter.exists(),
                          f"legacy instructor-prefixed folder must not exist: {legacy_chapter}")
         for path in self.out.rglob("*"):
+            # FR-014 forbids "instructor" in published topic/chapter path
+            # components (they become student URLs). The instructor DITAVAL
+            # profile is a build-time filter that never reaches html/, so it
+            # is legitimately named after the edition it produces — the mirror
+            # of trainee.ditaval.
+            if path.suffix == ".ditaval":
+                continue
             self.assertNotIn(
                 "instructor", path.name.lower(),
                 f'no path component under {self.out} may contain "instructor": {path}',
@@ -950,6 +1642,23 @@ class AudienceShapeTests(unittest.TestCase):
         pt_ph = pt_title.find("ph[@audience='-trainee']")
         self.assertIsNotNone(pt_ph)
         self.assertEqual(pt_ph.text, " — Instructor Version")
+
+    def test_flat_publication_title_keeps_course_code_upper_case(self) -> None:
+        """A course-code-prefixed assessment titles as ``AAAC Final Assessment``
+        — plain ``str.title()`` would mangle the acronym to ``Aaac``."""
+        self.assertEqual(
+            generate_dita._flat_publication_title("AAAC-final-assessment"),
+            "AAAC Final Assessment")
+        self.assertEqual(
+            generate_dita._flat_publication_title("SSAC-joining-assessment"),
+            "SSAC Joining Assessment")
+        # Un-coded publications keep the legacy title-casing.
+        self.assertEqual(
+            generate_dita._flat_publication_title("final-assessment-1"),
+            "Final Assessment 1")
+        self.assertEqual(
+            generate_dita._flat_publication_title("progress-test-2"),
+            "Progress Test 2")
 
     def test_chapter_topic_title_carries_audience_prefix(self) -> None:
         """Each main chapter is a real chapter topic (a week *sub-document*),
@@ -1168,12 +1877,12 @@ class CsvRefactoringSupportTests(unittest.TestCase):
                       "the summary warning must surface in logs")
 
     def test_renumbering_resolves_collision_into_unique_folders(self) -> None:
-        """Running the dedupe renumber step assigns the later gram a fresh
-        number (max+1), so the two grams land at distinct gram-NN folders with
-        no letter suffix (feature 008)."""
+        """Running the dedupe renumber step numbers the week's grams contiguously
+        1..k (issue #102, per-week scheme), so two grams that both claimed
+        number 5 land at distinct gram-NN folders with no letter suffix."""
         rows = [dict(r) for r in self._COLLIDING_GRAMS]
         renumbered = deduplicate_csv.renumber_grams(rows)
-        self.assertEqual(renumbered, 1, "exactly the second gram is renumbered")
+        self.assertEqual(renumbered, 2, "both grams take contiguous 1..k slots")
 
         cols = list(generate_dita.CSV_COLUMNS) + ["target_gram_id"]
         csv_path = self.tmp / "renumbered.csv"
@@ -1192,10 +1901,10 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ])
         self.assertEqual(rc, 0, "generator must accept the renumbered CSV")
         chapter_dir = out_dir / "main" / "week-2-grams"
-        self.assertTrue((chapter_dir / "gram-05" / "gram_05.dita").is_file(),
-                        "native gram keeps number 5")
-        self.assertTrue((chapter_dir / "gram-06" / "gram_06.dita").is_file(),
-                        "renumbered gram lands at max+1 = 6, no letter suffix")
+        self.assertTrue((chapter_dir / "gram-01" / "gram_01.dita").is_file(),
+                        "first gram takes contiguous slot 1")
+        self.assertTrue((chapter_dir / "gram-02" / "gram_02.dita").is_file(),
+                        "second gram takes contiguous slot 2, no letter suffix")
         self.assertFalse((chapter_dir / "gram-05a").exists(),
                          "letter-suffix folders must no longer be produced")
 
@@ -1233,7 +1942,8 @@ class CsvRefactoringSupportTests(unittest.TestCase):
         ditamap = (out_dir / "main" / "main.ditamap").read_text(encoding="utf-8")
         self.assertIn('href="week-2/week_2.dita"', ditamap,
                       "the week is a sub-document referenced by the map")
-        self.assertIn("week-2/gram-07/gram_07.dita", ditamap)
+        self.assertNotIn("gram-07", ditamap,
+                         "gram hrefs must not appear in ditamap — they live in chapter topic")
         week_topic = out_dir / "main" / "week-2" / "week_2.dita"
         self.assertTrue(week_topic.is_file(), "week chapter topic must exist")
         self.assertIn("<title>Week 2</title>",
@@ -1449,6 +2159,51 @@ class DedupGenerateDitaTests(unittest.TestCase):
         topic = ET.parse(g31 / "gram_31.dita").getroot()
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
 
+    # -- issue #164: a redirect never leaves its publication folder ----------
+    def test_cross_publication_master_falls_back_locally(self) -> None:
+        """A master in another publication must not be linked, even when the
+        CSV asks for it.
+
+        ``deduplicate_csv.py`` no longer groups across publications, but a CSV
+        deduplicated by an older build still carries such targets. Honouring
+        one emits ``../../<other-pub>/…`` out of the publication folder, and
+        DITA-OT answers that by rooting the job at the parent of the map's
+        folder: the whole publication publishes one tier below its own
+        index.html and generated links, so every page 404s. Self-contained
+        beats deduplicated — copy the asset locally and warn."""
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                master="dedup/img/shared.png"),
+        ]
+        rows[1]["publication"] = "progress-test-1"
+        rows[1]["chapter"] = ""
+        csv_path = self._write_csv(rows)
+        out = self._generate(csv_path)
+        log_text = Path("generate.log").read_text(encoding="utf-8")
+        self.assertIn("outside the publication", log_text)
+        g31 = out / "progress-test-1" / "gram-31"
+        self.assertTrue((g31 / "shared-b.png").is_file(),
+                        "the asset must be copied into its own publication")
+        topic = ET.parse(g31 / "gram_31.dita").getroot()
+        self.assertIsNone(
+            topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"),
+            "a refused redirect records no provenance — nothing was redirected")
+        # The invariant that matters is containment, not depth: an href may
+        # traverse folders (../7_questions.png is a legitimate publication-root
+        # reference) but must never leave the publication folder.
+        pub_dir = (out / "progress-test-1").resolve()
+        escaping = []
+        for el in topic.iter():
+            href = el.get("href") or ""
+            if not href or href.startswith("#"):
+                continue
+            target = (g31 / href).resolve()
+            if pub_dir != target and pub_dir not in target.parents:
+                escaping.append(href)
+        self.assertEqual(escaping, [],
+                         "no href may resolve outside the publication folder")
+
     # -- issue #78: .wav redirects are gated on the (time, freq) view --------
     def test_wav_redirect_view_mismatch_falls_back_locally(self) -> None:
         """A stale or hand-edited redirect onto a master whose .glc presents
@@ -1606,7 +2361,7 @@ class FreqBandDerivationTests(unittest.TestCase):
         """An off-centre band produces a non-zero freq-start in the table."""
         parent = ET.Element("body")
         generate_dita._append_gramframe_table(
-            parent, "lofar-1.png", "271", "400", "600", "Lofar 1")
+            parent, "lofar-1.png", "271", "400", "600", 1)
         rows = {r.find("entry").text: r.findall("entry")[1].text
                 for r in parent.findall(".//tbody/row")
                 if len(r.findall("entry")) == 2}
@@ -1617,10 +2372,12 @@ class FreqBandDerivationTests(unittest.TestCase):
 class TrustBoundaryTests(unittest.TestCase):
     """Fail-fast on our own artifacts (constitution VII).
 
-    A blank Zone-A identity column, or a blank ``.wav`` view field (promoted to
-    Zone A because it is the dedup key), is a defect in data our pipeline
-    produces — the generator aborts loudly rather than coercing it to "" and
-    emitting a malformed topic.
+    A blank Zone-A identity column is a defect in data our pipeline produces —
+    the generator aborts loudly rather than coercing it to "" and emitting a
+    malformed topic. The ``.wav`` view fields (``time_end``/``bandwidth``/
+    ``bandcentre``) are *not* in this set: they only feed the image GramFrame
+    table, so a blank one on a ``.wav`` row is tolerated (see
+    ``test_blank_wav_view_field_is_tolerated``).
     """
 
     def setUp(self) -> None:
@@ -1667,6 +2424,18 @@ class TrustBoundaryTests(unittest.TestCase):
             generate_dita.require_field({"publication": " main "}, "publication"),
             "main")
 
+    def test_require_field_reports_line_no(self) -> None:
+        # Explicit line_no wins.
+        with self.assertRaises(generate_dita.PipelineDataError) as ctx:
+            generate_dita.require_field({"publication": ""}, "publication",
+                                        line_no=42)
+        self.assertIn("at CSV line 42", str(ctx.exception))
+        # Falls back to the line stamped on the row by read_csv when not passed.
+        with self.assertRaises(generate_dita.PipelineDataError) as ctx:
+            generate_dita.require_field(
+                {"publication": "", generate_dita._SOURCE_LINE: 7}, "publication")
+        self.assertIn("at CSV line 7", str(ctx.exception))
+
     # -- blank identity column aborts the run ------------------------------
     def test_blank_identity_column_aborts(self) -> None:
         for field in ("publication", "topic_type", "sequence"):
@@ -1678,8 +2447,11 @@ class TrustBoundaryTests(unittest.TestCase):
                 ])
                 self.assertEqual(rc, 1, f"blank {field} must abort")
 
-    # -- blank .wav view field aborts (promotion clause) -------------------
-    def test_blank_wav_view_field_aborts(self) -> None:
+    # -- blank .wav view field is tolerated (view fields only feed GramFrame) --
+    def test_blank_wav_view_field_is_tolerated(self) -> None:
+        # A .wav row emits a plain link to its .glc and never renders a
+        # GramFrame table, so its view fields are unused: a blank one degrades
+        # to "" rather than aborting the run.
         for field in ("time_end", "bandwidth", "bandcentre"):
             with self.subTest(field=field):
                 row = self._gram_row(png_path="g/audio.wav", **{field: ""})
@@ -1688,7 +2460,7 @@ class TrustBoundaryTests(unittest.TestCase):
                     "--csv", str(csv_path), "--out", str(self.tmp / f"wav_{field}"),
                     "--image-root", str(FIXTURES),
                 ])
-                self.assertEqual(rc, 1, f"blank .wav {field} must abort")
+                self.assertEqual(rc, 0, f"blank .wav {field} must be tolerated")
 
     # -- the same blank view on a NON-wav row is fine ----------------------
     def test_blank_view_on_image_row_is_allowed(self) -> None:
@@ -1702,6 +2474,66 @@ class TrustBoundaryTests(unittest.TestCase):
             "--image-root", str(FIXTURES),
         ])
         self.assertEqual(rc, 0, "blank views on an image row are allowed")
+
+
+class CsvEncodingToleranceTests(unittest.TestCase):
+    """``read_csv`` must survive whatever encoding Excel's Save As produces.
+
+    The writer emits ``utf-8-sig``, but a technical author who edits the CSV
+    in Excel and saves with the convenient default *"CSV (Comma delimited)"*
+    gets the file back in Windows ANSI (cp1252). A strict utf-8 read crashes
+    on the first non-ASCII byte — which is why operators had to reach for the
+    awkward *"CSV (MS-DOS)"* option. The decoder now falls back to cp1252.
+    """
+
+    HEADER = "publication,vessel_name"
+    BODY = 'main,"HMS Hood £5 at 90° N"'  # contains £ and °
+
+    def _csv_bytes(self, encoding: str, bom: bool = False) -> bytes:
+        text = f"{self.HEADER}\r\n{self.BODY}\r\n"
+        raw = text.encode(encoding)
+        return (b"\xef\xbb\xbf" + raw) if bom else raw
+
+    def _decode(self, raw: bytes) -> str:
+        tmp = TMP / f"enc_{self._testMethodName}.csv"
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(raw)
+        return generate_dita.decode_csv_bytes(
+            tmp.read_bytes(), tmp, generate_dita.LOGGER
+        )
+
+    def test_utf8_with_bom_is_read_cleanly(self) -> None:
+        """The canonical writer output / Excel 'CSV UTF-8' round-trips."""
+        text = self._decode(self._csv_bytes("utf-8", bom=True))
+        self.assertIn("HMS Hood £5 at 90° N", text)
+        self.assertFalse(text.startswith("﻿"), "BOM must be stripped")
+
+    def test_utf8_without_bom_is_read_cleanly(self) -> None:
+        text = self._decode(self._csv_bytes("utf-8"))
+        self.assertIn("HMS Hood £5 at 90° N", text)
+
+    def test_excel_ansi_comma_delimited_is_recovered(self) -> None:
+        """The painful default save (cp1252) no longer crashes — and the
+        non-ASCII characters survive intact, unlike a strict utf-8 read."""
+        text = self._decode(self._csv_bytes("cp1252"))
+        self.assertIn("HMS Hood £5 at 90° N", text)
+
+    def test_strict_utf8_would_have_crashed(self) -> None:
+        """Guards the regression: the cp1252 bytes are *not* valid utf-8, so
+        the old strict reader genuinely failed on them."""
+        with self.assertRaises(UnicodeDecodeError):
+            self._csv_bytes("cp1252").decode("utf-8")
+
+    def test_full_run_accepts_ansi_saved_csv(self) -> None:
+        """End-to-end: a generator run over a cp1252-saved CSV succeeds."""
+        src = (FIXTURES / "minimal.csv").read_text(encoding="utf-8-sig")
+        out_dir = TMP / f"out_{self._testMethodName}"
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        ansi_csv = TMP / f"ansi_{self._testMethodName}.csv"
+        ansi_csv.write_bytes(src.encode("cp1252"))
+        rc = _run(out_dir, csv_path=ansi_csv)
+        self.assertEqual(rc, 0, "a cp1252-saved CSV must drive a clean run")
 
 
 if __name__ == "__main__":

@@ -119,6 +119,17 @@ class BuildStagesTests(unittest.TestCase):
         self.assertEqual([label for label, _, _ in stages],
                          ["extract", "dedupe", "write"])
 
+    def test_write_stage_never_wipes_the_whole_dita_tree(self):
+        """The orchestrator has no whole-tree wipe to hand the write stage.
+
+        The write stage rebuilds only the publication folder(s) its own CSV
+        produces, so successive scoped runs accumulate into one dita\\ tree.
+        Clearing that tree outright is a manual act, done by hand — there is
+        no flag for it, and nothing here may reintroduce one."""
+        stages = pipeline.build_stages(only=None)
+        write_argv = next(argv for label, _, argv in stages if label == "write")
+        self.assertNotIn("--clean", write_argv)
+
     def test_argv_lists_carry_no_program_name(self):
         # main() parses argv with argparse, which does NOT skip element 0;
         # every list must start with an option flag, not a script path.

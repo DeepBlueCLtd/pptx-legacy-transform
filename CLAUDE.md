@@ -66,7 +66,10 @@ os.chdir(r"C:\dev\aaac")     # project ROOT on the target (illustrative path)
 os.getcwd()                   # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): analysis sheets -> PNGs
-exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc -> image
+                                     #   (Word -> PNG only; never PNG -> Word. --sweep-wrappers
+                                     #    retracts the .docx files feature 007 used to fabricate)
+exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc -> image (moves .wav aside)
+exec(open(r"ingest.py").read())      # prep (when an incoming screenshot tree arrives): verify names, then APPLY=True to import + relink (leaves .wav in place)
 exec(open(r"extract.py").read())     # Stage 3: source\  -> extract.csv at ROOT
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions
 exec(open(r"write.py").read())       # Stage 5: signed-off CSV -> dita\
@@ -81,7 +84,7 @@ level *above* the canonical scripts:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py   ← thin wrappers (set sys.argv, runpy the canonical script)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py  ingest.py   ← thin wrappers (set sys.argv, runpy the canonical script)
 ├── pipeline.py          ← orchestrator: runs the four core stages in sequence, fail-fast
 ├── stock.wav            ← silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
@@ -113,7 +116,7 @@ root. Data flows strictly forward; the only branch point is a human.
    row per resulting DITA topic.
 4. **(human)** — technical author triages the CSV in Excel.
 5. **`scripts/generate_dita.py`** — consumes the signed-off CSV, emits the DITA
-   tree, ditamaps, DITAVAL profiles, manifest, and skipped report.
+   tree, ditamaps, DITAVAL profiles, and skipped report.
 6. **`scripts/publish_html.py`** — renders DITA → HTML via DITA-OT (dev preview
    only; Oxygen is the production publisher).
 
@@ -123,21 +126,77 @@ Each gram has hyperlinks; the `Lofar`-labelled ones **always** point to a `.glc`
 config file, which in turn names a sibling asset. **The generator dispatches on
 the GLC's inner asset extension, not on any CSV flag:**
 
-- `.png` / `.jpg` (~82%, pre-rendered spectrogram) → embedded inline in the topic.
+- `.png` / `.jpg` (~82%, pre-rendered spectrogram) → embedded inline in the topic,
+  titled `Lofar N`, anchored `id="lofar-N"`, classed `lofar-stage`.
 - `.wav` (~18%, rendered live by the on-PC GLC viewer) → surfaced as a link to
-  the `.glc`, with both the `.glc` and `.wav` copied beside the topic.
+  the `.glc`, with both the `.glc` and `.wav` copied beside the topic; titled
+  `WAV N`, anchored `id="wav-N"`, classed `wav-stage`.
+
+The two kinds are numbered on **independent 1..N sequences** (image, audio,
+audio, image → `Lofar 1`, `WAV 1`, `WAV 2`, `Lofar 2`). An audio link is not a
+Lofar — it resolves to no spectrogram — so it must never take a number off the
+Lofar counter and render as `Lofar 4`, promising a LOFAR gram the link cannot
+show. Both titles are **synthesised**, never taken from the CSV `display_text`:
+in the audited corpus the legacy decks label *every* `.glc` hyperlink `Lofar N`,
+audio ones included, so the source label cannot distinguish them.
 
 The `wav_treatment` CSV column is **deprecated and ignored** — retained only for
 round-trip compatibility. No author decision selects the treatment.
 
 ### One topic per gram
 
-A single gram spans N+1 CSV rows (one per Lofar + one analysis sheet) that all
-share a `topic_filename`. The generator **merges** them into one
-`gram-NN/gram_NN.dita` topic (Analysis Sheet section first, then one section per
-Lofar in `sequence` order). Every referenced asset is copied beside the topic
-with a stable name (`analysis.png`, `lofar-1.png`, `lofar-2-i.png`, …) so every
-`href` is a bare filename — no `../` traversal.
+A single gram spans N+1 CSV rows (one per Lofar + one analysis sheet, plus any
+demon rows) that all share a `topic_filename`. The generator **merges** them
+into one `gram-NN/gram_NN.dita` topic (Analysis Sheet section first, then the
+demon GramFrame(s), then one section per Lofar in `sequence` order). Every
+referenced asset is copied beside the topic with a stable name (`analysis.png`,
+`demon.png`, `lofar-1.png`, `lofar-2-i.png`, …) so every `href` is a bare
+filename — no `../` traversal.
+
+### The analysis sheet's Word original (feature 013)
+
+The analysis image cannot be amended, so where the author's Word document still
+exists the generator copies it beside the topic as `analysis.doc`/`analysis.docx`
+— **unreferenced**. Nothing in the topic XML links it, so published output is
+byte-identical and DITA-OT never carries it into `html/`; it is parked in
+`dita/` for the analyst who later has to correct the sheet. The path rides an
+optional right-edge `analysis_doc_path` CSV column resolved at extraction: the
+deck's own hyperlink when that names a Word file, else a same-stem sibling probe
+(`.doc` before `.docx`) beside the *final* analysis image, so a sheet recovered
+from a Lofar folder is probed where it was recovered. Empty is normal (the newer
+decks only ever had an image) and is counted, not warned, in the extract summary.
+
+Feature 007's FR-018 reverse wrap — synthesising a `.docx` around any analysis
+PNG lacking one — is **superseded and removed**, not defaulted off. It fired
+exactly where no editable original existed, so it produced an uneditable picture
+in a document-shaped shell and made "is there a Word document here?" mean
+nothing. `snapshot_analysis_docs.py --sweep-wrappers [--apply]` retracts the
+files earlier runs wrote, detecting them by full content signature (the exact
+five-part zip + `AnalysisSheet` drawing name) so an author's document is never
+matched. **The pipeline must never create a Word document.**
+
+### Demon images (issue #151, feature 012)
+
+A **demon** is an alternately-rendered gram view that **leads** the gram's page.
+It is additive (never a `.wav` replacement) and carries a third `topic_type`
+value, `demon`, alongside `glc` and `analysis`. Prep-time, `ingest_gram_images.py`
+recognises a delivered demon image (filename with a `Demon` token, leading,
+numbered like `Demon2- ...`, or after a duration prefix like `4m10s_Demon - ...`),
+copies it into the source
+gram folder under its original name, and writes a `demon.glc` marker cloned from
+the folder's first hyperlinked `.glc` — repointed at the demon image with the
+band overwritten to the fixed **0 – 40 Hz** (`bandwidth=40`, `bandcentre=20`).
+`extract_to_csv.py` then scans the gram's **first resolved Lofar folder** for
+`demon.glc` / `demon-2.glc` markers and emits a leading `topic_type="demon"` row
+per marker; its `time_end` is the demon image's **pixel height** scaled by the
+marker's `update_period` (issues #148/#160),
+its band is read from the marker. The generator (`emit_gram_topic`) renders each
+demon as an inline `demon-stage` GramFrame **before** the Lofars and after the
+instructor-only analysis sheet, with **no audience restriction** — so in the
+student editions (analysis filtered) the demon is the first block on the page.
+The 0 – 40 Hz constant lives in the `demon.glc` only: extract and the generator
+read it through the ordinary `bandwidth`/`bandcentre` band path with no
+demon-specific frequency special-case.
 
 ### The CSV is the human-in-the-loop contract
 
@@ -170,14 +229,22 @@ gram under), a `main` row with no week assigned is a **fail-fast** error in
 `check_main_chapter_assigned` instructing the analyst to fill in
 `target_chapter`.
 
-Because several decks now share a week, two grams can claim the same number.
-`deduplicate_csv.py` **renumbers** the collision: per `(publication, effective
-chapter, effective doc)` bucket it walks distinct grams in `(source chapter,
-row-order)` order and bumps a taken number to `max+1`, recording it in the
-additive `target_gram_id` column (empty = use `gram_id`; `gram_id` is never
-mutated). The generator derives every per-gram name from the **effective gram
-number** (`target_gram_id or gram_id`). The old letter-suffix auto-disambiguation
-is **gone**: an un-renumbered within-week collision is a **fail-fast** error in
+Because several decks now share a week, the native source gram numbers within a
+week are gappy and jump across deck boundaries (e.g. the `Week N` deck's numbers
+then the Pub10 slice's much higher numbers) — reading as "missing numbers"
+(issue #102). `deduplicate_csv.py`'s default `--main-numbering per-week` therefore
+**renumbers each week's `main` grams contiguously `1..k`** (no gaps, restart at 1
+per week): per week it walks distinct grams in `(native-week deck first, source
+chapter, row-order)` order — so the deck whose title carries the week's own
+`Week N` token leads and any sliced no-week deck (Pub10) follows as the contiguous
+tail — assigning `1..k` into the additive `target_gram_id` column (empty where
+`gram_id` already equals the assigned number; `gram_id` is never mutated). The
+alternative `--main-numbering continuous` numbers `main` as one `1..N` across all
+weeks. Non-`main` publications keep the per-`(publication, chapter, doc)`
+bump-on-collision rule. The generator derives every per-gram name from the
+**effective gram number** (`target_gram_id or gram_id`); the gh-pages/PR-preview
+builds use the default `per-week`. The old letter-suffix auto-disambiguation is
+**gone**: an un-renumbered within-week collision is a **fail-fast** error in
 `check_row_identity` instructing the operator to run the dedupe step.
 
 ### Audiences and editions (feature 004)
@@ -245,15 +312,31 @@ independently, so each must be self-contained.
 - **Strict on our own data; forgiving only at the boundary (constitution VII).**
   Be ruthless with data the pipeline produces and forbids editing — the CSV
   *identity* columns (`publication`, `gram_id`, `topic_type`, `sequence`,
-  `topic_filename`) and any value whose emptiness would corrupt one of our own
-  invariants (the `.wav` dedup view fields `time_end`/`bandwidth`/`bandcentre`).
-  A blank one hard-fails at the point of use via `require_field` →
-  `PipelineDataError`, never a silent `.get(field, "")` coercion. This is the
-  *complement* of the rule above, not a contradiction: missing external assets
-  still dangle (Zone C) and uncertain *author* cells are still warned-and-
-  deferred per Human-in-the-Loop (Zone B); only our own malformed data crashes.
-  Schema-`Empty allowed?=yes` columns (`chapter` on a test, `vessel_name`, …)
-  stay forgiving — don't pass them to `require_field`.
+  `topic_filename`). A blank one hard-fails at the point of use via
+  `require_field` → `PipelineDataError`, never a silent `.get(field, "")`
+  coercion. This is the *complement* of the rule above, not a contradiction:
+  missing external assets still dangle (Zone C) and uncertain *author* cells are
+  still warned-and-deferred per Human-in-the-Loop (Zone B); only our own
+  malformed data crashes. Schema-`Empty allowed?=yes` columns (`chapter` on a
+  test, `vessel_name`, …) stay forgiving — don't pass them to `require_field`.
+  The view fields `time_end`/`bandwidth`/`bandcentre` are **forgiving**: they
+  only feed the image GramFrame table, so a `.wav` row (surfaced as a `.glc`
+  link, never a GramFrame render) may leave them blank without error, and the
+  dedup/generate view key reads them tolerantly (a blank degrades to `""`).
+  `time_end` (the gram's time period, in seconds) is **not** taken from the
+  `.glc`'s crop values at all: it is the referenced image's **pixel height** in
+  scan lines, measured from the file on disk at extraction, multiplied by the
+  GLC's `update_period` — the seconds one scan line represents (issues
+  #148/#160). Nearly every GLC omits `update_period` or states `1` (so seconds
+  == rows), but some carry `2`, and those grams are twice as long as their pixel
+  height; an absent value silently means `1`, a present-but-unusable one falls
+  back to `1` with a `GLC invalid update_period` row warning. The GLC's
+  `bottom_crop` is ignored (many valid image GLCs omit it, which used to raise a
+  spurious "invalid GLC" warning). Because it is now image-derived, a blank
+  `time_end` is an asset problem that **dangles** (missing image → `ASSET_MISSING`
+  flag; present-but-unreadable image → a `time period unknown` warning), never a
+  fail-fast — only the GLC-authored `bandwidth`/`bandcentre` remain in the
+  extract-time strict gate.
 - **Dual logging.** Stages write a DEBUG log at the repo root
   (`generate.log`, `extract.log`, `introspect.log`) alongside console output —
   the primary debugging surface on the air-gapped network.
@@ -291,5 +374,5 @@ relevant feature's `spec.md` and `plan.md` first — the contracts under
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-[specs/010-frequency-bands/plan.md](specs/010-frequency-bands/plan.md)
+[specs/011-import-gram-images/plan.md](specs/011-import-gram-images/plan.md)
 <!-- SPECKIT END -->

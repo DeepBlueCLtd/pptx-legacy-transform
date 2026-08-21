@@ -101,6 +101,12 @@ analysis sheet has no rendered `.png` yet.
   for name in EXTRA_ANALYSIS_NAMES:
       sys.argv += ["--extra-name", name]
   ```
+- A **misspelling** of the token itself (e.g. `analaysis.doc` — note the
+  stray `a`, so `analysis` is not a substring) is recognised out of the
+  box via the built-in `ANALYSIS_NAME_MISSPELLINGS` list, no `--extra-name`
+  needed. `generate_dita.py` corrects the same misspellings when it names
+  the emitted asset, so the copied PNG and its DITA href read `analysis…`
+  even though the source file keeps its misspelled on-disk name.
 - **Pillow is an *optional* prep-time wheel** used only to trim page
   margins and normalise DPI on the rendered PNG (FR-017). It is imported
   defensively: when Pillow is absent the snapshotter keeps the full-page
@@ -109,8 +115,7 @@ analysis sheet has no rendered `.png` yet.
   (`pip download Pillow -d wheels/`); it is **not** installed on the
   pipeline runtime path.
 
-The rendered PNG (and, for a PNG-only sheet, a reverse-wrapped `.docx`,
-FR-018) is a **committed source asset**: the snapshotter is idempotent
+The rendered PNG is a **committed source asset**: the snapshotter is idempotent
 (it skips any sheet that already has its sibling `.png`), so the renderer
 never runs inside the re-runnable generate/publish loop and re-runs are
 byte-identical. The snapshotter renders the **first page** and **detects
@@ -122,6 +127,59 @@ defers (the run continues, exit 0) and surfaces in `snapshot.log`, the
 end-of-run summary, and the analysis row's `warnings` column — the image
 then dangles as an intended local `<image>` href, resolved by dropping
 the PNG in and re-running.
+
+The conversion runs in **one direction only**: Word document → PNG. Feature 007
+also used to synthesise a `.docx` around any analysis PNG that had no Word
+sibling (its FR-018), so that "every sheet exists in both forms". Feature 013
+**supersedes that**: the pipeline no longer creates Word documents at all, so
+every `.doc`/`.docx` in a source tree is one an author wrote. The reasoning is
+in [specs/013-analysis-word-originals/spec.md](specs/013-analysis-word-originals/spec.md)
+— in short, the wrapper was only ever created where no editable original
+existed, its content was the same picture the gram page already showed, and
+once the generator started carrying genuine originals into the DITA tree
+(below), a fabricated one made "there is a Word document here" mean nothing.
+
+#### Sweeping the fabricated wrappers
+
+Removing the step does not retract the files earlier runs already wrote. To
+clear them from a source tree:
+
+```bash
+# Report what would be deleted — the default; deletes nothing.
+python scripts/snapshot_analysis_docs.py --content-root source/ --sweep-wrappers
+
+# Delete them, once you have read the list.
+python scripts/snapshot_analysis_docs.py --content-root source/ --sweep-wrappers --apply
+```
+
+Detection is by **content signature** — the exact five-part zip structure and
+drawing name the removed generator wrote — never by filename, timestamp, or
+size. An author's own Word document is never matched, even one whose only
+visible content is a full-page image; a real `.docx` always carries
+styles/settings/docProps parts the fabricated one never had. The sweep is
+idempotent, and its failure mode is leaving a file alone rather than deleting
+something it should not have.
+
+### The analysis sheet's editable Word original
+
+The analysis image on a gram page is a dead end: it is what the reader sees,
+but nobody can amend it. Where the author's Word document still exists,
+`generate_dita.py` copies it into the gram's topic folder as
+`analysis.doc` / `analysis.docx`, beside the `analysis*.png` it produced —
+so an analyst who has to correct a bearing or an identification finds the
+source next to the page, instead of hunting the legacy source tree for it.
+
+The copied document is deliberately **unreferenced**: no link, no button, no
+mention in the topic XML. The published HTML is byte-identical to what it was
+before the feature, and because DITA-OT does not carry unreferenced files into
+its output, the Word original lives in `dita/` only — which is where analysts
+work. A gram whose sheet only ever existed as an image gets no Word file, and
+that is a normal outcome, not a warning; `extract_to_csv.py`'s end-of-run
+summary reports how many grams are in that position:
+
+```text
+Extraction summary: … analysis_sheets=375 without_word_original=202
+```
 
 ### Relinking `.wav` grams to pre-rendered images
 
@@ -155,14 +213,110 @@ through the corpus folder by folder, verifying each batch with `git diff` since
 the sources are versioned. `--dry-run` previews matches without changing
 anything; activity is logged to `relink.log`.
 
+### Importing author gram images from a parallel delivery
+
+A second, differently-shaped image intake handles the common case where a gram
+has **only** a `.wav`: students only inspect the spectrogram visually, so the
+author opens each `.wav` in the analysis tool, screenshots the displayed gram,
+and saves it in a **parallel *incoming* tree** under the **wav's own name** —
+e.g. `WAV 1.jpg`, `WAVE 3.png`, or `0 - 600 Hz.jpg`. The whole filename stem is
+matched against the wav basename. Since issue #148 measures the gram's time
+period (`time_end`) from the imported image's pixel height rather than from the
+filename, a **duration prefix carries no information** — but the author still
+types one on many screenshots (`9m WAV 1.jpg`, `7m20s_0 - 1000 Hz.jpg`), so a
+leading duration token is **tolerated** as a fallback (below). The **prep-time**
+stage `ingest_gram_images.py` (wrapper `ingest.py`) imports these.
+
+The incoming tree mirrors `source/` but **omits the per-document container
+folder**: `incoming/<doc>/<gram>/<image>` maps to
+`source/<doc>/<container>/<gram>/`, where `<container>` is the *single*
+sub-folder of the source document folder (identified by position, never by
+name). One publication omits the container tier and holds its gram folders
+directly under the document folder; a document folder with a large flat set of
+sub-folders (eight or more) is read as that container-less layout, while an
+in-between count (2–7) is reported as ambiguous and skipped.
+
+Matching **folds three systematic kinds of drift** so the operator never
+hand-fixes them — at every folder level and image-stem-to-wav:
+
+- **case** — an incoming `WAV 2` matches a source `Wav 2.wav`;
+- **hyphen spacing** — an incoming `0 - 1000 Hz` matches a source `0-1000 Hz.wav`
+  *and* vice versa (the author is inconsistent about the spaces flanking the
+  frequency-range dash);
+- **leading duration** — an incoming `9m WAV 1`, `4m10s WAV 2` or
+  `7m20s_0 - 1000 Hz` matches a source `WAV 1.wav`, `WAV 2.wav` or
+  `0 - 1000 Hz.wav`. The token is whole minutes, optionally minutes-plus-
+  seconds, followed by a space or an underscore.
+
+Case and hyphen spacing are folded by a `match_key` (casefold + collapsed
+whitespace + spaces stripped from around hyphens) applied to **both** sides. The
+duration is handled by `candidate_keys` as a **fallback only** — the whole stem
+is tried first and the prefix stripped just for a second attempt, so a source
+wav whose own name begins with a duration still matches whole. The copied image
+takes the wav's name, so the duration is dropped on import. Everything else —
+different tokens, a missing digit — stays exact, so real mistakes are still
+reported for the operator to fix.
+
+The stage runs in two phases:
+
+- **Verify** (default, read-only). Matches incoming document and gram folders,
+  and image stems, against the `.wav` basenames the gram's `.glc` files
+  reference, then writes `ingest_report.txt`: every unmatched folder or image
+  with its nearest-candidate suggestions and a *trends* section that aggregates
+  systematic drifts (e.g. `token-drift 'WAVE' -> 'WAV' x 14`). The operator
+  fixes names in the **incoming** tree by hand and re-runs until it is clean.
+  Nothing on disk changes except the report and `ingest.log`.
+- **Apply** (`--apply`). For each verified match, copies the image beside its
+  `.glc` renamed to the wav's stem in the wav's own casing **and** spacing
+  (`WAV 1.jpg` beside `Wav 1.wav` → `Wav 1.jpg`; `0 - 1000 Hz.jpg` beside
+  `0-1000 Hz.wav` → `0-1000 Hz.jpg`) and rewrites the `.glc`'s `<filename>` to
+  point at it. Nothing else in the `.glc` changes — no `<bitmap_crop_values>` is
+  written, because since issue #148 the time period (`time_end`) is measured
+  from the imported image's **pixel height** (scan lines), not the `.glc`. Any
+  `<update_period>` the `.glc` already carries survives the rewrite untouched,
+  so the scan rate it states still scales that height at extraction (#160).
+
+Ambiguity is never guessed: two images folding onto one wav, an image folding
+onto two distinct wavs, an image with no matching wav, or a `.glc` already
+pointing at an image are each warned, skipped, and counted. Idempotency rides on
+the "already points at an image" skip, so it is safe to re-run as you work
+through the corpus.
+
+**Divergence from `relink.py`:** that stage moves the superseded `.wav` aside
+to `.wav.bak`; `ingest.py` deliberately **leaves the `.wav` in place** — a
+future user may want the audio and cannot be assumed able to rename file
+suffixes. The generator only copies what the `.glc` references, so the retained
+wav never reaches `dita/`.
+
+**Demon images (issue #151).** The same incoming folders may also carry *demon*
+images — an alternately-rendered gram view whose filename carries a `Demon`
+token, either leading (`Demon - 10m2s 0-40Hz.png`, `Demon - 0-40Hz.png`), a
+*numbered* demon (`Demon2- 0 - 40 Hz.jpg` — the digit rides straight after
+`Demon`), or after a duration prefix (`4m10s_Demon - 0 - 40 Hz.jpg`). These are
+**additive**, not `.wav` replacements, so they skip the stem matching. In the default
+verify pass each is listed in a `DEMON IMAGES` report section; `--apply` copies
+the image into the source gram folder (original name kept) and writes a
+`demon.glc` marker cloned from the folder's first hyperlinked `.glc`, with its
+`<filename>` repointed at the image and its band overwritten to the fixed
+**0 – 40 Hz** range. Several demons in one folder get `demon.glc`, `demon-2.glc`,
+… markers. Later, `extract.py` finds each `demon.glc` in the gram's first Lofar
+folder and emits a leading `topic_type="demon"` row (time period = the demon
+image's pixel height × the marker's `update_period`, per issues #148/#160;
+band = 0 – 40 Hz from the marker), which
+the generator renders as the gram's first GramFrame — shown to every audience,
+before the Lofars and after the instructor-only analysis sheet. A
+`demon_stock.png` at the repo root is the sample image for building demon test
+data.
+
 ## Folder structure
 
 | Path | Role |
 |---|---|
-| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` `relink.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
+| `extract.py` `dedupe.py` `write.py` `publish.py` `introspect.py` `snapshot.py` `relink.py` `ingest.py` | **Thin REPL wrappers** for the air-gapped target — committed templates that set `sys.argv` and `runpy` a canonical script (see [Running on the air-gapped target machine](#running-on-the-air-gapped-target-machine)). Target-specific paths live only in their Config blocks. |
 | `pipeline.py` | **Pipeline orchestrator** (committed template): runs extract → dedupe → write → publish back-to-back in one call, **stopping at the first stage that fails**. `ONLY` in its Config block scopes the whole run to one source folder (a single document); `STAGES` trims which stages run. |
-| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline; reverse-wrap PNG-only sheets to `.docx` (feature 007). External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
+| `scripts/snapshot_analysis_docs.py` | **Prep-time** stage: render each Word `*analysis*` sheet (`.doc`/`.docx`, plus any `--extra-name` opt-ins) to a same-stem `.png` so the analysis table embeds inline (feature 007). Word → PNG only: the pipeline never creates Word documents (feature 013 supersedes FR-018), and `--sweep-wrappers` retracts the picture-only `.docx` files earlier runs fabricated. External LibreOffice renderer, optional Pillow trim — neither on the runtime path. |
 | `scripts/relink_glc_to_image.py` | **Prep-time** stage: rewrite each `.glc` that still points at a `.wav` to reference the matching author-supplied `Image <N>-…` image in the same folder, moving the old `.wav` aside to `.wav.bak`; idempotent and re-runnable. See [Relinking `.wav` grams to pre-rendered images](#relinking-wav-grams-to-pre-rendered-images). |
+| `scripts/ingest_gram_images.py` | **Prep-time** stage: import author screenshots from a parallel *incoming* tree (`<wav-stem>.<ext>`, optionally with a tolerated `<duration> ` prefix), matching them to wav-backed `.glc` files. Default verify pass reports folder/stem mismatches; `--apply` copies each image beside its `.glc` under the wav's own name and repoints the `.glc` (no `<bottom_crop>` — `time_end` is image-derived, issue #148). Also seeds `demon.glc` markers for any *demon* images in the delivery (issue #151). Leaves the `.wav` in place (diverging from `relink`). See [Importing author gram images from a parallel delivery](#importing-author-gram-images-from-a-parallel-delivery). |
 | `scripts/mock_pptx.py` | Synthetic instructor PPTX generator (Story 4). |
 | `scripts/introspect_pptx.py` | Structural-report producer for an instructor PPTX (Story 3). |
 | `scripts/extract_to_csv.py` | Walk a content tree and emit the intermediate CSV (Story 2). |
@@ -231,6 +385,7 @@ os.getcwd()                       # confirm it took
 
 exec(open(r"snapshot.py").read())    # Stage 1 (prep, when Word sheets changed): render analysis sheets -> sibling PNGs
 exec(open(r"relink.py").read())      # prep (when new Image <N>-.. files dropped in): repoint .wav-backed .glc at the image
+exec(open(r"ingest.py").read())      # prep (when an incoming screenshot tree is delivered): verify names, then set APPLY=True to import + relink
 exec(open(r"extract.py").read())     # Stage 3: walk source\ -> extract.csv at ROOT
 #   -> open extract.csv in Excel, resolve warnings, save as UTF-8 CSV
 exec(open(r"dedupe.py").read())      # optional: renumber within-week gram collisions -> extract.dedupe.csv
@@ -286,7 +441,7 @@ restarting the interpreter:
 
 ```text
 ROOT\  (e.g. C:\dev\aaac)
-├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py   ← thin wrappers (committed templates)
+├── extract.py  introspect.py  dedupe.py  write.py  publish.py  snapshot.py  relink.py  ingest.py   ← thin wrappers (committed templates)
 ├── pipeline.py          ← orchestrator: extract -> dedupe -> write -> publish, fail-fast (committed template)
 ├── stock.wav            ← committed silent stub for generate_dita.py --stub-wav
 ├── source\              ← the real PPTX corpus
@@ -305,6 +460,19 @@ fragment) the operator installs once into the Oxygen WebHelp template so the
 `README.md`. `theme\oxygen-hide-search\` is a second overlay (one CSS rule)
 that hides the useless search box in the **student** edition only, wired in
 through the student transformation scenario — see that folder's `README.md`.
+`theme\gram-nav-panel\` is a third overlay (one CSS file) that pins the
+floating per-gram navigation panel — the in-page stage jump links, `Lofar N`
+and `WAV N` in page order (both editions), plus the instructor-only
+Analysis Sheet link — to the lower-right
+corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
+overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
+compact top-right overlay on gram pages, so it stops reserving a full-height
+right-hand column and lets the gramframe use the full page width; see that
+folder's `README.md`. `theme\oxygen-dark-mode\` is a fifth overlay (one script
+plus one CSS file) that publishes every page in the template's **dark** theme
+and hides the light/dark theme picker, so the production output matches the
+dark dev preview and offers the reader no choice; see that folder's
+`README.md`.
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
@@ -415,17 +583,87 @@ installs, not the user-folder install.
    emitting only the `main` publication. It composes with `--only`.
 
    GramFrame needs the full time + frequency coordinate system to render a
-   gram, so **every GLC-backed gram** — whether its inner asset is a
-   pre-rendered image (`.png`/`.jpg`) or a live-render `.wav` — requires its
-   `time_end`, `bandwidth`, and `bandcentre` view fields. Extraction now
-   **fails fast** (writing the CSV first so its `warnings` column is
-   inspectable, then exiting non-zero) when any GLC gram is missing one of them
-   — surfacing the problem here rather than late and cryptically in
-   `deduplicate_csv.py`. (Assetless/dangling GLC rows and analysis-sheet rows
-   are exempt.) Fix the offending GLC(s) and re-run. For dev/exploration
-   against an incomplete corpus, pass `--relaxed` to substitute the default
-   `100` for each missing field and complete the run; this is not for
-   deliverable output (GramFrame needs the real values).
+   gram, so an **image GLC-backed gram** (its inner asset a pre-rendered
+   `.png`/`.jpg` embedded inline) requires its `time_end`, `bandwidth`, and
+   `bandcentre` view fields. `time_end` (the time period, in seconds) is
+   measured from the image's **pixel height** (scan lines) at extraction, not
+   read from the `.glc` (issue #148), then multiplied by the `.glc`'s
+   `update_period` — the seconds one scan line represents — where it states one
+   (issue #160; absent means `1`, i.e. seconds == rows);
+   `bandwidth`/`bandcentre` come from the `.glc`. A
+   **`.wav`-backed gram is exempt**: it is surfaced as a plain link to its
+   `.glc` (the on-PC GLC viewer renders it live, reading the `.glc` directly),
+   so no GramFrame table is emitted and the view fields are never consumed — a
+   blank one is fine. Extraction **fails fast** (writing the CSV first so its
+   `warnings` column is inspectable, then exiting non-zero) when an **image**
+   GLC gram is missing its `bandwidth` or `bandcentre` — surfacing the problem
+   here rather than late and cryptically in `deduplicate_csv.py`. A blank
+   `time_end` is **not** a fail-fast: because it is image-derived it follows the
+   "missing assets dangle" rule — a missing image is flagged `asset file
+   missing on disk`, and a present-but-unreadable image gets a non-fatal
+   `gram time period unknown` warning; dropping a readable image in and
+   re-running resolves it. (`.wav`-backed grams, assetless/dangling GLC rows,
+   and analysis-sheet rows are exempt from all of the above.) Fix the offending
+   GLC(s)/image(s) and re-run. For dev/exploration against an incomplete
+   corpus, pass `--relaxed` to substitute the default `100` for each missing
+   view field and complete the run; this is not for deliverable output
+   (GramFrame needs the real values).
+
+   Extraction also checks that **every referenced asset file is present on
+   disk**. A row whose `png_path` names an image or `.wav` that is missing
+   (e.g. an analysis sheet whose PNG never made it into `source\`) would
+   otherwise dangle silently through the generator and only surface as a
+   DITA-OT *"resource cannot be loaded"* error at publish. Instead, each such
+   row is flagged with `asset file missing on disk` in its `warnings` column,
+   and the run logs an enumerated list (`extract.log`, `CSV line N: … -> path`)
+   so you can track and triage them — fix the source file, or drop the row.
+   Rows that legitimately carry no asset (assetless GLC links, a gram with no
+   analysis hyperlink) are exempt. This is a **warning** by default (the CSV is
+   still written, honouring the "missing assets dangle, they don't crash"
+   rule); pass `--strict-assets` for a focused cleanup pass that hard-fails
+   (exit 1) until every referenced asset is present or its row dropped.
+
+   A single missing *file* is distinct from a **whole missing folder**. When a
+   gram's entire asset folder is gone — an author deleted the gram, so *every*
+   directory its hyperlinks reference is absent on disk — the gram is not a set
+   of dangling assets to flag but a removed gram: extraction **drops it from the
+   CSV entirely** (a logged skip, `whole asset folder is missing`, counted in
+   the extraction summary), rather than emit a topic whose every reference would
+   fail at publish. The single-missing-file case above (folder still present)
+   keeps being flagged, not dropped — only a wholesale-deleted folder is
+   skipped.
+
+   **Stale analysis-sheet links.** A common legacy artefact is a gram whose
+   analysis-sheet hyperlink still points at an *earlier build's* folder (e.g. a
+   `Working grams week 3\…` href on a deck now filed under week 4), even though
+   the gram's real analysis sheet moved with it and now sits beside the gram's
+   own `.glc` files. When the linked analysis image can't be found on disk,
+   extraction tries to recover before flagging:
+   - if the gram carries a `vessel_name` (it is real, exploitable content), it
+     **looks in the gram's own Lofar folder(s)** for an analysis sheet
+     (`*analysis*` / `*analaysis*`, `.png`/`.jpg`/`.jpeg`) and, if found,
+     **repoints the row at that sibling** — a logged, silent recovery. If no
+     sheet is found there, the row is flagged `asset file missing on disk` as
+     above (nothing is silently lost);
+   - if the gram has **no `vessel_name`**, it is mangled legacy content that
+     can't be exploited, so the analysis sheet is **dropped entirely** (no
+     analysis row, no warning) while the gram's resolved Lofar rows are kept.
+   This recovery only ever fires for an analysis image that isn't on disk; a
+   correctly-linked sheet is untouched, so it can't change output for grams that
+   already resolve.
+
+   The **reverse** case is the same stale link seen from the `.glc` side: when
+   a gram's analysis-sheet *header* points at a stale folder, its `GramNN/`
+   `.glc` files match no header by folder key and would be dropped with a
+   `.glc … names folder … but no matching header on this slide` warning — the
+   gram's Lofars silently lost. So before warning, extraction checks the
+   `.glc`'s own on-disk folder for a sibling analysis sheet (the same
+   `*analysis*` / `*analaysis*` image the recovery above would find). If one is
+   there — proof this is a real gram — the `.glc` is **reconnected to the header
+   carrying the same gram number** (a logged, silent recovery, no warning), and
+   the mis-linked analysis sheet is then recovered from that folder by the rule
+   above. Without a sibling sheet (or a matching header) the `.glc` is dropped
+   and the warning stands, exactly as before.
 
 4. **Stage 4 — Manual CSV review (technical author).** Open
    `extracted.csv` in Excel. The author should:
@@ -442,6 +680,10 @@ installs, not the user-folder install.
    per gram** at `dita/<publication>/<chapter>/gram-NN/gram_NN.dita`
    (the N+1 CSV rows for the gram are merged — Analysis Sheet
    section first, then one section per Lofar in `sequence` order).
+   Image-backed sections are titled `Lofar 1…N` and audio (`.wav`)
+   sections `WAV 1…M`, each on its own contiguous sequence: an audio
+   link resolves to no spectrogram, so numbering it off the Lofar
+   counter promised a LOFAR gram the link cannot show.
    For `main`, the chapter is the **week** (feature 008): a bare-integer
    `target_chapter` of `1`…`4` becomes `dita/main/week-N/`, headed
    `Week N`, and the per-gram `NN` is the effective gram number
@@ -456,7 +698,7 @@ installs, not the user-folder install.
    is a bare filename — no `../` traversal. Each publication's ditamap
    is written **inside its folder** (`dita/<pub>/<pub>.ditamap` with
    folder-relative hrefs — nothing at the `dita/` root except the
-   manifest, skipped report, and DITAVAL profile), so a publication
+   skipped report and DITAVAL profiles), so a publication
    folder is self-contained and can be opened in Oxygen as-is. Output
    is deterministic: re-running the same CSV
    produces byte-identical files (including the copied assets). If a
@@ -464,6 +706,19 @@ installs, not the user-folder install.
    and still emits the topic with the intended local href — dropping
    the asset in at the expected source path and re-running resolves
    the dangling reference without churning the topic XML.
+
+   *Temporary debugging aid.* Because `main` renumbers and re-buckets grams
+   (several source decks fold into one `week-N/` folder, and within-week
+   collisions renumber via `target_gram_id`), a published `week-N/gram-NN` no
+   longer matches the publication / week / gram number you would search for in
+   the source PPTX. Each gram page therefore carries a visible
+   **instructor-only** block mapping it back: source publication, source
+   chapter/deck title, original `gram_id`, the published week + gram number, and
+   the analysis image's source path. It is the fast way to trace a published
+   page — e.g. one whose analysis image failed to load — to the deck it came
+   from. The block is **on by default during the current debugging phase**; pass
+   `--no-debug-provenance` to suppress it. It is tagged `audience="-trainee"` so
+   it never leaks into a student edition.
 
 6. **Stage 6 — Build verification (Oxygen).** Build both the instructor
    profile (no audience exclusion) and the trainee profile (excluding
@@ -482,23 +737,31 @@ Because these columns are pipeline-authored, the tools treat a blank value in a
 `topic_filename` (`chapter` is empty-allowed for the progress tests) — as a
 hard error rather than coercing it to empty, so a defect surfaces loudly instead
 of producing a malformed topic (constitution principle VII, "Strict on
-Self-Authored Data"). The `.wav` dedup view fields
-(`time_end`/`bandwidth`/`bandcentre`) are likewise required on an audio row,
-since they are the key that decides whether two audio grams share a view.
+Self-Authored Data"). The view fields
+(`time_end`/`bandwidth`/`bandcentre`) are **not** in this set: they only feed
+the image GramFrame table, so a `.wav` row — surfaced as a `.glc` link, never a
+GramFrame render — may leave them blank. `time_end` is additionally special: it
+is measured from the referenced image's pixel height at extraction rather than
+read from the `.glc` (issue #148) — scaled by the `.glc`'s `update_period` where
+one is stated (issue #160) — so it is populated automatically for image grams
+and blank when there is no measurable image. The dedup/generate view key
+still uses the three to keep two grams with *different* windows from merging,
+but reads them tolerantly (a blank degrades to empty, so blank-view rows simply
+share a key) rather than hard-failing.
 
 | # | Column | Editable? | Notes |
 |---|---|---|---|
-| 1 | `publication` | no | `main` or `progress-test-N`. |
+| 1 | `publication` | no | `main`, `progress-test-N`, or a standalone assessment (`AAAC-final-assessment`, `SSAC-final-assessment`, … — see the course-code rule below). |
 | 2 | `chapter` | no | Empty for progress-test rows. |
 | 3 | `gram_id` | no | Format `Gram NN`. |
 | 4 | `vessel_name` | yes | Instructor-only content. |
-| 5 | `topic_type` | no | `glc` or `analysis`. |
+| 5 | `topic_type` | no | `glc`, `analysis`, or `demon`. A `demon` row (issue #151) is an alternately-rendered gram view seeded by ingest; the generator renders it as the gram's leading GramFrame (before the Lofars, after the analysis sheet). |
 | 6 | `sequence` | no | 1-based per gram, scoped per `topic_type`. |
-| 7 | `topic_filename` | no | `gram_NN.dita`. Every row of a single gram (one per Lofar plus one analysis) shares this filename; the generator merges the N+1 rows into one DITA topic per gram. |
+| 7 | `topic_filename` | no | `gram_NN.dita`. Every row of a single gram (the demon(s), one per Lofar, plus one analysis) shares this filename; the generator merges the rows into one DITA topic per gram. |
 | 8 | `display_text` | yes (rare) | Human-readable link label from the PPTX run. |
 | 9 | `link_href` | yes (rare) | Raw hyperlink URI from the PPTX run; always a `.glc` in the audited corpus. |
 | 10 | `glc_path` | yes | Resolved `.glc` path relative to the source folder. |
-| 11 | `time_end` | yes | From GLC `bottom_crop`; numeric string. |
+| 11 | `time_end` | yes | The gram's time period in seconds. Measured at extraction as the referenced image's **pixel height** (scan lines) × the GLC's `update_period` (seconds per scan line), **not** the GLC's `bottom_crop` (issues #148/#160). A GLC that states no `update_period` means `1`, so the value equals the pixel height — the historical case. Numeric string, blank for `.wav` rows and when the image cannot be measured. |
 | 12 | `bandwidth` | yes | From GLC `bandwidth`; numeric string. Width of the frequency band. |
 | 13 | `bandcentre` | yes | From GLC `bandcentre`; numeric string. Centre of the band. The frequency axis is derived from the pair: `freq_start = bandcentre − bandwidth/2`, `freq_end = bandcentre + bandwidth/2` (issue #87). Replaces the former single `freq_end` column. |
 | 14 | `png_path` | yes | Asset named inside the GLC, resolved relative to the source folder. `.png`/`.jpg`/`.gif` → embedded inline; `.wav` → GLC-viewer link (the `.glc` + `.wav` pair is copied alongside the topic). |
@@ -512,7 +775,8 @@ empty default, so a CSV without them behaves exactly as before:
 |---|---|---|
 | `target_chapter` | extractor / author | **Feature 008/009:** for `main`, the bare-integer **week** (`1`…`4`) a gram lands in. Set automatically from a `Week N` deck title; for a **no-week** deck (e.g. Pub10, Legacy Pub 10) extraction now **even-slices** the deck's grams across the four weeks (`floor(G/4)` per week, remainder to the earliest weeks, in source order) instead of leaving it blank (feature 009). Remains author-editable. The generator expands a bare integer to heading `Week N` and folder `main/week-N/` (`main` carries no per-document tier). Empty falls back to the source `chapter`. |
 | `master_png_path` | `deduplicate_csv.py` | Empty = not redirected. Non-empty = the `png_path` of the master copy this row's large duplicated asset should link to instead of copying its own. Only assets strictly over 10 MiB that genuinely duplicate another row are redirected; for `.wav` rows "genuinely duplicate" also requires identical `time_end`/`bandwidth`/`bandcentre` — two `.glc` files windowing the same recording differently are never merged, so neither student view is lost (issues #78, #87). Run `python scripts/deduplicate_csv.py --csv signed.csv --image-root source/ --out signed.dedup.csv`, then `generate_dita.py` against the `.dedup.csv`. Reverse with `python scripts/rehydrate_dita.py --dita dita/ [--gram gram-NN]`. |
-| `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) keeps numbering unique *within* each week — native numbers are preserved and only genuine collisions are bumped to one past the week's maximum (the feature-008 behaviour; the same number may recur in different weeks); **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-week rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
+| `analysis_doc_path` | extractor | **Feature 013:** path to the analysis sheet's editable Word original (`.doc`/`.docx`), relative to the source folder, or empty when the sheet only ever existed as an image. The generator copies the named file into the gram's topic folder as `analysis.doc`/`analysis.docx` and references it from nothing — it is parked there for an analyst who later has to amend the sheet. Resolved at extraction from the deck's own hyperlink where that names a Word file, otherwise by same-stem sibling probe (`.doc` before `.docx`) beside the resolved analysis image, including a sheet recovered from a Lofar folder. Author-editable and empty-allowed; a recorded file that is absent at generate time warns and continues, and because nothing links it there is no dangling href to repair. |
+| `target_gram_id` | `deduplicate_csv.py` | **Feature 008/009:** empty = use `gram_id` unchanged. Non-empty = the renumbered gram number. The scheme is chosen by `deduplicate_csv.py --main-numbering` (feature 009): **`per-week`** (default) numbers each week's `main` grams as contiguous `1..k` — no gaps and restart at 1 per week, so a week reads gram 1, 2, 3 … with no holes even when its decks' native numbers are gappy or jump (issue #102); within a week the native-`Week N` deck takes the low numbers and any sliced no-week deck (Pub10) follows as the contiguous tail. **`continuous`** numbers `main` as one `1..N` sequence across the four weeks (week N starts past week N-1's maximum). Non-`main` publications always use the per-`(publication, chapter, doc)` bump-on-collision rule. `gram_id` is never mutated; the generated folder/file/title use the effective number. The gh-pages and PR-preview builds use the default `per-week`. If two distinct grams still collide on a week + number, `generate_dita.py` aborts with a per-collision error telling you to run the dedupe step. |
 
 ### Editing the CSV in Excel — what can go wrong
 
@@ -520,8 +784,21 @@ The intermediate CSV is written `utf-8-sig` (BOM included), CRLF
 line-terminated, with `QUOTE_MINIMAL` quoting (R11). Excel can mangle
 all three of those if you "Save As" instead of "Save":
 
+- **Encoding flipped to Windows ANSI.** Excel's default
+  *Save As → "CSV (Comma delimited)"* writes the file in the Windows ANSI
+  code page (cp1252), not UTF-8. The readers (`generate_dita.py` and
+  `deduplicate_csv.py`) **tolerate this**: they try UTF-8 first, then fall
+  back to cp1252, so the convenient default save loads cleanly and you no
+  longer need the awkward *"CSV (MS-DOS)"* option (which uses a different,
+  OEM code page and is now best avoided — it can mangle non-ASCII glyphs
+  under the cp1252 fallback). For a byte-clean round-trip that preserves the
+  BOM, prefer *Save As → CSV UTF-8*. A fallback decode is noted at DEBUG
+  level in `generate.log` / the dedupe log — it stays off the console,
+  since the cp1252 save is a supported round-trip rather than something
+  you must act on.
 - **BOM stripped** if you re-save as plain CSV without `Unicode (UTF-8)`
-  selected — non-ASCII vessel names become mojibake on the next read.
+  selected — non-ASCII vessel names no longer crash the reader (see above),
+  but the byte-level round-trip invariant in `csv-schema.md` no longer holds.
 - **Line endings flipped** to LF on macOS or to mixed endings in some
   cross-platform flows. `generate_dita.py` tolerates this on read, but
   the byte-level round-trip invariant in `csv-schema.md` no longer holds.
@@ -579,8 +856,30 @@ extractor and `introspect_pptx.py` share, so a fix here flows to both.)
   hidden from the per-gram view (with the count surfaced); the header-only
   rows are still emitted for downstream visibility.
 - **Final-assessment routing** — a deck matching `--final-pattern` (default
-  `final assessment`) routes to its own `final-assessment-N` publication
-  instead of falling through to `main`.
+  `final assessment`) routes to its own final-assessment publication instead of
+  falling through to `main`.
+- **Joining-assessment routing** — a deck matching `--joining-pattern` (default
+  `joining`) routes to its own joining-assessment publication (the initial
+  joining assessment) instead of falling through to `main`. The joining pattern
+  is checked before the final and test patterns, so a deck deliberately named
+  for the joining assessment never lands in those buckets. As with the other
+  standalone assessments, `--exclude-tests` drops it.
+- **Course-code naming for the standalone assessments** — the corpus holds one
+  final assessment (and one joining assessment) *per course*, so both are named
+  from the **course code** found in the deck's own name or its folder title:
+  `Instructor SSAC - Final Assessment_UPDATED` → publication
+  `SSAC-final-assessment`, `Instructor AAAC Final Assessment Updated` →
+  `AAAC-final-assessment` (map title `AAAC Final Assessment`), and likewise
+  `Instructor_SSAC_Joining Assessment` → `SSAC-joining-assessment`. Any
+  separator around the code works — space, `-` or `_` — since matching only
+  requires the code not be part of a longer word. The recognised
+  codes are the `COURSE_CODES` tuple in `extract_to_csv.py` (`AAAC`, `SSAC`) —
+  matched case-insensitively and whole-token, emitted upper-case; add a course
+  by adding its code there. A deck carrying **no** recognised code keeps the
+  legacy encounter-order `final-assessment-N` / `joining-assessment-N` name.
+  The counter is per-run, so before this rule two coded decks extracted in
+  separate `--only` runs both came out as `final-assessment-1` and collided on
+  publish; the code makes each name stable and scope-independent.
 
 ### Design lessons worth keeping
 
@@ -669,9 +968,15 @@ canonical air-gapped test surface.
 | `NotImplementedError: Shape grouping is not implemented yet.` | Expected pre-handover (FR-015). | Run introspection against a real instructor PPTX, answer the five questions in the stub's docstring, then implement the function. |
 | `extract_to_csv.py` exits 0 with empty CSV. | `--input-root` does not contain any `.pptx`. | Verify the path; the walker is recursive. |
 | CSV opens with garbled non-ASCII vessel names in Excel. | The file lost its BOM during Save As. | Re-export from Excel via *File → Save As → CSV UTF-8*. |
+| `UnicodeDecodeError` when running `write.py`/`dedupe.py` after editing the CSV in Excel. | Excel's default *"CSV (Comma delimited)"* save writes Windows ANSI (cp1252), not UTF-8; older builds of the reader were strict utf-8. | Fixed: the readers now fall back to cp1252, so the **default save just works** — you no longer need the awkward *"CSV (MS-DOS)"* option, and the fallback is logged at DEBUG (no console warning). For a byte-clean round-trip, prefer *Save As → CSV UTF-8*. |
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
-| `GLC missing bottom_crop` / `bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those elements (R6). | Every GLC-backed gram (image or `.wav`) needs `time_end` / `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (Analysis-sheet rows and dangling GLC rows are exempt.) |
-| `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | A GLC-backed gram's GLC has no time period and/or band fields; GramFrame can't render without them. | Fix the offending GLC(s) listed in the error so they carry `time_end`, `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
+| Oxygen / DITA-OT reports `[DOTX008E] The resource '…analysis-20sheet-20.png' cannot be loaded`. | The topic references an asset (here an analysis sheet PNG) that is not present in the built tree — the source file was missing at generate time, so the generator dangled the href. (`-20` is DITA-OT's rendering of the URL-escaped space `%20` in the original filename.) | Catch it upstream: `extract_to_csv.py` now flags any referenced-but-missing asset with `asset file missing on disk` in the CSV `warnings` column and an enumerated `extract.log` list, so re-run extraction and triage those rows (restore the source file, or drop the row) before publishing. To map a published `week-N/gram-NN` back to the source deck/gram it came from, read the source-provenance block at the top of the gram page (on by default for now; `--no-debug-provenance` suppresses it). |
+| Every published page 404s, and the content sits one folder deeper than the links expect — e.g. `html\instructor\main\main\week-1\week_1.html` exists but `html\instructor\main\week-1\week_1.html` (the link `index.html` uses) does not. The outer folder holds only `index.html` and the CSS/resources. | A topic referenced a file **outside its publication folder**, so DITA-OT resolved the job root to the *parent* of the map's folder and mirrored that extra tier into the output — stranding `index.html` and every generated link one level above the content. The usual source was a cross-publication deduplication redirect: `deduplicate_csv.py` grouped byte-identical assets by content alone, so a gram an assessment deck reuses from the week it came from was redirected as `..\..\..\<other-pub>\…` (issue #164). One such reference nests the whole publication. | Fixed on both sides: dedupe no longer groups across publications, and the generator refuses a cross-publication redirect (copying the asset locally with a `lies outside the publication` warning) so an older CSV heals without re-running dedupe. Re-run `dedupe.py` then `write.py`, and republish. To confirm a tree is clean before publishing, check that no `href` in `dita\<pub>\` resolves outside `<pub>\`. |
+| `GLC missing bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those band elements (R6). | An **image** GLC-backed gram needs `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (`time_end` is measured from the image, not the GLC — issue #148 — so a missing `bottom_crop` is no longer warned. `.wav` rows, analysis-sheet rows and dangling GLC rows are exempt.) |
+| `gram time period unknown — could not read image height` warning in CSV. | The gram's image is present on disk but its pixel height couldn't be read (unrecognised/corrupt PNG/JPEG/GIF), so `time_end` is blank (issue #148). | Confirm the file is a valid image in the expected format and re-run; if the image itself is missing you'll instead see `asset file missing on disk` (drop the correct image in). This is a warning, not a fail-fast. |
+| `GLC invalid update_period '…' — assumed 1 s per scan line` warning in CSV. | The GLC states an `update_period` that isn't a positive number, so the seconds-per-scan-line scaling can't be applied and extraction fell back to `1` (issue #160). | Open the `.glc` and fix the value (`<update_period>2</update_period>`), then re-run — the affected gram's `time_end` is otherwise too short by that factor. A GLC with **no** `update_period` is normal and never warns. |
+| A gram's time axis reads half (or double) its true length. | The GLC carries an `update_period` other than `1` — e.g. `2`, meaning each scan line is 2 s — and the CSV predates issue #160, when `time_end` was the raw pixel height. | Re-run `extract.py` on the current code and re-generate; `time_end` is now height × `update_period`. Check `extract.log` for the `… x update_period …` INFO lines listing every scaled gram. |
+| `extract_to_csv.py` exits 1: "GLC gram view field(s) missing — GramFrame cannot render". | An **image** GLC-backed gram's GLC has no band fields; GramFrame can't render without them. (`.wav`-backed grams are exempt — they link to the `.glc` and never render a GramFrame table. `time_end` is image-derived and dangles rather than failing fast.) | Fix the offending GLC(s) listed in the error so they carry `bandwidth` and `bandcentre`, then re-run. To keep exploring the toolchain against an incomplete corpus, re-run with `--relaxed` to substitute the default `100` (not for deliverable output). |
 | `GLC malformed: ...` warning. | Source GLC failed `xml.etree.ElementTree.parse`. | Open the file in a text editor; usually it is truncated. The pipeline will not block on this. |
 | Generator produces `skipped.txt` rows. | A GLC row's inner asset is missing or has an extension other than `.png`, `.jpg`, `.gif`, `.wav`. | Drop the asset into the expected source path and re-run, or accept the skip if the row is genuinely unusable. |
 
@@ -769,11 +1074,12 @@ Then use `Z:\…` paths everywhere — never `\\server\share\…`:
 - **`publish_html.py`** — pass drive-letter paths to every directory
   flag: `--dita Z:\Out --staged Z:\dita-build --out Z:\html --dita-ot
   Z:\dita-ot-4.4`.
-- **Oxygen (production publisher)** — open the map from `Z:\…`, then in
-  the transformation scenario's **Output** tab set the **base**,
-  **temporary**, and **output** directories to absolute drive-letter
-  paths (e.g. `Z:\dita-temp`, `Z:\html\…`). Duplicate the stock
-  scenario first — the built-ins are read-only.
+- **Oxygen (production publisher)** — all paths in the transformation
+  scenario's **Output** and **Parameters** tabs must use absolute
+  drive-letter paths (e.g. `Z:\dita-temp`, `Z:\html\…`). See
+  [Configuring Oxygen transformation scenarios](#configuring-oxygen-transformation-scenarios-production-publisher)
+  for the full setup, including `${cfn}` output-path templates and the
+  `args.filter` parameter for the student edition.
 
 > **Privilege gotcha:** a drive mapped in an Administrator shell is
 > invisible to a non-Administrator publisher (and vice-versa). Map the
@@ -806,7 +1112,7 @@ html/
 ├── index.html                        ← shared landing — pick an edition
 ├── instructor/
 │   ├── index.html                    ← publication list, instructor edition
-│   ├── main/                         ← DITA-OT render, no audience filter
+│   ├── main/                         ← DITA-OT render with --filter=instructor.ditaval
 │   ├── progress-test-1/
 │   └── …                             ← one folder per ditamap
 └── student/
@@ -817,9 +1123,12 @@ html/
 ```
 
 The instructor edition contains every vessel-name decoration,
-Analysis Sheet section, and "Instructor Version" labelling. The
-student edition is produced by a second DITA-OT pass with
-`dita/trainee.ditaval` excluding every element carrying
+Analysis Sheet section, and "Instructor Version" labelling; it is
+produced with `dita/instructor.ditaval`, which excludes the one piece
+of student-only content — the in-body 7 Questions section on each gram
+page (instructors reach that image via the root-level 7 Questions nav
+topic instead). The student edition is produced by a second DITA-OT
+pass with `dita/trainee.ditaval` excluding every element carrying
 `audience="-trainee"`. URL paths below the top-level edition segment
 are identical across editions — swapping `instructor/` ↔ `student/`
 in any URL reaches the same gram in the other edition.
@@ -884,6 +1193,98 @@ simply omits the pages (logged warning) rather than failing the build. Edit
 `static/welcome.dita` and `static/security.dita` in Oxygen like any topic — the
 committed copies are mock development content. See [`static/README.md`](static/README.md).
 
+### Configuring Oxygen transformation scenarios (production publisher)
+
+Oxygen publishes each ditamap independently. Set up **two** saved transformation
+scenarios — one instructor, one student — then run both against every ditamap.
+Using Oxygen's `${cfn}` editor variable in the output path gives each publication
+its own subfolder automatically, so running the scenarios on successive ditamaps
+never overwrites a previous publication's output.
+
+#### Create the instructor scenario
+
+1. In Oxygen's **Transformation Scenarios** pane, locate the built-in
+   **DITA Map WebHelp Responsive** scenario, then **Duplicate** it (built-ins
+   are read-only). Name the duplicate **AAAC Instructor**.
+
+2. In the **Output** tab of the duplicated scenario, set:
+
+   | Field | Value |
+   |---|---|
+   | Output directory | `Z:\html\instructor\${cfn}` |
+   | Temporary files directory | `Z:\dita-temp\${cfn}` |
+
+   Leave `args.filter` (on the **Parameters** tab) blank — the instructor
+   edition includes all content with no audience filtering.
+
+3. On the **Templates** tab, select the custom publishing template (the
+   Fi3ldMan-derived one that carries the GramFrame overlay and any other theme
+   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`. Both
+   editions publish **dark, with no theme picker** once that template carries
+   `theme/oxygen-dark-mode/` — see that folder's `README.md` for the two
+   `.opt` entries it needs.
+
+#### Create the student scenario
+
+4. Duplicate the **same built-in** scenario again. Name the copy **AAAC Student**.
+
+5. In the **Output** tab, set:
+
+   | Field | Value |
+   |---|---|
+   | Output directory | `Z:\html\student\${cfn}` |
+   | Temporary files directory | `Z:\dita-temp\student-${cfn}` |
+
+6. On the **Parameters** tab, add or edit:
+
+   | Parameter | Value |
+   |---|---|
+   | `args.filter` | `Z:\dita\trainee.ditaval` |
+
+   Use the absolute drive-letter path to the `trainee.ditaval` file that
+   `generate_dita.py` writes at the root of its `--out` folder (i.e., one level
+   above the per-publication subfolders).
+
+7. On the **Templates** tab, select the **same** custom template as the
+   instructor scenario — there is no need for a separate student template
+   (see `theme/oxygen-hide-search/README.md`).
+
+#### Publishing each ditamap
+
+For every ditamap in the `dita\` tree:
+
+1. Open the ditamap in Oxygen from the mapped drive
+   (e.g. `Z:\dita\main\main.ditamap`).
+2. Run **AAAC Instructor** → output lands in `Z:\html\instructor\main\`.
+3. Run **AAAC Student** → output lands in `Z:\html\student\main\`.
+4. Repeat for each remaining ditamap (`progress-test-1`, `progress-test-2`, …).
+
+The `${cfn}` variable expands to the ditamap stem (`main`,
+`progress-test-1`, …), so each publication's HTML lands in its own named
+subfolder and later runs on a different ditamap do not overwrite it.
+
+#### Resulting folder layout
+
+```text
+Z:\html\
+├── instructor\
+│   ├── main\
+│   ├── progress-test-1\
+│   └── progress-test-2\
+└── student\
+    ├── main\
+    ├── progress-test-1\
+    └── progress-test-2\
+```
+
+This matches the `publish_html.py` dev-preview layout
+(`html/<edition>/<ditamap-stem>/`).
+
+> **Temporary files and the mapped-drive rule.** All four directories — the
+> DITA input, the DITAVAL, the temporary files, and the output — must be on a
+> **mapped drive letter**, not a raw `\\server\share` UNC path. See [Map a
+> drive — DITA-OT cannot read `\\server\share` (UNC) paths](#map-a-drive--dita-ot-cannot-read-serversh-unc-paths).
+
 ## Known limitations
 
 - **Shape grouping is a documented stub (FR-015).** The
@@ -897,13 +1298,40 @@ committed copies are mock development content. See [`static/README.md`](static/R
   technical author is the sole authority.
 - **Output is always rebuilt from scratch.** `extract_to_csv.py`,
   `deduplicate_csv.py`, and `generate_dita.py` each clear their target
-  (the output CSV, the deduped CSV, and the DITA tree respectively) at
+  (the output CSV, the deduped CSV, and — for the generator — each
+  publication folder its CSV produces) at
   the start of a run. This verifies the target isn't locked (e.g. open
   in Excel or Oxygen) and guarantees a failed or re-pointed run can't
   leave a previous document's output behind for a later stage to
-  silently consume. `generate_dita.py`'s `--clean` flag is now a
-  deprecated no-op (cleaning is unconditional); `deduplicate_csv.py`
-  skips the wipe when `--out` rewrites `--csv` in place.
+  silently consume. `deduplicate_csv.py` skips the wipe when `--out`
+  rewrites `--csv` in place.
+- **`generate_dita.py` rebuilds each publication it produces, and only
+  those.** Every run wipes `dita/<pub>/` for each publication in its CSV
+  before writing it — so a gram deleted from the PPTX disappears from the
+  DITA tree rather than lingering as an orphan the regenerated ditamap no
+  longer references. The publication folder is the unit because the
+  ditamap is rewritten wholesale per publication: folder and map are
+  rebuilt together, so the tree and its nav can never disagree.
+  Publications *not* in the CSV are left untouched, which is what lets a
+  suite of documents be built up in one `dita/` tree over successive
+  scoped runs and published one by one.
+- **Nothing wipes the whole `dita/` tree.** There is no flag for it and no
+  wrapper toggle: the generator's blast radius is exactly the publication
+  folders its own CSV produces. On the target `--out` is `Z:\dita`, whose
+  other contents — anything the author keeps alongside the generated
+  publications — belong to the operator, so clearing it outright is a
+  deliberate manual act: **delete the folder by hand** before the run when
+  you want a from-scratch rebuild of everything. (`generate_dita.py` used
+  to take a `--clean` flag that did this; it was removed because a wipe
+  that broad is too easy to carry accidentally in a tuned wrapper. Passing
+  it now fails fast with argparse's `unrecognized arguments: --clean` —
+  if you see that, delete the flag, and any `CLEAN_ALL` line, from your
+  tuned `write.py` or `pipeline.py`.)
+  Note `skipped.txt` is rewritten each run either way, so it describes
+  the current run, not the accumulated tree. (A `manifest.txt` listing
+  every file produced used to be written beside it; it was removed
+  because nothing consumed it and, sitting at the root of a tree built
+  up over several scoped runs, it described only the last one.)
 - **Windows orchestrator only.** `run_pipeline.bat` is a Windows batch
   file; on POSIX systems run the Python scripts directly.
 - **One third-party dependency.** Only `python-pptx` is required at

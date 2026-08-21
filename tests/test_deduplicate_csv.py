@@ -136,11 +136,11 @@ class DeduplicateCsvTests(unittest.TestCase):
         _, rows = _read(out)
         self.assertTrue(all(r["master_png_path"] == "" for r in rows))
 
-    def test_wav_missing_view_hard_fails(self) -> None:
-        """A byte-identical .wav row with a blank view field hard-fails
-        (constitution VII): the view is the dedup key, so a blank one would
-        silently mis-pair audio. The run aborts with a PipelineDataError
-        rather than the old tolerant 'left non-redirected' behaviour."""
+    def test_wav_missing_view_tolerated(self) -> None:
+        """A byte-identical .wav row with a blank view field is tolerated: the
+        view fields only feed the image GramFrame table, never a .wav link, so a
+        blank one degrades to "" rather than aborting. Two blank-view rows share
+        the empty view and merge as before (no crash)."""
         noview = self.tmp / "noview.csv"
         cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
                 "sequence", "topic_filename", "display_text", "link_href",
@@ -151,7 +151,7 @@ class DeduplicateCsvTests(unittest.TestCase):
                                lineterminator="\r\n")
             w.writeheader()
             # master.wav and dup1.wav are byte-identical on disk; the view
-            # cells are blank, which is now a hard-fail rather than tolerated.
+            # cells are blank, which is now tolerated rather than a hard-fail.
             for gid, glc, png in (
                 ("40", "dedup/audio/master.glc", "dedup/audio/master.wav"),
                 ("41", "dedup/audio/dup1.glc", "dedup/audio/dup1.wav"),
@@ -163,11 +163,13 @@ class DeduplicateCsvTests(unittest.TestCase):
                 })
         out = self.tmp / "noview_out.csv"
         self.assertEqual(deduplicate_csv.main(
-            ["--csv", str(noview), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
-        self.assertFalse(out.exists(), "no CSV written when the run aborts")
-        log = Path("dedup.log").read_text(encoding="utf-8")
-        self.assertIn("missing or blank", log)
-        self.assertIn("time_end", log)
+            ["--csv", str(noview), "--image-root", str(FIXTURES), "--out", str(out)]), 0)
+        self.assertTrue(out.exists(), "CSV is written when the run succeeds")
+        _, rows = _read(out)
+        # Byte-identical, same (empty) view -> exactly one redirects to the other.
+        redirected = [r for r in rows if r["master_png_path"]]
+        self.assertEqual(len(redirected), 1, "one of the pair redirects")
+        self.assertEqual(redirected[0]["master_png_path"], "dedup/audio/master.wav")
 
     def test_blank_identity_column_aborts(self) -> None:
         """A blank required identity column (gram_id) is a defect in our own
@@ -191,6 +193,33 @@ class DeduplicateCsvTests(unittest.TestCase):
             ["--csv", str(bad), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
         self.assertFalse(out.exists(), "no CSV written when the run aborts")
         self.assertIn("missing or blank", Path("dedup.log").read_text(encoding="utf-8"))
+
+    def test_abort_names_the_offending_csv_line(self) -> None:
+        """The abort message points at the exact CSV line of the bad row, so
+        the operator can find it in a large extract.csv without scanning. The
+        blank gram_id sits on the third data row -> source line 4 (header is
+        line 1)."""
+        bad = self.tmp / "blank_id_line.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "display_text", "link_href",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path", "file_size",
+                "wav_treatment", "warnings"]
+        with bad.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            # Lines 2 and 3 are well-formed; the blank gram_id lands on line 4.
+            for gid in ("10", "11", ""):
+                w.writerow({c: "" for c in cols} | {
+                    "publication": "main", "chapter": "X", "gram_id": gid,
+                    "topic_type": "glc", "sequence": "1",
+                    "png_path": f"images/{gid or 'blank'}.png",
+                })
+        out = self.tmp / "blank_id_line_out.csv"
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(bad), "--image-root", str(FIXTURES), "--out", str(out)]), 1)
+        log = Path("dedup.log").read_text(encoding="utf-8")
+        self.assertIn("at CSV line 4", log)
 
     # -- stale-output removal: a failed run leaves nothing behind ------------
     def test_stale_output_removed_when_run_aborts(self) -> None:
@@ -255,6 +284,77 @@ class DeduplicateCsvTests(unittest.TestCase):
         log = Path("dedup.log").read_text(encoding="utf-8")
         self.assertIn("missing/unreadable", log)
 
+    def test_duplicate_across_publications_is_not_redirected(self) -> None:
+        """A duplicate group must never span publications (issue #164).
+
+        The generator renders a redirect as a relative href from the
+        redirected gram's folder to the master's, so a cross-publication
+        master emits ``../../<other-pub>/…`` and the publication folder stops
+        being self-contained. DITA-OT then roots the job at the parent of the
+        map's folder and publishes the whole publication one tier below its
+        own index.html and links, 404-ing every page. The grams an assessment
+        deck reuses from the week it came from are exactly the byte-identical
+        ones, so this is the ordinary case."""
+        cross = self.tmp / "cross.csv"
+        cols = ["publication", "chapter", "gram_id", "vessel_name", "topic_type",
+                "sequence", "topic_filename", "display_text", "link_href",
+                "glc_path", "time_end", "bandwidth", "bandcentre", "png_path",
+                "file_size", "wav_treatment", "warnings"]
+        with cross.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, quoting=csv.QUOTE_MINIMAL,
+                               lineterminator="\r\n")
+            w.writeheader()
+            # Byte-identical assets, one per publication.
+            for pub, gid, png in (
+                ("main", "30", "dedup/img/shared.png"),
+                ("progress-test-1", "31", "dedup/img/shared_b.png"),
+            ):
+                w.writerow({c: "" for c in cols} | {
+                    "publication": pub, "chapter": "X", "gram_id": gid,
+                    "topic_type": "glc", "sequence": "1", "png_path": png,
+                    "file_size": "11000000",
+                })
+        out = self.tmp / "cross_out.csv"
+        self.assertEqual(deduplicate_csv.main(
+            ["--csv", str(cross), "--image-root", str(FIXTURES), "--out", str(out)]), 0)
+        _, rows = _read(out)
+        self.assertTrue(
+            all(r["master_png_path"] == "" for r in rows),
+            "byte-identical assets in different publications must each keep "
+            f"their own copy, got {self._by_png(rows)}",
+        )
+
+    def test_no_dedupe_skips_detection_but_still_renumbers(self) -> None:
+        """``--no-dedupe`` turns off duplicate detection only.
+
+        The script does two jobs; the renumbering is required (the generator
+        fail-fasts on un-renumbered within-week collisions) while the
+        deduplication is a disk-space optimisation. Turning the optimisation
+        off must leave the renumbering, and the column, intact."""
+        out = self.tmp / "nodedupe.csv"
+        self.assertEqual(deduplicate_csv.main([
+            "--csv", str(SOURCE), "--image-root", str(FIXTURES),
+            "--out", str(out), "--no-dedupe",
+        ]), 0)
+        fieldnames, rows = _read(out)
+        self.assertIn("master_png_path", fieldnames,
+                      "the column is still emitted, so the CSV round-trips")
+        self.assertTrue(
+            all(r["master_png_path"] == "" for r in rows),
+            f"no row may be redirected, got {self._by_png(rows)}")
+        self.assertIn("target_gram_id", fieldnames,
+                      "renumbering still runs with detection off")
+        log = Path("dedup.log").read_text(encoding="utf-8")
+        self.assertIn("Deduplication skipped", log)
+
+    def test_duplicate_within_one_publication_still_redirects(self) -> None:
+        """The publication scoping must not disable deduplication itself:
+        two copies inside one publication still collapse to a master."""
+        _, rows = _read(self._run())
+        m = self._by_png(rows)
+        self.assertEqual(m["dedup/img/shared.png"], "")
+        self.assertEqual(m["dedup/img/shared_b.png"], "dedup/img/shared.png")
+
     # -- T034: round-trip fidelity + idempotency ----------------------------
     def test_csv_roundtrip_and_idempotent(self) -> None:
         out1 = self._run("once.csv")
@@ -284,13 +384,19 @@ class DeduplicateCsvTests(unittest.TestCase):
 
 
 class RenumberGramsTests(unittest.TestCase):
-    """Within-week gram-number renumbering (feature 008)."""
+    """Bump-on-collision renumbering for **non-main** publications (feature 008).
+
+    ``main`` now uses contiguous per-week numbering (issue #102, see
+    ``PerWeekContiguousMainTests``); the per-``(publication, chapter, doc)``
+    bump-to-max+1 rule continues to serve the progress-test / final-assessment
+    publications, which these tests exercise. ``target_chapter`` is used here
+    purely as a bucket discriminator (it stands in for the source chapter)."""
 
     @staticmethod
     def _gram(chapter, gram_id, vessel, target_chapter=""):
         """Two rows (analysis + one glc) sharing one gram's identity."""
         base = {
-            "publication": "main", "chapter": chapter, "gram_id": gram_id,
+            "publication": "progress-test-1", "chapter": chapter, "gram_id": gram_id,
             "vessel_name": vessel, "target_chapter": target_chapter,
             "target_doc": "",
         }
@@ -441,8 +547,12 @@ class ContinuousNumberingTests(unittest.TestCase):
             [r["target_gram_id"] for r in rows_default],
             [r["target_gram_id"] for r in rows_explicit],
         )
-        # per-week keeps the same number in different weeks distinct (feature 008).
-        self.assertTrue(all(r["target_gram_id"] == "" for r in rows_default))
+        # per-week numbers each week as contiguous 1..k: each single-gram week
+        # restarts at 1, so the native gram_id 5 is renumbered to 1 in both weeks.
+        self.assertEqual(self._target(rows_default), {
+            ("W1", "5", "A"): "1",
+            ("W2", "5", "B"): "1",
+        })
 
     def test_non_main_unaffected_by_continuous(self) -> None:
         # Non-main publications keep per-week bump-on-collision under either scheme.
@@ -459,6 +569,129 @@ class ContinuousNumberingTests(unittest.TestCase):
         first = [r["target_gram_id"] for r in rows]
         deduplicate_csv.renumber_grams(rows, main_numbering="continuous")
         self.assertEqual([r["target_gram_id"] for r in rows], first)
+
+
+class CsvEncodingToleranceTests(unittest.TestCase):
+    """The dedupe reader mirrors generate_dita's Excel-encoding tolerance.
+
+    An author may run the dedupe step on a CSV they just edited in Excel and
+    saved with the default *"CSV (Comma delimited)"* (Windows ANSI / cp1252).
+    A strict utf-8 read would crash on the first non-ASCII byte.
+    """
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.tmp = TMP / f"dedup_enc_{self._testMethodName}"
+        if self.tmp.exists():
+            import shutil
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _decode(self, raw: bytes) -> str:
+        p = self.tmp / "in.csv"
+        p.write_bytes(raw)
+        return deduplicate_csv.decode_csv_bytes(
+            p.read_bytes(), p, deduplicate_csv.LOGGER
+        )
+
+    def test_ansi_comma_delimited_is_recovered(self) -> None:
+        text = "publication,vessel_name\r\nmain,\"HMS Hood £5 at 90° N\"\r\n"
+        raw = text.encode("cp1252")
+        with self.assertRaises(UnicodeDecodeError):
+            raw.decode("utf-8")  # the bytes really are not utf-8
+        self.assertIn("HMS Hood £5 at 90° N", self._decode(raw))
+
+    def test_utf8_with_bom_is_read_cleanly(self) -> None:
+        text = "publication,vessel_name\r\nmain,Resolute\r\n"
+        out = self._decode(b"\xef\xbb\xbf" + text.encode("utf-8"))
+        self.assertTrue(out.startswith("publication"), "BOM must be stripped")
+
+
+class PerWeekContiguousMainTests(unittest.TestCase):
+    """Issue #102: the default ``per-week`` scheme numbers each ``main`` week as
+    contiguous ``1..k`` (no gaps, restart at 1 per week), with the native-week
+    deck ahead of any sliced no-week deck."""
+
+    @staticmethod
+    def _gram(chapter, gram_id, vessel, target_chapter="", publication="main"):
+        base = {
+            "publication": publication, "chapter": chapter, "gram_id": gram_id,
+            "vessel_name": vessel, "target_chapter": target_chapter,
+            "target_doc": "",
+        }
+        return [
+            {**base, "topic_type": "glc", "sequence": "1"},
+            {**base, "topic_type": "analysis", "sequence": "1"},
+        ]
+
+    def _target(self, rows):
+        out = {}
+        for r in rows:
+            out.setdefault(
+                (r["chapter"], r["gram_id"], r["vessel_name"]), r["target_gram_id"],
+            )
+        return out
+
+    def test_gappy_native_numbers_become_contiguous(self) -> None:
+        # One week deck with gappy native numbers 1, 5, 9 → contiguous 1, 2, 3.
+        rows = (
+            self._gram("Instructor Week 4 Grams", "1", "A", "4")
+            + self._gram("Instructor Week 4 Grams", "5", "B", "4")
+            + self._gram("Instructor Week 4 Grams", "9", "C", "4")
+        )
+        deduplicate_csv.renumber_grams(rows)  # default per-week
+        t = self._target(rows)
+        self.assertEqual(t[("Instructor Week 4 Grams", "1", "A")], "")   # 1 == seq 1
+        self.assertEqual(t[("Instructor Week 4 Grams", "5", "B")], "2")
+        self.assertEqual(t[("Instructor Week 4 Grams", "9", "C")], "3")
+
+    def test_each_week_restarts_at_one(self) -> None:
+        # Distinct weeks each restart at 1 (unlike continuous).
+        rows = (
+            self._gram("Instructor Week 1 Grams", "7", "A", "1")
+            + self._gram("Instructor Week 2 Grams", "8", "B", "2")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        t = self._target(rows)
+        self.assertEqual(t[("Instructor Week 1 Grams", "7", "A")], "1")
+        self.assertEqual(t[("Instructor Week 2 Grams", "8", "B")], "1")
+
+    def test_native_week_deck_precedes_sliced_no_week_deck(self) -> None:
+        # A week shared by the native Week-4 deck (grams 1,2) and a sliced Pub10
+        # slice (grams 70,71). The native deck takes 1,2; Pub10 follows 3,4 — even
+        # though "Instructor Pub10" sorts alphabetically before "Instructor Week".
+        rows = (
+            self._gram("Instructor Week 4 Grams", "1", "A", "4")
+            + self._gram("Instructor Week 4 Grams", "2", "B", "4")
+            + self._gram("Instructor Pub10_Ed22B", "70", "P", "4")
+            + self._gram("Instructor Pub10_Ed22B", "71", "Q", "4")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        t = self._target(rows)
+        self.assertEqual(t[("Instructor Week 4 Grams", "1", "A")], "")   # 1
+        self.assertEqual(t[("Instructor Week 4 Grams", "2", "B")], "")   # 2
+        self.assertEqual(t[("Instructor Pub10_Ed22B", "70", "P")], "3")
+        self.assertEqual(t[("Instructor Pub10_Ed22B", "71", "Q")], "4")
+
+    def test_gram_id_never_mutated_and_idempotent(self) -> None:
+        rows = (
+            self._gram("Instructor Week 4 Grams", "9", "A", "4")
+            + self._gram("Instructor Pub10_Ed22B", "70", "P", "4")
+        )
+        deduplicate_csv.renumber_grams(rows)
+        first = [r["target_gram_id"] for r in rows]
+        self.assertEqual([r["gram_id"] for r in rows], ["9", "9", "70", "70"])
+        deduplicate_csv.renumber_grams(rows)  # recompute
+        self.assertEqual([r["target_gram_id"] for r in rows], first)
+
+    def test_non_main_unaffected_by_per_week_contiguous(self) -> None:
+        # Non-main keeps bump-on-collision: native 5 kept, the colliding 5 bumped.
+        rows = (
+            self._gram("PT", "5", "Vp", "", publication="progress-test-1")
+            + self._gram("PT", "5", "Vq", "", publication="progress-test-1")
+        )
+        deduplicate_csv.renumber_grams(rows)  # default per-week
+        self.assertEqual(sorted(self._target(rows).values()), ["", "6"])
 
 
 if __name__ == "__main__":

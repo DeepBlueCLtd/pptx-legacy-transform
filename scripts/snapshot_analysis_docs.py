@@ -9,19 +9,29 @@ leaving a click-to-open link that launches MS Word mid-lesson.
 The mechanism is an external, configurable renderer (LibreOffice headless
 ``soffice`` by default), invoked once per un-rendered sheet via
 ``subprocess`` -- exactly as feature 001 contains DITA-OT. The script's
-runtime-critical path is **stdlib only** (the reverse ``.docx`` wrap uses
-``zipfile`` + ``xml.etree``); the only optional library is Pillow, imported
-defensively inside :func:`tidy_image` with a full-page fallback when absent.
+runtime-critical path is **stdlib only**; the only optional library is Pillow,
+imported defensively inside :func:`tidy_image` with a full-page fallback when
+absent.
 
-Design invariants (see specs/007-analysis-sheet-images/):
+The conversion runs in **one direction only**: Word document -> PNG. Feature 013
+supersedes feature 007's FR-018, which used to synthesise a ``.docx`` around any
+analysis PNG lacking one -- so the pipeline no longer creates Word documents,
+and every Word document in a source tree is one an author wrote. ``--sweep-
+wrappers`` retracts the fabricated files earlier runs left behind.
+
+Design invariants (see specs/007-analysis-sheet-images/ and
+specs/013-analysis-word-originals/):
 
 - **Render-once / idempotent.** A sheet that already has its sibling ``.png``
   is skipped; the rendered PNG is a committed source asset, so the renderer
   never runs inside the re-runnable generate/publish loop (research R2).
 - **Warn-and-defer.** A renderer failure, an unavailable renderer, a
-  multi-page source, an absent image library, or a wrap failure is a WARNING
-  that defers -- the run continues and exits 0; never an abort, never a
-  silent truncation (Principle IV, research R3/R5).
+  multi-page source, or an absent image library is a WARNING that defers --
+  the run continues and exits 0; never an abort, never a silent truncation
+  (Principle IV, research R3/R5).
+- **The sweep never guesses.** Deletion is opt-in (``--apply``) and keys on a
+  full content signature, so its failure mode is leaving a file alone rather
+  than destroying an author's document.
 - **Selection keys on the name, not "every Word doc".** Analysis sheets share
   the chapter folder with PPT source data and unrelated Word documents, so
   selection matches the ``*analysis*`` naming convention (research R7).
@@ -56,6 +66,14 @@ LOGGER = logging.getLogger(__name__)
 # extension are analysis sheets. Selection keys on the corpus naming
 # convention so unrelated ``source_data.doc`` siblings are left untouched.
 ANALYSIS_NAME_TOKEN = "analysis"
+# Known misspellings of the analysis token seen in legacy decks (e.g.
+# ``analaysis.doc``). Matched alongside the correct token so a typo'd sheet
+# still renders and flows through the pipeline instead of being silently
+# skipped. This is a general typo-tolerance for the one selection token, not
+# a corpus-specific opt-in (those stay in ``--extra-name`` per the wrapper).
+# generate_dita.py corrects the same misspellings when it names the emitted
+# asset, so the published href reads ``analysis`` regardless.
+ANALYSIS_NAME_MISSPELLINGS = ("analaysis",)
 WORD_SUFFIXES = (".doc", ".docx")
 
 
@@ -92,7 +110,6 @@ class SnapshotResult:
     outcome: str  # "rendered" | "skipped_has_png" | "render_failed"
     multipage: bool = False
     tidied: bool = False
-    docx_wrapped: bool = False
     warning: str | None = None
 
 
@@ -119,13 +136,17 @@ def _normalise_extra_names(extra_names: Iterable[str]) -> tuple[str, ...]:
 def _is_analysis_name(stem: str, extra_names: tuple[str, ...] = ()) -> bool:
     """True iff ``stem`` names an analysis sheet.
 
-    Matches the ``*analysis*`` convention (case-insensitive) or any of the
-    ``extra_names`` tokens, each matched the same way -- as a case-insensitive
-    substring of the stem (research R7: deviating corpus sheets are opted in
-    by name, the hyperlink-driven alternative stays rejected).
+    Matches the ``*analysis*`` convention (case-insensitive), a known
+    misspelling of that token (``ANALYSIS_NAME_MISSPELLINGS``, e.g.
+    ``analaysis``), or any of the ``extra_names`` tokens, each matched the
+    same way -- as a case-insensitive substring of the stem (research R7:
+    deviating corpus sheets are opted in by name, the hyperlink-driven
+    alternative stays rejected).
     """
     lowered = stem.lower()
     if ANALYSIS_NAME_TOKEN in lowered:
+        return True
+    if any(typo in lowered for typo in ANALYSIS_NAME_MISSPELLINGS):
         return True
     return any(token.lower() in lowered for token in extra_names if token)
 
@@ -319,85 +340,116 @@ def tidy_image(png: Path) -> bool:
 
 
 # -----------------------------------------------------------------------------
-# Reverse wrap: guarantee a .docx form too (Phase 6: FR-018, research R9).
+# Wrapper sweep (Feature 013): retract the .docx files feature 007 fabricated.
 # -----------------------------------------------------------------------------
+#
+# Feature 007's FR-018 guaranteed every analysis sheet existed in both an image
+# and a Word form, synthesising a minimal ``.docx`` around any analysis PNG that
+# had no Word sibling. That guarantee is **superseded** (see
+# specs/013-analysis-word-originals/): the wrapper was created precisely where
+# no editable original had ever existed, and its entire content was the same
+# picture the gram page already showed. Feature 013 carries genuine Word
+# originals into the DITA tree, which makes "is there a Word document in this
+# folder?" the signal an analyst reads as "there is a source I can amend" -- and
+# a wrapper makes that signal always true and therefore worthless.
+#
+# The synthesis step is gone. These functions retract what earlier runs already
+# wrote into source trees, because removing the step does not delete its output.
+#
+# Detection is by **content signature**, never filename, timestamp, or size: a
+# fabricated wrapper is a zip whose part list is exactly the five parts the
+# generator wrote, whose document body carries the generator's ``AnalysisSheet``
+# drawing name, and which embeds exactly one PNG. A genuine Word document --
+# even one whose only visible content is a full-page image an author pasted in
+# -- carries styles, settings, fontTable, and docProps parts that the fabricated
+# one never had, so it cannot collide with this signature.
 
-_DOCX_FIXED_DATE = (1980, 1, 1, 0, 0, 0)
+# The exact part list the removed wrapper generator emitted, in any order.
+_WRAPPER_PARTS = frozenset({
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "word/_rels/document.xml.rels",
+    "word/document.xml",
+    "word/media/image1.png",
+})
 
-_WRAP_CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Default Extension="png" ContentType="image/png"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>"""
-
-_WRAP_ROOT_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>"""
-
-_WRAP_DOC_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
-</Relationships>"""
-
-# A full-page inline image. The EMU extents are nominal (a landscape page at
-# 96 DPI); Word/consumers scale to the embedded PNG. The point is a valid,
-# parseable .docx that embeds the rendered analysis image (research R9).
-_WRAP_DOCUMENT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-<w:body>
-<w:p><w:r><w:drawing>
-<wp:inline distT="0" distB="0" distL="0" distR="0">
-<wp:extent cx="9144000" cy="6858000"/>
-<wp:docPr id="1" name="AnalysisSheet"/>
-<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-<pic:pic>
-<pic:nvPicPr><pic:cNvPr id="1" name="AnalysisSheet"/><pic:cNvPicPr/></pic:nvPicPr>
-<pic:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
-<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9144000" cy="6858000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
-</pic:pic>
-</a:graphicData></a:graphic>
-</wp:inline>
-</w:drawing></w:r></w:p>
-</w:body>
-</w:document>"""
+# The drawing name the removed generator gave its full-page image. Present in
+# both the ``wp:docPr`` and ``pic:cNvPr`` elements it wrote.
+_WRAPPER_MARKER = b"AnalysisSheet"
 
 
-def wrap_png_in_docx(png: Path, docx_out: Path) -> bool:
-    """Emit a minimal full-page ``.docx`` embedding ``png``.
+def is_fabricated_wrapper(path: Path) -> bool:
+    """True iff ``path`` is a ``.docx`` fabricated by the removed wrap step.
 
-    Reuses the stdlib ``zipfile`` + fixed-timestamp pattern from
-    ``mock_pptx.emit_docx`` so the output is byte-stable and idempotent
-    (Principle V, research R9). Returns ``False`` on a filesystem error.
-    **Never raises.**
+    Requires **every** signature element to match (FR-014). Anything unreadable,
+    not a zip, or structurally different is reported as *not* a wrapper: the
+    sweep's failure mode must be leaving a file alone, never deleting an
+    author's document. Never raises.
     """
-    try:
-        image_bytes = png.read_bytes()
-    except OSError as exc:
-        LOGGER.warning("reverse wrap failed (cannot read %s): %s", png, exc)
+    if path.suffix.lower() != ".docx":
         return False
     try:
-        docx_out.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(docx_out, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, content in (
-                ("[Content_Types].xml", _WRAP_CONTENT_TYPES),
-                ("_rels/.rels", _WRAP_ROOT_RELS),
-                ("word/_rels/document.xml.rels", _WRAP_DOC_RELS),
-                ("word/document.xml", _WRAP_DOCUMENT),
-            ):
-                info = zipfile.ZipInfo(filename=name, date_time=_DOCX_FIXED_DATE)
-                info.compress_type = zipfile.ZIP_DEFLATED
-                zf.writestr(info, content)
-            img_info = zipfile.ZipInfo(
-                filename="word/media/image1.png", date_time=_DOCX_FIXED_DATE)
-            img_info.compress_type = zipfile.ZIP_DEFLATED
-            zf.writestr(img_info, image_bytes)
-        return True
-    except OSError as exc:
-        LOGGER.warning("reverse wrap failed (%s): %s", docx_out, exc)
+        with zipfile.ZipFile(path) as zf:
+            if frozenset(zf.namelist()) != _WRAPPER_PARTS:
+                return False
+            return _WRAPPER_MARKER in zf.read("word/document.xml")
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        LOGGER.debug("not a readable .docx, leaving alone (%s): %s", exc, path)
         return False
+
+
+def find_fabricated_wrappers(content_root: Path) -> list[Path]:
+    """Return every fabricated wrapper under ``content_root``, sorted.
+
+    Scans all ``.docx`` files, not just those beside a PNG. The removed step's
+    existence check looked only for a same-stem ``.docx`` and never a ``.doc``,
+    so in the legacy ``.doc`` decks it fabricated a wrapper *next to a genuine
+    ``analysis.doc``* (FR-015); a scan that skipped folders already holding a
+    Word document would miss exactly those. Sorted for deterministic reporting.
+    """
+    return sorted(
+        p for p in content_root.rglob("*.docx")
+        if p.is_file() and is_fabricated_wrapper(p)
+    )
+
+
+def sweep_wrappers(content_root: Path, apply_changes: bool = False) -> list[Path]:
+    """Report (and with ``apply_changes``, delete) fabricated wrappers.
+
+    Returns the wrappers found, whether or not they were deleted. Reporting is
+    the default and deleting is the opt-in (FR-016), following the verify-then-
+    apply convention ``ingest_gram_images.py`` already establishes for the
+    destructive prep stages -- this is the only step in feature 013 that removes
+    files, so the operator sees the list before anything happens to it.
+
+    Idempotent (013 FR-018): a swept tree yields an empty list and no filesystem
+    change. A file that cannot be deleted is a WARNING that defers, per the
+    stage's warn-and-defer invariant.
+    """
+    found = find_fabricated_wrappers(content_root)
+    for wrapper in found:
+        if not apply_changes:
+            LOGGER.info("would delete fabricated wrapper: %s", wrapper)
+            continue
+        try:
+            wrapper.unlink()
+            LOGGER.info("deleted fabricated wrapper: %s", wrapper)
+        except OSError as exc:
+            LOGGER.warning("could not delete %s: %s", wrapper, exc)
+    return found
+
+
+def _emit_sweep_summary(found: list[Path], apply_changes: bool) -> None:
+    """Log + print the sweep's end-of-run summary."""
+    if apply_changes:
+        summary = f"sweep summary: fabricated_wrappers_found={len(found)} deleted={len(found)}"
+    else:
+        summary = (
+            f"sweep summary: fabricated_wrappers_found={len(found)} deleted=0 "
+            "(report-only; re-run with --apply to delete)"
+        )
+    LOGGER.info("%s", summary)
+    print(summary)
 
 
 # -----------------------------------------------------------------------------
@@ -439,35 +491,6 @@ def _process_sheet(
     return result
 
 
-def _reverse_wrap_png_only(
-    content_root: Path, dry_run: bool, extra_names: tuple[str, ...] = (),
-) -> list[SnapshotResult]:
-    """For every analysis ``.png`` with no same-stem ``.docx``, emit one.
-
-    Selection mirrors :func:`iter_analysis_sheets` (``*analysis*`` plus the
-    ``extra_names`` tokens) so an opted-in sheet rides the same FR-018 path.
-    """
-    results: list[SnapshotResult] = []
-    for png in sorted(content_root.rglob("*")):
-        if not png.is_file() or png.suffix.lower() != ".png":
-            continue
-        if not _is_analysis_name(png.stem, extra_names):
-            continue
-        docx_out = png.with_suffix(".docx")
-        if docx_out.exists():
-            continue
-        if dry_run:
-            LOGGER.info("would wrap PNG into .docx: %s -> %s", png, docx_out)
-            results.append(SnapshotResult(
-                source_path=png, outcome="skipped_has_png", docx_wrapped=True))
-            continue
-        if wrap_png_in_docx(png, docx_out):
-            LOGGER.info("wrapped PNG into .docx: %s -> %s", png, docx_out)
-            results.append(SnapshotResult(
-                source_path=png, outcome="skipped_has_png", docx_wrapped=True))
-    return results
-
-
 def _emit_summary(results: list[SnapshotResult]) -> None:
     """Log + print the end-of-run summary (FR-014)."""
     sheets_seen = sum(1 for r in results if r.source_path.suffix.lower() in WORD_SUFFIXES)
@@ -477,13 +500,12 @@ def _emit_summary(results: list[SnapshotResult]) -> None:
                   and r.source_path.suffix.lower() in WORD_SUFFIXES)
     render_failed = sum(1 for r in results if r.outcome == "render_failed")
     multipage_warned = sum(1 for r in results if r.multipage)
-    docx_wrapped = sum(1 for r in results if r.docx_wrapped)
     tidy_skipped = sum(1 for r in results if r.outcome == "rendered" and not r.tidied)
     summary = (
         "snapshot summary: "
         f"sheets_seen={sheets_seen} rendered={rendered} "
         f"skipped_has_png={skipped} render_failed={render_failed} "
-        f"multipage_warned={multipage_warned} docx_wrapped={docx_wrapped} "
+        f"multipage_warned={multipage_warned} "
         f"tidy_skipped={tidy_skipped}"
     )
     LOGGER.info("%s", summary)
@@ -492,15 +514,13 @@ def _emit_summary(results: list[SnapshotResult]) -> None:
 
 def snapshot(
     content_root: Path, renderer_cmd: str, dry_run: bool,
-    reverse_wrap: bool = True, extra_names: Iterable[str] = (),
+    extra_names: Iterable[str] = (),
 ) -> list[SnapshotResult]:
-    """Scan ``content_root``, render/skip each analysis sheet, reverse-wrap.
+    """Scan ``content_root`` and render each un-rendered analysis sheet.
 
-    ``reverse_wrap`` controls FR-018 (synthesise a ``.docx`` wrapper around
-    any ``*analysis*.png`` that has no same-stem ``.docx`` so editors get a
-    Word source). Default ``True`` preserves the original feature 007
-    contract; pass ``False`` (CLI ``--no-reverse-wrap``) when the corpus
-    is read-only-by-policy and synthesised ``.docx`` files would be noise.
+    One direction only: Word document -> sibling PNG. The pipeline no longer
+    creates Word documents at all (feature 013 supersedes feature 007's FR-018),
+    so every ``.doc``/``.docx`` in a source tree is one an author wrote.
 
     ``extra_names`` (CLI ``--extra-name``, repeatable) opts in analysis
     sheets whose filenames lack the ``analysis`` token; each entry is a
@@ -511,8 +531,6 @@ def snapshot(
     results: list[SnapshotResult] = []
     for doc in iter_analysis_sheets(content_root, tokens):
         results.append(_process_sheet(doc, renderer_cmd, dry_run))
-    if reverse_wrap:
-        results.extend(_reverse_wrap_png_only(content_root, dry_run, tokens))
     return results
 
 
@@ -524,11 +542,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--renderer-cmd", default="soffice", dest="renderer_cmd")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
     parser.add_argument(
-        "--no-reverse-wrap", action="store_false", dest="reverse_wrap",
-        help="Skip FR-018's reverse-wrap step (synthesising a .docx around "
-             "every PNG-only analysis sheet). Use when the source corpus "
-             "should not be mutated with new .docx files — only render "
-             ".doc/.docx -> .png siblings.")
+        "--sweep-wrappers", action="store_true", dest="sweep_wrappers",
+        help="Instead of rendering, find the picture-only .docx files that "
+             "feature 007's removed reverse-wrap step fabricated in this tree "
+             "and report them. Detection is by content signature, so an "
+             "author's own Word document is never matched. Reports only "
+             "unless --apply is also given.")
+    parser.add_argument(
+        "--apply", action="store_true", dest="apply_changes",
+        help="With --sweep-wrappers, delete the fabricated wrappers found "
+             "instead of only reporting them. Has no effect on its own.")
     parser.add_argument(
         "--extra-name", action="append", default=[], dest="extra_names",
         metavar="TOKEN",
@@ -548,16 +571,31 @@ def main(argv: list[str] | None = None) -> int:
         LOGGER.error("content root is not a directory: %s", content_root)
         return 1
 
+    if args.sweep_wrappers:
+        LOGGER.info(
+            "sweeping fabricated .docx wrappers under %s (%s)",
+            content_root,
+            "applying" if args.apply_changes else "report-only")
+        try:
+            found = sweep_wrappers(content_root, apply_changes=args.apply_changes)
+        except OSError as exc:
+            LOGGER.error("sweep failed: %s", exc)
+            return 1
+        _emit_sweep_summary(found, args.apply_changes)
+        return 0
+
+    if args.apply_changes:
+        LOGGER.warning(
+            "--apply has no effect without --sweep-wrappers; rendering as usual.")
+
     LOGGER.info(
-        "snapshotting analysis sheets under %s (renderer=%r%s%s%s)",
+        "snapshotting analysis sheets under %s (renderer=%r%s%s)",
         content_root, args.renderer_cmd,
         ", dry-run" if args.dry_run else "",
-        "" if args.reverse_wrap else ", no-reverse-wrap",
         ", extra-names=%r" % (args.extra_names,) if args.extra_names else "")
     try:
         results = snapshot(
             content_root, args.renderer_cmd, args.dry_run,
-            reverse_wrap=args.reverse_wrap,
             extra_names=args.extra_names,
         )
     except OSError as exc:

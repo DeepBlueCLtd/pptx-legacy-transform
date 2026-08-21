@@ -234,9 +234,9 @@ class EditionsTests(unittest.TestCase):
     def test_editions_are_instructor_then_student(self):
         self.assertEqual([e.name for e in EDITIONS], ["instructor", "student"])
 
-    def test_instructor_edition_has_no_filter(self):
+    def test_instructor_edition_uses_instructor_ditaval(self):
         instructor = next(e for e in EDITIONS if e.name == "instructor")
-        self.assertIsNone(instructor.ditaval)
+        self.assertEqual(instructor.ditaval, Path("instructor.ditaval"))
         self.assertEqual(instructor.output_subdir, "instructor")
 
     def test_student_edition_uses_trainee_ditaval(self):
@@ -343,6 +343,10 @@ class PublishDualEditionTests(unittest.TestCase):
             '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n',
             encoding="utf-8",
         )
+        (staged / "instructor.ditaval").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n',
+            encoding="utf-8",
+        )
         return staged
 
     def test_publish_invokes_dita_ot_per_edition_per_ditamap(self):
@@ -362,10 +366,11 @@ class PublishDualEditionTests(unittest.TestCase):
             self.assertEqual(mock_sub.run.call_count, 4)
             calls = [c.args[0] for c in mock_sub.run.call_args_list]
 
-            # Two student calls carry --filter=…/trainee.ditaval
+            # Both editions now carry a --filter, so classify by output dir.
             student_calls = [
                 argv for argv in calls
-                if any(arg.startswith("--filter=") for arg in argv)
+                if any("/student/" in arg for arg in argv
+                       if arg.startswith("--output="))
             ]
             self.assertEqual(len(student_calls), 2)
             for argv in student_calls:
@@ -373,22 +378,19 @@ class PublishDualEditionTests(unittest.TestCase):
                     arg.endswith("trainee.ditaval")
                     for arg in argv if arg.startswith("--filter=")
                 ), f"student call missing trainee filter: {argv}")
-                self.assertTrue(any(
-                    "/student/" in arg for arg in argv
-                    if arg.startswith("--output=")
-                ), f"student call output not in /student/: {argv}")
 
-            # Two instructor calls carry no --filter
+            # Two instructor calls carry --filter=…/instructor.ditaval
             instructor_calls = [
                 argv for argv in calls
-                if not any(arg.startswith("--filter=") for arg in argv)
+                if any("/instructor/" in arg for arg in argv
+                       if arg.startswith("--output="))
             ]
             self.assertEqual(len(instructor_calls), 2)
             for argv in instructor_calls:
                 self.assertTrue(any(
-                    "/instructor/" in arg for arg in argv
-                    if arg.startswith("--output=")
-                ), f"instructor call output not in /instructor/: {argv}")
+                    arg.endswith("instructor.ditaval")
+                    for arg in argv if arg.startswith("--filter=")
+                ), f"instructor call missing instructor filter: {argv}")
 
     def test_publish_fails_loudly_when_ditaval_missing(self):
         with TemporaryDirectory() as tmp_str:
@@ -428,7 +430,8 @@ class PublishDualEditionTests(unittest.TestCase):
             self.assertEqual(len(student_logs), 2,
                              "one log line per student ditamap")
             for line in instructor_logs:
-                self.assertIn("filter=none", line)
+                self.assertIn("filter=", line)
+                self.assertIn("instructor.ditaval", line)
             for line in student_logs:
                 self.assertIn("filter=", line)
                 self.assertIn("trainee.ditaval", line)
@@ -598,6 +601,20 @@ class InjectGramframePluginTests(unittest.TestCase):
                 "/* gramframe stub */\n",
             )
 
+    def test_drops_bundle_at_root_and_each_edition(self):
+        # Each edition needs its own copy so the edition folder is
+        # self-contained (mirrors the per-edition theme.css placement).
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            out.mkdir()
+            src = self._fake_bundle(tmp)
+            self._write(out / "index.html", self._gram_page())
+            inject_gramframe_plugin(out, bundle_src=src)
+            self.assertTrue((out / GRAMFRAME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "instructor" / GRAMFRAME_BUNDLE_NAME).is_file())
+            self.assertTrue((out / "student" / GRAMFRAME_BUNDLE_NAME).is_file())
+
     def test_injects_script_into_head_of_every_html_file(self):
         with TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -620,9 +637,12 @@ class InjectGramframePluginTests(unittest.TestCase):
             deep = (
                 out / "instructor" / "main" / "main" / "gram-01" / "gram_01.html"
             ).read_text(encoding="utf-8")
-            # Deep page must reach four levels up to the bundle at out_root.
+            # Deep page links the edition-local bundle
+            # (out/instructor/gramframe.bundle.js), reaching three levels up
+            # to the edition folder — never above it — so instructor/ stays
+            # self-contained.
             self.assertIn(
-                '<script src="../../../../gramframe.bundle.js" defer></script>',
+                '<script src="../../../gramframe.bundle.js" defer></script>',
                 deep,
             )
 
@@ -676,6 +696,97 @@ class InjectGramframePluginTests(unittest.TestCase):
             f"Vendor the GramFrame bundle at "
             f"{publish_html.GRAMFRAME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
         )
+
+
+class EditionStandaloneTests(unittest.TestCase):
+    """Each ``html/<edition>/`` subtree must be self-contained: copy it out
+    on its own and every page still resolves its assets.
+
+    The delivered instructor and student versions are handed over as
+    independent, individually-copyable publications. A page inside an
+    edition must therefore never reference a local asset (``href``/``src``)
+    that resolves *above* its edition folder — every relative path must
+    stay within ``html/<edition>/`` (or reach a sibling under it). This
+    guards against the GramFrame regression where the JS bundle was
+    vendored once at ``html/`` and every gram page linked
+    ``../../../../../gramframe.bundle.js``, breaking the interactive viewer
+    the moment a single edition was copied away from the shared root.
+    """
+
+    _LOCAL_REF_RE = re.compile(r'(?:href|src)="([^"]+)"')
+
+    @staticmethod
+    def _write(path: Path, body: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _page() -> str:
+        return (
+            '<!DOCTYPE html>\n'
+            '<html lang="en">\n'
+            '  <head>\n'
+            '    <meta charset="UTF-8">\n'
+            '    <title>Gram</title>\n'
+            '  </head>\n'
+            '  <body>\n'
+            '    <table class="gram-config"><tr><td colspan="2">'
+            '<img src="lofar-1.png"></td></tr></table>\n'
+            '  </body>\n'
+            '</html>\n'
+        )
+
+    def _build_tree(self, out: Path) -> None:
+        """Lay out a representative two-edition tree and run both injectors."""
+        tmp = out.parent
+        bundle = tmp / "vendor" / "gramframe.bundle.js"
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        bundle.write_text("/* gramframe */\n", encoding="utf-8", newline="\n")
+        theme = tmp / "vendor" / "theme.css"
+        theme.write_text("/* theme */\n", encoding="utf-8", newline="\n")
+
+        # Shared landing + both editions, each with a publication index and a
+        # deep gram topic mirroring what DITA-OT emits for ``main``.
+        self._write(out / "index.html", self._page())
+        for edition in ("instructor", "student"):
+            self._write(out / edition / "index.html", self._page())
+            self._write(out / edition / "main" / "index.html", self._page())
+            self._write(
+                out / edition / "main" / "main" / "week-1-grams"
+                / "gram-01" / "gram_01.html",
+                self._page(),
+            )
+        inject_gramframe_plugin(out, bundle_src=bundle)
+        inject_operator_console_theme(out, bundle_src=theme)
+
+    def test_no_edition_page_references_an_asset_above_its_edition(self):
+        with TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            out = tmp / "html"
+            self._build_tree(out)
+
+            offenders: list[str] = []
+            for edition in ("instructor", "student"):
+                edition_dir = (out / edition).resolve()
+                for page in sorted(edition_dir.rglob("*.html")):
+                    body = page.read_text(encoding="utf-8")
+                    for ref in self._LOCAL_REF_RE.findall(body):
+                        # Skip absolute URLs / anchors — only local paths matter.
+                        if "://" in ref or ref.startswith(("#", "/", "mailto:")):
+                            continue
+                        resolved = (page.parent / ref).resolve()
+                        try:
+                            resolved.relative_to(edition_dir)
+                        except ValueError:
+                            offenders.append(
+                                f"{page.relative_to(out)} -> {ref} "
+                                f"(escapes {edition}/)"
+                            )
+            self.assertEqual(
+                offenders, [],
+                "edition pages must not reference assets above their edition "
+                "folder:\n" + "\n".join(offenders),
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -900,6 +1011,10 @@ class PublisherIdempotencyTests(unittest.TestCase):
                     '<map><title>Main</title></map>', encoding="utf-8",
                 )
                 (d / "trainee.ditaval").write_text(
+                    '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n',
+                    encoding="utf-8",
+                )
+                (d / "instructor.ditaval").write_text(
                     '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n',
                     encoding="utf-8",
                 )
@@ -1183,6 +1298,9 @@ class KeepStagedTests(unittest.TestCase):
         (d / "trainee.ditaval").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n', encoding="utf-8",
         )
+        (d / "instructor.ditaval").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n<val/>\n', encoding="utf-8",
+        )
         fake_dita_ot = tmp / "dita-ot"
         (fake_dita_ot / "bin").mkdir(parents=True)
         (fake_dita_ot / "bin" / "dita").write_text("#!/bin/sh\n")
@@ -1238,25 +1356,44 @@ class KeepStagedTests(unittest.TestCase):
             )
 
 
-def _html_twin(dita_path: Path) -> Path:
+def _html_twin(dita_path: Path, edition: str = "instructor") -> Path:
     """Return the HTML file produced by DITA-OT for ``dita_path``.
 
     Staging in ``publish_html.stage()`` rewrites each ditamap so its
     topic hrefs are relative to the ditamap stem, then drops the
     ditamap inside ``<staged>/<stem>/<stem>.ditamap``. DITA-OT therefore
     publishes to ``html/<edition>/<stem>/<topic-rel>`` with no
-    duplicated ``<stem>/`` segment (see the ``stage`` docstring). The
-    image-presence regression check targets the **instructor edition**
-    (the unfiltered superset) — that's where every image referenced by
-    ``dita/`` is required to exist. Student-edition image presence is
-    implicitly verified by the Jest URL-parity test, which asserts
-    each instructor HTML page has a sibling at the same path under
-    ``html/student/``.
+    duplicated ``<stem>/`` segment (see the ``stage`` docstring).
+
+    Neither edition is a strict superset any more: the instructor build
+    strips ``audience="student-only"`` content (the in-body 7 Questions
+    section) while the student build strips ``audience="-trainee"``
+    content (analysis sheets, vessel names). The image-presence check
+    therefore resolves each image against the edition where its audience
+    keeps it visible (``edition``), defaulting to ``instructor``.
     """
     rel = dita_path.relative_to(DITA_ROOT)
     map_stem = rel.parts[0]
     inner = Path(*rel.parts[1:]).with_suffix(".html")
-    return HTML_ROOT / "instructor" / map_stem / inner
+    return HTML_ROOT / edition / map_stem / inner
+
+
+def _image_edition(parent_map: dict, img: "ET.Element") -> str:
+    """Return the edition whose HTML keeps ``img`` visible.
+
+    Walks ``img``'s ancestors for an ``audience`` attribute. An image
+    inside an ``audience="student-only"`` element (the 7 Questions
+    section) survives only in the student edition; everything else
+    (unfiltered, or the instructor-only ``-trainee`` sections which the
+    instructor build keeps) is checked against the instructor edition.
+    """
+    node = img
+    while node is not None:
+        audience = (node.get("audience") or "").split()
+        if "student-only" in audience:
+            return "student"
+        node = parent_map.get(node)
+    return "instructor"
 
 
 _IMG_SRC_RE = re.compile(r'<img\b[^>]*\bsrc="([^"]+)"', re.IGNORECASE)
@@ -1330,19 +1467,31 @@ class PublishedImagePresenceTests(unittest.TestCase):
         missing: list[str] = []
         for dita_path in self.dita_files:
             root = ET.parse(dita_path).getroot()
-            dita_hrefs = [img.get("href") for img in root.findall(".//image")]
-            dita_hrefs = [h for h in dita_hrefs if h]
-            if not dita_hrefs:
+            parent_map = {c: p for p in root.iter() for c in p}
+            images = [img for img in root.findall(".//image") if img.get("href")]
+            if not images:
                 continue
-            html_path = _html_twin(dita_path)
-            if not html_path.is_file():
-                missing.append(f"{dita_path}: html twin not found at {html_path}")
-                continue
-            html_srcs = set(_IMG_SRC_RE.findall(html_path.read_text(encoding="utf-8")))
-            for href in dita_hrefs:
-                if href not in html_srcs:
+            # An image is checked against the edition whose audience keeps it
+            # visible: student-only 7Q images land in the student HTML, all
+            # others in the instructor HTML. Cache the twin per edition.
+            twin_srcs: dict[str, set] = {}
+            for img in images:
+                href = img.get("href")
+                edition = _image_edition(parent_map, img)
+                if edition not in twin_srcs:
+                    html_path = _html_twin(dita_path, edition)
+                    if not html_path.is_file():
+                        missing.append(
+                            f"{dita_path}: {edition} html twin not found at {html_path}"
+                        )
+                        twin_srcs[edition] = set()
+                        continue
+                    twin_srcs[edition] = set(
+                        _IMG_SRC_RE.findall(html_path.read_text(encoding="utf-8"))
+                    )
+                if href not in twin_srcs[edition]:
                     missing.append(
-                        f"{html_path.relative_to(REPO_ROOT)}: "
+                        f"{_html_twin(dita_path, edition).relative_to(REPO_ROOT)}: "
                         f"DITA referenced image {href!r}, no <img src={href!r}> in HTML"
                     )
         self.assertEqual(missing, [], "\n".join(missing))
@@ -1369,6 +1518,7 @@ class PublishedImagePresenceTests(unittest.TestCase):
         mismatched: list[str] = []
         for dita_path in self.dita_files:
             root = ET.parse(dita_path).getroot()
+            parent_map = {c: p for p in root.iter() for c in p}
             for img in root.findall(".//image"):
                 href = img.get("href")
                 if not href:
@@ -1380,7 +1530,7 @@ class PublishedImagePresenceTests(unittest.TestCase):
                         f"referenced image not on disk: {href}"
                     )
                     continue
-                html_path = _html_twin(dita_path)
+                html_path = _html_twin(dita_path, _image_edition(parent_map, img))
                 html_asset = (html_path.parent / href).resolve()
                 if not html_asset.is_file():
                     missing.append(

@@ -51,8 +51,9 @@ PUBLISH = SCRIPTS / "publish_html.py"
 # source\, i.e. a single document), or None to process the entire corpus.
 # Mirrors extract_to_csv.py --only: extract writes a scoped extract.csv
 # that dedupe/write/publish carry through, so only that document is
-# rebuilt. Note write runs with --clean, so a scoped run rebuilds dita\
-# to contain only that document.
+# rebuilt. Successive scoped runs accumulate into one dita\ tree, each run
+# rebuilding the publication folder(s) its own document lands in and
+# leaving every other publication alone.
 ONLY = "Instructor Week 1 Grams"
 
 # Output locations — keep these in step with write.py and publish.py.
@@ -71,7 +72,7 @@ STAGES = ("extract", "dedupe", "write", "publish")
 # session picks up edited canonical scripts (mirrors the wrappers).
 _CANONICAL_MODULES = ("extract_to_csv", "introspect_pptx", "deduplicate_csv",
                       "generate_dita", "publish_html", "rehydrate_dita",
-                      "snapshot_analysis_docs", "mock_pptx")
+                      "snapshot_analysis_docs", "ingest_gram_images", "mock_pptx")
 
 # The DEBUG log each canonical main() writes in the cwd, named in the
 # failure banner so the operator knows where to look.
@@ -86,6 +87,10 @@ def build_stages(only=ONLY, stages=STAGES):
     scoped CSV carries through, so no later stage needs the flag. Each
     ``argv`` is a bare option list (no program name) — the canonical
     ``main()`` parses it with argparse.
+
+    No stage ever wipes the whole of DITA_OUT; the write stage's blast
+    radius is the publication folder(s) its own CSV produces. Clearing
+    DITA_OUT outright is a manual act, done by hand.
     """
     extract_argv = ["--input-root", str(SOURCE), "--out", str(ROOT / "extract.csv")]
     if only:
@@ -96,7 +101,7 @@ def build_stages(only=ONLY, stages=STAGES):
                               "--image-root", str(SOURCE),
                               "--out", "extract.dedupe.csv"]),
         "write":   (WRITE,   ["--csv", "extract.dedupe.csv",
-                              "--out", str(DITA_OUT), "--clean",
+                              "--out", str(DITA_OUT),
                               "--image-root", str(SOURCE),
                               "--stub-wav", "stock.wav"]),
         "publish": (PUBLISH, ["--dita", str(DITA_OUT), "--out", str(HTML_OUT),

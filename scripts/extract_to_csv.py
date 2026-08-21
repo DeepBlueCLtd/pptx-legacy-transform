@@ -24,6 +24,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Iterator
 
@@ -35,30 +36,70 @@ CSV_COLUMNS: tuple[str, ...] = (
     "publication", "chapter", "target_doc", "target_chapter", "gram_id", "vessel_name", "topic_type",
     "sequence", "topic_filename", "display_text", "link_href", "glc_path",
     "time_end", "bandwidth", "bandcentre", "png_path", "target_ext", "file_size", "wav_treatment", "warnings",
+    "analysis_doc_path",
 )
 
 DEFAULT_TEST_PATTERN: str = "progress test"
 DEFAULT_FINAL_PATTERN: str = "final assessment"
+DEFAULT_JOINING_PATTERN: str = "joining"
+
+# Course codes that identify which course a standalone assessment deck belongs
+# to. The corpus carries one final assessment per course (e.g. "Instructor SSAC
+# - Final Assessment_UPDATED" and "Instructor AAAC Final Assessment Updated"),
+# so the code — not an encounter-order counter — is the stable publication name:
+# ``SSAC-final-assessment`` / ``AAAC-final-assessment``. Add a course by adding
+# its code here; matching is case-insensitive and whole-token, and the code is
+# emitted upper-case whatever case the folder uses.
+COURSE_CODES: tuple[str, ...] = ("AAAC", "SSAC")
+
+# Seconds represented by one horizontal scan line (one pixel row) of a gram
+# image, used when the ``.glc`` names no ``update_period`` of its own. The
+# legacy viewer multiplies the image's scan-line count by this period to get the
+# gram's time period; the audited corpus is overwhelmingly ``1`` (so seconds ==
+# rows), but some GLCs carry a different rate — e.g. ``2`` — and must be honoured
+# (issue #160). A GLC that omits the element keeps the historical assumption.
+DEFAULT_UPDATE_PERIOD: Decimal = Decimal("1")
 
 # GramFrame needs the full time + frequency coordinate system to render a gram,
-# so every GLC-backed gram -- whether its inner asset is a pre-rendered image
-# (.png/.jpg) or a live-render .wav -- requires these three "view" fields. They
-# are also the downstream dedup key for .wav rows (``deduplicate_csv._view_key``
-# and ``generate_dita._master_index_key`` ``require_field`` them). We catch a
-# blank here so the failure surfaces at extraction (issue #92) rather than late
-# and cryptically in dedupe. ``--relaxed`` substitutes ``RELAXED_DEFAULT`` so the
-# rest of the toolchain can still be exercised against an incomplete corpus.
+# so an *image* GLC-backed gram (pre-rendered .png/.jpg embedded inline) requires
+# these three "view" fields. ``time_end`` is the image's pixel height scaled by
+# the GLC's ``update_period`` (issues #148/#160, derived at extraction from the
+# file on disk plus the GLC); ``bandwidth``/``bandcentre``
+# come from the .glc. A .wav-backed gram does *not* need them: it is surfaced
+# downstream as a plain link to its .glc (the on-PC GLC viewer renders it live,
+# reading the .glc directly), so no GramFrame table is emitted and the view
+# fields are never consumed for it -- a blank one is fine. We catch a blank on an
+# image row here so the failure surfaces at extraction (issue #92) rather than
+# late and cryptically in dedupe. ``--relaxed`` substitutes ``RELAXED_DEFAULT``
+# so the rest of the toolchain can still be exercised against an incomplete corpus.
 GLC_VIEW_FIELDS: tuple[str, ...] = ("time_end", "bandwidth", "bandcentre")
+# The subset of the view fields that come from the GLC author and so are subject
+# to the strict extract-time fail-fast (issue #92). ``time_end`` is excluded: it
+# is derived from the image's pixel height (issue #148), so a blank one is a
+# dangling-asset problem, not an author omission — see ``glc_view_problems``.
+GLC_AUTHORED_VIEW_FIELDS: tuple[str, ...] = ("bandwidth", "bandcentre")
 RELAXED_DEFAULT: str = "100"
 
-# Inner-asset extensions a GLC-backed gram actually renders (and so needs its
-# view fields for). A GLC row with no resolved asset (target_ext == "") dangles
-# per the missing-asset rule and is not subject to the check.
-# Mirrors the generator's dispatch (generate_dita.py): .png/.jpg/.jpeg/.gif are
-# embedded inline, .wav is surfaced as a link -- both render and need the view
-# fields.
-RENDERABLE_GLC_EXTENSIONS: tuple[str, ...] = (
-    ".png", ".jpg", ".jpeg", ".gif", ".wav")
+# Warning stamped on any row whose ``png_path`` references an asset (image or
+# ``.wav``) that is not present on disk. Such a row dangles silently through the
+# generator and only surfaces as a DITA-OT load error at publish time; catching
+# it here at the extraction boundary lets the operator track and triage the
+# instances (fix the source file, or drop the row) before publishing.
+ASSET_MISSING_WARNING: str = "asset file missing on disk"
+
+# Inner-asset extensions that feed a GramFrame table and so require the view
+# fields. Only the embedded-image extensions qualify: a .wav is surfaced as a
+# link to its .glc, not rendered by GramFrame, so it is exempt (its blank view
+# fields are legitimate, not a defect). A GLC row with no resolved asset
+# (target_ext == "") dangles per the missing-asset rule and is not subject to
+# the check either. Mirrors the generator's dispatch (generate_dita.py).
+GRAMFRAME_GLC_EXTENSIONS: tuple[str, ...] = (
+    ".png", ".jpg", ".jpeg", ".gif")
+
+# A demon marker (issue #151): ingest writes a ``demon.glc`` (and ``demon-2.glc``,
+# … for several demons) into a gram folder beside a demon image. It is *not*
+# hyperlinked from the slide, so ``extract`` discovers it by scanning the gram's
+# first resolved Lofar folder (see ``_DEMON_MARKER_RE`` / ``_find_demon_markers``).
 
 # Prefixes that identify the welcome / exit framing slides emitted by
 # ``mock_pptx.py``. These slides carry no gram content and must not
@@ -72,6 +113,33 @@ FRAMING_TITLE_PREFIXES: tuple[str, ...] = ("Welcome to ", "End of ")
 # target on a shape-level link is treated as an authoring residue,
 # not a header.
 ANALYSIS_SHEET_EXTENSIONS: tuple[str, ...] = (".doc", ".docx", ".png", ".jpg", ".jpeg")
+
+# Tokens that name an analysis sheet on disk, used by the Lofar-folder fallback
+# (``_recover_analysis_sheet``) when a gram's analysis hyperlink is stale. Kept
+# in sync with snapshot_analysis_docs.ANALYSIS_NAME_TOKEN /
+# ANALYSIS_NAME_MISSPELLINGS so the fallback recognises exactly the sheets the
+# snapshotter does. Only image sheets are recovered here — a Word sheet awaiting
+# its snapshot render is a separate flow, left to Feature 007.
+ANALYSIS_NAME_TOKEN = "analysis"
+ANALYSIS_NAME_MISSPELLINGS: tuple[str, ...] = ("analaysis",)
+ANALYSIS_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg")
+
+# Word forms an analysis sheet can take on disk, in the order the sibling probe
+# below tries them (feature 013). ``.doc`` leads deliberately: the removed
+# reverse-wrap step (feature 007 FR-018) only ever checked for a same-stem
+# ``.docx`` before fabricating one, so a legacy ``.doc`` deck that has not yet
+# been swept can hold a genuine ``analysis.doc`` *and* a fabricated
+# ``analysis.docx`` side by side. Probing ``.doc`` first picks the real document
+# in that tree; in a swept or modern tree only one of the two exists, so the
+# order makes no difference.
+ANALYSIS_WORD_EXTENSIONS: tuple[str, ...] = (".doc", ".docx")
+
+# Some legacy decks carry navigation buttons labelled like "N Questions"
+# that link to an image (a self-test slide), not a gram. Their shape-level
+# hyperlink targets a ``.png`` so they would otherwise be mistaken for a
+# gram header. Any link whose visible label ends in the word "questions"
+# (case-insensitive; the leading number is irrelevant) is silently ignored.
+QUESTIONS_LABEL_WORD = "questions"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,9 +172,9 @@ def setup_logging(log_path: Path) -> None:
 @dataclass
 class GlcDocument:
     image_filename: str = ""
-    time_end: str = ""
     bandwidth: str = ""
     bandcentre: str = ""
+    update_period: str = ""
     warnings: list[str] = field(default_factory=list)
 
 
@@ -118,6 +186,19 @@ def parse_glc(path: Path) -> GlcDocument:
     a single ``"GLC malformed: <reason>"`` warning. Path stripping uses
     ``pathlib.PureWindowsPath(raw).name`` so a Windows ``W:\\foo\\bar.PNG``
     surfaces as ``bar.PNG``.
+
+    The GLC's ``bottom_crop`` is deliberately **not** read: the gram's time
+    period (``time_end``) is derived from the pixel height of the referenced
+    image, not from the ``.glc`` (issue #148). Many valid image GLCs omit the
+    element entirely, so reading it here only produced spurious "invalid GLC"
+    warnings.
+
+    ``update_period`` — the seconds one scan line represents — *is* read (issue
+    #160): the scan-line count alone is only the time period when the period is
+    ``1``. It is returned raw (the caller scales the measured pixel height by it,
+    defaulting to ``DEFAULT_UPDATE_PERIOD``); an absent element is the common,
+    unremarkable case and earns **no** warning, exactly as ``bottom_crop``'s
+    absence used to.
     """
     doc = GlcDocument()
     try:
@@ -145,13 +226,6 @@ def parse_glc(path: Path) -> GlcDocument:
         else:
             doc.image_filename = PureWindowsPath(raw).name
 
-    bottom = root.findtext("data_source/bitmap_crop_values/bottom_crop")
-    if bottom is None or not bottom.strip():
-        doc.warnings.append("GLC missing bottom_crop")
-        doc.time_end = ""
-    else:
-        doc.time_end = bottom.strip()
-
     bandwidth = root.findtext("settings/lofar/bandwidth")
     if bandwidth is None or not bandwidth.strip():
         doc.warnings.append("GLC missing bandwidth")
@@ -168,6 +242,12 @@ def parse_glc(path: Path) -> GlcDocument:
         doc.bandcentre = ""
     else:
         doc.bandcentre = bandcentre.strip()
+
+    # Seconds per scan line (issue #160). Optional: most GLCs omit it and mean
+    # the historical 1 s, so a missing element is silent — only a *present*
+    # value is carried forward, and only the caller judges whether it parses.
+    update_period = root.findtext("settings/lofar/update_period")
+    doc.update_period = (update_period or "").strip()
 
     return doc
 
@@ -338,12 +418,34 @@ def test_number_from_name(name: str) -> int | None:
     return None
 
 
+_COURSE_CODE_RE = re.compile(
+    r"(?<![A-Za-z])(" + "|".join(COURSE_CODES) + r")(?![A-Za-z])", re.IGNORECASE)
+
+
+def course_code_from_name(*names: str) -> str:
+    """Return the first ``COURSE_CODES`` token found in ``names``, upper-cased.
+
+    ``names`` is searched in order (deck stem first, then its folder title), so
+    a code carried only by the containing folder still identifies the course.
+    Matching is case-insensitive and whole-token — ``AAACX`` or ``pre-ssac1``
+    do not match — and returns ``""`` when no code is present, leaving the
+    caller on its encounter-order fallback.
+    """
+    for name in names:
+        match = _COURSE_CODE_RE.search(name or "")
+        if match:
+            return match.group(1).upper()
+    return ""
+
+
 def classify_publication(
     pptx: Path,
     test_pattern: str,
     allocated: dict[str, int],
     final_pattern: str = "",
     final_allocated: dict[str, int] | None = None,
+    joining_pattern: str = "",
+    joining_allocated: dict[str, int] | None = None,
 ) -> tuple[str, str | None, str | None]:
     """Return ``(publication, chapter, chapter_slug)`` per R2/R3.
 
@@ -355,12 +457,38 @@ def classify_publication(
 
     Final-assessment PPTXs (matched against ``final_pattern`` when
     non-empty and a separate ``final_allocated`` map is supplied) get
-    their own ``final-assessment-N`` publication prefix. The final
-    pattern is checked first so a filename containing both phrases
-    routes to the final-assessment bucket.
+    their own final-assessment publication. The final pattern is checked
+    first so a filename containing both phrases routes to the
+    final-assessment bucket.
+
+    Joining-assessment PPTXs (the initial joining assessment, matched
+    against ``joining_pattern`` when non-empty with its own
+    ``joining_allocated`` map) get a joining-assessment publication.
+    The joining pattern is checked first so a deck deliberately named
+    for the joining assessment never falls through to the final or test
+    buckets.
+
+    Both standalone assessments are named from the **course code** in the
+    deck's own name or its folder title when one is present
+    (``SSAC-final-assessment``, ``AAAC-final-assessment``) — the corpus holds
+    one of each per course, so the code is the stable identity. An
+    encounter-order counter (``final-assessment-N``) is only the fallback for a
+    deck carrying no recognised code; that counter is per-run, so two coded
+    decks extracted in separate ``--only`` runs would otherwise both land on
+    ``…-1`` and collide on publish.
     """
     name = pptx.name.lower()
+    if joining_pattern and joining_allocated is not None and joining_pattern.lower() in name:
+        code = course_code_from_name(pptx.stem, pptx.parent.name)
+        if code:
+            return (f"{code}-joining-assessment", None, None)
+        if pptx.stem not in joining_allocated:
+            joining_allocated[pptx.stem] = len(joining_allocated) + 1
+        return (f"joining-assessment-{joining_allocated[pptx.stem]}", None, None)
     if final_pattern and final_allocated is not None and final_pattern.lower() in name:
+        code = course_code_from_name(pptx.stem, pptx.parent.name)
+        if code:
+            return (f"{code}-final-assessment", None, None)
         if pptx.stem not in final_allocated:
             final_allocated[pptx.stem] = len(final_allocated) + 1
         return (f"final-assessment-{final_allocated[pptx.stem]}", None, None)
@@ -391,6 +519,17 @@ class GramPlaceholder:
     vessel_name: str
     png_href: str | None
     glc_links: list[GlcLink]
+
+
+def _label_ends_in_questions(label: str) -> bool:
+    """True when ``label``'s final word is "questions" (case-insensitive).
+
+    Matches "N Questions", "Questions", "10 questions" and tolerates
+    trailing whitespace/punctuation; does not match "acquisitions".
+    """
+    return re.search(
+        rf"\b{QUESTIONS_LABEL_WORD}\b\W*$", label, re.IGNORECASE
+    ) is not None
 
 
 def _shape_level_hyperlink(shape) -> str | None:
@@ -595,6 +734,49 @@ def is_framing_slide(slide) -> bool:
     return False
 
 
+def _descriptor_text(header) -> str:
+    """Collapse a header shape's text runs into its ``"Gram N: <detail>"`` caption."""
+    return "".join(
+        run.text or "" for para in header.text_frame.paragraphs for run in para.runs
+    ).strip()
+
+
+def _reconnect_orphan_glc(
+    glc_href: str,
+    folder_key: str,
+    num_to_header: dict,
+    content_root: Path | None,
+    source_dir: Path | None,
+):
+    """Reconnect a folder-orphaned ``.glc`` to its gram header via a sibling
+    analysis sheet, or return ``None`` when it can't be confidently recovered.
+
+    A ``.glc`` whose ``GramNN/`` folder matches no header on the slide is
+    usually a gram whose *analysis-sheet* header hyperlink was left pointing at
+    an earlier build's folder (a stale link), so the folder-key pairing in
+    ``extract_grams_from_slide`` can't associate them. When the ``.glc``'s own
+    on-disk folder holds an analysis-sheet image — proof this is a real gram,
+    and the very sheet ``generate_dita`` will surface once the row exists (see
+    the Lofar-folder recovery in ``gram_to_rows``) — reconnect it to the header
+    carrying the same gram number rather than dropping it and warning.
+
+    Returns that header, or ``None`` when recovery isn't safe: no filesystem
+    context, a folder key with no gram number, the ``.glc`` doesn't resolve on
+    disk, no sibling analysis sheet beside it, or no number-matched header. In
+    every ``None`` case the caller warns and drops exactly as before.
+    """
+    if content_root is None:
+        return None
+    if not re.search(r"\d", folder_key):
+        return None
+    resolved = resolve_glc_path(glc_href, content_root, source_dir=source_dir)
+    if resolved is None:
+        return None
+    if _recover_analysis_sheet([resolved.parent], content_root) is None:
+        return None
+    return num_to_header.get(_gram_num_from_id(folder_key))
+
+
 def extract_grams_from_slide(
     slide,
     slide_num: int,
@@ -644,6 +826,15 @@ def extract_grams_from_slide(
         # level on the small .glc-bearing shapes; without this filter
         # those would be mistaken for gram headers.
         if not href.lower().endswith(ANALYSIS_SHEET_EXTENSIONS):
+            continue
+        # Skip self-test navigation buttons labelled "N Questions" — they
+        # link to an image but are not grams (see QUESTIONS_LABEL_WORD).
+        label = " ".join((shape.text_frame.text or "").split())
+        if _label_ends_in_questions(label):
+            LOGGER.info(
+                "Slide %d: ignoring %r link (label ends in %r) — not a gram",
+                slide_num, label, QUESTIONS_LABEL_WORD,
+            )
             continue
         headers.append((shape, href))
 
@@ -732,6 +923,17 @@ def extract_grams_from_slide(
             continue
         folder_to_header[key] = (header, href)
 
+    # Index headers by their parsed gram number so a .glc whose gram folder
+    # matches no header — because that gram's analysis-sheet header links to a
+    # stale earlier-build folder — can still be reconnected to its gram via a
+    # sibling analysis sheet (see _reconnect_orphan_glc). First header wins on a
+    # numeric collision; numberless headers can't disambiguate, so are skipped.
+    num_to_header: dict[str, object] = {}
+    for header, _analysis_href in headers:
+        h_gram_id, _ = _split_descriptor(_descriptor_text(header))
+        if re.search(r"\d", h_gram_id):
+            num_to_header.setdefault(_gram_num_from_id(h_gram_id), header)
+
     header_to_pairs: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for cand, pairs in candidates:
         for text, glc_href in pairs:
@@ -757,6 +959,21 @@ def extract_grams_from_slide(
                         "trailing-'a' fallback", slide_num, glc_href, key, fallback,
                     )
             if hdr_entry is None:
+                recovered_header = _reconnect_orphan_glc(
+                    glc_href, key, num_to_header, content_root, source_dir,
+                )
+                if recovered_header is not None:
+                    # A stale analysis-sheet link left this .glc folder-orphaned,
+                    # but its sibling analysis sheet proves the gram is real —
+                    # reconnect it by gram number rather than warn-and-drop.
+                    LOGGER.info(
+                        "Slide %d: .glc %r names folder %r with no folder-matched "
+                        "header (its analysis link points elsewhere); reconnected "
+                        "to the 'Gram %s' header via its sibling analysis sheet",
+                        slide_num, glc_href, key, _gram_num_from_id(key),
+                    )
+                    header_to_pairs[id(recovered_header)].append((text, glc_href))
+                    continue
                 LOGGER.warning(
                     "Slide %d: .glc %r names folder %r but no matching header on this slide",
                     slide_num, glc_href, key,
@@ -827,17 +1044,37 @@ def extract_grams_from_slide(
 
     for header, analysis_href in headers:
         lofar_pairs = header_to_pairs.get(id(header), [])
+
+        gram_id, instructor_detail = _split_descriptor(_descriptor_text(header))
+
+        # Deleted-gram remnant: when a gram is removed in PowerPoint the
+        # emptied header button often survives, still carrying its
+        # shape-level hyperlink to the old analysis sheet but with its
+        # "Gram N: ..." caption gone. That shape passes the header test
+        # above yet yields an empty gram_id, and its now-orphaned GramNN/
+        # folder no longer has matching .glc shapes, so it would emit a
+        # lone analysis row with a blank gram_id -- an invalid row that
+        # dedupe rejects (require_field). A header with neither a gram
+        # number nor any Lofar link is not publishable content, so drop
+        # it here (loudly) rather than the operator hand-deleting the row
+        # on every run. A header that *does* carry Lofar links but no
+        # parseable number is a different problem (a caption we failed to
+        # read) -- keep it and let the no-Lofar/number warnings surface.
+        if not gram_id and not lofar_pairs:
+            h_left, h_top, _, _ = _bbox(header)
+            LOGGER.warning(
+                "Slide %d: skipping deleted-gram remnant at top=%d left=%d "
+                "(analysis href %r) -- no gram number and no Lofar links",
+                slide_num, h_top, h_left, analysis_href,
+            )
+            continue
+
         if not lofar_pairs:
             h_left, h_top, _, _ = _bbox(header)
             LOGGER.warning(
                 "Slide %d: gram header at top=%d left=%d has no Lofar box",
                 slide_num, h_top, h_left,
             )
-
-        descriptor = "".join(
-            run.text or "" for para in header.text_frame.paragraphs for run in para.runs
-        ).strip()
-        gram_id, instructor_detail = _split_descriptor(descriptor)
 
         glc_links = [GlcLink(display_text=t.strip(), href=h) for t, h in lofar_pairs]
         grams.append(GramPlaceholder(
@@ -909,6 +1146,418 @@ def _png_file_size(png_path: str, content_root: Path) -> str:
         return ""
 
 
+def _jpeg_pixel_height(fh) -> int | None:
+    """Walk a JPEG's segment markers and return its pixel height, or ``None``.
+
+    ``fh`` is an open binary file positioned anywhere; the scan restarts at the
+    first marker after the SOI. Reads only segment headers (never the entropy-
+    coded scan data), skipping non-frame segments by their declared length until
+    a Start-Of-Frame marker is reached, whose body carries ``precision(1),
+    height(2), width(2)``. Returns ``None`` on a truncated or unexpected stream.
+    """
+    fh.seek(2)  # past the SOI (0xFFD8)
+    # Frame headers that carry image dimensions. DHT (0xC4), JPG (0xC8) and
+    # DAC (0xCC) share the 0xCn range but are not frame headers, so they are
+    # skipped like any other length-prefixed segment.
+    sof_markers = frozenset((
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+    ))
+    while True:
+        prefix = fh.read(1)
+        if not prefix:
+            return None
+        if prefix != b"\xff":
+            continue
+        marker = fh.read(1)
+        while marker == b"\xff":  # fill bytes before the marker code
+            marker = fh.read(1)
+        if not marker:
+            return None
+        code = marker[0]
+        # Standalone markers (no length payload): SOI, EOI, RSTn, TEM.
+        if code == 0xD8 or code == 0xD9 or 0xD0 <= code <= 0xD7 or code == 0x01:
+            continue
+        length_bytes = fh.read(2)
+        if len(length_bytes) < 2:
+            return None
+        seg_len = int.from_bytes(length_bytes, "big")
+        if seg_len < 2:
+            return None
+        if code in sof_markers:
+            body = fh.read(seg_len - 2)
+            if len(body) < 5:
+                return None
+            return int.from_bytes(body[1:3], "big")
+        fh.seek(seg_len - 2, 1)  # skip this segment's body
+
+
+def _image_pixel_height(png_path: str, content_root: Path) -> int | None:
+    """Return the pixel height (scan-line count) of an image, or ``None``.
+
+    Issue #148: a pre-rendered gram's time period is derived from the image
+    itself — the number of horizontal scan lines, i.e. the pixel height — not
+    from any crop value in the ``.glc``. The legacy viewer multiplies that count
+    by the GLC's ``update_period`` (seconds per scan line), which is ``1`` for
+    nearly all of the corpus but not all of it, so the caller scales this height
+    by the parsed period (issue #160) rather than treating rows as seconds.
+    Reads only the header of PNG, JPEG and GIF files using the standard
+    library, keeping Pillow off the runtime path per the air-gap dependency
+    budget. Returns ``None`` when the file is absent, truncated, or not a
+    recognised/parsable format, so the caller leaves ``time_end`` blank and the
+    usual missing-view-field handling (warn, or ``--relaxed`` default) applies.
+    """
+    if not png_path:
+        return None
+    candidate = content_root / png_path
+    try:
+        with candidate.open("rb") as fh:
+            head = fh.read(26)
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                # PNG mandates IHDR as the first chunk; height is the four
+                # big-endian bytes at offset 20 (8 sig + 4 len + 4 tag + 4 w).
+                return int.from_bytes(head[20:24], "big") if len(head) >= 24 else None
+            if head[:6] in (b"GIF87a", b"GIF89a"):
+                # Logical-screen height: two little-endian bytes at offset 8.
+                return int.from_bytes(head[8:10], "little") if len(head) >= 10 else None
+            if head[:2] == b"\xff\xd8":
+                return _jpeg_pixel_height(fh)
+    except OSError:
+        return None
+    return None
+
+
+def _parse_update_period(raw: str) -> tuple[Decimal, str | None]:
+    """Return ``(seconds per scan line, warning or None)`` for a GLC's period.
+
+    Issue #160: the legacy viewer derives a gram's time period by multiplying
+    the image's scan-line count by the ``.glc``'s ``update_period``. The audited
+    corpus is nearly all ``1`` (which is why the count alone served until now),
+    but values such as ``2`` exist and halve the effective scan rate, so the
+    period has to be read rather than assumed.
+
+    Forgiving at the boundary (constitution VII): a blank/absent value is the
+    ordinary "no period stated" case and silently means
+    ``DEFAULT_UPDATE_PERIOD``; a present but unparsable or non-positive value is
+    an authoring defect that cannot be honoured, so it falls back to the same
+    default and returns a warning for the CSV rather than raising. ``Decimal``
+    (not ``float``) keeps the arithmetic exact and the output deterministic.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return DEFAULT_UPDATE_PERIOD, None
+    try:
+        value = Decimal(text)
+    except (InvalidOperation, ValueError):
+        value = None
+    if value is None or not value.is_finite() or value <= 0:
+        return (
+            DEFAULT_UPDATE_PERIOD,
+            f"GLC invalid update_period {text!r} — assumed "
+            f"{_format_seconds(DEFAULT_UPDATE_PERIOD)} s per scan line",
+        )
+    return value, None
+
+
+def _format_seconds(value: Decimal) -> str:
+    """Render a time period as the CSV's plain decimal string.
+
+    Trailing zeros are dropped (``180.0`` -> ``180``) and exponent notation is
+    never emitted, so an integral period reads exactly as it did before issue
+    #160 and a fractional one stays human-legible in Excel.
+    """
+    normalised = value.normalize()
+    if normalised == normalised.to_integral_value():
+        normalised = normalised.to_integral_value()
+    return format(normalised, "f")
+
+
+def _time_period(
+    png_path: str, content_root: Path, glc: GlcDocument,
+) -> tuple[str, list[str]]:
+    """Return ``(time_end, warnings)`` for an image-backed gram row.
+
+    The time period is the referenced image's scan-line count — its pixel
+    height (issue #148) — multiplied by the GLC's seconds-per-scan-line
+    ``update_period`` (issue #160). An unmeasurable image yields ``""`` so the
+    caller's existing dangling-asset handling applies unchanged.
+    """
+    height = _image_pixel_height(png_path, content_root)
+    if height is None:
+        return "", []
+    period, warning = _parse_update_period(glc.update_period)
+    seconds = _format_seconds(Decimal(height) * period)
+    if period != DEFAULT_UPDATE_PERIOD:
+        LOGGER.info(
+            "%s: %d scan lines x update_period %s -> time period %s s",
+            png_path, height, _format_seconds(period), seconds,
+        )
+    return seconds, ([warning] if warning else [])
+
+
+def _asset_file_missing(png_path: str, content_root: Path) -> bool:
+    """True when a target asset is *expected* (non-empty path) but absent on disk.
+
+    A blank ``png_path`` means the row carries no asset at all (an assetless
+    GLC link, or a gram with no analysis hyperlink) — that is not "missing",
+    just legitimately empty, so it returns ``False``. Only a populated
+    reference whose file cannot be found on disk counts, so the caller can
+    flag it for the author to fix or drop (mirrors the resolution
+    ``_png_file_size`` performs, but reports presence rather than size).
+    """
+    if not png_path:
+        return False
+    return not (content_root / png_path).is_file()
+
+
+def _gram_folder_missing(
+    gram: GramPlaceholder, content_root: Path, source_dir: Path | None,
+) -> bool:
+    """True when *every* asset folder this gram references is absent on disk.
+
+    A gram whose whole per-gram folder an author has deleted references its
+    assets — the analysis-sheet image and the Lofar ``.glc`` files — out of
+    that now-missing directory. This is deliberately distinct from a single
+    deleted *file* with the folder still present: the latter stays flagged
+    (``ASSET_MISSING_WARNING``) so the author restores the one file, whereas a
+    vanished folder means the gram itself is gone, so the caller drops it from
+    the CSV entirely rather than emit a topic full of dangling references (that
+    would only fail later in Oxygen/DITA-OT).
+
+    Fires only when the gram carries at least one href with a directory
+    component *and none* of those directories resolves on disk (checked under
+    the deck folder then the content root, mirroring ``resolve_glc_path``'s
+    candidate order). A gram whose hrefs are all bare filenames — no folder to
+    test — or any one of whose asset folders still exists returns ``False``, so
+    a merely-deleted individual file continues to be flagged, not dropped.
+    """
+    hrefs = [link.href for link in gram.glc_links if link.href]
+    if gram.png_href:
+        hrefs.append(gram.png_href)
+    referenced_dirs: list[Path] = []
+    for href in hrefs:
+        decoded = urllib.parse.unquote(href.split("?", 1)[0].split("#", 1)[0])
+        rel = Path(decoded.replace("\\", "/"))
+        if rel.parent == Path("."):
+            continue  # bare filename — no folder to test
+        referenced_dirs.append(rel.parent)
+    if not referenced_dirs:
+        return False
+    for rel_dir in referenced_dirs:
+        candidates: list[Path] = []
+        if source_dir is not None:
+            candidates.append(source_dir / rel_dir)
+        candidates.append(content_root / rel_dir)
+        if any(candidate.is_dir() for candidate in candidates):
+            return False
+    return True
+
+
+def _is_analysis_sheet_image(name: str) -> bool:
+    """True when ``name`` looks like an analysis-sheet image file.
+
+    Matches the ``analysis`` token (or a known misspelling, e.g. ``analaysis``)
+    as a case-insensitive substring of the stem, with an image extension —
+    mirroring ``snapshot_analysis_docs._is_analysis_name`` so the Lofar-folder
+    fallback recognises the same sheets the snapshotter renders.
+    """
+    p = PurePosixPath(name)
+    if p.suffix.lower() not in ANALYSIS_IMAGE_EXTENSIONS:
+        return False
+    stem = p.stem.lower()
+    if ANALYSIS_NAME_TOKEN in stem:
+        return True
+    return any(typo in stem for typo in ANALYSIS_NAME_MISSPELLINGS)
+
+
+def _recover_analysis_sheet(
+    lofar_dirs: list[Path], content_root: Path,
+) -> str | None:
+    """Find an analysis-sheet image sitting in a gram's Lofar folder(s).
+
+    When a gram's analysis hyperlink is stale — a legacy href left pointing at
+    an earlier build's folder — the real analysis sheet often still sits beside
+    the gram's Lofar ``.glc`` files. Search each resolved Lofar directory (in
+    the order the Lofars appear, so the result is deterministic) for an analysis
+    image and return the first match as a ``content_root``-relative POSIX path,
+    or ``None`` when none is found. Directories are scanned non-recursively and
+    their entries sorted so a folder holding two candidate images always yields
+    the same one (the determinism/idempotency invariant).
+    """
+    for lofar_dir in lofar_dirs:
+        if not lofar_dir.is_dir():
+            continue
+        for entry in sorted(lofar_dir.iterdir()):
+            if entry.is_file() and _is_analysis_sheet_image(entry.name):
+                return _rel_to_root(entry, content_root)
+    return None
+
+
+def _find_analysis_word_original(
+    image_relpath: str, content_root: Path, preferred: str = "",
+) -> str:
+    """Return the editable Word original behind an analysis image, or ``""``.
+
+    Feature 013: the analysis sheet the reader sees is a *rendered image*, which
+    cannot be amended. Where the author's Word document still exists it is
+    carried into the gram's DITA folder so an analyst who later needs to correct
+    the sheet finds the source beside the page it produced. This resolves which
+    file that is; the copy itself happens in ``generate_dita.py``.
+
+    ``image_relpath`` is the analysis row's final ``content_root``-relative image
+    path — *after* any Word-to-image redirect and after the stale-link recovery
+    below, so a sheet recovered from a Lofar folder is probed at the location it
+    was actually recovered from, not at the dead hyperlink target.
+
+    ``preferred`` is the suffix the deck's own hyperlink named, when that
+    hyperlink pointed at a Word document. It is authoritative — the author told
+    us which form the sheet takes — so it is tried before the generic probe.
+    Otherwise (the newer decks hyperlink the image directly) the sheet's Word
+    sibling is looked for by same stem in ``ANALYSIS_WORD_EXTENSIONS`` order.
+
+    Returns ``""`` when no Word original exists. That is an ordinary, expected
+    outcome — the newer decks supply the analysis sheet as an image and never had
+    a Word form — not a warning and not an error. The count of such grams is
+    reported in the extraction summary so the operator can see the gap.
+    """
+    if not image_relpath:
+        return ""
+    base = PurePosixPath(image_relpath)
+    suffixes: tuple[str, ...] = ANALYSIS_WORD_EXTENSIONS
+    if preferred:
+        # Authoritative suffix first, then the rest of the probe order.
+        suffixes = (preferred,) + tuple(
+            s for s in ANALYSIS_WORD_EXTENSIONS if s != preferred)
+    for suffix in suffixes:
+        candidate = base.with_suffix(suffix)
+        if (content_root / candidate).is_file():
+            return str(candidate)
+    return ""
+
+
+# A demon marker's stem is exactly ``demon`` (the first) or ``demon-N`` (the
+# Nth, N>=2). Anchored so ``demonstrate.glc`` and other ``demon``-prefixed files
+# never match. Case-insensitive.
+_DEMON_MARKER_RE = re.compile(r"^demon(?:-(\d+))?$", re.IGNORECASE)
+
+
+def _find_demon_markers(lofar_dir: Path) -> list[Path]:
+    """Return the ``demon.glc`` / ``demon-N.glc`` markers in ``lofar_dir``.
+
+    Ordered ``demon`` (1) then ``demon-2``, ``demon-3``, … by their numeric
+    suffix — a plain lexical sort would wrongly put ``demon-2.glc`` before
+    ``demon.glc`` (``-`` < ``.``). Deterministic so multiple demons emit in a
+    stable order ahead of the Lofars.
+    """
+    markers: list[tuple[int, Path]] = []
+    for entry in sorted(lofar_dir.iterdir()):
+        if not (entry.is_file() and entry.suffix.lower() == ".glc"):
+            continue
+        match = _DEMON_MARKER_RE.match(entry.stem)
+        if match is None:
+            continue
+        order = int(match.group(1)) if match.group(1) else 1
+        markers.append((order, entry))
+    return [entry for _order, entry in sorted(markers, key=lambda t: (t[0], t[1].name))]
+
+
+def demon_rows_for_gram(
+    gram: GramPlaceholder,
+    lofar_dirs: list[Path],
+    publication: str,
+    chapter: str | None,
+    content_root: Path,
+    gram_num: str,
+    target_doc: str,
+    target_chapter: str,
+    relaxed: bool,
+) -> list[dict]:
+    """Emit one ``topic_type="demon"`` row per demon marker for this gram (#151).
+
+    A demon image is an alternately-rendered gram view that leads the gram's
+    page. It is signalled by a ``demon.glc`` marker ingest writes into the gram
+    folder (never hyperlinked from the slide), so it is discovered here by
+    scanning the folder of the gram's **first resolved Lofar ``.glc``**
+    (``lofar_dirs[0]``). A gram with no resolved Lofar has no folder to inspect
+    and gets no demon row. Each marker becomes one demon row ordered ahead of
+    the Lofar rows; the demon's ``time_end`` is the image's pixel height (issue
+    #148) and its band is the fixed 0 - 40 Hz read from the marker.
+    """
+    if not lofar_dirs:
+        return []
+    lofar_dir = lofar_dirs[0]
+    if not lofar_dir.is_dir():
+        return []
+
+    rows: list[dict] = []
+    for i, marker in enumerate(_find_demon_markers(lofar_dir), start=1):
+        warnings: list[str] = []
+        glc = parse_glc(marker)
+        warnings.extend(glc.warnings)
+        glc_path = _rel_to_root(marker, content_root)
+        png_path = ""
+        time_end = ""
+        if glc.image_filename:
+            png_path = resolve_asset_path(
+                glc.image_filename, content_root, source_dir=marker.parent)
+            if Path(png_path).suffix.lower() in GRAMFRAME_GLC_EXTENSIONS:
+                time_end, period_warnings = _time_period(
+                    png_path, content_root, glc)
+                warnings.extend(period_warnings)
+
+        row = {
+            "publication": publication,
+            "chapter": chapter or "",
+            "target_doc": target_doc,
+            "target_chapter": target_chapter,
+            "gram_id": gram.gram_id,
+            "vessel_name": gram.vessel_name,
+            "topic_type": "demon",
+            "sequence": str(i),
+            "topic_filename": f"gram_{gram_num}.dita",
+            "display_text": "",
+            "link_href": "",
+            "glc_path": glc_path,
+            "time_end": time_end,
+            "bandwidth": glc.bandwidth,
+            "bandcentre": glc.bandcentre,
+            "png_path": png_path,
+            "target_ext": Path(png_path).suffix.lower(),
+            "file_size": _png_file_size(png_path, content_root),
+            "wav_treatment": "",
+            "warnings": "",
+        }
+        asset_missing = _asset_file_missing(png_path, content_root)
+        # A demon is always rendered as an inline image GramFrame, so it needs
+        # the same view fields an image Lofar does. ``time_end`` is image-derived
+        # (dangles when the image is absent, like every image row); the band
+        # comes from the demon marker ingest wrote (0 - 40 Hz). Mirror the image
+        # Lofar handling: default under --relaxed, else warn (never fail-fast --
+        # a demon row is topic_type="demon", exempt from glc_view_problems).
+        if row["target_ext"] in GRAMFRAME_GLC_EXTENSIONS:
+            for field_name in GLC_VIEW_FIELDS:
+                if (row[field_name] or "").strip():
+                    continue
+                if relaxed:
+                    row[field_name] = RELAXED_DEFAULT
+                    warnings.append(
+                        f"demon missing {field_name} — defaulted to "
+                        f"{RELAXED_DEFAULT} (--relaxed)")
+                elif field_name == "time_end":
+                    if not asset_missing:
+                        warnings.append(
+                            "demon time period unknown — could not read image "
+                            "height")
+                else:
+                    warnings.append(
+                        f"demon missing {field_name} — GramFrame cannot render")
+        if asset_missing:
+            warnings.append(ASSET_MISSING_WARNING)
+        row["warnings"] = ", ".join(warnings)
+        rows.append(row)
+    return rows
+
+
 def gram_to_rows(
     gram: GramPlaceholder,
     publication: str,
@@ -932,6 +1581,9 @@ def gram_to_rows(
     """
     rows: list[dict] = []
     gram_num = _gram_num_from_id(gram.gram_id)
+    # Folders holding this gram's resolved Lofar .glc files, in Lofar order and
+    # de-duplicated — the search space for the analysis-sheet fallback below.
+    lofar_dirs: list[Path] = []
 
     for i, link in enumerate(gram.glc_links, start=1):
         warnings: list[str] = []
@@ -948,9 +1600,10 @@ def gram_to_rows(
             glc_path = href
         else:
             glc_path = _rel_to_root(resolved, content_root)
+            if resolved.parent not in lofar_dirs:
+                lofar_dirs.append(resolved.parent)
             glc = parse_glc(resolved)
             warnings.extend(glc.warnings)
-            time_end = glc.time_end
             bandwidth = glc.bandwidth
             bandcentre = glc.bandcentre
             if glc.image_filename:
@@ -963,6 +1616,17 @@ def gram_to_rows(
                 png_path = resolve_asset_path(
                     glc.image_filename, content_root, source_dir=resolved.parent,
                 )
+                # Issue #148: the gram's time period (the GramFrame y-axis,
+                # ``time_end``) is the image's scan-line count — its pixel
+                # height — not the GLC's ``bottom_crop``, scaled by the GLC's
+                # seconds-per-scan-line ``update_period`` (issue #160). Only a
+                # pre-rendered image carries this; a .wav-backed row is surfaced
+                # as a link to its .glc (no GramFrame table) and keeps a blank
+                # time_end.
+                if Path(png_path).suffix.lower() in GRAMFRAME_GLC_EXTENSIONS:
+                    time_end, period_warnings = _time_period(
+                        png_path, content_root, glc)
+                    warnings.extend(period_warnings)
 
         row = {
             "publication": publication,
@@ -986,27 +1650,63 @@ def gram_to_rows(
             "wav_treatment": "",
             "warnings": "",
         }
-        # A GLC-backed gram (pre-rendered image or live-render .wav) needs its
-        # time + frequency view fields for GramFrame; flag (or, under --relaxed,
-        # default) any blank one so the issue surfaces here rather than later in
-        # dedupe (issue #92). An assetless GLC row (target_ext "") dangles.
-        if row["target_ext"] in RENDERABLE_GLC_EXTENSIONS:
+        # A resolved asset reference (image or .wav) whose file is not on disk
+        # would dangle through the generator and only fail at publish; flag it
+        # here so the operator can track it. An assetless GLC row (png_path "",
+        # already carrying "GLC not found") is exempt.
+        asset_missing = _asset_file_missing(png_path, content_root)
+        # An *image* GLC-backed gram needs its time + frequency view fields for
+        # GramFrame; flag (or, under --relaxed, default) any blank one so the
+        # issue surfaces here rather than later in dedupe (issue #92). A .wav row
+        # is exempt -- it links to its .glc, no GramFrame table -- as is an
+        # assetless GLC row (target_ext "") which dangles.
+        #
+        # ``time_end`` is handled apart from the GLC-authored band fields: it is
+        # the image's pixel height (issue #148), so a blank one is an *asset*
+        # problem, not an author omission. When the image is missing on disk it
+        # already dangles (ASSET_MISSING below, and re-resolves when the file is
+        # dropped in), so — per the "missing assets dangle, they don't crash"
+        # invariant — it is exempt from the fail-fast gate; only a
+        # present-but-unreadable image earns a (non-fatal) warning here. The
+        # fail-fast gate (glc_view_problems) therefore covers band fields only.
+        if row["target_ext"] in GRAMFRAME_GLC_EXTENSIONS:
             for field_name in GLC_VIEW_FIELDS:
-                if not (row[field_name] or "").strip():
-                    if relaxed:
-                        row[field_name] = RELAXED_DEFAULT
+                if (row[field_name] or "").strip():
+                    continue
+                if relaxed:
+                    row[field_name] = RELAXED_DEFAULT
+                    warnings.append(
+                        f"gram missing {field_name} — defaulted to "
+                        f"{RELAXED_DEFAULT} (--relaxed)")
+                elif field_name == "time_end":
+                    if not asset_missing:
                         warnings.append(
-                            f"gram missing {field_name} — defaulted to "
-                            f"{RELAXED_DEFAULT} (--relaxed)")
-                    else:
-                        warnings.append(
-                            f"gram missing {field_name} — GramFrame cannot "
-                            f"render")
+                            "gram time period unknown — could not read image "
+                            "height")
+                else:
+                    warnings.append(
+                        f"gram missing {field_name} — GramFrame cannot "
+                        f"render")
+        if asset_missing:
+            warnings.append(ASSET_MISSING_WARNING)
         row["warnings"] = ", ".join(warnings)
         rows.append(row)
 
+    # Demon rows (issue #151) lead the gram: emitted here, once the Lofar folders
+    # are known, and prepended to every return path so they precede the Lofar
+    # rows in the CSV (the generator renders them first, after the analysis
+    # sheet). A gram with no resolved Lofar folder gets none.
+    demon_rows = demon_rows_for_gram(
+        gram, lofar_dirs, publication, chapter, content_root, gram_num,
+        target_doc, target_chapter, relaxed)
+
     analysis_warnings: list[str] = []
     analysis_png = gram.png_href or ""
+    # The suffix the deck's own hyperlink named, when it named a Word document.
+    # Captured before the redirect below rewrites the path to the rendered
+    # image, because it is the author's own statement of which form the sheet
+    # takes and so outranks the sibling probe (feature 013).
+    analysis_word_suffix = ""
     if not analysis_png:
         analysis_warnings.append("missing analysis PNG hyperlink")
         analysis_png_resolved = ""
@@ -1020,11 +1720,47 @@ def gram_to_rows(
         # snapshotter hasn't run, or its render failed) keep the intended
         # .png href so the image dangles -- never a Word <xref> -- and record
         # a warning the author sees in Excel (FR-009/FR-010).
-        if Path(analysis_png_resolved).suffix.lower() in (".doc", ".docx"):
+        if Path(analysis_png_resolved).suffix.lower() in ANALYSIS_WORD_EXTENSIONS:
+            analysis_word_suffix = Path(analysis_png_resolved).suffix.lower()
             analysis_png_resolved = str(
                 PurePosixPath(analysis_png_resolved).with_suffix(".png"))
             if not (content_root / analysis_png_resolved).is_file():
                 analysis_warnings.append("analysis image not rendered")
+    # A directly-referenced analysis image (.png/.jpg) whose file is absent —
+    # typically a legacy href left pointing at an earlier build's folder. The
+    # Word-sheet path above already records the more specific "analysis image
+    # not rendered" (snapshot step not run) for the same missing .png, so that
+    # case is excluded here. Otherwise:
+    #   * a gram carrying a vessel_name is real content worth persevering with:
+    #     look for an analysis sheet sitting in the gram's own Lofar folder(s)
+    #     and repoint to it (a stale link whose real target moved). Found ->
+    #     recover silently; not found -> flag ASSET_MISSING_WARNING as before.
+    #   * a gram with no vessel_name is mangled legacy content we can't exploit:
+    #     drop the analysis sheet entirely (no row, no warning), keeping the
+    #     gram's resolved Lofar rows.
+    if (analysis_png_resolved
+            and "analysis image not rendered" not in analysis_warnings
+            and _asset_file_missing(analysis_png_resolved, content_root)):
+        if gram.vessel_name.strip():
+            recovered = _recover_analysis_sheet(lofar_dirs, content_root)
+            if recovered is not None:
+                LOGGER.info(
+                    "Gram %s (%s): analysis link %r not on disk; recovered "
+                    "analysis sheet from Lofar folder -> %s",
+                    gram.gram_id or "<no gram_id>", gram.vessel_name,
+                    analysis_png, recovered,
+                )
+                analysis_png_resolved = recovered
+            else:
+                analysis_warnings.append(ASSET_MISSING_WARNING)
+        else:
+            LOGGER.info(
+                "Gram %s: no vessel_name and analysis link %r not on disk — "
+                "dropping the analysis sheet (mangled legacy, unrecoverable). "
+                "The gram's Lofar rows are unaffected.",
+                gram.gram_id or "<no gram_id>", analysis_png,
+            )
+            return demon_rows + rows
     rows.append({
         "publication": publication,
         "chapter": chapter or "",
@@ -1046,29 +1782,76 @@ def gram_to_rows(
         "file_size": _png_file_size(analysis_png_resolved, content_root),
         "wav_treatment": "",
         "warnings": ", ".join(analysis_warnings),
+        # Probed against the *final* image path, so a sheet recovered from a
+        # Lofar folder above is looked up where it was recovered from. Empty
+        # when the sheet never had a Word form -- an ordinary outcome, counted
+        # (not warned) in the extraction summary (feature 013).
+        "analysis_doc_path": _find_analysis_word_original(
+            analysis_png_resolved, content_root, analysis_word_suffix),
     })
-    return rows
+    return demon_rows + rows
 
 
-def glc_view_problems(rows: list[dict]) -> list[tuple[str, str]]:
-    """Return ``(gram_id, field)`` for every GLC gram row missing a view field.
+def glc_view_problems(rows: list[dict]) -> list[tuple[str, str, int]]:
+    """Return ``(gram_id, field, line)`` for every GLC gram row missing a view field.
 
-    Every GLC-backed gram (a ``glc`` row whose inner asset is a renderable
-    image or ``.wav``) must carry ``time_end`` / ``bandwidth`` / ``bandcentre``
-    for GramFrame to render -- and the trio is also the downstream dedup/generate
-    view key for ``.wav`` rows. Analysis rows and assetless (dangling) GLC rows
-    are exempt. Under ``--relaxed`` these blanks are already filled with
-    ``RELAXED_DEFAULT`` upstream, so this returns empty (issue #92).
+    Every *image* GLC-backed gram (a ``glc`` row whose inner asset is a
+    renderable image) must carry ``bandwidth`` and ``bandcentre`` for GramFrame
+    to render. ``.wav`` rows are exempt -- they surface as a link to the
+    ``.glc``, never a GramFrame table, so their view fields are optional.
+    Analysis rows and assetless (dangling) GLC rows are also exempt. Under
+    ``--relaxed`` the image blanks are already filled with ``RELAXED_DEFAULT``
+    upstream, so this returns empty (issue #92).
+
+    ``time_end`` is **not** gated here: it is the image's pixel height (issue
+    #148), so a blank one is a missing/unreadable-asset problem that dangles
+    (flagged ASSET_MISSING and resolved by dropping the file in), not an author
+    omission — hard-failing on it would violate the "missing assets dangle"
+    invariant. Only the GLC-authored band fields fail-fast.
+
+    ``line`` is the 1-based line the row occupies in the CSV this run writes
+    (``write_csv`` emits the header then ``rows`` in order, so index ``i`` lands
+    on line ``i + 2``), letting the abort point straight at the offending row.
     """
-    problems: list[tuple[str, str]] = []
-    for row in rows:
+    problems: list[tuple[str, str, int]] = []
+    for index, row in enumerate(rows):
         if row.get("topic_type", "") != "glc":
             continue
-        if (row.get("target_ext", "") or "").lower() not in RENDERABLE_GLC_EXTENSIONS:
+        if (row.get("target_ext", "") or "").lower() not in GRAMFRAME_GLC_EXTENSIONS:
             continue
-        for field_name in GLC_VIEW_FIELDS:
+        line_no = index + 2  # +1 header, +1 for 0-based -> 1-based
+        for field_name in GLC_AUTHORED_VIEW_FIELDS:
             if not (row.get(field_name, "") or "").strip():
-                problems.append((row.get("gram_id", ""), field_name))
+                problems.append((row.get("gram_id", ""), field_name, line_no))
+    return problems
+
+
+def missing_asset_problems(
+    rows: list[dict], content_root: Path,
+) -> list[tuple[str, str, str, int]]:
+    """Return ``(publication, gram_id, png_path, line)`` for each asset-missing row.
+
+    A row *expects* a target file when its ``png_path`` is non-empty (a resolved
+    image or ``.wav`` reference). Rows that legitimately carry no asset — an
+    assetless GLC link, or a gram with no analysis hyperlink — have a blank
+    ``png_path`` and are exempt (the user's "not all rows require a target
+    file"). A populated reference whose file is absent on disk would dangle
+    through the generator and only fail at publish, so it is collected here.
+
+    ``line`` mirrors ``glc_view_problems``: ``write_csv`` emits the header then
+    ``rows`` in order, so index ``i`` lands on CSV line ``i + 2`` — the report
+    can point straight at the offending row.
+    """
+    problems: list[tuple[str, str, str, int]] = []
+    for index, row in enumerate(rows):
+        png_path = (row.get("png_path", "") or "").strip()
+        if not png_path:
+            continue
+        if _asset_file_missing(png_path, content_root):
+            problems.append((
+                row.get("publication", ""), row.get("gram_id", ""),
+                png_path, index + 2,
+            ))
     return problems
 
 
@@ -1099,6 +1882,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--test-pattern", default=DEFAULT_TEST_PATTERN, dest="test_pattern")
     parser.add_argument("--final-pattern", default=DEFAULT_FINAL_PATTERN, dest="final_pattern")
+    parser.add_argument("--joining-pattern", default=DEFAULT_JOINING_PATTERN, dest="joining_pattern")
     parser.add_argument(
         "--only", default=None, dest="only",
         help="Scope the walk to PPTXs whose path under --input-root starts with "
@@ -1115,9 +1899,19 @@ def main(argv: Iterable[str] | None = None) -> int:
              "out of source\\. Independent of --only.",
     )
     parser.add_argument(
+        "--strict-assets", action="store_true", dest="strict_assets",
+        help="Promote the missing-target-asset check to a hard abort. By "
+             "default a row that references an image/.wav whose file is absent "
+             "on disk is flagged (a per-row warning plus an enumerated summary) "
+             "but the CSV is still written, honouring the 'missing assets "
+             "dangle' rule. Pass this during a focused cleanup pass to make the "
+             "run fail (exit 1) until every referenced asset is present or its "
+             "row dropped.",
+    )
+    parser.add_argument(
         "--relaxed", action="store_true", dest="relaxed",
-        help="Dev/exploration only: instead of hard-failing when a GLC-backed "
-             "gram (pre-rendered image or live-render .wav) is missing a "
+        help="Dev/exploration only: instead of hard-failing when an image "
+             "GLC-backed gram (pre-rendered .png/.jpg) is missing a "
              f"required view field ({', '.join(GLC_VIEW_FIELDS)}), substitute the "
              f"default '{RELAXED_DEFAULT}' so the rest of the toolchain can run "
              "against an incomplete corpus. GramFrame needs the real values, so "
@@ -1144,9 +1938,11 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     rows: list[dict] = []
     pptx_count = 0
+    skipped_deleted_grams = 0
     warning_counter: Counter[str] = Counter()
     allocated: dict[str, int] = {}
     final_allocated: dict[str, int] = {}
+    joining_allocated: dict[str, int] = {}
 
     try:
         for pptx in walk_pptxs(args.input_root, only_subdir=args.only):
@@ -1155,6 +1951,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             publication, chapter, chapter_slug = classify_publication(
                 pptx, args.test_pattern, allocated,
                 args.final_pattern, final_allocated,
+                args.joining_pattern, joining_allocated,
             )
             if args.exclude_tests and publication != "main":
                 LOGGER.info(
@@ -1185,6 +1982,21 @@ def main(argv: Iterable[str] | None = None) -> int:
             target_doc = "" if publication == "main" else pptx.name
             target_chapters = deck_target_chapters(publication, chapter, len(deck_grams))
             for gram, target_chapter in zip(deck_grams, target_chapters):
+                # A gram whose whole asset folder an author has deleted is a
+                # removed gram, not a dangling asset: drop it entirely rather
+                # than emit a topic of references that only fail at publish.
+                # (A single deleted *file* with the folder still present is
+                # left to the per-row missing-asset flag below.)
+                if _gram_folder_missing(
+                        gram, args.input_root, source_dir=pptx.parent):
+                    LOGGER.info(
+                        "Skipping gram %s in %s: its whole asset folder is "
+                        "missing on disk — an author has deleted the gram "
+                        "(dropped from the CSV, not dangled).",
+                        gram.gram_id or "<no gram_id>", pptx.name,
+                    )
+                    skipped_deleted_grams += 1
+                    continue
                 gram_rows = gram_to_rows(
                     gram, publication, chapter, chapter_slug,
                     args.input_root, source_dir=pptx.parent,
@@ -1214,6 +2026,37 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     write_csv(rows, args.out)
 
+    # Missing target assets: a row that references an image/.wav whose file is
+    # absent on disk would dangle silently through the generator and only
+    # surface as a DITA-OT load error at publish (e.g. an analysis sheet whose
+    # PNG never made it into source). Enumerate them here, at the extraction
+    # boundary, so the operator can track and triage each one — fix the source
+    # file, or drop the row — before publishing. Per the "missing assets
+    # dangle, they don't crash" invariant this is a WARNING that still yields a
+    # CSV (each offending row is also flagged in its warnings column);
+    # --strict-assets promotes it to a hard abort for a focused cleanup pass.
+    missing_assets = missing_asset_problems(rows, args.input_root)
+    if missing_assets:
+        detail = "; ".join(
+            f"CSV line {line_no}: {pub}/gram_id={gram_id!r} -> {png_path}"
+            for pub, gram_id, png_path, line_no in missing_assets)
+        if args.strict_assets:
+            LOGGER.error(
+                "Aborting (--strict-assets): %d row(s) reference an asset file "
+                "missing on disk. Fix the source file so it is present under "
+                "%s, or drop the row, then re-run. Offending rows: %s",
+                len(missing_assets), args.input_root, detail,
+            )
+            return 1
+        LOGGER.warning(
+            "%d row(s) reference an asset file missing on disk — each will "
+            "dangle in the generated DITA and fail to load in Oxygen/DITA-OT, "
+            "and is flagged with %r in its CSV warnings column. Fix the source "
+            "file or drop the row (re-run with --strict-assets to hard-fail on "
+            "these). Offending rows: %s",
+            len(missing_assets), ASSET_MISSING_WARNING, detail,
+        )
+
     # Issue #92: fail at extraction (not late in dedupe) when a GLC-backed gram
     # lacks the time + frequency view fields GramFrame requires. The CSV is
     # written first so its warnings column is inspectable; --relaxed has already
@@ -1221,22 +2064,52 @@ def main(argv: Iterable[str] | None = None) -> int:
     problems = glc_view_problems(rows)
     if problems:
         detail = "; ".join(
-            f"gram_id={gram_id!r} missing {field_name}"
-            for gram_id, field_name in problems)
+            f"CSV line {line_no}: gram_id={gram_id!r} missing {field_name}"
+            for gram_id, field_name, line_no in problems)
         LOGGER.error(
             "Aborting: %d GLC gram view field(s) missing — GramFrame cannot "
-            "render without them. Fix the GLC(s) so they carry a time period, "
-            "bandwidth and bandcentre, or re-run with --relaxed to substitute "
-            "'%s' for development. Offending rows: %s",
+            "render without them. Fix the GLC(s) so they carry a bandwidth and "
+            "bandcentre (the time period is read from the image height), or "
+            "re-run with --relaxed to substitute '%s' for development. "
+            "Offending rows: %s",
             len(problems), RELAXED_DEFAULT, detail,
         )
         return 1
 
+    if skipped_deleted_grams:
+        LOGGER.warning(
+            "Skipped %d gram(s) whose whole asset folder is missing on disk "
+            "(author-deleted grams, dropped from the CSV). A single missing "
+            "file with its folder still present is not dropped — it is flagged "
+            "%r instead.",
+            skipped_deleted_grams, ASSET_MISSING_WARNING,
+        )
+
+    # Feature 013 (FR-019): how many grams show an analysis sheet nobody can
+    # amend. Not a warning -- the newer decks legitimately supply the sheet as
+    # an image and never had a Word form -- but the operator cannot see the
+    # scale of the gap without a number, and it is how the real corpus's
+    # proportions become known at all.
+    analysis_rows = [r for r in rows if r.get("topic_type") == "analysis"]
+    without_word = sum(
+        1 for r in analysis_rows if not (r.get("analysis_doc_path") or "").strip())
+
     distinct = ", ".join(f"{w}={c}" for w, c in sorted(warning_counter.items()))
     LOGGER.info(
-        "Extraction summary: pptx=%d rows=%d warnings=%d distinct=[%s]",
-        pptx_count, len(rows), sum(warning_counter.values()), distinct,
+        "Extraction summary: pptx=%d rows=%d skipped_deleted_grams=%d "
+        "warnings=%d distinct=[%s] analysis_sheets=%d without_word_original=%d",
+        pptx_count, len(rows), skipped_deleted_grams,
+        sum(warning_counter.values()), distinct,
+        len(analysis_rows), without_word,
     )
+    if without_word:
+        LOGGER.info(
+            "%d of %d gram(s) with an analysis sheet have no editable Word "
+            "original, so their sheet cannot be amended at source — the "
+            "rendered image is all there is. This is expected for decks that "
+            "supplied the sheet as an image; no action is required.",
+            without_word, len(analysis_rows),
+        )
     return 0
 
 

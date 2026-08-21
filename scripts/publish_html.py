@@ -59,7 +59,10 @@ class Edition:
 
     Exactly two editions exist (per spec 003 FR-013 / Out of Scope):
 
-    - ``instructor`` — no audience filter; the full content, including
+    - ``instructor`` — DITA-OT runs with
+      ``--filter=<dita>/instructor.ditaval`` to strip every element
+      carrying ``audience="student-only"`` (today just the in-body 7
+      Questions section). Instructors keep the full content otherwise:
       vessel-name decorations, Analysis Sheets, and "Instructor Version"
       labelling.
     - ``student`` — DITA-OT runs with ``--filter=<dita>/trainee.ditaval``
@@ -80,7 +83,7 @@ EDITIONS: tuple[Edition, ...] = (
     Edition(
         name="instructor",
         output_subdir="instructor",
-        ditaval=None,
+        ditaval=Path("instructor.ditaval"),
         description=(
             "Full content, including answers, vessel names, and analysis sheets."
         ),
@@ -479,10 +482,15 @@ _DITAOT_DATE_META_RE = re.compile(
 # https://github.com/DeepBlueCLtd/GramFrame ``docs/HTML-Integration-Guide.md``.
 #
 # The bundle is vendored at ``vendor/gramframe/gramframe.bundle.js`` so
-# air-gapped publish runs do not reach for the network. We copy it once
-# to ``<out_root>/gramframe.bundle.js`` and inject a single relative
-# ``<script>`` tag into every emitted page; the script no-ops on pages
-# that have no ``gram-config`` tables.
+# air-gapped publish runs do not reach for the network. We drop a copy at
+# ``<out_root>/gramframe.bundle.js`` (for the shared landing) *and* one at
+# ``<out_root>/<edition>/gramframe.bundle.js`` for each edition, then inject
+# a single relative ``<script>`` tag into every emitted page pointing at the
+# copy that sits at or above it *within its own edition* — never above the
+# edition folder. This mirrors the per-edition ``theme.css`` placement so
+# each ``<out_root>/<edition>/`` subtree is self-contained: copy it out on
+# its own and every page still resolves its bundle. The script no-ops on
+# pages that have no ``gram-config`` tables.
 
 GRAMFRAME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "gramframe" / "gramframe.bundle.js"
 GRAMFRAME_BUNDLE_NAME = "gramframe.bundle.js"
@@ -492,15 +500,21 @@ _GRAMFRAME_HEAD_CLOSE = "  </head>"
 
 def inject_gramframe_plugin(
     out_root: Path,
+    editions: tuple[Edition, ...] = EDITIONS,
     bundle_src: Path = GRAMFRAME_BUNDLE_SRC,
 ) -> int:
-    """Copy the GramFrame bundle into ``out_root`` and link it from every page.
+    """Vendor the GramFrame bundle into ``out_root`` and link it from every page.
 
-    Places one copy of the bundle at ``<out_root>/<GRAMFRAME_BUNDLE_NAME>``
-    and inserts a ``<script src="…/gramframe.bundle.js" defer></script>``
-    line into the ``<head>`` of every ``*.html`` file under ``out_root``,
-    with the ``src`` written as a path relative to that file's parent
-    directory (so ``file://`` browsing works).
+    Drops one copy at ``<out_root>/<GRAMFRAME_BUNDLE_NAME>`` (for the shared
+    landing) and another at ``<out_root>/<edition>/<GRAMFRAME_BUNDLE_NAME>``
+    for each edition, then inserts a
+    ``<script src="…/gramframe.bundle.js" defer></script>`` line into the
+    ``<head>`` of every ``*.html`` file under ``out_root``. Each page links
+    the copy inside its *own* edition (the root copy only for the shared
+    landing), with the ``src`` written relative to that file's parent
+    directory (so ``file://`` browsing works). The href therefore never
+    climbs above the edition folder, so ``<out_root>/<edition>/`` is
+    self-contained and can be copied out and used standalone.
 
     Idempotent: pages that already carry the tag are left alone, so
     re-running the publisher does not duplicate the tag and preserves
@@ -513,15 +527,31 @@ def inject_gramframe_plugin(
             f"GramFrame bundle missing at {bundle_src}. "
             "Vendor the v0.1.9 release asset before publishing."
         )
-    bundle_dest = out_root / GRAMFRAME_BUNDLE_NAME
-    bundle_dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(bundle_src, bundle_dest)
+    out_root.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(bundle_src, out_root / GRAMFRAME_BUNDLE_NAME)
+    for edition in editions:
+        edition_dir = out_root / edition.output_subdir
+        edition_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(bundle_src, edition_dir / GRAMFRAME_BUNDLE_NAME)
+
+    edition_bundles: dict[str, Path] = {
+        e.output_subdir: out_root / e.output_subdir / GRAMFRAME_BUNDLE_NAME
+        for e in editions
+    }
+    root_bundle = out_root / GRAMFRAME_BUNDLE_NAME
 
     count = 0
     for path in sorted(out_root.rglob("*.html")):
         body = path.read_text(encoding="utf-8")
         if GRAMFRAME_BUNDLE_NAME in body:
             continue
+        # Reuse the theme page classifier purely for its edition detection —
+        # a page under ``<edition>/`` links that edition's bundle; the shared
+        # landing at the root links the root copy.
+        edition, _ = _theme_classify_page(path.relative_to(out_root).parts, editions)
+        bundle_dest = (
+            edition_bundles[edition] if edition is not None else root_bundle
+        )
         rel = os.path.relpath(bundle_dest, start=path.parent).replace(os.sep, "/")
         tag = f'    <script src="{rel}" defer></script>\n{_GRAMFRAME_HEAD_CLOSE}'
         new_body, replaced = re.subn(
@@ -936,7 +966,8 @@ def publish(
     """Run DITA-OT once per ditamap per edition.
 
     For each ditamap, the publisher emits two HTML trees:
-    ``<out_root>/instructor/<stem>/`` (no audience filter) and
+    ``<out_root>/instructor/<stem>/`` (with
+    ``--filter=<dita>/instructor.ditaval``) and
     ``<out_root>/student/<stem>/`` (with ``--filter=<dita>/trainee.ditaval``).
     Both editions are produced from the *same* staged DITA source tree —
     no per-edition forking, no post-publish rewriting (FR-013).
@@ -1040,14 +1071,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dita.is_dir():
         print(f"Source dita tree not found: {args.dita}", file=sys.stderr)
         return 1
-    if not (args.dita / "trainee.ditaval").is_file():
-        print(
-            f"Required DITAVAL profile missing: {args.dita / 'trainee.ditaval'}.\n"
-            "Spec 003 makes the dual-edition publish the only supported mode; "
-            "the trainee filter must be committed alongside the DITA source.",
-            file=sys.stderr,
-        )
-        return 1
+    for profile in ("trainee.ditaval", "instructor.ditaval"):
+        if not (args.dita / profile).is_file():
+            print(
+                f"Required DITAVAL profile missing: {args.dita / profile}.\n"
+                "Spec 003 makes the dual-edition publish the only supported "
+                "mode; both edition filters must be committed alongside the "
+                "DITA source (generate_dita.py emits them).",
+                file=sys.stderr,
+            )
+            return 1
     if not _dita_launcher(args.dita_ot).exists():
         print(f"DITA-OT not found at {args.dita_ot}", file=sys.stderr)
         return 1

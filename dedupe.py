@@ -31,7 +31,7 @@ for p in (PYLIB, SCRIPTS):
 
 for mod in ("extract_to_csv", "introspect_pptx", "deduplicate_csv",
             "generate_dita", "publish_html", "rehydrate_dita",
-            "snapshot_analysis_docs", "mock_pptx"):
+            "snapshot_analysis_docs", "ingest_gram_images", "mock_pptx"):
     sys.modules.pop(mod, None)
 
 # ---- Config ----------------------------------------------------
@@ -43,5 +43,10 @@ sys.argv = [
     "--csv", "extract.csv",
     "--image-root", str(SOURCE),
     "--out", "extract.dedupe.csv",
+    # Renumber only — no duplicate detection, so every gram keeps its own
+    # copy of every asset. Deduplication buys disk space at the cost of a
+    # self-contained gram folder; where space is not the constraint, the
+    # trade is not worth making. Comment this out to re-enable it.
+    "--no-dedupe",
 ]
 runpy.run_path(str(DEDUPE), run_name="__main__")

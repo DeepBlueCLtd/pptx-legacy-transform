@@ -57,7 +57,7 @@ body::before {
   padding: 10px 12px;
   text-transform: uppercase;
 }
-body:not(:has(.edition-instructor))::before {
+body:not(:has(.gf-persistent))::before {
   content: "┄ STUDENT ┄ TRAINING ┄";
   background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
   border-bottom-color: rgba(77,208,225,0.35);
@@ -65,7 +65,7 @@ body:not(:has(.edition-instructor))::before {
 }
 /* Heuristic for Oxygen-published output (which carries no data-edition
    attribute): generate_dita stamps a hidden instructor-only marker
-   (.edition-instructor) on EVERY page, so its absence reliably means the
+   (.gf-persistent) on EVERY page, so its absence reliably means the
    student edition — including the week sub-document pages, which the older
    :has(.ph) heuristic misread as student. When publish_html.py stamped the
    edition on <body>, the data-edition rules below win regardless. */
@@ -84,7 +84,7 @@ body[data-edition="student"]::before {
 
 /* The hidden instructor-only edition marker (stamped by generate_dita on every
    page) is a signal, not content — never render the empty paragraph itself. */
-.edition-instructor { display: none; }
+.gf-persistent { display: none; }
 
 /* ---------- Layout ---------- */
 main[role="main"] {
@@ -135,6 +135,84 @@ section.section > h2.sectiontitle {
   margin: 32px 0 12px;
 }
 
+/* ---------- Gram index: re-flowing tile grid ----------
+   generate_dita.py emits each week/chapter landing page and each progress test
+   with a <ul outputclass="gram-index"> of <xref outputclass="enterBtn"> links,
+   one per gram. Untouched that is a tall single-column bullet list; lay it out
+   as a grid of rounded tiles that reflow to the content width so a 30-gram week
+   is a scannable board, not a scroll. Production counterpart:
+   theme/gram-index-grid.css (a paste-in slug for the operator's oxygen.css) —
+   keep the two in step
+   (same grid; colours differ because that overlay dresses the light stock
+   WebHelp template and this is the dark operator console). */
+ul.gram-index {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
+}
+ul.gram-index > li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+ul.gram-index > li > a.enterBtn,
+ul.gram-index > li > a.enterBtn:link,
+ul.gram-index > li > a.enterBtn:visited {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+  font: 600 13px/1.2 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyan-bright);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(77,208,225,0.04);
+  transition: color 0.12s ease, border-color 0.12s ease,
+              background-color 0.12s ease, transform 0.12s ease;
+}
+/* Vessel name (instructor edition only): quieter subtitle under the number. */
+ul.gram-index > li > a.enterBtn .vessel-name {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  color: var(--ink-dim);
+}
+ul.gram-index > li > a.enterBtn:hover,
+ul.gram-index > li > a.enterBtn:focus {
+  color: var(--amber-bright);
+  background: var(--panel-2);
+  border-color: var(--amber);
+  transform: translateY(-1px);
+}
+ul.gram-index > li > a.enterBtn:hover .vessel-name,
+ul.gram-index > li > a.enterBtn:focus .vessel-name {
+  color: var(--amber);
+}
+ul.gram-index > li > a.enterBtn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  ul.gram-index > li > a.enterBtn { transition: none; }
+  ul.gram-index > li > a.enterBtn:hover,
+  ul.gram-index > li > a.enterBtn:focus { transform: none; }
+}
+
 /* ---------- Cleanup of DITA-OT scaffolding ---------- */
 caption:empty { display: none; }
 section.section > br,
@@ -159,44 +237,75 @@ section.analysis-sheet .imagecenter img {
   filter: brightness(1.05) saturate(1.1);
 }
 
-/* ---------- Analysis-sheet floating jump (instructor only) ----------
-   Issue #91: the instructor wants to reach the analysis image fast from
-   anywhere on a long gram page. The generator emits an audience-tagged
-   in-page link (<p class="analysis-jump"> → <a href="#…analysis-sheet">);
-   pin it as a fixed pill in the lower-right corner. It carries
-   audience="-trainee", so the student edition never ships the markup. */
-article p.analysis-jump {
+/* ---------- Floating gram nav panel (both editions) ----------
+   The generator emits one <p class="gram-nav"> per gram page, carrying an
+   in-page <a> per stage section in page order — Lofars (#…/lofar-N), audio
+   links (#…/wav-N) and demons (#…/demon-N) — plus, instructor edition only, a
+   final link to the Analysis Sheet (the student build's trainee filter
+   strips that one entry, since its <xref> carries audience="-trainee").
+   Pin it as a fixed panel in the lower-right so the reader can jump straight
+   to a numbered stage from anywhere on a long gram page. (This was the
+   instructor-only "Analysis Sheet" pill, issue #91; it now serves students
+   and instructors alike.) */
+article p.gram-nav {
   position: fixed;
   right: 22px;
   bottom: 24px;
   z-index: 1000;
   margin: 0;
-}
-article p.analysis-jump a,
-article p.analysis-jump a:link,
-article p.analysis-jump a:visited {
-  display: inline-block;
-  text-decoration: none;
-  color: var(--instructor);
-  background: rgba(255,138,61,0.12);
-  border: 1px solid rgba(255,138,61,0.5);
-  border-radius: 4px;
-  padding: 10px 16px;
-  font: 600 11px/1 "JetBrains Mono", monospace;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 220px;
+  padding: 12px 14px;
+  background: rgba(13,17,23,0.92);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
   box-shadow: 0 6px 20px rgba(0,0,0,0.45);
 }
-article p.analysis-jump a::before { content: "▤ "; color: var(--amber); }
-article p.analysis-jump a:hover,
-article p.analysis-jump a:focus {
+article p.gram-nav::before {
+  content: "JUMP TO";
+  font: 600 10px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.22em;
+  color: var(--ink-faint);
+  margin-bottom: 2px;
+}
+article p.gram-nav a,
+article p.gram-nav a:link,
+article p.gram-nav a:visited {
+  display: block;
+  text-decoration: none;
+  color: var(--cyan-bright);
+  font: 600 11px/1.2 "JetBrains Mono", monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 8px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+}
+article p.gram-nav a:hover,
+article p.gram-nav a:focus {
   color: var(--amber-bright);
-  background: rgba(255,138,61,0.2);
+  background: rgba(255,138,61,0.12);
   border-color: var(--amber);
 }
+/* The Analysis Sheet entry (instructor edition only) keeps the amber accent
+   so it still reads as the instructor affordance it has always been. */
+article p.gram-nav a[href$="analysis-sheet"],
+article p.gram-nav a[href$="analysis-sheet"]:link,
+article p.gram-nav a[href$="analysis-sheet"]:visited {
+  color: var(--instructor);
+  border-color: rgba(255,138,61,0.5);
+}
+article p.gram-nav a[href$="analysis-sheet"]::before { content: "▤ "; color: var(--amber); }
 
-/* ---------- LOFAR stage: faux instrument trace ---------- */
-section.lofar-stage {
+/* ---------- LOFAR stage: faux instrument trace ----------
+   The audio (.wav-backed) sections carry section.wav-stage instead — no
+   spectrogram to render, just a link to the .glc — so they share the panel
+   chrome below but none of the gramframe-table rules, and their header
+   marker reads AUDIO rather than TRACE. */
+section.lofar-stage,
+section.wav-stage {
   background: var(--panel);
   border: 1px solid var(--rule);
   border-radius: 4px;
@@ -207,7 +316,8 @@ section.lofar-stage {
 }
 
 /* Stage header bar */
-section.lofar-stage > h2.sectiontitle {
+section.lofar-stage > h2.sectiontitle,
+section.wav-stage > h2.sectiontitle {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -222,6 +332,16 @@ section.lofar-stage > h2.sectiontitle::before {
   content: "● TRACE / STAGE";
   color: var(--amber);
   letter-spacing: 0.18em;
+}
+section.wav-stage > h2.sectiontitle::before {
+  content: "◈ AUDIO / GLC";
+  color: var(--amber);
+  letter-spacing: 0.18em;
+}
+/* The .glc link body sits under the header bar, inside the same panel. */
+section.wav-stage > p {
+  margin: 0;
+  padding: 14px;
 }
 
 /* Image cell — scanlines overlay */

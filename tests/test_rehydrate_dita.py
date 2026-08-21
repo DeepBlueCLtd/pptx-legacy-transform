@@ -104,10 +104,12 @@ class RehydrateDitaTests(unittest.TestCase):
             self._write_csv("base.csv", self._image_rows(False), False), "baseline")
         dedup = self._generate(
             self._write_csv("dd.csv", self._image_rows(True), True), "dedup")
-        # Sanity: dedup differs before rehydration (redirected, has <data>).
-        self.assertFalse(filecmp.dircmp(baseline, dedup).diff_files == [] and
-                         not filecmp.dircmp(baseline, dedup).right_only,
-                         "dedup tree should differ from baseline pre-rehydration")
+        # Sanity: dedup's gram-31 differs before rehydration — the redirected
+        # lofar has no local PNG and its topic carries the <data> pointer.
+        cmp = filecmp.dircmp(baseline / "main" / "images" / "gram-31",
+                             dedup / "main" / "images" / "gram-31")
+        self.assertTrue(cmp.diff_files or cmp.left_only or cmp.right_only,
+                        "dedup gram-31 should differ from baseline pre-rehydration")
         rc = rehydrate_dita.main(["--dita", str(dedup), "--gram", "gram-31"])
         self.assertEqual(rc, 0)
         # The restored gram-31 now matches the baseline gram-31 exactly.
@@ -176,7 +178,8 @@ class RehydrateDitaTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         g31 = dedup / "main" / "images" / "gram-31"
         topic = ET.parse(g31 / "gram_31.dita").getroot()
-        image = topic.find(".//image")
+        # Find the gramframe image (not the 7 Questions section image).
+        image = topic.find(".//table[@outputclass='gram-config']//image")
         # Href is re-localised even though the copy dangled (drop-in resolves it).
         self.assertEqual(image.get("href"), "shared-b.png")
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))

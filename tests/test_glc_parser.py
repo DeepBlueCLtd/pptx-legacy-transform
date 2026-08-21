@@ -23,8 +23,11 @@ class GlcParserTests(unittest.TestCase):
         TMP.mkdir(parents=True, exist_ok=True)
 
     def test_parse_minimal_glc_returns_expected_fields(self) -> None:
+        # time_end is no longer a GLC field (issue #148): it is derived from the
+        # image's pixel height at extraction, so the parser exposes only the
+        # image filename and the two frequency-band values.
         doc = extract_to_csv.parse_glc(FIXTURES / "minimal.glc")
-        self.assertEqual(doc.time_end, "271")
+        self.assertFalse(hasattr(doc, "time_end"))
         self.assertEqual(doc.bandwidth, "400")
         self.assertEqual(doc.bandcentre, "200")
         self.assertEqual(doc.image_filename, "gram12.PNG")
@@ -33,7 +36,6 @@ class GlcParserTests(unittest.TestCase):
     def test_parse_malformed_glc_returns_empty_with_warning(self) -> None:
         doc = extract_to_csv.parse_glc(FIXTURES / "malformed.glc")
         self.assertEqual(doc.image_filename, "")
-        self.assertEqual(doc.time_end, "")
         self.assertEqual(doc.bandwidth, "")
         self.assertEqual(doc.bandcentre, "")
         self.assertEqual(len(doc.warnings), 1)
@@ -64,7 +66,9 @@ class GlcParserTests(unittest.TestCase):
         )
         doc = extract_to_csv.parse_glc(path)
         self.assertIn("GLC missing filename", doc.warnings)
-        self.assertIn("GLC missing bottom_crop", doc.warnings)
+        # bottom_crop is no longer read, so its absence is no longer warned
+        # (issue #148 — it was spurious "invalid GLC" noise on valid images).
+        self.assertNotIn("GLC missing bottom_crop", doc.warnings)
         self.assertIn("GLC missing bandwidth", doc.warnings)
         self.assertIn("GLC missing bandcentre", doc.warnings)
 
@@ -103,6 +107,30 @@ class GlcParserTests(unittest.TestCase):
         self.assertEqual(doc.bandcentre, "")
         self.assertIn("GLC missing bandcentre", doc.warnings)
         self.assertNotIn("GLC missing bandwidth", doc.warnings)
+
+    def test_parse_glc_reads_update_period(self) -> None:
+        """Seconds per scan line, when the GLC states one (issue #160)."""
+        path = TMP / "update_period.glc"
+        path.write_text(
+            "<GAPS_Lite_configuration>"
+            "<data_source><filename>g.png</filename></data_source>"
+            "<settings><lofar>"
+            "<bandwidth>400</bandwidth><bandcentre>200</bandcentre>"
+            "<update_period>2</update_period>"
+            "</lofar></settings>"
+            "</GAPS_Lite_configuration>",
+            encoding="utf-8",
+        )
+        doc = extract_to_csv.parse_glc(path)
+        self.assertEqual(doc.update_period, "2")
+        self.assertEqual(doc.warnings, [])
+
+    def test_parse_glc_absent_update_period_is_blank_and_silent(self) -> None:
+        # Most of the corpus omits the element and means the historical 1 s;
+        # that must not warn (the spurious-warning trap bottom_crop fell into).
+        doc = extract_to_csv.parse_glc(FIXTURES / "minimal.glc")
+        self.assertEqual(doc.update_period, "")
+        self.assertEqual(doc.warnings, [])
 
 
 if __name__ == "__main__":

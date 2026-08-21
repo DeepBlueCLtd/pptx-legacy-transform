@@ -208,75 +208,193 @@ class TidyTests(SnapshotTestBase):
 
 
 # -----------------------------------------------------------------------------
-# Phase 6: reverse PNG -> .docx wrap
+# Feature 013 (US2): the pipeline never creates Word documents
 # -----------------------------------------------------------------------------
 
-class ReverseWrapTests(SnapshotTestBase):
+class NoWordSynthesisTests(SnapshotTestBase):
+    """Feature 007's FR-018 reverse wrap is removed, not merely defaulted off."""
 
-    def test_png_only_sheet_gets_docx_wrapper(self) -> None:  # T026
-        import xml.etree.ElementTree as ET
-        import zipfile
+    def test_png_only_sheet_gains_no_word_document(self) -> None:
+        """The behaviour the removed step existed to provide, asserted absent.
 
+        A png-only analysis sheet had no editable original before the run and
+        must still have none after it — an honest absence tells an analyst to
+        re-author the sheet, where a picture-only .docx would waste their time.
+        """
         png = self.root / "eee_analysis.png"
         png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
-        results = nas.snapshot(self.root, STUB_CMD, dry_run=False)
-        docx = png.with_suffix(".docx")
-        self.assertTrue(docx.exists(), "a png-only analysis sheet must gain a .docx")
-        wrap_results = [r for r in results if r.source_path == png]
-        self.assertTrue(any(r.docx_wrapped for r in wrap_results))
-        with zipfile.ZipFile(docx) as zf:
-            self.assertEqual(zf.testzip(), None, "zip must be openable")
-            ET.fromstring(zf.read("word/document.xml"))  # must parse
-            self.assertIn("word/media/image1.png", zf.namelist())
-
-    def test_reverse_wrap_is_idempotent(self) -> None:  # T027
-        png = self.root / "fff_analysis.png"
-        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
         nas.snapshot(self.root, STUB_CMD, dry_run=False)
-        docx = png.with_suffix(".docx")
-        first = docx.read_bytes()
-        mtime = docx.stat().st_mtime_ns
-        nas.snapshot(self.root, STUB_CMD, dry_run=False)
-        self.assertEqual(docx.read_bytes(), first, "reverse .docx must be byte-stable")
-        self.assertEqual(docx.stat().st_mtime_ns, mtime, "no re-wrap when .docx exists")
-
-    def test_no_reverse_wrap_suppresses_docx_synthesis(self) -> None:
-        """``--no-reverse-wrap`` (reverse_wrap=False) must skip FR-018:
-        a png-only analysis sheet stays png-only, no synthetic .docx is
-        written, and no result records ``docx_wrapped=True``. For
-        workflows where the source corpus must not be mutated with
-        synthesised Word files."""
-        png = self.root / "ggg_analysis.png"
-        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
-        results = nas.snapshot(
-            self.root, STUB_CMD, dry_run=False, reverse_wrap=False,
-        )
-        docx = png.with_suffix(".docx")
-        self.assertFalse(
-            docx.exists(),
-            "--no-reverse-wrap must not synthesise a .docx for png-only sheets",
-        )
-        self.assertFalse(
-            any(r.docx_wrapped for r in results),
-            "no result should be marked docx_wrapped under --no-reverse-wrap",
-        )
-
-    def test_cli_no_reverse_wrap_threads_through_main(self) -> None:
-        """The ``--no-reverse-wrap`` CLI flag must reach ``snapshot()`` so
-        invoking via ``main`` produces the same suppression as the direct
-        keyword argument."""
-        png = self.root / "hhh_analysis.png"
-        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
-        rc = nas.main([
-            "--content-root", str(self.root),
-            "--renderer-cmd", STUB_CMD,
-            "--no-reverse-wrap",
-        ])
-        self.assertEqual(rc, 0)
         self.assertFalse(
             png.with_suffix(".docx").exists(),
-            "CLI --no-reverse-wrap must suppress reverse wrap end-to-end",
+            "the pipeline must never fabricate a Word document",
         )
+        self.assertEqual(
+            sorted(p.name for p in self.root.iterdir()), ["eee_analysis.png"],
+            "a png-only sheet must leave the folder exactly as it was",
+        )
+
+    def test_no_cli_option_reenables_wrapping(self) -> None:
+        """FR-010: removed outright, so no flag can arm the trap again."""
+        png = self.root / "hhh_analysis.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        with self.assertRaises(SystemExit):
+            nas.main([
+                "--content-root", str(self.root),
+                "--renderer-cmd", STUB_CMD,
+                "--no-reverse-wrap",
+            ])
+        self.assertFalse(png.with_suffix(".docx").exists())
+
+    def test_word_to_png_direction_is_untouched(self) -> None:
+        """FR-012: removing the wrap must not disturb the rendering path."""
+        doc = self._write_doc("iii_analysis.docx")
+        rc = self._run()
+        self.assertEqual(rc, 0)
+        self.assertTrue(doc.with_suffix(".png").exists(),
+                        "Word -> PNG rendering must still work")
+
+
+# -----------------------------------------------------------------------------
+# Feature 013 (US3): sweeping the wrappers earlier runs already wrote
+# -----------------------------------------------------------------------------
+
+def _write_fabricated_wrapper(path: Path) -> Path:
+    """Write a byte-exact replica of what the removed wrap step produced.
+
+    The generator is gone, so the fixture has to reconstruct its output: these
+    files exist in real source trees as historical artefacts, and the sweep is
+    judged on recognising them. Mirrors the five parts and the ``AnalysisSheet``
+    drawing name the removed ``wrap_png_in_docx`` wrote.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", "<Types/>")
+        zf.writestr("_rels/.rels", "<Relationships/>")
+        zf.writestr("word/_rels/document.xml.rels", "<Relationships/>")
+        zf.writestr(
+            "word/document.xml",
+            '<w:document><wp:docPr id="1" name="AnalysisSheet"/></w:document>')
+        zf.writestr("word/media/image1.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    return path
+
+
+def _write_genuine_docx(path: Path, *, with_image: bool = True) -> Path:
+    """Write a plausible author-written .docx that must survive the sweep.
+
+    Deliberately adversarial: it embeds a full-page image and even carries the
+    same drawing name, so the only thing separating it from a fabrication is the
+    part list — a real Word document always ships styles/settings/docProps that
+    the fabricated one never had.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", "<Types/>")
+        zf.writestr("_rels/.rels", "<Relationships/>")
+        zf.writestr("word/_rels/document.xml.rels", "<Relationships/>")
+        zf.writestr(
+            "word/document.xml",
+            '<w:document><wp:docPr id="1" name="AnalysisSheet"/>'
+            "<w:p>real editable text</w:p></w:document>")
+        zf.writestr("word/styles.xml", "<w:styles/>")
+        zf.writestr("word/settings.xml", "<w:settings/>")
+        zf.writestr("docProps/core.xml", "<cp:coreProperties/>")
+        if with_image:
+            zf.writestr("word/media/image1.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    return path
+
+
+class WrapperSweepTests(SnapshotTestBase):
+
+    def test_fabricated_wrapper_is_detected(self) -> None:
+        wrapper = _write_fabricated_wrapper(self.root / "a_analysis.docx")
+        self.assertTrue(nas.is_fabricated_wrapper(wrapper))
+
+    def test_genuine_word_document_is_not_detected(self) -> None:
+        """FR-014: the sweep's failure mode must be leaving a file alone."""
+        genuine = _write_genuine_docx(self.root / "b_analysis.docx")
+        self.assertFalse(
+            nas.is_fabricated_wrapper(genuine),
+            "an author's document with a full-page image must never match",
+        )
+
+    def test_doc_and_unreadable_files_are_not_detected(self) -> None:
+        legacy = self.root / "c_analysis.doc"
+        legacy.write_bytes(b"\xd0\xcf\x11\xe0 legacy binary doc")
+        junk = self.root / "d_analysis.docx"
+        junk.write_bytes(b"not a zip at all")
+        self.assertFalse(nas.is_fabricated_wrapper(legacy))
+        self.assertFalse(nas.is_fabricated_wrapper(junk))
+
+    def test_report_only_is_the_default_and_deletes_nothing(self) -> None:
+        """FR-016: deletion is the opt-in, not the default."""
+        wrapper = _write_fabricated_wrapper(self.root / "e_analysis.docx")
+        found = nas.sweep_wrappers(self.root)
+        self.assertEqual(found, [wrapper])
+        self.assertTrue(wrapper.exists(), "default mode must not delete")
+
+    def test_apply_deletes_only_the_wrappers(self) -> None:
+        wrapper = _write_fabricated_wrapper(self.root / "f_analysis.docx")
+        genuine = _write_genuine_docx(self.root / "g_analysis.docx")
+        png = self.root / "f_analysis.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        found = nas.sweep_wrappers(self.root, apply_changes=True)
+        self.assertEqual(found, [wrapper])
+        self.assertFalse(wrapper.exists(), "the fabrication must be deleted")
+        self.assertTrue(genuine.exists(), "the author's document must survive")
+        self.assertTrue(png.exists(), "unrelated files must be untouched")
+
+    def test_wrapper_beside_genuine_doc_is_swept(self) -> None:
+        """FR-015: the legacy .doc deck case the removed step's .docx-only
+        existence check created — a fabrication sitting next to the real thing.
+        A scan that skipped folders already holding a Word document would miss
+        exactly the folders where the fake is most dangerous."""
+        legacy = self.root / "Analysis Sheet.doc"
+        legacy.write_bytes(b"\xd0\xcf\x11\xe0 genuine legacy sheet")
+        wrapper = _write_fabricated_wrapper(self.root / "Analysis Sheet.docx")
+        found = nas.sweep_wrappers(self.root, apply_changes=True)
+        self.assertEqual(found, [wrapper])
+        self.assertFalse(wrapper.exists())
+        self.assertTrue(legacy.exists(), "the genuine .doc must survive")
+
+    def test_sweep_is_idempotent(self) -> None:
+        """013 FR-018: a swept tree yields nothing and changes nothing."""
+        _write_fabricated_wrapper(self.root / "h_analysis.docx")
+        genuine = _write_genuine_docx(self.root / "i_analysis.docx")
+        before = genuine.read_bytes()
+        nas.sweep_wrappers(self.root, apply_changes=True)
+        second = nas.sweep_wrappers(self.root, apply_changes=True)
+        self.assertEqual(second, [], "a swept tree must report nothing")
+        self.assertEqual(genuine.read_bytes(), before)
+
+    def test_sweep_finds_wrappers_recursively_and_sorted(self) -> None:
+        nested = self.root / "Week 1" / "Gram 3"
+        nested.mkdir(parents=True)
+        second = _write_fabricated_wrapper(nested / "Analysis Sheet.docx")
+        first = _write_fabricated_wrapper(self.root / "A_analysis.docx")
+        self.assertEqual(nas.find_fabricated_wrappers(self.root), sorted([first, second]))
+
+    def test_cli_sweep_reports_then_applies(self) -> None:
+        wrapper = _write_fabricated_wrapper(self.root / "j_analysis.docx")
+        rc = nas.main(["--content-root", str(self.root), "--sweep-wrappers"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(wrapper.exists(), "CLI sweep must report before deleting")
+        rc = nas.main([
+            "--content-root", str(self.root), "--sweep-wrappers", "--apply"])
+        self.assertEqual(rc, 0)
+        self.assertFalse(wrapper.exists(), "--apply must delete")
+
+    def test_apply_without_sweep_warns_and_renders(self) -> None:
+        doc = self._write_doc("k_analysis.docx")
+        with self.assertLogs(nas.LOGGER, level="WARNING") as cm:
+            rc = nas.main([
+                "--content-root", str(self.root),
+                "--renderer-cmd", STUB_CMD, "--apply",
+            ])
+        self.assertEqual(rc, 0)
+        self.assertTrue(any("no effect without --sweep-wrappers" in m for m in cm.output))
+        self.assertTrue(doc.with_suffix(".png").exists())
 
 
 # -----------------------------------------------------------------------------
@@ -328,12 +446,13 @@ class ExtraNameTests(SnapshotTestBase):
                          "a blank token must not widen selection to every doc")
         self.assertTrue(any("blank --extra-name" in m for m in cm.output))
 
-    def test_extra_name_reverse_wraps_png_only_sheet(self) -> None:
+    def test_extra_name_png_only_sheet_gains_no_word_document(self) -> None:
+        """An opted-in sheet rides the same no-synthesis rule as any other."""
         png = self.root / "X-aaa.png"
         png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
         nas.snapshot(self.root, STUB_CMD, dry_run=False, extra_names=["X-aaa"])
-        self.assertTrue(png.with_suffix(".docx").exists(),
-                        "an --extra-name sheet must ride the FR-018 wrap path")
+        self.assertFalse(png.with_suffix(".docx").exists(),
+                         "no sheet, opted-in or not, gains a fabricated .docx")
 
     def test_cli_extra_name_threads_through_main(self) -> None:
         doc = self._write_doc("Y-bbb.doc")
@@ -341,6 +460,34 @@ class ExtraNameTests(SnapshotTestBase):
         self.assertEqual(rc, 0)
         self.assertTrue(doc.with_suffix(".png").exists(),
                         "CLI --extra-name must reach snapshot() end-to-end")
+
+
+# -----------------------------------------------------------------------------
+# Known misspellings of the analysis token (e.g. ``analaysis.doc``)
+# -----------------------------------------------------------------------------
+
+class MisspellingTests(SnapshotTestBase):
+
+    def test_misspelled_analysis_doc_produces_png(self) -> None:
+        # ``analysis`` is not a substring of ``analaysis`` (extra 'a'), so the
+        # plain token match misses it; the known-misspelling list must catch it.
+        doc = self._write_doc("analaysis.doc")
+        rc = self._run()
+        self.assertEqual(rc, 0)
+        self.assertTrue(doc.with_suffix(".png").exists(),
+                        "a misspelled analysis sheet must still gain a .png")
+
+    def test_iter_selects_misspelled_sheet_without_extra_name(self) -> None:
+        self._write_doc("Gram 4 analaysis.doc")
+        self._write_doc("source_data.doc")
+        found = {p.name for p in nas.iter_analysis_sheets(self.root)}
+        self.assertEqual(found, {"Gram 4 analaysis.doc"},
+                         "misspelling is recognised out of the box, no --extra-name")
+
+    def test_is_analysis_name_accepts_known_misspelling(self) -> None:
+        self.assertTrue(nas._is_analysis_name("analaysis"))
+        self.assertTrue(nas._is_analysis_name("Gram 4 ANALAYSIS"))
+        self.assertFalse(nas._is_analysis_name("source_data"))
 
 
 # -----------------------------------------------------------------------------

@@ -12,10 +12,10 @@
  * which is a maintenance burden to keep in step with the instructor template),
  * the pipeline marks each *page* with its edition and lets one shared stylesheet
  * do the hiding. `generate_dita` stamps a hidden, instructor-only marker —
- * `<p class="edition-instructor">`, carrying `audience="-trainee"` — onto every
+ * `<p class="gf-persistent">`, carrying `audience="-trainee"` — onto every
  * page. The trainee DITAVAL strips it in the student build, so:
  *
- *   - instructor pages carry `.edition-instructor`  -> rule below does NOT match -> search box shown
+ *   - instructor pages carry `.gf-persistent`  -> rule below does NOT match -> search box shown
  *   - student pages carry none                       -> rule below matches        -> search box hidden
  *
  * Wire this single file into the shared publishing template's `<resources>`
@@ -36,12 +36,12 @@
  */
 
 /* The marker element itself is never meant to be seen. */
-.edition-instructor {
+.gf-persistent {
     display: none !important;
 }
 
 /* Hide the search box on any page that does NOT carry the instructor marker
    (i.e. the student edition, where the trainee filter stripped it). */
-body:not(:has(.edition-instructor)) #searchForm {
+body:not(:has(.gf-persistent)) #searchForm {
     display: none !important;
 }

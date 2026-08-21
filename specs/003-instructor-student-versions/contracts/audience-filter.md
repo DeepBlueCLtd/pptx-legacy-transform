@@ -41,11 +41,32 @@ student edition.
 
 | Edition | DITA-OT invocation |
 |---|---|
-| instructor | `dita --input=<ditamap> --format=html5 --output=html/instructor/<stem>/ --processing-mode=lax` |
+| instructor | `dita --input=<ditamap> --format=html5 --output=html/instructor/<stem>/ --processing-mode=lax --filter=<dita>/instructor.ditaval` |
 | student | `dita --input=<ditamap> --format=html5 --output=html/student/<stem>/ --processing-mode=lax --filter=<dita>/trainee.ditaval` |
 
 The only CLI difference between the two editions is the `--filter`
 argument and the `--output` destination.
+
+### 1.4 Instructor DITAVAL profile (mirror)
+
+```
+dita/instructor.ditaval
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<val>
+  <prop att="audience" val="student-only" action="exclude"/>
+</val>
+```
+
+The mirror of `trainee.ditaval`: elements authored as *student-only*
+content carry `audience="student-only"`, and the instructor build
+excludes them. Today the only such element is the in-body 7 Questions
+section on a gram page (and its nav-panel jump link) — see site 6 in
+§2.1. Instructors still reach the 7 Questions image via the unfiltered
+root-level `7_questions.dita` nav topic; it is simply not repeated on
+every gram page.
 
 ## 2. Audience-tagged elements in the DITA source
 
@@ -57,7 +78,20 @@ argument and the `--output` destination.
 | 2 | Analysis Sheet section on a gram body | `<section audience="-trainee"><title>Analysis Sheet</title>…</section>` | feature 001 (`_append_analysis_section`) |
 | 3 | Chapter navtitle prefix on `main.ditamap` | `<topichead><topicmeta><navtitle><ph audience="-trainee">Instructor </ph>Week 1 Grams</navtitle></topicmeta></topichead>` | this feature (`emit_main_ditamap`) |
 | 4 | Map title suffix on every ditamap | `<map><title>Progress Test 1<ph audience="-trainee"> — Instructor Version</ph></title>…</map>` | this feature (`emit_main_ditamap`, `emit_test_ditamap`) |
-| 5 | Hidden edition marker on every page body | `<body><p audience="-trainee" outputclass="edition-instructor"/>…</body>` | `_append_edition_marker` / `_inject_static_edition_marker` |
+| 5 | Hidden edition marker on every page body | `<body><p audience="-trainee" outputclass="gf-persistent"/>…</body>` | `_append_edition_marker` / `_inject_static_edition_marker` |
+
+### 2.1a Sites carrying `audience="student-only"` (excluded from the instructor edition)
+
+| # | Site | Element form | Owner |
+|---|---|---|---|
+| 6 | In-body 7 Questions section on a gram body | `<section id="seven-questions" audience="student-only" outputclass="seven-questions">…</section>` | `_append_seven_questions_section` |
+| 6b | 7 Questions jump link in the gram nav panel | `<xref audience="student-only" href="#topic/seven-questions">7 Questions</xref>` | `_append_gram_nav_panel` |
+
+Both are stripped by `instructor.ditaval` (§1.4). The `-trainee`
+instructor DITAVAL is not involved. The section's target and its jump
+link share the token, so the instructor build never ships a dangling
+anchor. The root-level `7_questions.dita` topic and its ditamap
+topicref are **unfiltered**, so both editions keep the nav topic.
 
 Site 5 fires on **every** rendered page: every gram topic, every Week
 sub-document topic, and the copied static common pages (Welcome,
@@ -65,7 +99,7 @@ Security). It is the per-page edition signal a single shared Oxygen
 stylesheet keys off (present → instructor, absent → student) so the
 WebHelp search box can be hidden in the student edition without a
 divergent student-only publishing template. The marker renders as
-`<p class="edition-instructor">` and is hidden by CSS; the class string
+`<p class="gf-persistent">` and is hidden by CSS; the class string
 only ever appears in instructor output, so SC-002 stays clean.
 
 Site 3 only fires for chapters whose CSV `chapter` column starts
@@ -89,7 +123,7 @@ feature emits:
 
 ## 3. Rendered-HTML behaviour
 
-### 3.1 Instructor edition (no filter)
+### 3.1 Instructor edition (`--filter=dita/instructor.ditaval`)
 
 | Source site | Rendered HTML behaviour |
 |---|---|
@@ -97,7 +131,8 @@ feature emits:
 | Site 2 | Analysis Sheet section renders as a normal `<section>` with the link or embedded image. |
 | Site 3 | Chapter navigation entry reads `"Instructor Week 1 Grams"`. |
 | Site 4 | Page title / breadcrumb reads `"Progress Test 1 — Instructor Version"`. |
-| Site 5 | `<p class="edition-instructor">` present (hidden by CSS); `body:not(:has(.edition-instructor))` does not match, so the search box stays visible. |
+| Site 5 | `<p class="gf-persistent">` present (hidden by CSS); `body:not(:has(.gf-persistent))` does not match, so the search box stays visible. |
+| Site 6 / 6b | The 7 Questions section and its nav jump link are stripped; instructors see the image only via the root-level `7_questions.dita` nav topic. |
 
 ### 3.2 Student edition (`--filter=dita/trainee.ditaval`)
 
@@ -107,7 +142,8 @@ feature emits:
 | Site 2 | The entire `<section>` is stripped; no "Analysis Sheet" heading and no link / image is rendered. |
 | Site 3 | The `<ph>` element is stripped; the chapter navigation entry reads `"Week 1 Grams"`. |
 | Site 4 | The `<ph>` element is stripped; page title / breadcrumb reads `"Progress Test 1"`. |
-| Site 5 | The `<p>` marker is stripped; `body:not(:has(.edition-instructor))` matches, so the search box is hidden. |
+| Site 5 | The `<p>` marker is stripped; `body:not(:has(.gf-persistent))` matches, so the search box is hidden. |
+| Site 6 / 6b | The 7 Questions section and its nav jump link are kept; with the analysis section (site 2) filtered out, the 7 Questions image is the first visible content on the page. |
 
 ### 3.3 Leakage guarantee (SC-002, FR-010, FR-015)
 

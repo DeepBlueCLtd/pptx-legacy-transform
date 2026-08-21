@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import logging
 import re
 import sys
@@ -47,6 +48,15 @@ MASTER_PNG_PATH = "master_png_path"
 # The renumbered gram number (feature 008). Empty means "unchanged — use
 # ``gram_id``"; ``gram_id`` itself is never mutated.
 TARGET_GRAM_ID = "target_gram_id"
+
+# In-memory-only row annotation: the 1-based line number each row occupied in
+# the source CSV (header is line 1, so the first data row is line 2). Stamped
+# by ``read_csv`` and read by ``require_field`` so an abort can point the
+# operator straight at the offending row in a large CSV. It is *not* a CSV
+# column — ``write_csv`` only emits ``fieldnames``, so this sentinel key never
+# round-trips to disk. The double-underscore name keeps it clear of any real
+# column and out of accidental collisions.
+_SOURCE_LINE = "__source_line__"
 
 # Default candidacy cut-off: strictly greater than 10 MiB (FR-003). The
 # mebibyte reading of the user's "10Mb" cut-off; overridable via CLI.
@@ -102,6 +112,8 @@ def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
     value = (row.get(field) or "").strip()
     if value:
         return value
+    if line_no is None:
+        line_no = row.get(_SOURCE_LINE)
     where = f" at CSV line {line_no}" if line_no is not None else ""
     raise PipelineDataError(
         f"Required field {field!r} is missing or blank{where} "
@@ -118,16 +130,65 @@ def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
 # CSV I/O — preserve the file-level contract (utf-8-sig, CRLF, QUOTE_MINIMAL)
 # -----------------------------------------------------------------------------
 
+def decode_csv_bytes(raw: bytes, path: Path, logger: logging.Logger) -> str:
+    """Decode an Excel-edited CSV, tolerant of whichever encoding Excel chose.
+
+    Mirrors the identical helper in ``generate_dita.py`` so the air-gapped
+    maintainer reads one shape of code in every script. The pipeline writes
+    ``utf-8-sig``, but a technical author who edits the file in Excel and
+    uses *Save As → "CSV (Comma delimited)"* (the convenient default) gets
+    the file back in the Windows ANSI code page (cp1252), **not** UTF-8 — so
+    a strict ``utf-8`` read dies on the first non-ASCII byte (a vessel name,
+    a ``£`` or a ``°``). That is why the operator has had to reach for the
+    awkward *"CSV (MS-DOS)"* option.
+
+    We try UTF-8 first (covering our own output and Excel's *"CSV UTF-8"*),
+    then fall back to cp1252 so the plain *"CSV (Comma delimited)"* save
+    round-trips too. cp1252 maps almost every byte, so this never raises; at
+    worst an exotic glyph is mildly mangled — visible in the cell for the
+    author to fix — rather than crashing the whole run. Boundary-forgiveness
+    (constitution VII): the file came back from a human's Excel, not from our
+    own deterministic writer.
+    """
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        # DEBUG, not WARNING: the plain *"CSV (Comma delimited)"* save is a
+        # supported round-trip (we decode cp1252 here and the writer emits
+        # ``utf-8-sig`` again), so this is a routine note for the debug log,
+        # not a console nag the operator must act on. Kept off stdout (the
+        # stream handler is INFO) but recorded in the per-stage log for the
+        # air-gapped maintainer.
+        logger.debug(
+            "%s is not UTF-8; decoded as Windows-1252 (cp1252), the encoding "
+            "Excel's 'CSV (Comma delimited)' save produces. Handled — the data "
+            "round-trips cleanly. Save as 'CSV UTF-8' if you want a byte-exact "
+            "BOM-prefixed file.",
+            path,
+        )
+        return raw.decode("cp1252")
+
+
 def read_csv(path: Path) -> tuple[list[str], list[dict]]:
     """Return ``(fieldnames, rows)`` from the intermediate CSV.
 
     The header is preserved verbatim so the output can round-trip every
     existing column; only ``master_png_path`` is added if absent.
     """
-    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+    text = decode_csv_bytes(path.read_bytes(), path, LOGGER)
+    with io.StringIO(text, newline="") as fh:
         reader = csv.DictReader(fh)
         fieldnames = list(reader.fieldnames or ())
-        rows = [dict(r) for r in reader]
+        rows = []
+        for r in reader:
+            row = dict(r)
+            # ``reader.line_num`` is the source-file line the row ended on
+            # (correct even when a quoted cell spans lines), so an abort can
+            # name the exact line the operator sees in Excel / a text editor.
+            row[_SOURCE_LINE] = reader.line_num
+            rows.append(row)
     return fieldnames, rows
 
 
@@ -192,20 +253,24 @@ def _view_key(row: dict) -> tuple:
     assets carry their view in the row itself (the gram-config table), so
     byte-identity alone suffices and they share one key.
 
-    Promotion clause (constitution VII): for a ``.wav`` row these three view
-    fields *are* the dedup key — an empty one would silently mis-pair distinct
-    audio views, so a blank is hard-failed here rather than falling back to a
-    tolerant unique key. The generator's ``_master_index_key`` enforces the
-    same contract, so this step never emits a CSV the generator would reject.
+    The view fields only drive GramFrame rendering, which happens for *images*,
+    not ``.wav`` output — a ``.wav`` row is emitted downstream as a plain link
+    to its ``.glc`` and never renders a gram-config table. They are therefore
+    boundary-forgiving here (they originate in the external ``.glc``): a blank
+    one degrades to "" rather than aborting. When the values *are* present they
+    still refine the key, so byte-identical ``.wav`` rows windowing the same
+    recording differently stay unmerged (issues #78, #87); when absent,
+    blank-view rows simply share a key. The generator's ``_master_index_key``
+    reads these fields the same forgiving way.
     """
     png = (row.get("png_path", "") or "").strip()
     if Path(png).suffix.lower() != ".wav":
         return ("any",)
     return (
         "wav-view",
-        require_field(row, "time_end"),
-        require_field(row, "bandwidth"),
-        require_field(row, "bandcentre"),
+        row.get("time_end", "") or "",
+        row.get("bandwidth", "") or "",
+        row.get("bandcentre", "") or "",
     )
 
 
@@ -235,15 +300,31 @@ def deduplicate(
     """Populate each row's ``master_png_path`` in place; return redirect count.
 
     Candidacy: ``file_size`` strictly greater than ``threshold_bytes``
-    (FR-003). Candidates are grouped by ``file_size`` first; only within a
-    size-collision group of >=2 is content confirmed by ``sha256`` (a
-    unique-size large file is never hashed). Confirmed byte-identical
-    rows are then split by ``_view_key`` so ``.wav`` rows merge only when
-    their ``(time_end, bandwidth, bandcentre)`` view also matches (issues
+    (FR-003). Candidates are grouped by ``(publication, file_size)`` first;
+    only within a size-collision group of >=2 is content confirmed by
+    ``sha256`` (a unique-size large file is never hashed). Confirmed
+    byte-identical rows are then split by ``_view_key`` so ``.wav`` rows
+    merge only when their ``(time_end, bandwidth, bandcentre)`` view also
+    matches (issues
     #78, #87). Within
     each resulting group of >=2, the first row by ``_identity_key`` is
     the master (empty ``master_png_path``); the rest carry the master's
     ``png_path``.
+
+    **A duplicate group never spans publications** (issue #164). A redirect
+    is rendered by the generator as a relative href from the redirected
+    gram's folder to the master's, so redirecting across a publication
+    boundary emits ``../../../<other-pub>/…`` — a reference that leaves the
+    publication folder. That breaks the self-contained-publication invariant
+    the whole layout rests on, and it breaks publishing outright: DITA-OT
+    resolves the job root to the *parent* of the map's folder, mirrors that
+    extra tier into the output, and strands ``index.html`` and every
+    generated link one level above the content, so every page 404s. The
+    grams reused between an assessment deck and the week it came from are
+    exactly the ones that collide, so this is the common case, not a corner
+    one. Redirects *within* a publication (e.g. between two weeks of
+    ``main``) still traverse folders and remain correct — they stay inside
+    the publication.
     """
     # Every row starts non-redirected; this also repopulates (clears stale
     # values from) a CSV that already carries the column, keeping the
@@ -251,19 +332,19 @@ def deduplicate(
     for row in rows:
         row[MASTER_PNG_PATH] = ""
 
-    # 1) Candidate filter + size pre-grouping.
-    by_size: dict[int, list[dict]] = defaultdict(list)
+    # 1) Candidate filter + (publication, size) pre-grouping.
+    by_size: dict[tuple, list[dict]] = defaultdict(list)
     for row in rows:
         size = _parse_size(row)
         png = (row.get("png_path", "") or "").strip()
         if size is not None and size > threshold_bytes and png:
-            by_size[size].append(row)
+            by_size[(require_field(row, "publication"), size)].append(row)
 
     redirected = 0
     total_reclaimed = 0
     # 2) Confirm content identity only inside size-collision groups of >=2.
-    for size in sorted(by_size):
-        members = by_size[size]
+    for pub, size in sorted(by_size):
+        members = by_size[(pub, size)]
         if len(members) < 2:
             continue  # unique size — cannot have a byte-identical twin
         by_hash: dict[str, list[dict]] = defaultdict(list)
@@ -280,8 +361,9 @@ def deduplicate(
                 continue
             by_view: dict[tuple, list[dict]] = defaultdict(list)
             for row in members:
-                # A blank ``.wav`` view hard-fails inside ``_view_key``
-                # (constitution VII) rather than being tolerated as before.
+                # A blank ``.wav`` view degrades to "" inside ``_view_key``
+                # (the fields only matter for image GramFrame rendering, not
+                # ``.wav`` links) — blank-view rows simply share a key.
                 by_view[_view_key(row)].append(row)
             for view in sorted(by_view):
                 group = by_view[view]
@@ -298,8 +380,9 @@ def deduplicate(
                 reclaimed = count * size
                 total_reclaimed += reclaimed
                 LOGGER.info(
-                    "Duplicate group: master=%s%s redirected=%d bytes_reclaimed=%d",
-                    master_png,
+                    "Duplicate group in %s: master=%s%s redirected=%d "
+                    "bytes_reclaimed=%d",
+                    pub, master_png,
                     " view=%s/%s/%s" % (view[1], view[2], view[3]) if view[0] == "wav-view" else "",
                     count, reclaimed,
                 )
@@ -316,6 +399,19 @@ def deduplicate(
 # -----------------------------------------------------------------------------
 
 _DIGITS_RE = re.compile(r"\d+")
+
+# A ``main`` deck whose source ``chapter`` title carries a "Week N" token
+# (e.g. "Instructor Week 4 Grams") natively belongs to that week; a deck with
+# no token (Pub10) is sliced across the weeks by the extractor. Mirrors
+# ``extract_to_csv._WEEK_TOKEN_RE`` — kept local so this single-purpose script
+# stays self-contained on the air-gapped target.
+_WEEK_TOKEN_RE = re.compile(r"\bweek\s*0*(\d+)\b", re.IGNORECASE)
+
+
+def _has_native_week(chapter: str) -> bool:
+    """True when ``chapter`` carries its own "Week N" token (a native-week
+    deck), False for a no-week deck the extractor sliced into the weeks."""
+    return bool(_WEEK_TOKEN_RE.search(chapter or ""))
 
 
 def _effective_chapter(row: dict) -> str:
@@ -439,20 +535,79 @@ def _renumber_main_continuous(rows: list[dict], indices) -> int:
     return renumbered
 
 
+def _renumber_main_per_week_contiguous(rows: list[dict], indices) -> int:
+    """Per-week contiguous ``main`` numbering (feature 009): each week is numbered
+    independently as ``1..k`` with no gaps, restarting at 1 every week — so a
+    week's grams read 1, 2, 3 … with no holes even when the source gram numbers
+    are gappy or two decks share the week.
+
+    Within a week, grams are ordered ``(native-week-deck first, source chapter,
+    first-row order)``: a deck whose title carries the week's own "Week N" token
+    keeps the low numbers and leads the page, with any sliced no-week deck (Pub10)
+    following as the contiguous tail — preserving the existing reading order while
+    closing the gaps. A gram whose ``gram_id`` already equals its assigned number
+    keeps an empty ``target_gram_id``; ``gram_id`` is never mutated. Returns the
+    count of renumbered grams.
+    """
+    gram_rows: dict[tuple, list[int]] = {}
+    gram_first: dict[tuple, int] = {}
+    gram_week: dict[tuple, tuple] = {}
+    gram_order: dict[tuple, tuple] = {}
+    for idx in indices:
+        row = rows[idx]
+        # A blank gram_id in our own artifact is a defect, not something to
+        # number past silently (constitution VII / Zone-A) — hard-fail here as
+        # the per-week bucket path does.
+        ident = (
+            row.get("chapter", ""), require_field(row, "gram_id"),
+            row.get("vessel_name", ""),
+        )
+        if ident not in gram_rows:
+            gram_rows[ident] = []
+            gram_first[ident] = idx
+            gram_week[ident] = _week_sort_key(_effective_chapter(row))
+            chapter = row.get("chapter", "")
+            # is_no_week_deck sorts native-week decks (0) ahead of sliced ones (1).
+            gram_order[ident] = (0 if _has_native_week(chapter) else 1, chapter)
+        gram_rows[ident].append(idx)
+
+    ordered = sorted(
+        gram_rows,
+        key=lambda ident: (gram_week[ident], gram_order[ident], gram_first[ident]),
+    )
+    renumbered = 0
+    seq = 0
+    current_week: tuple | None = None
+    for ident in ordered:
+        if gram_week[ident] != current_week:
+            current_week = gram_week[ident]
+            seq = 0  # restart numbering at the start of each week
+        seq += 1
+        if _gram_number(ident[1]) == seq:
+            continue  # already this number — leave target_gram_id empty
+        for idx in gram_rows[ident]:
+            rows[idx][TARGET_GRAM_ID] = str(seq)
+        LOGGER.info(
+            "main gram renumbered (per-week): chapter=%s gram_id=%s -> %d",
+            _effective_chapter(rows[gram_first[ident]]), ident[1], seq,
+        )
+        renumbered += 1
+    return renumbered
+
+
 def renumber_grams(rows: list[dict], main_numbering: str = "per-week") -> int:
     """Populate ``target_gram_id`` to give grams collision-free numbers.
 
     ``main_numbering`` (feature 009) selects how the ``main`` publication is
-    numbered; non-``main`` publications always use the per-week rule:
+    numbered; non-``main`` publications always use the per-week bump-on-collision
+    rule (``_renumber_buckets``):
 
-    - ``"per-week"`` (default): every publication, ``main`` included, is numbered
-      **per week** — within each ``(publication, effective_chapter,
-      effective_doc)`` bucket native numbers are preserved and only genuine
-      collisions are bumped (the feature-008 behaviour; unique per week, not
-      globally).
+    - ``"per-week"`` (default): ``main`` is numbered **per week** as contiguous
+      ``1..k`` with no gaps, restarting at 1 every week (issue #102; the
+      feature-009 spec behaviour). Within a week the native-week deck leads and any
+      sliced no-week deck (Pub10) follows as the contiguous tail.
     - ``"continuous"``: ``main`` is numbered as one ``1..N`` sequence across the
-      four weeks (week N starts past week N-1's maximum); non-``main`` keeps the
-      per-week rule.
+      four weeks (week N starts past week N-1's maximum).
 
     Idempotent: ``target_gram_id`` is cleared and recomputed from ``gram_id``
     each run, so re-running over the same inputs and scheme yields a
@@ -463,17 +618,20 @@ def renumber_grams(rows: list[dict], main_numbering: str = "per-week") -> int:
     for row in rows:
         row[TARGET_GRAM_ID] = ""
 
+    main_idx = [i for i, r in enumerate(rows) if r.get("publication", "") == "main"]
+    nonmain_idx = [i for i, r in enumerate(rows) if r.get("publication", "") != "main"]
     if main_numbering == "continuous":
-        main_idx = [i for i, r in enumerate(rows) if r.get("publication", "") == "main"]
-        nonmain_idx = [i for i, r in enumerate(rows) if r.get("publication", "") != "main"]
         renumbered = (
             _renumber_main_continuous(rows, main_idx)
             + _renumber_buckets(rows, nonmain_idx)
         )
     else:
-        # per-week (default): feature-008 behaviour for every publication (main
-        # is per-week because effective_doc is "" for main).
-        renumbered = _renumber_buckets(rows, range(len(rows)))
+        # per-week (default): contiguous 1..k per week for main (issue #102);
+        # non-main keeps the feature-008 bump-on-collision behaviour.
+        renumbered = (
+            _renumber_main_per_week_contiguous(rows, main_idx)
+            + _renumber_buckets(rows, nonmain_idx)
+        )
 
     LOGGER.info(
         "Renumber summary: grams_renumbered=%d (main_numbering=%s)",
@@ -501,14 +659,25 @@ def main(argv: Iterable[str] | None = None) -> int:
                         default=DEFAULT_THRESHOLD_BYTES, dest="threshold_bytes",
                         help="candidacy cut-off; only rows with file_size "
                              "strictly greater are eligible (default 10 MiB)")
+    parser.add_argument("--no-dedupe", action="store_true", dest="no_dedupe",
+                        help="skip duplicate detection entirely — no row is "
+                             "redirected and every gram keeps its own copy of "
+                             "every asset. The gram renumbering this script "
+                             "also performs still runs, so this is the way to "
+                             "get renumbering without deduplication. Use it "
+                             "when disk space is not the constraint: "
+                             "deduplication trades a self-contained gram "
+                             "folder for saved bytes, and only the bytes are "
+                             "optional.")
     parser.add_argument("--main-numbering", choices=("per-week", "continuous"),
                         default="per-week", dest="main_numbering",
                         help="how the main publication's grams are numbered "
-                             "(feature 009): 'per-week' (default) keeps numbering "
-                             "unique within each week, preserving native numbers "
-                             "and bumping only collisions; 'continuous' numbers "
-                             "main as one 1..N sequence across the four weeks. "
-                             "Non-main publications are unaffected.")
+                             "(feature 009): 'per-week' (default) numbers each "
+                             "week independently as contiguous 1..k (no gaps, "
+                             "restart at 1 per week, native-week deck first); "
+                             "'continuous' numbers main as one 1..N sequence "
+                             "across the four weeks. Non-main publications keep "
+                             "the per-week bump-on-collision rule.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("dedup.log"))
@@ -540,7 +709,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     # emitting a CSV the generator would reject (constitution VII).
     try:
         renumber_grams(rows, main_numbering=args.main_numbering)
-        deduplicate(rows, args.image_root, args.threshold_bytes)
+        if args.no_dedupe:
+            # Still normalise the column, so the output CSV carries it (empty)
+            # exactly as a dedupe run would and stays round-trip/idempotent.
+            for row in rows:
+                row[MASTER_PNG_PATH] = ""
+            LOGGER.info(
+                "Deduplication skipped (--no-dedupe): every gram keeps its own "
+                "copy of every asset.")
+        else:
+            deduplicate(rows, args.image_root, args.threshold_bytes)
     except PipelineDataError as exc:
         LOGGER.error("Aborting: %s", exc)
         return 1

@@ -5,8 +5,14 @@ Run from the WinPython REPL after the once-per-session, by-hand chdir:
     >>> import os; os.chdir(r"C:\\dev\\AAAC")
     >>> exec(open(r"write.py").read())
 
-Reads extract.dedupe.csv from the cwd and (re)builds DITA_OUT from
-scratch (--clean). Common static pages come from .\\static (the
+Reads extract.dedupe.csv from the cwd and rebuilds, from scratch, each
+publication folder that CSV produces under DITA_OUT — so a gram dropped
+from the PPTX drops out of the DITA tree too. Other publications already
+in DITA_OUT are left alone, so a suite of documents can be built up over
+successive runs and published one by one. Nothing here ever wipes the
+whole of DITA_OUT: clearing Z:\\dita is a deliberate manual act, done by
+hand when you want it. Common static pages
+come from .\\static (the
 generator's cwd-relative default). --stub-wav stock.wav swaps every
 .wav asset for the committed silent stub to slim the tree for
 cross-system transit — drop the flag for a full-audio build. Publish to
@@ -32,20 +38,32 @@ for p in (PYLIB, SCRIPTS):
 
 for mod in ("extract_to_csv", "introspect_pptx", "deduplicate_csv",
             "generate_dita", "publish_html", "rehydrate_dita",
-            "snapshot_analysis_docs", "mock_pptx"):
+            "snapshot_analysis_docs", "ingest_gram_images", "mock_pptx"):
     sys.modules.pop(mod, None)
 
 # ---- Config ----------------------------------------------------
 WRITE    = SCRIPTS / "generate_dita.py"
 DITA_OUT = Path(r"Z:\dita")
+
+# Every publication folder this run produces is rebuilt from scratch, so a
+# gram dropped from the PPTX disappears from the DITA tree. Publications
+# *not* in this CSV are always left alone, so a suite of documents can be
+# built up in DITA_OUT over successive runs and published one by one. For a
+# from-scratch rebuild of everything, delete DITA_OUT by hand first.
 # ----------------------------------------------------------------
 
 sys.argv = [
     str(WRITE),
     "--csv", "extract.dedupe.csv",
     "--out", str(DITA_OUT),
-    "--clean",
     "--image-root", str(SOURCE),
     "--stub-wav", "stock.wav",
+    # The source-provenance debug block is ON by default for now: each gram page
+    # carries a visible instructor-only block mapping its published week-N/gram-NN
+    # back to the source publication, source deck title and original gram number
+    # (plus the analysis image's source path) — so a published page (e.g. a
+    # missing analysis image) can be traced to the PPTX it came from. To turn it
+    # off once the debugging phase is over, uncomment the line below:
+    # "--no-debug-provenance",
 ]
 runpy.run_path(str(WRITE), run_name="__main__")

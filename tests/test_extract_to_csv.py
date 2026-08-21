@@ -12,6 +12,7 @@ import csv
 import shutil
 import sys
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -86,6 +87,140 @@ class ClassificationTests(unittest.TestCase):
         second, _, _ = extract_to_csv.classify_publication(
             Path("/root/y/Progress Test Beta.pptx"), "progress test", allocated)
         self.assertEqual((first, second), ("progress-test-1", "progress-test-2"))
+
+    def test_final_assessment_named_from_course_code(self) -> None:
+        """The two course-specific final assessments get distinct, stable,
+        counter-free publication names — not a per-run ``final-assessment-1``
+        each (the real corpus folder titles, one per course)."""
+        ssac, chapter, slug = extract_to_csv.classify_publication(
+            Path("/root/Instructor SSAC - Final Assessment_UPDATED/"
+                 "Instructor SSAC - Final Assessment_UPDATED.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, {})
+        self.assertEqual(ssac, "SSAC-final-assessment")
+        self.assertIsNone(chapter)
+        self.assertIsNone(slug)
+        # A *separate* allocation map (a second --only run) still disagrees.
+        aaac, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor AAAC Final Assessment Updated/"
+                 "Instructor AAAC Final Assessment Updated.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, {})
+        self.assertEqual(aaac, "AAAC-final-assessment")
+
+    def test_course_code_read_from_folder_title_and_case_folded(self) -> None:
+        """The code is taken from the deck's folder title when the filename
+        lacks it, and is emitted upper-case whatever case the corpus uses."""
+        pub, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor ssac - Final Assessment/"
+                 "Final Assessment Grams.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, {})
+        self.assertEqual(pub, "SSAC-final-assessment")
+
+    def test_final_assessment_falls_back_to_counter_without_a_code(self) -> None:
+        """A final-assessment deck naming no known course keeps the legacy
+        encounter-order ``final-assessment-N`` name."""
+        final_allocated: dict[str, int] = {}
+        first, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor Progress Final Assessment Grams/"
+                 "Instructor Progress Final Assessment Grams.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, final_allocated)
+        second, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Other Final Assessment/Other Final Assessment.pptx"),
+            "progress test", {}, extract_to_csv.DEFAULT_FINAL_PATTERN, final_allocated)
+        self.assertEqual((first, second),
+                         ("final-assessment-1", "final-assessment-2"))
+
+    def test_course_code_matches_whole_token_only(self) -> None:
+        """A code embedded in a longer word is not a course code."""
+        self.assertEqual(extract_to_csv.course_code_from_name("Instructor AAACX Final"), "")
+        self.assertEqual(extract_to_csv.course_code_from_name("Instructor xSSAC Final"), "")
+        # Punctuation still delimits: "SSAC - Final" and "SSAC_Final" both match.
+        self.assertEqual(extract_to_csv.course_code_from_name("SSAC_Final Assessment"), "SSAC")
+        self.assertEqual(
+            extract_to_csv.course_code_from_name("no code here", "Week 1 AAAC"), "AAAC")
+
+    def test_joining_assessment_named_from_course_code(self) -> None:
+        """The joining assessment shares the final assessment's naming rule, so
+        two course-specific joining decks never collide either."""
+        pub, _, _ = extract_to_csv.classify_publication(
+            Path("/root/Instructor AAAC Joining Assessment/"
+                 "Instructor AAAC Joining Assessment.pptx"),
+            "progress test", {},
+            extract_to_csv.DEFAULT_FINAL_PATTERN, {},
+            extract_to_csv.DEFAULT_JOINING_PATTERN, {})
+        self.assertEqual(pub, "AAAC-joining-assessment")
+
+    def test_corpus_assessment_folder_names_route_by_course(self) -> None:
+        """The four real corpus assessment decks, verbatim. Their titles use
+        three different separator styles around the code — space, ``-`` and
+        ``_`` — and each must still yield the course-coded publication rather
+        than a per-run ``…-assessment-1`` both courses share."""
+        cases = {
+            "Instructor SSAC - Final Assessment_UPDATED": "SSAC-final-assessment",
+            "Instructor AAAC Final Assessment Updated": "AAAC-final-assessment",
+            "Instructor_SSAC_Joining Assessment": "SSAC-joining-assessment",
+            "Instructor_AAAC_Joining Assessment": "AAAC-joining-assessment",
+        }
+        for folder, expected in cases.items():
+            with self.subTest(folder=folder):
+                pub, chapter, slug = extract_to_csv.classify_publication(
+                    Path("/root") / folder / f"{folder}.pptx",
+                    extract_to_csv.DEFAULT_TEST_PATTERN, {},
+                    extract_to_csv.DEFAULT_FINAL_PATTERN, {},
+                    extract_to_csv.DEFAULT_JOINING_PATTERN, {})
+                self.assertEqual(pub, expected)
+                self.assertIsNone(chapter)
+                self.assertIsNone(slug)
+        self.assertEqual(len(set(cases.values())), 4, "all four names must differ")
+
+    def test_joining_assessment_routing(self) -> None:
+        """A deck whose filename contains the joining pattern routes to its own
+        joining-assessment-N publication, never to main."""
+        joining_allocated: dict[str, int] = {}
+        pub, chapter, slug = extract_to_csv.classify_publication(
+            Path("/root/Joining/Instructor Initial Joining Assessment Grams.pptx"),
+            "progress test", {},
+            extract_to_csv.DEFAULT_FINAL_PATTERN, {},
+            extract_to_csv.DEFAULT_JOINING_PATTERN, joining_allocated)
+        self.assertEqual(pub, "joining-assessment-1")
+        self.assertIsNone(chapter)
+        self.assertIsNone(slug)
+
+    def test_joining_pattern_checked_before_final_and_test(self) -> None:
+        """The joining bucket wins over final/test when a deck name matches more
+        than one pattern, so a deliberately-named joining deck never falls
+        through to those buckets."""
+        joining_allocated: dict[str, int] = {}
+        pub, _, _ = extract_to_csv.classify_publication(
+            Path("/root/x/Joining Final Assessment Progress Test 1.pptx"),
+            "progress test", {},
+            "final assessment", {},
+            "joining", joining_allocated)
+        self.assertEqual(pub, "joining-assessment-1")
+
+    def test_joining_allocation_is_stable_encounter_order(self) -> None:
+        """Distinct joining decks number 1, 2, … in encounter order; the same
+        deck stem keeps its number."""
+        joining_allocated: dict[str, int] = {}
+        first, _, _ = extract_to_csv.classify_publication(
+            Path("/root/a/Joining Assessment Alpha.pptx"),
+            "progress test", {}, "final assessment", {}, "joining", joining_allocated)
+        second, _, _ = extract_to_csv.classify_publication(
+            Path("/root/b/Joining Assessment Beta.pptx"),
+            "progress test", {}, "final assessment", {}, "joining", joining_allocated)
+        first_again, _, _ = extract_to_csv.classify_publication(
+            Path("/root/a/Joining Assessment Alpha.pptx"),
+            "progress test", {}, "final assessment", {}, "joining", joining_allocated)
+        self.assertEqual((first, second, first_again),
+                         ("joining-assessment-1", "joining-assessment-2", "joining-assessment-1"))
+
+    def test_joining_pattern_disabled_when_empty(self) -> None:
+        """An empty joining pattern disables the bucket, so a 'joining' deck
+        falls through to main (back-compat with callers that don't set it)."""
+        pub, chapter, _ = extract_to_csv.classify_publication(
+            Path("/root/Joining Stuff/Joining Stuff.pptx"),
+            "progress test", {}, "final assessment", {}, "", None)
+        self.assertEqual(pub, "main")
+        self.assertEqual(chapter, "Joining Stuff")
 
     def test_week_chapter_number_parses_week_token(self) -> None:
         """Feature 008: a "Week N" deck title yields the bare-integer week."""
@@ -254,6 +389,89 @@ class EvenWeekSliceTests(unittest.TestCase):
         )
 
 
+class ImagePixelHeightTests(unittest.TestCase):
+    """The stdlib image-height reader (issue #148) across PNG/JPEG/GIF.
+
+    time_end is the image's scan-line count (pixel height), read from just the
+    file header with no Pillow on the runtime path.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "img_height"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _h(self, name: str, data: bytes) -> int | None:
+        (self.tmp / name).write_bytes(data)
+        return extract_to_csv._image_pixel_height(name, self.tmp)
+
+    def test_png_height(self) -> None:
+        mock_pptx.emit_png(self.tmp / "g.png", width=5, height=321)
+        self.assertEqual(
+            extract_to_csv._image_pixel_height("g.png", self.tmp), 321)
+
+    def test_gif_height(self) -> None:
+        import struct
+        gif = b"GIF89a" + struct.pack("<HH", 40, 275) + b"\x00" * 4
+        self.assertEqual(self._h("g.gif", gif), 275)
+
+    def test_jpeg_height_skips_intervening_segments(self) -> None:
+        import struct
+        soi = b"\xff\xd8"
+        app0 = b"\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00\x01\x01\x00" \
+            + b"\x00\x01\x00\x01\x00\x00"
+        sof0 = (b"\xff\xc0" + struct.pack(">H", 17) + b"\x08"
+                + struct.pack(">H", 442) + struct.pack(">H", 300)
+                + b"\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01")
+        jpeg = soi + app0 + sof0 + b"\xff\xd9"
+        self.assertEqual(self._h("g.jpg", jpeg), 442)
+
+    def test_missing_file_returns_none(self) -> None:
+        self.assertIsNone(
+            extract_to_csv._image_pixel_height("nope.png", self.tmp))
+
+    def test_unrecognised_bytes_return_none(self) -> None:
+        self.assertIsNone(self._h("junk.png", b"not an image at all"))
+
+    def test_blank_path_returns_none(self) -> None:
+        self.assertIsNone(extract_to_csv._image_pixel_height("", self.tmp))
+
+
+class UpdatePeriodTests(unittest.TestCase):
+    """Scan lines are seconds only when update_period is 1 (issue #160)."""
+
+    def _period(self, raw: str):
+        value, warning = extract_to_csv._parse_update_period(raw)
+        return extract_to_csv._format_seconds(value), warning
+
+    def test_absent_period_defaults_to_one_without_warning(self) -> None:
+        self.assertEqual(self._period(""), ("1", None))
+        self.assertEqual(self._period("   "), ("1", None))
+
+    def test_stated_period_is_honoured(self) -> None:
+        self.assertEqual(self._period("2"), ("2", None))
+        self.assertEqual(self._period(" 0.5 "), ("0.5", None))
+
+    def test_unparsable_period_falls_back_with_warning(self) -> None:
+        formatted, warning = self._period("two")
+        self.assertEqual(formatted, "1")
+        self.assertIn("invalid update_period", warning)
+
+    def test_non_positive_period_falls_back_with_warning(self) -> None:
+        for raw in ("0", "-2"):
+            formatted, warning = self._period(raw)
+            self.assertEqual(formatted, "1")
+            self.assertIn("invalid update_period", warning)
+
+    def test_seconds_format_drops_trailing_zeros_and_exponents(self) -> None:
+        fmt = extract_to_csv._format_seconds
+        self.assertEqual(fmt(Decimal("180.0")), "180")
+        self.assertEqual(fmt(Decimal("720")), "720")
+        self.assertEqual(fmt(Decimal("1000000")), "1000000")
+        self.assertEqual(fmt(Decimal("90.50")), "90.5")
+
+
 class GramToRowsTests(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -276,17 +494,65 @@ class GramToRowsTests(unittest.TestCase):
         self.assertIn("GLC not found", rows[0]["warnings"])
 
     def test_resolvable_glc_populates_measurements(self) -> None:
+        # time_end is the referenced image's pixel height (issue #148), not the
+        # GLC's bottom_crop; place a real image of a known height so the derived
+        # value is deterministic. bandwidth/bandcentre still come from the GLC.
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
         gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
         rows = extract_to_csv.gram_to_rows(
             gram, publication="main", chapter="Arctic Survey",
             chapter_slug="arctic-survey",
             content_root=self.tmp, source_dir=self.tmp,
         )
-        self.assertEqual(rows[0]["time_end"], "271")
+        self.assertEqual(rows[0]["time_end"], "123")
         self.assertEqual(rows[0]["bandwidth"], "400")
         self.assertEqual(rows[0]["bandcentre"], "200")
         self.assertEqual(rows[0]["png_path"], "gram12.PNG")
         self.assertEqual(rows[0]["link_href"], "supporting/gram12/config_1.glc")
+
+    def _glc_with_period(self, period: str) -> None:
+        """Rewrite the resolvable GLC to state ``period`` seconds per scan line."""
+        glc = self.tmp / "supporting/gram12/config_1.glc"
+        glc.write_text(
+            "<GAPS_Lite_configuration>"
+            "<data_source><filename>gram12.PNG</filename></data_source>"
+            "<settings><lofar>"
+            "<bandwidth>400</bandwidth><bandcentre>200</bandcentre>"
+            f"<update_period>{period}</update_period>"
+            "</lofar></settings>"
+            "</GAPS_Lite_configuration>",
+            encoding="utf-8",
+        )
+
+    def _first_row(self) -> dict:
+        gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
+        return extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )[0]
+
+    def test_update_period_scales_the_time_period(self) -> None:
+        # Issue #160: 123 scan lines at 2 s each is a 246 s gram, not 123 s.
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
+        self._glc_with_period("2")
+        row = self._first_row()
+        self.assertEqual(row["time_end"], "246")
+        self.assertEqual(row["warnings"], "")
+
+    def test_fractional_update_period_scales_the_time_period(self) -> None:
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
+        self._glc_with_period("0.5")
+        self.assertEqual(self._first_row()["time_end"], "61.5")
+
+    def test_invalid_update_period_defaults_to_one_and_warns(self) -> None:
+        # Forgiving at the boundary: an unusable authored value still yields a
+        # row (scan lines == seconds, as before) plus a warning for the author.
+        mock_pptx.emit_png(self.tmp / "gram12.PNG", width=4, height=123)
+        self._glc_with_period("later")
+        row = self._first_row()
+        self.assertEqual(row["time_end"], "123")
+        self.assertIn("invalid update_period", row["warnings"])
 
     def test_wav_targeted_link_is_treated_as_unresolvable_glc(self) -> None:
         # Backlog 007: the audited corpus has no Lofar text run targeting
@@ -373,6 +639,89 @@ class GramToRowsTests(unittest.TestCase):
         self.assertIn("analysis image not rendered", analysis["warnings"])
         self.assertEqual(analysis["file_size"], "")
 
+    def test_stale_analysis_link_recovered_from_lofar_folder(self) -> None:
+        # A gram whose analysis hyperlink is stale (a legacy href pointing at an
+        # earlier build's folder) but whose real analysis sheet sits beside its
+        # Lofar .glc -> the analysis row is repointed at the sibling sheet and
+        # not flagged. The gram carries a vessel_name, so it is worth recovering.
+        sheet = self.tmp / "supporting/gram12/Analysis Sheet.png"
+        sheet.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="Working grams week 3/Analysis Sheet.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(analysis["topic_type"], "analysis")
+        self.assertEqual(
+            analysis["png_path"], "supporting/gram12/Analysis Sheet.png")
+        self.assertNotIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+        self.assertFalse(
+            extract_to_csv.missing_asset_problems([analysis], self.tmp))
+
+    def test_stale_analysis_link_recovers_misspelled_sheet(self) -> None:
+        # The fallback recognises the known 'analaysis' misspelling too, exactly
+        # as the snapshotter's _is_analysis_name does.
+        sheet = self.tmp / "supporting/gram12/Analaysis Sheet.png"
+        sheet.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(
+            analysis["png_path"], "supporting/gram12/Analaysis Sheet.png")
+        self.assertNotIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+
+    def test_recovery_is_deterministic_with_multiple_sheets(self) -> None:
+        # Two candidate images in the Lofar folder -> the sorted-first one is
+        # always chosen (determinism/idempotency invariant).
+        for name in ("Analysis B.png", "Analysis A.png"):
+            (self.tmp / "supporting/gram12" / name).write_bytes(
+                b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        self.assertEqual(
+            rows[-1]["png_path"], "supporting/gram12/Analysis A.png")
+
+    def test_stale_analysis_link_with_no_sibling_sheet_is_flagged(self) -> None:
+        # vessel_name present but no analysis sheet in the Lofar folder -> keep
+        # the analysis row and flag it, so nothing is silently lost.
+        gram = _gram(png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        analysis = rows[-1]
+        self.assertEqual(analysis["topic_type"], "analysis")
+        self.assertIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+
+    def test_stale_analysis_link_without_vessel_drops_analysis_row(self) -> None:
+        # No vessel_name -> mangled legacy content we can't exploit: the
+        # analysis sheet is dropped entirely (no analysis row) even when a
+        # sibling sheet exists, while the gram's resolved Lofar row survives.
+        sheet = self.tmp / "supporting/gram12/Analysis Sheet.png"
+        sheet.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(vessel="", png="stale/gone.png")
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        self.assertEqual([r["topic_type"] for r in rows], ["glc"],
+                         "the Lofar row is kept, the analysis sheet dropped")
+
 
 # Issue #92: every GLC-backed gram (image or live-render .wav) needs its time +
 # frequency view fields for GramFrame. These GLCs carry none of the three.
@@ -415,40 +764,69 @@ class GlcViewFieldTests(unittest.TestCase):
         )
 
     def test_strict_leaves_blanks_and_warns_per_field(self) -> None:
-        for inner, ext in (("audio_clip.wav", ".wav"), ("spectro.png", ".png")):
-            with self.subTest(inner=inner):
-                row = self._rows(inner, relaxed=False)[0]
-                self.assertEqual(row["target_ext"], ext)
-                for field_name in extract_to_csv.GLC_VIEW_FIELDS:
-                    self.assertEqual(row[field_name], "")
-                    self.assertIn(
-                        f"gram missing {field_name} — GramFrame cannot render",
-                        row["warnings"])
+        # Only image GLC rows warn: a .wav surfaces as a .glc link (no
+        # GramFrame table), so its blank view fields are legitimate.
+        row = self._rows("spectro.png", relaxed=False)[0]
+        self.assertEqual(row["target_ext"], ".png")
+        # The GLC-authored band fields warn "GramFrame cannot render".
+        for field_name in extract_to_csv.GLC_AUTHORED_VIEW_FIELDS:
+            self.assertEqual(row[field_name], "")
+            self.assertIn(
+                f"gram missing {field_name} — GramFrame cannot render",
+                row["warnings"])
+        # time_end is the image height (issue #148). Here the referenced image
+        # is missing, so the row already dangles (ASSET_MISSING) and time_end is
+        # exempt from the GramFrame gate — no "gram missing time_end" warning.
+        self.assertEqual(row["time_end"], "")
+        self.assertNotIn("time_end — GramFrame cannot render", row["warnings"])
+        self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, row["warnings"])
+
+    def test_present_but_unreadable_image_warns_time_period(self) -> None:
+        # An image that IS on disk but whose height cannot be read yields a
+        # non-fatal "time period unknown" warning (not a fail-fast, not
+        # ASSET_MISSING).
+        (self.tmp / "supporting/gram12").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "supporting/gram12/spectro.png").write_bytes(b"not a png")
+        row = self._rows("spectro.png", relaxed=False)[0]
+        self.assertEqual(row["time_end"], "")
+        self.assertIn("gram time period unknown", row["warnings"])
+        self.assertNotIn(extract_to_csv.ASSET_MISSING_WARNING, row["warnings"])
+
+    def test_wav_row_is_exempt_from_view_requirement(self) -> None:
+        # A .wav-backed gram never renders a GramFrame table, so a blank view
+        # field is fine: no warning, no default, no flag.
+        row = self._rows("audio_clip.wav", relaxed=False)[0]
+        self.assertEqual(row["target_ext"], ".wav")
+        for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+            self.assertEqual(row[field_name], "")
+        self.assertNotIn("GramFrame cannot render", row["warnings"])
+        self.assertEqual(
+            extract_to_csv.glc_view_problems([row]), [],
+            "a .wav row must never be flagged for a missing view field")
 
     def test_relaxed_defaults_each_field_and_notes_it(self) -> None:
-        for inner in ("audio_clip.wav", "spectro.png"):
-            with self.subTest(inner=inner):
-                row = self._rows(inner, relaxed=True)[0]
-                for field_name in extract_to_csv.GLC_VIEW_FIELDS:
-                    self.assertEqual(
-                        row[field_name], extract_to_csv.RELAXED_DEFAULT)
-                    self.assertIn(
-                        f"gram missing {field_name} — defaulted to "
-                        f"{extract_to_csv.RELAXED_DEFAULT} (--relaxed)",
-                        row["warnings"])
+        # --relaxed only touches image rows (the ones that require the fields).
+        row = self._rows("spectro.png", relaxed=True)[0]
+        for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+            self.assertEqual(
+                row[field_name], extract_to_csv.RELAXED_DEFAULT)
+            self.assertIn(
+                f"gram missing {field_name} — defaulted to "
+                f"{extract_to_csv.RELAXED_DEFAULT} (--relaxed)",
+                row["warnings"])
 
     def test_glc_view_problems_flags_each_missing_field(self) -> None:
-        for inner in ("audio_clip.wav", "spectro.png"):
-            with self.subTest(inner=inner):
-                problems = extract_to_csv.glc_view_problems(
-                    self._rows(inner, relaxed=False))
-                self.assertEqual(
-                    sorted(field for _, field in problems),
-                    sorted(extract_to_csv.GLC_VIEW_FIELDS))
-                # Relaxed run fills the blanks, so nothing is flagged.
-                self.assertEqual(
-                    extract_to_csv.glc_view_problems(
-                        self._rows(inner, relaxed=True)), [])
+        problems = extract_to_csv.glc_view_problems(
+            self._rows("spectro.png", relaxed=False))
+        # Only the GLC-authored band fields fail-fast; time_end is image-derived
+        # (issue #148) and dangles rather than crashing.
+        self.assertEqual(
+            sorted(field for _, field, _ in problems),
+            sorted(extract_to_csv.GLC_AUTHORED_VIEW_FIELDS))
+        # Relaxed run fills the blanks, so nothing is flagged.
+        self.assertEqual(
+            extract_to_csv.glc_view_problems(
+                self._rows("spectro.png", relaxed=True)), [])
 
     def test_analysis_row_is_never_flagged(self) -> None:
         # An analysis sheet (.png, but topic_type "analysis") legitimately
@@ -492,6 +870,30 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
         gram_ids = {r["gram_id"] for r in rows}
         self.assertEqual(len(analysis_rows), len(gram_ids),
                          "Expected exactly one analysis row per gram")
+
+    def test_summary_reports_grams_without_a_word_original(self) -> None:
+        """Feature 013 FR-019: the operator can see, from the summary alone,
+        how many grams show an analysis sheet nobody can amend. The mock corpus
+        deliberately mixes sheets that have a Word original with sheets that
+        only ever existed as an image, so both counts are non-zero."""
+        out_csv = TMP / "extract_corpus_word_coverage.csv"
+        with self.assertLogs(extract_to_csv.LOGGER, level="INFO") as cm:
+            rc = extract_to_csv.main([
+                "--input-root", str(self.week1_dir),
+                "--out", str(out_csv),
+            ])
+        self.assertEqual(rc, 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        analysis_rows = [r for r in rows if r["topic_type"] == "analysis"]
+        without = [r for r in analysis_rows if not r["analysis_doc_path"].strip()]
+        self.assertTrue(without, "fixture should include image-only sheets")
+        self.assertLess(len(without), len(analysis_rows),
+                        "fixture should also include sheets with a Word original")
+        summary = [m for m in cm.output if "Extraction summary" in m]
+        self.assertEqual(len(summary), 1)
+        self.assertIn(f"analysis_sheets={len(analysis_rows)}", summary[0])
+        self.assertIn(f"without_word_original={len(without)}", summary[0])
 
     def test_gram_id_is_normalized_integer_form(self) -> None:
         """Per csv-schema.md the canonical ``gram_id`` cell is a plain
@@ -717,16 +1119,25 @@ class GlcViewFieldMainTests(unittest.TestCase):
             ])
         self.assertEqual(rc, 1)
         self.assertIn("GramFrame", "\n".join(cm.output))
+        # The abort names the offending row's line in the just-written CSV so
+        # the operator can jump straight to it.
+        self.assertIn("CSV line ", "\n".join(cm.output))
         # The CSV is still written so its warnings column is inspectable.
         self.assertTrue(out_csv.exists())
         with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
-        glc_rows = [r for r in rows if r["topic_type"] == "glc"
-                    and r["target_ext"]]
-        self.assertTrue(glc_rows)
-        self.assertTrue(all(r["time_end"] == "" for r in glc_rows))
+        image_glc_rows = [r for r in rows if r["topic_type"] == "glc"
+                          and r["target_ext"]
+                          in extract_to_csv.GRAMFRAME_GLC_EXTENSIONS]
+        self.assertTrue(image_glc_rows)
+        # time_end is read from the image height (issue #148), so stripping the
+        # GLC leaves it populated — the strict fail is on the missing band
+        # fields, which are what "GramFrame cannot render" now flags. (.wav GLC
+        # rows keep a blank time_end and are not GramFrame rows.)
+        self.assertTrue(all(r["time_end"] for r in image_glc_rows))
+        self.assertTrue(all(r["bandwidth"] == "" for r in image_glc_rows))
         self.assertTrue(any("GramFrame cannot render" in r["warnings"]
-                            for r in glc_rows))
+                            for r in image_glc_rows))
 
     def test_relaxed_run_defaults_fields_and_succeeds(self) -> None:
         out_csv = TMP / "extract_glcview_relaxed.csv"
@@ -738,12 +1149,631 @@ class GlcViewFieldMainTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
-        glc_rows = [r for r in rows if r["topic_type"] == "glc"
-                    and r["target_ext"]]
-        self.assertTrue(glc_rows)
-        for r in glc_rows:
-            for field_name in extract_to_csv.GLC_VIEW_FIELDS:
+        # Only image GLC rows are subject to (and so defaulted by) --relaxed;
+        # .wav rows are exempt and keep their blank view fields.
+        image_rows = [r for r in rows if r["topic_type"] == "glc"
+                      and r["target_ext"] in extract_to_csv.GRAMFRAME_GLC_EXTENSIONS]
+        self.assertTrue(image_rows)
+        for r in image_rows:
+            # Only the GLC-authored band fields were stripped, so only they are
+            # defaulted; time_end keeps the image-derived height (issue #148).
+            for field_name in extract_to_csv.GLC_AUTHORED_VIEW_FIELDS:
                 self.assertEqual(r[field_name], extract_to_csv.RELAXED_DEFAULT)
+            self.assertTrue(r["time_end"])
+            self.assertNotEqual(r["time_end"], extract_to_csv.RELAXED_DEFAULT)
+
+
+class DeletedGramRemnantTests(unittest.TestCase):
+    """A header button emptied when its gram was deleted in PowerPoint must
+    not become a blank-``gram_id`` row.
+
+    When a gram is deleted, the emptied header shape often survives, still
+    carrying its shape-level hyperlink to the (now-orphaned) analysis sheet
+    but with no caption and no matching ``.glc`` links. Such a remnant would
+    otherwise emit a lone analysis row whose ``gram_id`` is blank — an
+    invalid row ``deduplicate_csv`` rejects via ``require_field``.
+    """
+
+    def _slide_with_real_gram_and_remnant(self):
+        from pptx import Presentation
+        from pptx.util import Emu
+
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+
+        # A genuine gram: captioned header (shape-level analysis link) plus a
+        # sibling Lofar shape carrying a text-run .glc link in the same folder.
+        header = slide.shapes.add_textbox(Emu(0), Emu(0), Emu(100), Emu(50))
+        header.text_frame.text = "Gram 14: Frigate"
+        mock_pptx.add_shape_level_hyperlink(header, "Gram14/Analysis%20Sheet.png")
+
+        lofar = slide.shapes.add_textbox(Emu(0), Emu(60), Emu(100), Emu(30))
+        run = lofar.text_frame.paragraphs[0].add_run()
+        run.text = "Lofar"
+        mock_pptx.add_text_run_hyperlink(run, "Gram14/chan.glc")
+
+        # The remnant: an emptied header still linked to a deleted gram's
+        # analysis sheet, with no caption and no Lofar links.
+        remnant = slide.shapes.add_textbox(Emu(0), Emu(100), Emu(100), Emu(50))
+        remnant.text_frame.text = ""
+        mock_pptx.add_shape_level_hyperlink(remnant, "Gram15/Analysis%20Sheet.png")
+
+        return slide
+
+    def test_remnant_is_dropped_and_real_gram_kept(self) -> None:
+        slide = self._slide_with_real_gram_and_remnant()
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            grams = extract_to_csv.extract_grams_from_slide(slide, slide_num=3)
+        self.assertEqual([g.gram_id for g in grams], ["14"],
+                         "remnant should be dropped, real gram kept")
+        # No surviving gram carries a blank id.
+        self.assertTrue(all(g.gram_id.strip() for g in grams))
+        self.assertTrue(
+            any("deleted-gram remnant" in m for m in cm.output),
+            f"expected a remnant-skip warning, got: {cm.output}")
+
+    def test_remnant_produces_no_blank_gram_id_row(self) -> None:
+        slide = self._slide_with_real_gram_and_remnant()
+        grams = extract_to_csv.extract_grams_from_slide(slide, slide_num=3)
+        rows: list[dict] = []
+        for gram in grams:
+            rows.extend(extract_to_csv.gram_to_rows(
+                gram, "main", "Instructor Week 1 Grams", "week-1",
+                content_root=TMP, source_dir=TMP,
+                target_chapter="1", relaxed=True,
+            ))
+        self.assertTrue(rows)
+        self.assertTrue(all(r["gram_id"].strip() for r in rows),
+                        "a blank-gram_id row survived to CSV output")
+
+
+class OrphanGlcAnalysisRecoveryTests(unittest.TestCase):
+    """A .glc whose ``GramNN/`` folder matches no header on the slide — because
+    that gram's *analysis-sheet* header links to a stale earlier-build folder —
+    is reconnected to its gram (not dropped with a spurious 'no matching header'
+    warning) when the real analysis sheet sits beside the .glc.
+
+    This is the reverse of the PR #125 stale-analysis-link recovery: there the
+    .glc matched but the analysis image was missing; here the analysis header
+    is mis-linked so the .glc itself is folder-orphaned, and the sibling
+    analysis sheet is what proves the gram is real and reconnectable.
+    """
+
+    def setUp(self) -> None:
+        self.root = TMP / "orphan_glc_recovery" / self._testMethodName
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        self.root.mkdir(parents=True)
+        # A real gram folder on disk: the .glc, and (optionally) its sibling
+        # analysis sheet. The folder name is the .glc href's 'Gram 12/' folder.
+        self.gram_dir = self.root / "Working Grams Week 4" / "Gram 12"
+        self.gram_dir.mkdir(parents=True)
+        (self.gram_dir / "Wav 1.glc").write_text("<glc/>", encoding="utf-8")
+
+    def _add_sibling_analysis_sheet(self) -> None:
+        (self.gram_dir / "Analysis Sheet.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    def _slide(self):
+        from pptx import Presentation
+        from pptx.util import Emu
+
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+        # Header captioned "Gram 12" but whose analysis-sheet hyperlink points
+        # at a stale earlier-build folder ('Gram 11'), so its folder key never
+        # matches the gram's own 'Gram 12/' .glc.
+        header = slide.shapes.add_textbox(Emu(0), Emu(0), Emu(100), Emu(50))
+        header.text_frame.text = "Gram 12: Frigate"
+        mock_pptx.add_shape_level_hyperlink(
+            header, "Working Grams Week 3/Gram 11/Analysis%20Sheet.png")
+        lofar = slide.shapes.add_textbox(Emu(0), Emu(60), Emu(100), Emu(30))
+        run = lofar.text_frame.paragraphs[0].add_run()
+        run.text = "Lofar"
+        mock_pptx.add_text_run_hyperlink(
+            run, "Working Grams Week 4/Gram 12/Wav 1.glc")
+        return slide
+
+    def test_orphan_glc_reconnected_when_sibling_sheet_present(self) -> None:
+        self._add_sibling_analysis_sheet()
+        with self.assertLogs(extract_to_csv.LOGGER, level="INFO") as cm:
+            grams = extract_to_csv.extract_grams_from_slide(
+                self._slide(), slide_num=2,
+                content_root=self.root, source_dir=self.root)
+        self.assertEqual([g.gram_id for g in grams], ["12"])
+        self.assertEqual(
+            [link.href for link in grams[0].glc_links],
+            ["Working Grams Week 4/Gram 12/Wav 1.glc"],
+            "the folder-orphaned .glc should be reconnected to its gram")
+        log = "\n".join(cm.output)
+        self.assertIn("reconnected", log)
+        self.assertNotIn("no matching header", log,
+                         "the recovered .glc must not emit the stale warning")
+
+    def test_orphan_glc_still_warns_without_sibling_sheet(self) -> None:
+        # No analysis sheet beside the .glc -> we can't confirm a real gram, so
+        # the .glc is dropped with the 'no matching header' warning, unchanged.
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            grams = extract_to_csv.extract_grams_from_slide(
+                self._slide(), slide_num=2,
+                content_root=self.root, source_dir=self.root)
+        self.assertIn("no matching header", "\n".join(cm.output))
+        self.assertEqual([link.href for link in grams[0].glc_links], [],
+                         "no sibling sheet -> the orphaned .glc stays dropped")
+
+
+class AnalysisWordOriginalTests(unittest.TestCase):
+    """Feature 013 (US1): the analysis sheet's editable Word original is
+    recorded so the generator can park it beside the gram's topic.
+
+    The rendered image the reader sees cannot be amended; where the author's
+    Word document still exists, an analyst has to be able to find it. These
+    cover which file is chosen, and the cases where there is none.
+    """
+
+    def setUp(self) -> None:
+        self.root = TMP / "analysis_word_original" / self._testMethodName
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        self.gram_dir = self.root / "Gram 12"
+        self.gram_dir.mkdir(parents=True)
+        glc = self.root / "supporting/gram12/config_1.glc"
+        glc.parent.mkdir(parents=True)
+        shutil.copy(FIXTURES / "minimal.glc", glc)
+        mock_pptx.emit_png(self.root / "gram12.PNG", width=4, height=123)
+
+    def _png(self, name: str = "Analysis Sheet.png") -> None:
+        mock_pptx.emit_png(self.gram_dir / name, width=8, height=8)
+
+    def _word(self, name: str) -> Path:
+        path = self.gram_dir / name
+        path.write_bytes(b"genuine word bytes")
+        return path
+
+    def _analysis_row(self, png_href: str = "Gram 12/Analysis Sheet.png") -> dict:
+        gram = _gram(png=png_href)
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.root, source_dir=self.root,
+        )
+        return [r for r in rows if r["topic_type"] == "analysis"][0]
+
+    def test_docx_sibling_of_an_image_sheet_is_recorded(self) -> None:
+        """The newer decks hyperlink the image directly; the Word original is
+        found by same-stem sibling probe."""
+        self._png()
+        self._word("Analysis Sheet.docx")
+        self.assertEqual(
+            self._analysis_row()["analysis_doc_path"],
+            "Gram 12/Analysis Sheet.docx")
+
+    def test_legacy_doc_sibling_is_recorded_in_its_own_format(self) -> None:
+        """FR-003: a binary .doc is carried as a .doc, never normalised."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        self.assertEqual(
+            self._analysis_row()["analysis_doc_path"],
+            "Gram 12/Analysis Sheet.doc")
+
+    def test_word_hyperlink_redirects_to_image_but_keeps_the_original(self) -> None:
+        """The older decks hyperlink the .doc itself. Extraction redirects the
+        row to the rendered image (feature 007) — but the Word path must not be
+        lost on the way, which is the defect feature 013 fixes."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        row = self._analysis_row(png_href="Gram 12/Analysis Sheet.doc")
+        self.assertEqual(row["png_path"], "Gram 12/Analysis Sheet.png",
+                         "the row still points at the rendered image")
+        self.assertEqual(row["analysis_doc_path"], "Gram 12/Analysis Sheet.doc")
+
+    def test_hyperlinked_suffix_outranks_the_probe_order(self) -> None:
+        """An un-swept legacy tree can hold a genuine .doc and a fabricated
+        .docx side by side. When the deck's own hyperlink names one of them,
+        the author's statement wins over the probe order."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        self._word("Analysis Sheet.docx")
+        row = self._analysis_row(png_href="Gram 12/Analysis Sheet.docx")
+        self.assertEqual(row["analysis_doc_path"], "Gram 12/Analysis Sheet.docx")
+
+    def test_probe_prefers_doc_when_the_deck_links_the_image(self) -> None:
+        """With no hyperlink to arbitrate, .doc leads: in an un-swept legacy
+        tree the .doc is the genuine sheet and the .docx is the fabrication."""
+        self._png()
+        self._word("Analysis Sheet.doc")
+        self._word("Analysis Sheet.docx")
+        self.assertEqual(
+            self._analysis_row()["analysis_doc_path"],
+            "Gram 12/Analysis Sheet.doc")
+
+    def test_image_only_sheet_records_nothing_and_does_not_warn(self) -> None:
+        """The expected outcome for decks that never had a Word form. Not a
+        warning — an absent original is honest, not an error."""
+        self._png()
+        row = self._analysis_row()
+        self.assertEqual(row["analysis_doc_path"], "")
+        self.assertNotIn("word", row["warnings"].lower())
+
+    def test_unrelated_word_doc_in_the_folder_is_not_claimed(self) -> None:
+        """Selection is same-stem, so a chapter folder's other Word documents
+        are never mistaken for the analysis sheet's original."""
+        self._png()
+        self._word("source_data.doc")
+        self.assertEqual(self._analysis_row()["analysis_doc_path"], "")
+
+    def test_original_is_probed_where_the_sheet_was_recovered(self) -> None:
+        """A stale analysis hyperlink is recovered to a sheet in the gram's
+        Lofar folder; the Word original must be looked for *there*, not at the
+        dead link target."""
+        lofar_dir = self.root / "supporting/gram12"
+        mock_pptx.emit_png(lofar_dir / "Gram 12 ANALYSIS.png", width=8, height=8)
+        (lofar_dir / "Gram 12 ANALYSIS.docx").write_bytes(b"recovered original")
+        row = self._analysis_row(png_href="Stale Folder/Analysis Sheet.png")
+        self.assertEqual(row["png_path"], "supporting/gram12/Gram 12 ANALYSIS.png",
+                         "sanity: the sheet was recovered from the Lofar folder")
+        self.assertEqual(row["analysis_doc_path"],
+                         "supporting/gram12/Gram 12 ANALYSIS.docx")
+
+    def test_column_is_at_the_right_edge_of_the_schema(self) -> None:
+        """FR-006: appended last so older CSVs read forward-compatibly."""
+        self.assertEqual(extract_to_csv.CSV_COLUMNS[-1], "analysis_doc_path")
+
+
+class QuestionsLabelFilterTests(unittest.TestCase):
+    """A shape-level image link labelled "N Questions" is not a gram."""
+
+    def test_matches_questions_labels(self) -> None:
+        for label in ("7 Questions", "Questions", "10 questions",
+                      "7  QUESTIONS", "Questions "):
+            with self.subTest(label=label):
+                self.assertTrue(extract_to_csv._label_ends_in_questions(label))
+
+    def test_ignores_non_questions_labels(self) -> None:
+        for label in ("Gram 12: Nordik Jockey", "Acquisitions",
+                      "Questions and answers", "", "Question"):
+            with self.subTest(label=label):
+                self.assertFalse(extract_to_csv._label_ends_in_questions(label))
+
+
+class MissingAssetDetectionTests(unittest.TestCase):
+    """A row that references an asset file absent on disk is flagged at
+    extraction (a per-row warning + the ``missing_asset_problems`` scan) so the
+    operator can track and triage it — rather than the reference dangling
+    silently until DITA-OT fails to load it at publish. Rows that carry no
+    asset (blank ``png_path``) are exempt."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "missing_asset"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+
+    def _analysis_row(self, png_name: str, create: bool) -> dict:
+        if create:
+            (self.tmp / png_name).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        gram = _gram(links=[], png=png_name)
+        rows = extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+        return rows[-1]  # the analysis row
+
+    def test_present_asset_is_not_flagged(self) -> None:
+        analysis = self._analysis_row("analysis.png", create=True)
+        self.assertEqual(analysis["warnings"], "")
+        self.assertFalse(
+            extract_to_csv.missing_asset_problems([analysis], self.tmp))
+
+    def test_absent_asset_is_flagged(self) -> None:
+        analysis = self._analysis_row("analysis.png", create=False)
+        self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+        problems = extract_to_csv.missing_asset_problems([analysis], self.tmp)
+        self.assertEqual(len(problems), 1)
+
+    def test_assetless_row_is_exempt(self) -> None:
+        # A gram with no analysis hyperlink carries a blank png_path; that is
+        # "no target file", not "missing" — no asset-missing flag.
+        analysis = self._analysis_row("", create=False)
+        self.assertEqual(analysis["png_path"], "")
+        self.assertNotIn(
+            extract_to_csv.ASSET_MISSING_WARNING, analysis["warnings"])
+        self.assertFalse(
+            extract_to_csv.missing_asset_problems([analysis], self.tmp))
+
+    def test_missing_asset_problems_scan_and_line_numbering(self) -> None:
+        (self.tmp / "there.png").write_bytes(b"x")
+        rows = [
+            {"publication": "main", "gram_id": "1", "topic_type": "analysis",
+             "png_path": "there.png"},                 # present -> ok
+            {"publication": "main", "gram_id": "2", "topic_type": "glc",
+             "png_path": "gone.png"},                   # absent -> flagged
+            {"publication": "main", "gram_id": "3", "topic_type": "glc",
+             "png_path": ""},                           # assetless -> exempt
+        ]
+        problems = extract_to_csv.missing_asset_problems(rows, self.tmp)
+        self.assertEqual(len(problems), 1)
+        pub, gram_id, png_path, line_no = problems[0]
+        self.assertEqual((pub, gram_id, png_path), ("main", "2", "gone.png"))
+        # index 1 -> CSV line 3 (header is line 1), matching glc_view_problems.
+        self.assertEqual(line_no, 3)
+
+
+class MissingAssetMainTests(unittest.TestCase):
+    """End-to-end: a corpus with a referenced asset file removed makes extract
+    warn (and still write the CSV) by default, or hard-abort under
+    ``--strict-assets``."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(
+            TMP / "extract_missing_asset_corpus")
+
+    def _extract(self, out_csv: Path, *extra: str) -> int:
+        return extract_to_csv.main(
+            ["--input-root", str(self.corpus), "--out", str(out_csv), *extra])
+
+    def _delete_one_referenced_asset(self, out_csv: Path) -> str:
+        # A clean extract first, to learn a genuinely-present referenced asset
+        # (non-empty png_path with a file_size), then delete that file so the
+        # next run sees the reference dangling.
+        self.assertEqual(self._extract(out_csv), 0)
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        target = next(r["png_path"] for r in rows
+                      if r["png_path"] and r["file_size"])
+        (self.corpus / target).unlink()
+        return target
+
+    def test_default_warns_and_still_writes_csv(self) -> None:
+        out_csv = TMP / "extract_missing_default.csv"
+        self._delete_one_referenced_asset(out_csv)
+        with self.assertLogs(extract_to_csv.LOGGER, level="WARNING") as cm:
+            rc = self._extract(out_csv)
+        self.assertEqual(rc, 0)
+        log = "\n".join(cm.output)
+        self.assertIn("missing on disk", log)
+        self.assertIn("CSV line ", log)
+        self.assertTrue(out_csv.exists())
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        self.assertTrue(
+            any(extract_to_csv.ASSET_MISSING_WARNING in r["warnings"]
+                for r in rows),
+            "at least one row must carry the asset-missing warning")
+
+    def test_strict_assets_aborts_after_writing_csv(self) -> None:
+        out_csv = TMP / "extract_missing_strict.csv"
+        self._delete_one_referenced_asset(out_csv)
+        with self.assertLogs(extract_to_csv.LOGGER, level="ERROR") as cm:
+            rc = self._extract(out_csv, "--strict-assets")
+        self.assertEqual(rc, 1)
+        self.assertIn("--strict-assets", "\n".join(cm.output))
+        # The CSV is written before the abort so its warnings are inspectable.
+        self.assertTrue(out_csv.exists())
+
+
+class DeletedGramFolderDetectionTests(unittest.TestCase):
+    """``_gram_folder_missing`` distinguishes a gram whose *whole folder* an
+    author has deleted (drop the gram) from a single missing *file* with the
+    folder still present (keep flagging that one file)."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "deleted_folder"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.deck = self.tmp / "Deck"
+        (self.deck / "Files" / "Gram 5").mkdir(parents=True)
+
+    def _gram(self, png: str, links: list[tuple[str, str]]):
+        return extract_to_csv.GramPlaceholder(
+            gram_id="Gram 5", vessel_name="V", png_href=png,
+            glc_links=[extract_to_csv.GlcLink(display_text=t, href=h)
+                       for t, h in links])
+
+    def test_folder_present_is_not_missing(self) -> None:
+        # The Gram 5 folder exists (even though the files inside don't) — this
+        # is a deleted *file*, not a deleted gram, so it is not folder-missing.
+        gram = self._gram(
+            "Files/Gram 5/Analysis.png",
+            [("LOFAR 1", "Files/Gram 5/Lofar 1.glc")])
+        self.assertFalse(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+    def test_folder_deleted_is_missing(self) -> None:
+        gram = self._gram(
+            "Files/Gram 9/Analysis.png",           # Gram 9 folder never created
+            [("LOFAR 1", "Files/Gram 9/Lofar 1.glc")])
+        self.assertTrue(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+    def test_bare_filename_hrefs_are_never_folder_missing(self) -> None:
+        # No directory component to test — fall back to per-file flagging.
+        gram = self._gram("Analysis.png", [("LOFAR 1", "Lofar 1.glc")])
+        self.assertFalse(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+    def test_one_surviving_folder_keeps_the_gram(self) -> None:
+        # analysis lives in the present Gram 5 folder, the glc in a gone one:
+        # some assets survive, so it is not a wholesale deletion.
+        gram = self._gram(
+            "Files/Gram 5/Analysis.png",
+            [("LOFAR 1", "Files/Gram 9/Lofar 1.glc")])
+        self.assertFalse(extract_to_csv._gram_folder_missing(
+            gram, self.tmp, source_dir=self.deck))
+
+
+class DeletedGramFolderMainTests(unittest.TestCase):
+    """End-to-end: deleting a gram's whole folder drops that gram from the CSV
+    (a skip, not a failure), while a single deleted file with its folder still
+    present stays flagged and in the CSV."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        cls.corpus = conftest_helpers.make_mock_corpus(
+            TMP / "extract_deleted_folder_corpus")
+
+    def _extract(self, out_csv: Path, *extra: str) -> int:
+        return extract_to_csv.main(
+            ["--input-root", str(self.corpus), "--out", str(out_csv), *extra])
+
+    def _rows(self, out_csv: Path) -> list[dict]:
+        with out_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+            return list(csv.DictReader(fh))
+
+    def test_deleted_folder_drops_the_gram(self) -> None:
+        out_csv = TMP / "extract_deleted_folder.csv"
+        self.assertEqual(self._extract(out_csv), 0)
+        rows = self._rows(out_csv)
+        # Pick a gram that has a resolved asset, then delete its whole folder.
+        target = next(r for r in rows if r["png_path"] and r["file_size"])
+        gram_id, publication = target["gram_id"], target["publication"]
+        folder = (self.corpus / target["png_path"]).parent
+        self.assertTrue(folder.is_dir())
+        shutil.rmtree(folder)
+
+        with self.assertLogs(extract_to_csv.LOGGER, level="INFO") as cm:
+            rc = self._extract(out_csv)
+        self.assertEqual(rc, 0)                       # a skip, not a failure
+        log = "\n".join(cm.output)
+        self.assertIn("whole asset folder is missing", log)
+
+        after = self._rows(out_csv)
+        self.assertFalse(
+            any(r["gram_id"] == gram_id and r["publication"] == publication
+                for r in after),
+            "the deleted-folder gram must be dropped from the CSV entirely")
+        # No row should carry the per-file missing flag *for that gram* — it was
+        # dropped, not dangled.
+        self.assertFalse(
+            any(extract_to_csv.ASSET_MISSING_WARNING in r["warnings"]
+                and r["gram_id"] == gram_id for r in after))
+
+    def test_single_deleted_file_keeps_the_gram_flagged(self) -> None:
+        out_csv = TMP / "extract_deleted_file.csv"
+        self.assertEqual(self._extract(out_csv), 0)
+        rows = self._rows(out_csv)
+        target = next(r for r in rows if r["png_path"] and r["file_size"])
+        gram_id, publication = target["gram_id"], target["publication"]
+        # Delete only the one file; its folder stays.
+        (self.corpus / target["png_path"]).unlink()
+
+        rc = self._extract(out_csv)
+        self.assertEqual(rc, 0)
+        after = self._rows(out_csv)
+        surviving = [r for r in after
+                     if r["gram_id"] == gram_id
+                     and r["publication"] == publication]
+        self.assertTrue(surviving, "the gram must NOT be dropped")
+        self.assertTrue(
+            any(extract_to_csv.ASSET_MISSING_WARNING in r["warnings"]
+                for r in surviving),
+            "the single missing file must still be flagged")
+
+
+DEMON_GLC = (
+    "<GAPS_Lite_configuration>\n"
+    "  <data_source>\n"
+    "    <filename>{name}</filename>\n"
+    "  </data_source>\n"
+    "  <settings>\n"
+    "    <lofar>\n"
+    "      <bandwidth>40</bandwidth>\n"
+    "      <bandcentre>20</bandcentre>\n"
+    "    </lofar>\n"
+    "  </settings>\n"
+    "</GAPS_Lite_configuration>\n"
+)
+
+
+class DemonRowsTests(unittest.TestCase):
+    """Extract emits a leading ``topic_type=demon`` row per demon marker (#151)."""
+
+    def setUp(self) -> None:
+        self.tmp = TMP / "demon_rows"
+        if self.tmp.exists():
+            shutil.rmtree(self.tmp)
+        self.tmp.mkdir(parents=True)
+        self.gramdir = self.tmp / "supporting/gram12"
+        self.gramdir.mkdir(parents=True)
+        shutil.copy(FIXTURES / "minimal.glc", self.gramdir / "config_1.glc")
+
+    def _add_demon(self, marker: str, image: str, *, height: int = 232) -> None:
+        (self.gramdir / marker).write_text(
+            DEMON_GLC.format(name=image), encoding="utf-8")
+        mock_pptx.emit_png(self.gramdir / image, width=978, height=height)
+
+    def _rows(self):
+        gram = _gram(links=[("LOFAR 1", "supporting/gram12/config_1.glc")])
+        return extract_to_csv.gram_to_rows(
+            gram, publication="main", chapter="Arctic Survey",
+            chapter_slug="arctic-survey",
+            content_root=self.tmp, source_dir=self.tmp,
+        )
+
+    def test_demon_row_leads_and_carries_view(self) -> None:
+        self._add_demon("demon.glc", "Demon - 0-40Hz.png", height=232)
+        rows = self._rows()
+        demon = rows[0]
+        self.assertEqual(demon["topic_type"], "demon")
+        self.assertEqual(demon["sequence"], "1")
+        self.assertEqual(demon["time_end"], "232")   # image pixel height (#148)
+        self.assertEqual(demon["bandwidth"], "40")    # 0-40 Hz baked in the glc
+        self.assertEqual(demon["bandcentre"], "20")
+        self.assertEqual(demon["png_path"], "supporting/gram12/Demon - 0-40Hz.png")
+        self.assertEqual(demon["topic_filename"], rows[1]["topic_filename"])
+        # placed before the Lofar (glc) row
+        self.assertEqual(rows[1]["topic_type"], "glc")
+
+    def test_no_demon_marker_no_demon_row(self) -> None:
+        rows = self._rows()
+        self.assertFalse(any(r["topic_type"] == "demon" for r in rows))
+
+    def test_multiple_demons_ordered(self) -> None:
+        self._add_demon("demon.glc", "Demon - 0-40Hz.png", height=100)
+        self._add_demon("demon-2.glc", "Demon - 10m2s 0-40Hz.png", height=200)
+        rows = self._rows()
+        demons = [r for r in rows if r["topic_type"] == "demon"]
+        self.assertEqual([d["sequence"] for d in demons], ["1", "2"])
+        self.assertEqual(demons[0]["time_end"], "100")
+        self.assertEqual(demons[1]["time_end"], "200")
+        # both precede the glc row
+        self.assertEqual(rows[0]["topic_type"], "demon")
+        self.assertEqual(rows[1]["topic_type"], "demon")
+
+    def test_missing_demon_image_dangles(self) -> None:
+        # marker present but its referenced image absent -> row still emitted,
+        # blank time_end, ASSET_MISSING flag (no crash, no fail-fast).
+        (self.gramdir / "demon.glc").write_text(
+            DEMON_GLC.format(name="Demon - 0-40Hz.png"), encoding="utf-8")
+        rows = self._rows()
+        demon = rows[0]
+        self.assertEqual(demon["topic_type"], "demon")
+        self.assertEqual(demon["time_end"], "")
+        self.assertIn(extract_to_csv.ASSET_MISSING_WARNING, demon["warnings"])
+
+    def test_demon_honours_marker_update_period(self) -> None:
+        # The marker is cloned from the gram's first .glc, so it inherits any
+        # update_period; the demon's time period is scaled by it like any other
+        # image row (issue #160).
+        (self.gramdir / "demon.glc").write_text(
+            DEMON_GLC.format(name="Demon - 0-40Hz.png").replace(
+                "</lofar>", "  <update_period>2</update_period>\n    </lofar>"),
+            encoding="utf-8")
+        mock_pptx.emit_png(
+            self.gramdir / "Demon - 0-40Hz.png", width=978, height=232)
+        demon = self._rows()[0]
+        self.assertEqual(demon["topic_type"], "demon")
+        self.assertEqual(demon["time_end"], "464")
+
+    def test_demon_row_not_gated_by_glc_view_problems(self) -> None:
+        # A demon row is topic_type="demon", exempt from the band fail-fast gate.
+        self._add_demon("demon.glc", "Demon - 0-40Hz.png")
+        rows = self._rows()
+        self.assertEqual(extract_to_csv.glc_view_problems(rows), [])
 
 
 if __name__ == "__main__":

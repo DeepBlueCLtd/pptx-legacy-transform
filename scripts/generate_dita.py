@@ -1,7 +1,7 @@
 """DITA generator (User Story 1, MVP).
 
 Consumes the signed-off intermediate CSV and writes the DITA topic tree,
-ditamaps, manifest, and skipped report under ``--out``. This is the
+ditamaps, and skipped report under ``--out``. This is the
 deliverable the migration pipeline exists to produce; everything before
 this script feeds it.
 
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import logging
 import re
 import shutil
@@ -46,10 +47,28 @@ CSV_COLUMNS: tuple[str, ...] = (
 # it (the current 16-column ``source.csv`` or any legacy CSV) stays valid
 # and produces byte-identical output — the deduplication feature is inert
 # by default (FR-010, SC-005).
+#
+# ``analysis_doc_path`` (feature 013) is likewise optional: a CSV written before
+# that feature simply has no such cell, which reads as "no Word original
+# recorded" and produces exactly the output it did before.
 OPTIONAL_CSV_COLUMNS: tuple[str, ...] = (
     "target_doc", "target_chapter", "target_ext", "master_png_path",
-    "target_gram_id",
+    "target_gram_id", "analysis_doc_path",
 )
+
+# Stable basename stem for the analysis sheet's editable Word original, copied
+# beside the topic under its source extension (feature 013). Mirrors the
+# ``analysis.png`` convention so the gram folder is self-describing: the picture
+# the page shows and the document it was rendered from, side by side.
+ANALYSIS_DOC_STEM = "analysis"
+
+# In-memory-only row annotation: the 1-based line number each row occupied in
+# the source CSV (header is line 1, so the first data row is line 2). Stamped
+# by ``read_csv`` and read by ``require_field`` so an abort can point the
+# operator straight at the offending row in a large CSV. Never a CSV column,
+# so it does not round-trip to disk; the double-underscore name keeps it clear
+# of any real column.
+_SOURCE_LINE = "__source_line__"
 
 # The ``@name`` of the DITA ``<data>`` provenance element that flags a
 # redirected (deduplicated) lofar and anchors its reversal (feature 006).
@@ -80,16 +99,42 @@ STATIC_PAGE_ORDER: tuple[str, ...] = ("welcome.dita", "security.dita")
 # ditamap root into a single nav entry (feature 010).
 GRAMS_NAVTITLE = "Grams"
 
+# 7 Questions image — shown at the top of student gram pages (the analysis
+# sheet is instructor-only so students see this section first) and also
+# surfaced as a root-level topic in every publication's ditamap. The in-body
+# section is *student-only* (see STUDENT_ONLY_AUDIENCE): instructors get the
+# 7 Questions image as the root-level nav topic only, not repeated on every
+# gram page. The root-level topic is unfiltered, so both editions keep it.
+SEVEN_QUESTIONS_IMAGE = "7_questions.png"
+SEVEN_QUESTIONS_TOPIC_STEM = "7_questions"
+# NCNames (XML id attributes) cannot start with a digit, so the topic id differs
+# from the filename stem.
+SEVEN_QUESTIONS_TOPIC_ID = "seven-questions"
+SEVEN_QUESTIONS_TOPIC_TITLE = "7 Questions"
+# Stable section id so the floating nav panel can link to it in-page.
+SEVEN_QUESTIONS_SECTION_ID = "seven-questions"
+
+# Audience token for student-only content — currently just the in-body 7
+# Questions section (and its nav-panel jump link). This is the mirror of the
+# instructor-only ``-trainee`` convention: the *instructor* DITAVAL excludes
+# it, the trainee (student) DITAVAL leaves it in. An element carrying this
+# token therefore survives only in the student edition.
+STUDENT_ONLY_AUDIENCE = "student-only"
+
 # Hidden, instructor-only per-page edition marker. The trainee DITAVAL strips
 # audience="-trainee", so this element survives only in the *instructor* build;
-# its outputclass surfaces it as ``<p class="edition-instructor">`` in the
-# rendered HTML. A single shared stylesheet keys the Oxygen WebHelp search box
-# (and the classification banner) off it — present means instructor, absent
-# means student — so both transformation scenarios can run the *same*
-# publishing template instead of a student-only variant whose only job is to
-# hide the (useless) search box. The class name only ever appears in instructor
-# output, so it never trips the student "no instructor" leakage check (SC-002).
-EDITION_MARKER_OUTPUTCLASS = "edition-instructor"
+# its outputclass surfaces it as ``<p class="gf-persistent">`` in the rendered
+# HTML. The class name is GramFrame's DITA-friendly trainer-context signal
+# (v0.1.11+): GramFrame detects ``class="gf-persistent"`` reliably because
+# DITA-OT/Oxygen pass @outputclass through to @class without rewriting it
+# (unlike @id, which they uniquify per-page). A single shared stylesheet also
+# keys the Oxygen WebHelp search box (and the classification banner) off it —
+# present means instructor, absent means student — so both transformation
+# scenarios can run the *same* publishing template instead of a student-only
+# variant whose only job is to hide the (useless) search box. The class name
+# only ever appears in instructor output, so it never trips the student "no
+# instructor" leakage check (SC-002).
+EDITION_MARKER_OUTPUTCLASS = "gf-persistent"
 
 # Topic body-group open tags into which a static page's edition marker is
 # inserted (string surgery, so the author's formatting is preserved elsewhere).
@@ -103,6 +148,15 @@ LOGGER = logging.getLogger(__name__)
 # ``copy_asset`` is sourced from this path instead of the real file.
 # Keeps the DITA tree slim for transit during cross-network testing.
 _STUB_WAV_PATH: "Path | None" = None
+
+# Temporary debugging aid: when enabled, every gram topic carries a visible
+# instructor-only block mapping its published path (``week-N/gram-NN``) back to
+# its source publication, source chapter/deck title and original ``gram_id`` —
+# so an operator staring at a published page (e.g. a missing analysis image) can
+# find the source PPTX it came from. ON by default during the current debugging
+# phase (``--no-debug-provenance`` suppresses it); flip the CLI default back off
+# once the phase is over.
+_DEBUG_PROVENANCE: bool = True
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -169,6 +223,8 @@ def require_field(row: dict, field: str, *, line_no: int | None = None) -> str:
     value = (row.get(field) or "").strip()
     if value:
         return value
+    if line_no is None:
+        line_no = row.get(_SOURCE_LINE)
     where = f" at CSV line {line_no}" if line_no is not None else ""
     raise PipelineDataError(
         f"Required field {field!r} is missing or blank{where} "
@@ -209,6 +265,45 @@ def _normalise_gram_id(raw: str) -> str:
     return str(int(digits[0]))
 
 
+def decode_csv_bytes(raw: bytes, path: Path, logger: logging.Logger) -> str:
+    """Decode an Excel-edited CSV, tolerant of whichever encoding Excel chose.
+
+    The pipeline writes ``utf-8-sig``, but a technical author who edits the
+    file in Excel and uses *Save As → "CSV (Comma delimited)"* (the
+    convenient default) gets the file back in the Windows ANSI code page
+    (cp1252), **not** UTF-8 — so a strict ``utf-8`` read dies on the first
+    non-ASCII byte (a vessel name, a ``£`` or a ``°``). That is why the
+    operator has had to reach for the awkward *"CSV (MS-DOS)"* option.
+
+    We therefore try UTF-8 first (covering our own output and Excel's
+    *"CSV UTF-8"*), then fall back to cp1252 so the plain *"CSV (Comma
+    delimited)"* save round-trips too. cp1252 maps almost every byte, so
+    this never raises; at worst an exotic glyph is mildly mangled — visible
+    in the cell for the author to fix — rather than crashing the whole run.
+    This is boundary-forgiveness (constitution VII): the file came back
+    from a human's Excel, not from our own deterministic writer.
+    """
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        # DEBUG, not WARNING: the plain *"CSV (Comma delimited)"* save is a
+        # supported round-trip (we decode cp1252 here and the writer emits
+        # ``utf-8-sig`` again), so this is a routine note for the debug log,
+        # not a console nag the operator must act on. Kept off stdout (the
+        # stream handler is INFO) but recorded in the per-stage log for the
+        # air-gapped maintainer.
+        logger.debug(
+            "%s is not UTF-8; decoded as Windows-1252 (cp1252), the encoding "
+            "Excel's 'CSV (Comma delimited)' save produces. Handled — the data "
+            "round-trips cleanly. Save as 'CSV UTF-8' if you want a byte-exact "
+            "BOM-prefixed file.",
+            path,
+        )
+        return raw.decode("cp1252")
+
+
 def read_csv(path: Path) -> list[dict]:
     """Read the intermediate CSV with strict header validation (FR-014).
 
@@ -216,7 +311,8 @@ def read_csv(path: Path) -> list[dict]:
     so downstream grouping treats ``"12"``, ``"Gram 12"``, and ``"Gram 12 "``
     as the same gram.
     """
-    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+    text = decode_csv_bytes(path.read_bytes(), path, LOGGER)
+    with io.StringIO(text, newline="") as fh:
         reader = csv.DictReader(fh)
         actual = tuple(reader.fieldnames or ())
         missing = [c for c in CSV_COLUMNS if c not in actual]
@@ -229,6 +325,11 @@ def read_csv(path: Path) -> list[dict]:
         for row in reader:
             row = dict(row)
             row["gram_id"] = _normalise_gram_id(row.get("gram_id", ""))
+            # Stamp the source-file line (header is line 1) so a downstream
+            # abort can name the exact row. ``reader.line_num`` is correct even
+            # when a quoted cell spans lines. Not a CSV column — purely in
+            # memory; see ``_SOURCE_LINE``.
+            row[_SOURCE_LINE] = reader.line_num
             rows.append(row)
     return rows
 
@@ -253,6 +354,10 @@ def check_row_identity(rows: list[dict]) -> list[str]:
     first_seen: dict[tuple, tuple[int, dict]] = {}
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        # Prefer the line stamped by ``read_csv`` (correct even with quoted
+        # multi-line cells); fall back to the positional index for synthetic
+        # rows that never came through ``read_csv``.
+        line_no = row.get(_SOURCE_LINE, line_no)
         # The key is the path the gram lands at: publication + effective
         # chapter + effective doc + effective gram number + topic_type +
         # sequence. Two rows sharing it mean two distinct grams resolve to
@@ -313,6 +418,7 @@ def check_main_chapter_assigned(rows: list[dict]) -> list[str]:
     """
     errors: list[str] = []
     for line_no, row in enumerate(rows, start=2):  # +1 header, 1-based
+        line_no = row.get(_SOURCE_LINE, line_no)  # prefer stamped line
         if row.get("publication", "") != "main":
             continue
         eff_chapter = _effective_chapter(row)
@@ -342,15 +448,31 @@ def slugify(text: str) -> str:
     return _SLUG_NON_ALNUM.sub("-", ascii_only).strip("-")
 
 
+# Known filename misspellings in the legacy corpus, corrected on the way into
+# the DITA tree so published hrefs read consistently (e.g. an analysis sheet
+# authored as ``analaysis.doc`` → ``analaysis.png`` is emitted as
+# ``analysis.png``). Applied to the slugified *target* name only: the source
+# file is still read from its real, misspelled on-disk name. Keyed on the
+# slug form (post-``slugify``) so multi-word names (``analaysis sheet`` →
+# ``analaysis-sheet``) are corrected too. Kept in sync with
+# snapshot_analysis_docs.ANALYSIS_NAME_MISSPELLINGS, which recognises the same
+# typo when rendering the sheet.
+_ASSET_NAME_CORRECTIONS = (("analaysis", "analysis"),)
+
+
 def slugify_asset_name(filename: str) -> str:
     """Slugify a filename while preserving its extension (lower-cased).
 
     Example: ``"Lofar 1 ABC.PNG"`` → ``"lofar-1-abc.png"``. The original
     extension is kept so DITA-OT and downstream consumers can still
-    classify the asset by suffix.
+    classify the asset by suffix. Known legacy misspellings
+    (``_ASSET_NAME_CORRECTIONS``) are normalised so the emitted filename and
+    every href referencing it read consistently.
     """
     p = Path(filename)
     stem = slugify(p.stem)
+    for wrong, right in _ASSET_NAME_CORRECTIONS:
+        stem = stem.replace(wrong, right)
     suffix = p.suffix.lower()
     return f"{stem}{suffix}" if stem else f"asset{suffix}"
 
@@ -388,6 +510,7 @@ def _relpath_posix(target: Path, start_dir: Path) -> str:
 
 def copy_asset(
     src_relpath: str, image_root: Path, topic_dir: Path,
+    target_name: str | None = None,
 ) -> tuple[str, Path | None]:
     """Copy the referenced asset next to its topic and return ``(href, written)``.
 
@@ -395,6 +518,10 @@ def copy_asset(
     (e.g. ``"Lofar 1 ABC.png"`` → ``"lofar-1-abc.png"``). Each gram has
     its own folder so two grams sharing an original filename never
     collide; the slug keeps hrefs URL-safe.
+
+    ``target_name`` overrides the derived filename with an explicit stable
+    basename (e.g. ``"demon.png"`` for a demon image whose source name varies);
+    the caller is responsible for its uniqueness within the topic folder.
 
     If ``src_relpath`` is empty, returns ``("", None)``.
 
@@ -407,7 +534,8 @@ def copy_asset(
     if not src_relpath:
         return "", None
     source = image_root / src_relpath
-    target_name = slugify_asset_name(Path(src_relpath).name)
+    if target_name is None:
+        target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
     # Testing aid: when --stub-wav is set, every .wav copy is sourced from
     # the stub file but keeps its slugified per-gram filename so the
@@ -479,8 +607,8 @@ def _effective_doc(row: dict) -> str:
 
     No publication carries a per-document folder tier. ``main`` is flat at
     ``main/week-N/gram-NN/``; every **non-main** publication
-    (``progress-test-N``, ``final-assessment-N``) is allocated per source-deck
-    stem in ``classify_publication``, so each maps to exactly **one** deck and a
+    (``progress-test-N``, ``AAAC-final-assessment``, …) is named per source deck
+    in ``classify_publication``, so each maps to exactly **one** deck and a
     ``doc`` tier could never disambiguate two decks — it only ever added a
     redundant folder echoing the publication name (e.g.
     ``progress-test-1/instructor-progress-test-1-grams/``).
@@ -618,17 +746,18 @@ def _master_index_key(png_path: str, asset_suffix: str, row: dict) -> tuple:
     views.
     """
     if asset_suffix == ".wav":
-        # Promotion clause (constitution VII): for a ``.wav`` row these three
-        # view fields *are* the dedup key — an empty one silently mis-pairs two
-        # genuinely different audio views, corrupting our own logic. So even
-        # though the values originate in the external ``.glc`` (nominally
-        # forgiving), a blank on a ``.wav`` row is a defect we fail loud on.
-        # Analysis/image/GLC-missing rows never reach this branch, so their
-        # legitimately-empty views are unaffected.
+        # The view fields (``time_end``/``bandwidth``/``bandcentre``) only drive
+        # GramFrame rendering, which happens for *images*, not ``.wav`` output —
+        # a ``.wav`` row emits a plain link to its ``.glc`` and never renders a
+        # gram-config table. So these fields are boundary-forgiving here (they
+        # originate in the external ``.glc``): a blank one degrades to "" rather
+        # than aborting. When the values *are* present they still refine the
+        # key, so two masters windowing one recording differently stay distinct
+        # (issues #78, #87); when absent, blank-view rows simply share a key.
         return ("wav", png_path,
-                require_field(row, "time_end"),
-                require_field(row, "bandwidth"),
-                require_field(row, "bandcentre"))
+                row.get("time_end", "") or "",
+                row.get("bandwidth", "") or "",
+                row.get("bandcentre", "") or "")
     return ("img", png_path)
 
 
@@ -782,7 +911,7 @@ def _derive_freq_band(bandwidth: str, bandcentre: str) -> tuple[str, str]:
 def _append_gramframe_table(
     parent: ET.Element, image_href: str, time_end: str,
     bandwidth: str, bandcentre: str,
-    display_text: str = "",
+    lofar_index: int,
 ) -> ET.Element:
     """Append one ``<section>`` containing a GramFrame ``gram-config`` table.
 
@@ -796,13 +925,37 @@ def _append_gramframe_table(
     ``colspan="2"`` on the image row — without them the image cell
     renders with ``colspan="1"`` and GramFrame rejects the table.
 
-    When ``display_text`` is supplied (the link label from the source
-    PPTX, e.g. ``"Lofar 1"``), a ``<title>`` is emitted inside the
-    section so multi-gram pages get a clear heading per spectrogram.
+    ``lofar_index`` is the 1-based position of this Lofar among its gram's
+    *image* GLC rows (assigned in render order, see ``emit_gram_topic``;
+    ``.wav``-backed rows are numbered separately as ``WAV N``). It drives a
+    stable ``<title>`` (``Lofar N``) and section ``id`` (``lofar-N``) so the
+    source decks' inconsistent labels (some "Lofar 1/2", some bare "Lofar",
+    some a single numbered one) become a uniform incremental sequence, and so
+    the floating nav panel can target each Lofar with an in-page anchor.
     """
-    section = ET.SubElement(parent, "section", {"outputclass": "lofar-stage"})
-    if display_text:
-        ET.SubElement(section, "title").text = display_text
+    return _append_gramframe_section(
+        parent, image_href, time_end, bandwidth, bandcentre,
+        section_id=_lofar_anchor_id(lofar_index),
+        title=f"Lofar {lofar_index}", outputclass="lofar-stage",
+    )
+
+
+def _append_gramframe_section(
+    parent: ET.Element, image_href: str, time_end: str,
+    bandwidth: str, bandcentre: str, *,
+    section_id: str, title: str, outputclass: str,
+) -> ET.Element:
+    """Append one GramFrame ``gram-config`` ``<section>`` with a given identity.
+
+    Shared body for the Lofar and demon (issue #151) GramFrame blocks: same
+    table shape (``class="gram-config"`` + two named ``<colspec>`` so DITA-OT
+    emits ``colspan="2"`` on the image row, which GramFrame requires), differing
+    only in the section ``id``/``title``/``outputclass``.
+    """
+    section = ET.SubElement(parent, "section", {
+        "id": section_id, "outputclass": outputclass,
+    })
+    ET.SubElement(section, "title").text = title
     table = ET.SubElement(section, "table", {"outputclass": "gram-config"})
     tgroup = ET.SubElement(table, "tgroup", {"cols": "2"})
     ET.SubElement(tgroup, "colspec", {"colname": "c1", "colnum": "1"})
@@ -826,21 +979,115 @@ def _append_gramframe_table(
     return section
 
 
-# Stable id on the analysis-sheet section so the instructor-only floating
-# jump link (issue #91) can target it with an in-page ``<xref>``.
+def _demon_anchor_id(index: int) -> str:
+    """Stable id for the *index*-th demon section within a gram (``demon``/``demon-N``)."""
+    return "demon" if index == 1 else f"demon-{index}"
+
+
+def _append_demon_gramframe(
+    parent: ET.Element, image_href: str, time_end: str,
+    bandwidth: str, bandcentre: str, demon_index: int,
+) -> ET.Element:
+    """Append a demon GramFrame section (issue #151), leading the gram's page.
+
+    The demon is an ordinary inline image GramFrame (time period = image pixel
+    height, band = 0 - 40 Hz baked into its marker upstream) carrying no audience
+    restriction, so it renders in every edition. ``demon_index`` drives a stable
+    ``Demon`` / ``Demon N`` title and ``demon`` / ``demon-N`` anchor.
+    """
+    title = "Demon" if demon_index == 1 else f"Demon {demon_index}"
+    return _append_gramframe_section(
+        parent, image_href, time_end, bandwidth, bandcentre,
+        section_id=_demon_anchor_id(demon_index),
+        title=title, outputclass="demon-stage",
+    )
+
+
+# Stable id on the analysis-sheet section so the floating nav panel's
+# instructor-only entry can target it with an in-page ``<xref>``.
 ANALYSIS_SECTION_ID = "analysis-sheet"
+
+
+def _lofar_anchor_id(index: int) -> str:
+    """Stable id for the *index*-th Lofar section within a gram.
+
+    Each gram's *image*-backed Lofars are numbered incrementally in render
+    order (``Lofar 1`` … ``Lofar N``); this anchors section ``id="lofar-N"``
+    so the floating nav panel's ``#topic/lofar-N`` xref scrolls straight to
+    it. Audio rows have their own sequence — see ``_wav_anchor_id``.
+    """
+    return f"lofar-{index}"
+
+
+def _wav_anchor_id(index: int) -> str:
+    """Stable id for the *index*-th audio (``.wav``-backed) section in a gram.
+
+    Audio sections are numbered independently of the Lofars (``WAV 1`` …
+    ``WAV M``), so a gram of image, audio, audio, image renders as Lofar 1,
+    WAV 1, WAV 2, Lofar 2 — each sequence contiguous.
+    """
+    return f"wav-{index}"
 
 
 def _append_edition_marker(body: ET.Element) -> None:
     """Prepend the hidden instructor-only edition marker as the first child of a
     topic body, so every rendered page carries the per-edition signal the shared
     stylesheet reads (see ``EDITION_MARKER_OUTPUTCLASS``). The empty ``<p>``
-    renders nothing useful on its own — the theme hides ``.edition-instructor``
+    renders nothing useful on its own — the theme hides ``.gf-persistent``
     — its presence/absence is the whole payload.
     """
     body.insert(0, ET.Element("p", {
         "audience": "-trainee", "outputclass": EDITION_MARKER_OUTPUTCLASS,
     }))
+
+
+def _append_debug_provenance(
+    body: ET.Element, first: dict, analysis_rows: list[dict], eff_gram_id: str,
+) -> None:
+    """Append the temporary source-provenance debug block (``--debug-provenance``).
+
+    The published IA renumbers and re-buckets grams (feature 008: several source
+    decks fold into ``main/week-N/``, and within-week collisions renumber via
+    ``target_gram_id``), so a published ``week-N/gram-NN`` no longer matches the
+    original publication / week / gram number an operator would search for in the
+    source PPTX. This block restores that mapping on the rendered page:
+
+    - source **publication** and **chapter** (the immutable source deck title),
+    - the original **gram_id** vs. the **published** week + gram number,
+    - for the analysis sheet, its **source path** and whether it resolved — the
+      direct pointer when chasing a missing analysis image.
+
+    Rendered as an instructor-only ``<note>`` (``audience="-trainee"``) so it
+    never leaks into a student edition; ``outputclass="debug-provenance"`` lets
+    the theme style or hide it. Temporary: gated off by default and removed
+    simply by dropping the flag.
+    """
+    _, published_chapter, _ = _normalise_chapter(_effective_chapter(first))
+    note = ET.SubElement(body, "note", {
+        "audience": "-trainee",
+        "outputclass": "debug-provenance",
+        "type": "other",
+        "othertype": "Source provenance (debug)",
+    })
+
+    def _line(label: str, value: str) -> None:
+        p = ET.SubElement(note, "p")
+        p.text = f"{label}: {value}"
+
+    _line("Source publication", first.get("publication", ""))
+    _line("Source chapter (deck)", first.get("chapter", ""))
+    _line("Source gram number", first.get("gram_id", ""))
+    _line(
+        "Published as",
+        f"{published_chapter or first.get('publication', '')}"
+        f" / gram {_gram_num(eff_gram_id)}",
+    )
+    if analysis_rows:
+        analysis_png = analysis_rows[0].get("png_path", "") or ""
+        _line("Analysis image source", analysis_png or "(no analysis hyperlink)")
+        warnings = analysis_rows[0].get("warnings", "") or ""
+        if warnings:
+            _line("Analysis warnings", warnings)
 
 
 def _inject_static_edition_marker(text: str, source: Path) -> str:
@@ -869,24 +1116,80 @@ def _inject_static_edition_marker(text: str, source: Path) -> str:
     return new_text
 
 
-def _append_analysis_jump_link(parent: ET.Element, topic_id: str) -> None:
-    """Append the instructor-only floating "jump to Analysis Sheet" link.
+def _append_seven_questions_section(body: ET.Element, href: str) -> None:
+    """Append the 7 Questions image section to a gram body.
 
-    Issue #91: on a long gram page the instructor wants to reach the
-    analysis image fast from anywhere. We emit a single in-page
-    ``<xref>`` (rendered ``<p class="analysis-jump">`` → a fixed pill by
-    the theme CSS) that scrolls to the analysis-sheet section. The link
-    carries ``audience="-trainee"`` so the trainee profile elides it
-    entirely — both the link and its target are instructor-only, so the
-    student edition never ships a dangling anchor.
+    The section carries ``audience="student-only"`` so it ships in the
+    student edition only — the instructor DITAVAL strips it. Instructors
+    still reach the 7 Questions image via the root-level nav topic
+    (``7_questions.dita``); it is not repeated on every gram page.
+    In the student edition the analysis section (``audience="-trainee"``)
+    is filtered out too, making this the first visible content on the page.
     """
-    p = ET.SubElement(parent, "p", {
-        "audience": "-trainee", "outputclass": "analysis-jump",
+    section = ET.SubElement(body, "section", {
+        "id": SEVEN_QUESTIONS_SECTION_ID,
+        "audience": STUDENT_ONLY_AUDIENCE,
+        "outputclass": "seven-questions",
     })
-    xref = ET.SubElement(p, "xref", {
-        "href": f"#{topic_id}/{ANALYSIS_SECTION_ID}",
+    ET.SubElement(section, "title").text = SEVEN_QUESTIONS_TOPIC_TITLE
+    ET.SubElement(section, "image", {
+        "href": href, "placement": "break", "align": "center",
     })
-    xref.text = "Analysis Sheet"
+
+
+def _append_gram_nav_panel(
+    parent: ET.Element, topic_id: str, stage_entries: list[tuple[str, str]],
+    has_analysis: bool, has_seven_q: bool = False,
+) -> None:
+    """Append the floating gram navigation panel.
+
+    On a long gram page the reader wants to jump straight to a numbered
+    Lofar — and, for the instructor, the Analysis Sheet — from anywhere.
+    We emit a single ``<p outputclass="gram-nav">`` carrying one in-page
+    ``<xref>`` per content section, which the theme pins as a fixed panel.
+
+    ``stage_entries`` is the gram's demon/Lofar/WAV sections as
+    ``(anchor_id, label)`` in the order they were rendered, so the panel
+    reads down the page rather than re-deriving an order of its own — the
+    Lofar and WAV sequences interleave (``Lofar 1``, ``WAV 1``, ``Lofar 2``)
+    whenever the source deck interleaved them.
+
+    The stage links are unfiltered, so the panel ships in *both* the
+    instructor and student editions. A final ``<xref audience="-trainee">``
+    to the analysis-sheet section is appended only when the gram has one;
+    the trainee profile elides just that entry (its target section is
+    instructor-only too, so the student edition never ships a dangling
+    anchor). Earlier this panel was the instructor-only Analysis-Sheet pill
+    (issue #91); it now serves students and instructors alike.
+
+    When ``has_seven_q`` is True a leading ``audience="student-only"`` xref
+    to the ``seven-questions`` section is prepended. The student edition
+    keeps it (scrolling to the first visible content, the 7 Questions
+    image); the instructor DITAVAL strips both this entry and its target
+    section, so the instructor panel never ships a dangling anchor.
+
+    Emitted only when there is something to jump to.
+    """
+    if not stage_entries and not has_analysis and not has_seven_q:
+        return
+    panel = ET.SubElement(parent, "p", {"outputclass": "gram-nav"})
+    if has_seven_q:
+        xref = ET.SubElement(panel, "xref", {
+            "audience": STUDENT_ONLY_AUDIENCE,
+            "href": f"#{topic_id}/{SEVEN_QUESTIONS_SECTION_ID}",
+        })
+        xref.text = SEVEN_QUESTIONS_TOPIC_TITLE
+    for anchor_id, label in stage_entries:
+        xref = ET.SubElement(panel, "xref", {
+            "href": f"#{topic_id}/{anchor_id}",
+        })
+        xref.text = label
+    if has_analysis:
+        xref = ET.SubElement(panel, "xref", {
+            "audience": "-trainee",
+            "href": f"#{topic_id}/{ANALYSIS_SECTION_ID}",
+        })
+        xref.text = "Analysis Sheet"
 
 
 def _append_analysis_section(
@@ -908,7 +1211,7 @@ def _append_analysis_section(
     if not href:
         return
     suffix = Path(href).suffix.lower().lstrip(".")
-    if suffix == "png":
+    if suffix in ("png", "jpg", "jpeg"):
         ET.SubElement(section, "image", {
             "href": href, "placement": "break", "align": "center",
         })
@@ -921,7 +1224,7 @@ def _append_analysis_section(
 
 
 def _append_glc_viewer_link(
-    parent: ET.Element, glc_href: str, display_text: str,
+    parent: ET.Element, glc_href: str, wav_index: int,
 ) -> ET.Element:
     """Append a GLC-viewer link block (§1.3) to the gram body.
 
@@ -932,32 +1235,53 @@ def _append_glc_viewer_link(
     ``.wav`` for live aural analysis. The companion ``.wav`` is copied
     next to the ``.glc`` by the caller.
 
-    When ``display_text`` is supplied (the link label from the source
-    PPTX), a ``<title>`` is emitted inside the section so multi-gram
-    pages get a clear heading per audio link.
+    An audio link is **not** a Lofar — it resolves to no spectrogram image —
+    so it is titled ``WAV N`` on its own 1..M sequence (``wav_index``,
+    assigned in render order by ``emit_gram_topic``) and anchored at
+    ``id="wav-N"``. Labelling it ``Lofar N`` off the shared image counter
+    misled readers into expecting a LOFAR gram behind the link.
+
+    The title is synthesised rather than taken from the row's
+    ``display_text``: the legacy decks label the audio links ``Lofar N``
+    too (every one of them in the audited corpus), which is the very
+    mislabelling this block exists to correct. ``display_text`` stays in the
+    CSV for round-tripping; it is not rendered.
     """
-    section = ET.SubElement(parent, "section", {"outputclass": "lofar-stage"})
-    if display_text:
-        ET.SubElement(section, "title").text = display_text
+    label = f"WAV {wav_index}"
+    section = ET.SubElement(parent, "section", {
+        "id": _wav_anchor_id(wav_index), "outputclass": "wav-stage",
+    })
+    ET.SubElement(section, "title").text = label
     p = ET.SubElement(section, "p")
     xref = ET.SubElement(p, "xref", {
         "href": glc_href, "format": "glc", "scope": "local",
     })
-    xref.text = display_text or glc_href
+    xref.text = label
     return section
 
 
 def emit_gram_topic(
     gram_rows: list[dict], out_dir: Path, image_root: Path,
     master_index: dict[tuple, MasterTarget] | None = None,
+    seven_q: bool = False,
 ) -> tuple[list[Path], list[dict], int]:
     """Write a single ``gram_NN.dita`` carrying every block for one gram.
 
     The body contains, in order:
 
     1. The analysis-sheet section (DOCX link or embedded PNG), once,
-       wrapped with ``audience="-trainee"``.
-    2. One block per ``topic_type="glc"`` row, in CSV ``sequence``
+       wrapped with ``audience="-trainee"`` (instructor-only).
+    2. The 7 Questions image section (``audience="student-only"`` — the
+       instructor DITAVAL strips it), when ``seven_q`` is True. In the
+       student edition the analysis section is filtered out too, so this
+       section appears first on the page; instructors don't get it here at
+       all (they have the root-level 7_questions.dita nav topic instead).
+    2a. The demon GramFrame block(s) (``topic_type="demon"``, issue #151),
+       in CSV ``sequence`` order — an inline image GramFrame (time period =
+       image pixel height, band = 0 - 40 Hz) with no audience restriction, so
+       it leads the gram in every edition (the first visible block for a
+       student, since analysis is filtered out).
+    3. One block per ``topic_type="glc"`` row, in CSV ``sequence``
        order. The block shape is chosen by the extension of the asset
        named inside the ``.glc`` (carried through as ``png_path``):
 
@@ -969,14 +1293,21 @@ def emit_gram_topic(
          into the per-gram folder so the on-PC GLC viewer can find
          the audio when a student opens the link.
 
+       The two shapes are titled and numbered on **independent** 1..N
+       sequences — ``Lofar 1``…``Lofar N`` for the images, ``WAV 1``…
+       ``WAV M`` for the audio — so an audio link is never presented as a
+       LOFAR gram it cannot show.
+
     Rows whose ``png_path`` is empty or carries any other extension
     are skipped with a warning recorded in ``skipped.txt``.
     """
     analysis_rows = [r for r in gram_rows if r["topic_type"] == "analysis"]
+    demon_rows = [r for r in gram_rows if r["topic_type"] == "demon"]
+    demon_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
     glc_rows = [r for r in gram_rows if r["topic_type"] == "glc"]
     glc_rows.sort(key=lambda r: int(r["sequence"]) if r["sequence"].isdigit() else 0)
 
-    first = analysis_rows[0] if analysis_rows else glc_rows[0]
+    first = (analysis_rows or glc_rows or demon_rows)[0]
     eff_gram_id = _effective_gram_id(first)
     gram_num = _gram_num(eff_gram_id)
     topic_dir = _topic_dir_for_row(out_dir, first)
@@ -994,6 +1325,8 @@ def emit_gram_topic(
         ph.text = f" - {first['vessel_name']}"
     body = ET.SubElement(topic, "body")
     _append_edition_marker(body)
+    if _DEBUG_PROVENANCE:
+        _append_debug_provenance(body, first, analysis_rows, eff_gram_id)
 
     written: list[Path] = []
     skipped: list[dict] = []
@@ -1011,6 +1344,17 @@ def emit_gram_topic(
         (missing/blank master, or no master with the matching view) is
         logged as a WARNING and treated as non-redirected so the asset is
         copied locally instead (FR-014).
+
+        A master in a *different publication* is refused the same way
+        (issue #164). The redirect href is relative from this gram's folder
+        to the master's, so a cross-publication master emits
+        ``../../../<other-pub>/…`` — a reference out of the publication
+        folder, which costs far more than the bytes it saves: DITA-OT then
+        roots the job at the parent of the map's folder and pushes the whole
+        publication a tier deeper than its own ``index.html`` and links, so
+        every page 404s. ``deduplicate_csv.py`` no longer groups across
+        publications, but a CSV deduplicated by an older build still carries
+        such targets, and self-contained beats deduplicated every time.
         """
         key = (r.get("master_png_path", "") or "").strip()
         if not key:
@@ -1026,6 +1370,20 @@ def emit_gram_topic(
                 "has no master row with a matching (time_end, bandwidth, bandcentre) view"
                 if suffix == ".wav" else "not found",
             )
+            return None
+        pub_root = (out_dir / require_field(r, "publication")).resolve(strict=False)
+        master_dir = target.topic_dir.resolve(strict=False)
+        if pub_root not in master_dir.parents and master_dir != pub_root:
+            LOGGER.warning(
+                "Redirect target for %s/%s/%s seq=%s lies outside the "
+                "publication: master_png_path=%r resolves to %s. Copying the "
+                "asset locally instead — a cross-publication redirect would "
+                "leave %s referencing another publication's folder, which "
+                "nests the published output an extra level deep.",
+                r["publication"], r["gram_id"], r["topic_type"],
+                r["sequence"], key, master_dir, r["publication"],
+            )
+            return None
         return target
 
     if analysis_rows:
@@ -1035,9 +1393,75 @@ def emit_gram_topic(
         )
         if copied is not None:
             written.append(copied)
-        _append_analysis_jump_link(body, topic_id)
         _append_analysis_section(body, href)
+        # Feature 013: park the sheet's editable Word original beside the image
+        # it produced. Deliberately *unreferenced* — the topic XML does not link
+        # it, so the published output is unchanged and no reader ever sees it.
+        # It is here for the analyst who later has to amend the sheet and would
+        # otherwise be hunting the legacy source tree for it. Empty for the
+        # decks that only ever supplied an image; the pipeline never invents one.
+        analysis_doc = (analysis_row.get("analysis_doc_path", "") or "").strip()
+        if analysis_doc:
+            doc_ext = Path(analysis_doc).suffix.lower()
+            _, doc_copied = copy_asset(
+                analysis_doc, image_root, topic_dir,
+                target_name=f"{ANALYSIS_DOC_STEM}{doc_ext}",
+            )
+            if doc_copied is not None:
+                written.append(doc_copied)
 
+    if seven_q:
+        # Relative path from the per-gram topic folder up to the publication
+        # root where 7_questions.png was copied.  The depth varies (week tier
+        # for main, optional doc tier for both) so we compute it at runtime.
+        pub = first["publication"]
+        pub_dir = out_dir / pub
+        seven_q_href = _relpath_posix(pub_dir / SEVEN_QUESTIONS_IMAGE, topic_dir)
+        _append_seven_questions_section(body, seven_q_href)
+
+    # Demon GramFrame(s) (issue #151) lead the gram content: after the
+    # analysis/7-questions sections, before every Lofar. Shown to all audiences
+    # (no restriction), so in the student editions -- where analysis is filtered
+    # -- the demon is the first block on the page. Each demon image is copied
+    # beside the topic under a stable ``demon.png`` / ``demon-N.png`` name so its
+    # href needs no ``../`` traversal.
+    # (anchor id, label) for every stage section actually rendered, in render
+    # order — the floating nav panel is built from this at the end.
+    stage_entries: list[tuple[str, str]] = []
+    demon_count = 0
+    for row in demon_rows:
+        png_path = row.get("png_path", "") or ""
+        if not png_path:
+            reason = "demon row has no png_path"
+            LOGGER.error(
+                "Skipping row %s/%s/%s seq=%s: %s",
+                row["publication"], row["gram_id"], row["topic_type"],
+                row["sequence"], reason,
+            )
+            skipped.append(_skip_record(row, reason))
+            continue
+        demon_count += 1
+        ext = Path(png_path).suffix.lower() or ".png"
+        target_name = ("demon" if demon_count == 1 else f"demon-{demon_count}") + ext
+        image_href, copied = copy_asset(
+            png_path, image_root, topic_dir, target_name=target_name)
+        if copied is not None:
+            written.append(copied)
+        demon_section = _append_demon_gramframe(
+            body, image_href,
+            row.get("time_end", ""),
+            row.get("bandwidth", ""), row.get("bandcentre", ""),
+            demon_count,
+        )
+        stage_entries.append(
+            (demon_section.get("id"), demon_section.find("title").text))
+
+    # The Lofars (image-backed) and the WAV links (audio-backed) carry
+    # *independent* 1..N sequences: a ``.wav`` GLC resolves to no spectrogram,
+    # so numbering it off the Lofar counter labelled audio links "Lofar 4" and
+    # promised a LOFAR gram that does not exist behind the link.
+    lofar_index = 0
+    wav_index = 0
     for row in glc_rows:
         png_path = row.get("png_path", "") or ""
         asset_suffix = Path(png_path).suffix.lower()
@@ -1048,24 +1472,30 @@ def emit_gram_topic(
                 # Redirected: link to the master copy, copy nothing locally,
                 # and record the original local path for reversal (feature 006).
                 href = _relpath_posix(master.topic_dir / master.link_basename, topic_dir)
+                lofar_index += 1
                 section = _append_gramframe_table(
                     body, href,
                     row.get("time_end", ""),
                     row.get("bandwidth", ""), row.get("bandcentre", ""),
-                    row.get("display_text", ""),
+                    lofar_index,
                 )
                 _append_provenance_data(section, png_path)
+                stage_entries.append(
+                    (_lofar_anchor_id(lofar_index), f"Lofar {lofar_index}"))
                 redirected += 1
                 continue
             image_href, copied = copy_asset(png_path, image_root, topic_dir)
             if copied is not None:
                 written.append(copied)
+            lofar_index += 1
             _append_gramframe_table(
                 body, image_href,
                 row.get("time_end", ""),
                 row.get("bandwidth", ""), row.get("bandcentre", ""),
-                row.get("display_text", ""),
+                lofar_index,
             )
+            stage_entries.append(
+                (_lofar_anchor_id(lofar_index), f"Lofar {lofar_index}"))
             continue
 
         if asset_suffix == ".wav":
@@ -1088,10 +1518,11 @@ def emit_gram_topic(
                 glc_href = _relpath_posix(
                     master.topic_dir / master.link_basename, topic_dir,
                 )
-                section = _append_glc_viewer_link(
-                    body, glc_href, row.get("display_text", ""),
-                )
+                wav_index += 1
+                section = _append_glc_viewer_link(body, glc_href, wav_index)
                 _append_provenance_data(section, glc_path)
+                stage_entries.append(
+                    (_wav_anchor_id(wav_index), f"WAV {wav_index}"))
                 redirected += 1
                 continue
             glc_href, glc_copied = copy_asset(glc_path, image_root, topic_dir)
@@ -1100,7 +1531,10 @@ def emit_gram_topic(
                 written.append(glc_copied)
             if wav_copied is not None:
                 written.append(wav_copied)
-            _append_glc_viewer_link(body, glc_href, row.get("display_text", ""))
+            wav_index += 1
+            _append_glc_viewer_link(body, glc_href, wav_index)
+            stage_entries.append(
+                (_wav_anchor_id(wav_index), f"WAV {wav_index}"))
             continue
 
         if not png_path:
@@ -1113,6 +1547,16 @@ def emit_gram_topic(
             row["sequence"], reason,
         )
         skipped.append(_skip_record(row, reason))
+
+    # Floating nav panel: one in-page jump per rendered stage section — demon,
+    # Lofar, WAV — in page order (both editions), plus an instructor-only
+    # Analysis Sheet link and (when present) a leading 7 Questions link.
+    # Appended last so it lists only the sections that actually rendered (a
+    # skipped row claims no number); position:fixed in the theme means DOM
+    # order doesn't affect placement.
+    _append_gram_nav_panel(
+        body, topic_id, stage_entries, bool(analysis_rows), has_seven_q=seven_q,
+    )
 
     # Navigation back to the publication index is delivered by the page
     # chrome (a future custom header bar), not by per-topic related-links:
@@ -1208,13 +1652,10 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
 
     The ditamap nests each week's gram topicrefs under a ``<topicref>`` to
     this topic (not a nav-only ``<topichead>``), so every renderer gives the
-    week its own page at the top level of the map — the publication index
-    lists the weeks, and each week page lists its grams (DITA-OT and Oxygen
-    both auto-generate child links for a topic with topicref children). The
-    topic body is intentionally empty: the title is the content, the
-    children are the point — apart from the hidden instructor-only edition
-    marker, which every page carries so the shared stylesheet can tell the
-    editions apart (see ``EDITION_MARKER_OUTPUTCLASS``).
+    week its own page at the top level of the map. The topic body contains a
+    ``<ul outputclass="gram-index">`` of ``enterBtn``-styled links — one per
+    gram in the week, sorted by ascending gram number — so clicking a week
+    lands directly on the gram-selection page without an extra hop (issue #130).
 
     The title is decomposed by ``_normalise_chapter``: a leading
     "Instructor " (case-insensitive) is wrapped in ``<ph audience="-trainee">``
@@ -1223,7 +1664,7 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
     them fail-fast in ``check_main_chapter_assigned`` before this runs.
     """
     written: list[Path] = []
-    for slug, (raw_chapter, _) in _main_chapters(rows).items():
+    for slug, (raw_chapter, chapter_rows) in _main_chapters(rows).items():
         if not slug:
             continue
         audience_prefix, display_remainder, _ = _normalise_chapter(raw_chapter)
@@ -1235,7 +1676,33 @@ def emit_main_chapter_topics(rows: list[dict], out_dir: Path) -> list[Path]:
             ph = ET.SubElement(title, "ph", {"audience": "-trainee"})
             ph.text = audience_prefix
             ph.tail = display_remainder
-        _append_edition_marker(ET.SubElement(topic, "body"))
+        body = ET.SubElement(topic, "body")
+        _append_edition_marker(body)
+
+        # Gram-selection button list: deduplicated, sorted by gram number.
+        seen: set[str] = set()
+        gram_entries: list[tuple[int, str, str]] = []
+        for row in chapter_rows:
+            doc_slug = _doc_slug(_effective_doc(row))
+            gram_dir = _gram_folder_name(_effective_gram_id(row))
+            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+            if uniq in seen:
+                continue
+            seen.add(uniq)
+            eff_gram_id = _effective_gram_id(row)
+            gram_num = int(_gram_num(eff_gram_id))
+            topic_file = _topic_filename(eff_gram_id)
+            # href relative to the chapter topic (in main/<slug>/)
+            href = "/".join([s for s in (doc_slug, gram_dir) if s] + [topic_file])
+            gram_entries.append((gram_num, href, str(gram_num)))
+        gram_entries.sort(key=lambda t: t[0])
+        ul = ET.SubElement(body, "ul", {"outputclass": "gram-index"})
+        for _, href, label in gram_entries:
+            li = ET.SubElement(ul, "li")
+            ET.SubElement(li, "xref", {
+                "href": href, "format": "dita", "outputclass": "enterBtn",
+        })
+
         chapter_dir = out_dir / "main" / slug
         chapter_dir.mkdir(parents=True, exist_ok=True)
         path = chapter_dir / f"{_chapter_topic_stem(slug)}.dita"
@@ -1298,6 +1765,46 @@ def copy_static_tree(static_root: Path, pub_dir: Path) -> list[Path]:
     return copied
 
 
+def emit_seven_questions_topic(pub_dir: Path, src: Path) -> list[Path]:
+    """Emit ``7_questions.dita`` and copy ``7_questions.png`` into ``pub_dir``.
+
+    The topic embeds the image inline so the publication's nav shows it as
+    a renderable page (a bare image file cannot be referenced by a ditamap).
+    Like all generated topics it carries the instructor-only edition marker.
+    The PNG copy is graceful-dangle: if ``src`` is absent a warning is logged
+    and the topic is still written with its intended href (dropping the PNG in
+    and re-running generates a complete, byte-identical result).
+
+    Returns the list of written destination paths (topic + PNG if copied).
+    """
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+
+    image_dest = pub_dir / SEVEN_QUESTIONS_IMAGE
+    if src.is_file():
+        shutil.copyfile(src, image_dest)
+        written.append(image_dest)
+    else:
+        LOGGER.warning(
+            "7 Questions image not found at %s — %s emitted with dangling href "
+            "(drop the PNG into the publication folder and re-run to resolve).",
+            src, pub_dir / f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
+        )
+
+    topic = ET.Element("topic", {"id": SEVEN_QUESTIONS_TOPIC_ID})
+    ET.SubElement(topic, "title").text = SEVEN_QUESTIONS_TOPIC_TITLE
+    body = ET.SubElement(topic, "body")
+    _append_edition_marker(body)
+    ET.SubElement(body, "image", {
+        "href": SEVEN_QUESTIONS_IMAGE,
+        "placement": "break", "align": "center",
+    })
+    topic_path = pub_dir / f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita"
+    _write_text(topic_path, _serialise(topic, TOPIC_DOCTYPE))
+    written.append(topic_path)
+    return written
+
+
 def _append_static_topicrefs(
     root: ET.Element, static_pages: Iterable[str],
 ) -> None:
@@ -1310,17 +1817,56 @@ def _append_static_topicrefs(
         ET.SubElement(root, "topicref", {"href": name})
 
 
-def _append_grams_topichead(root: ET.Element) -> ET.Element:
-    """Append and return the ``<topichead>`` (navtitle ``Grams``) that holds
-    every per-gram topicref, collapsing N gram entries into a single root-level
-    nav item (feature 010). Uses the ``<topicmeta>/<navtitle>`` child form,
-    matching the chapter topicheads.
+GRAMS_TOPIC_STEM = "grams"
+
+
+def emit_test_grams_topic(
+    publication: str, rows: list[dict], out_dir: Path,
+) -> Path:
+    """Write ``<publication>/grams.dita`` — a navigable landing page for a
+    flat (non-``main``) publication, mirroring the ``week_N.dita`` chapter
+    topics so Oxygen renders a proper "Grams" page with a bullet-list of
+    gram links rather than collapsing to a nav-only ``<topichead>``.
     """
-    topichead = ET.SubElement(root, "topichead")
-    topicmeta = ET.SubElement(topichead, "topicmeta")
-    navtitle = ET.SubElement(topicmeta, "navtitle")
-    navtitle.text = GRAMS_NAVTITLE
-    return topichead
+    pub_dir = out_dir / publication
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    topic = ET.Element("topic", {"id": GRAMS_TOPIC_STEM})
+    title_el = ET.SubElement(topic, "title")
+    title_el.text = GRAMS_NAVTITLE
+    body = ET.SubElement(topic, "body")
+    _append_edition_marker(body)
+
+    seen: set[str] = set()
+    gram_entries: list[tuple[int, str, str]] = []
+    for row in rows:
+        if row["publication"] != publication:
+            continue
+        doc_slug = _doc_slug(_effective_doc(row))
+        gram_dir = _gram_folder_name(_effective_gram_id(row))
+        uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
+        if uniq in seen:
+            continue
+        seen.add(uniq)
+        eff_gram_id = _effective_gram_id(row)
+        gram_num = int(_gram_num(eff_gram_id))
+        topic_file = _topic_filename(eff_gram_id)
+        href = "/".join([s for s in (doc_slug, gram_dir) if s] + [topic_file])
+        gram_entries.append((gram_num, href, str(gram_num)))
+    gram_entries.sort(key=lambda t: t[0])
+    ul = ET.SubElement(body, "ul", {"outputclass": "gram-index"})
+    for _, href, label in gram_entries:
+        li = ET.SubElement(ul, "li")
+        # Leave the xref text empty so DITA-OT resolves the link label from
+        # the target topic's own <title> (``Gram N - Vessel``), matching the
+        # per-week ``main`` index — a hardcoded ``Gram N`` here masked the real
+        # gram title (incl. the instructor-visible vessel name) on flat pubs.
+        ET.SubElement(li, "xref", {
+            "href": href, "format": "dita", "outputclass": "enterBtn",
+        })
+
+    path = pub_dir / f"{GRAMS_TOPIC_STEM}.dita"
+    _write_text(path, _serialise(topic, TOPIC_DOCTYPE))
+    return path
 
 
 def _main_chapters(rows: list[dict]) -> "OrderedDict[str, tuple[str, list[dict]]]":
@@ -1345,6 +1891,7 @@ def _main_chapters(rows: list[dict]) -> "OrderedDict[str, tuple[str, list[dict]]
 
 def emit_main_ditamap(
     rows: list[dict], out_dir: Path, static_pages: Iterable[str] = (),
+    seven_q_page: bool = False,
 ) -> Path:
     """Write ``main/main.ditamap`` — inside the publication folder — with one
     chapter-topic ``<topicref>`` per week at the **top level** of the map.
@@ -1379,37 +1926,15 @@ def emit_main_ditamap(
     root = ET.Element("map")
     _append_map_title(root, "Main")
     _append_static_topicrefs(root, static_pages)
-    for slug, (_, chapter_rows) in _main_chapters(rows).items():
+    if seven_q_page:
+        ET.SubElement(root, "topicref", {
+            "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
+        })
+    for slug, _ in _main_chapters(rows).items():
         if slug:
-            chapter_ref = ET.SubElement(root, "topicref", {
+            ET.SubElement(root, "topicref", {
                 "href": f"{slug}/{_chapter_topic_stem(slug)}.dita",
             })
-        else:
-            chapter_ref = root
-        seen: set[str] = set()
-        gram_refs: list[tuple[int, str]] = []
-        for row in chapter_rows:
-            doc_slug = _doc_slug(_effective_doc(row))
-            gram_dir = _gram_folder_name(_effective_gram_id(row))
-            uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
-            if uniq in seen:
-                continue
-            seen.add(uniq)
-            topic_file = _topic_filename(_effective_gram_id(row))
-            # Build the href from non-empty segments only, mirroring the
-            # pathlib-based on-disk layout (_publication_root, which drops
-            # empty path parts). A bare-integer week gives slug "week-N"; a
-            # no-week deck (e.g. Pub10 with a blank target_chapter) gives an
-            # EMPTY slug — interpolating it as "{slug}/..." would emit a
-            # leading-slash "/..." (absolute) href that DITA-OT cannot
-            # resolve, silently dropping the topic under
-            # --processing-mode=lax (a 404 in the rendered output).
-            # Filtering empties keeps href == path relative to the map.
-            href = "/".join([s for s in (slug, doc_slug, gram_dir) if s]
-                            + [topic_file])
-            gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
-        for _, href in sorted(gram_refs):
-            ET.SubElement(chapter_ref, "topicref", {"href": href})
 
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
@@ -1419,29 +1944,36 @@ def _flat_publication_title(publication: str) -> str:
     """Human-readable map title for a non-``main`` (flat) publication.
 
     ``progress-test-N`` → ``"Progress Test N"`` (preserves the legacy
-    title style from feature 001). Any other slug is title-cased with
-    hyphens turned into spaces (e.g. ``progress-final-assessment`` →
-    ``"Progress Final Assessment"``). This is what gets emitted into
-    the ditamap's ``<title>`` child element; the audience-tagged
-    " — Instructor Version" suffix is appended by ``_append_map_title``.
+    title style from feature 001). A course-code-prefixed assessment keeps
+    its code upper-case (``AAAC-final-assessment`` → ``"AAAC Final
+    Assessment"``) — ``str.title()`` alone would render it ``"Aaac …"``.
+    Any other slug is title-cased with hyphens turned into spaces (e.g.
+    ``progress-final-assessment`` → ``"Progress Final Assessment"``). This
+    is what gets emitted into the ditamap's ``<title>`` child element; the
+    audience-tagged " — Instructor Version" suffix is appended by
+    ``_append_map_title``.
     """
     if publication.startswith("progress-test-"):
         n = publication.removeprefix("progress-test-")
         return f"Progress Test {n}"
+    head, sep, tail = publication.partition("-")
+    if sep and head.isalpha() and head.isupper():
+        return f"{head} {tail.replace('-', ' ').title()}"
     return publication.replace("-", " ").title()
 
 
 def emit_test_ditamap(
     publication: str, rows: list[dict], out_dir: Path,
     static_pages: Iterable[str] = (),
+    seven_q_page: bool = False,
 ) -> Path:
     """Write ``<publication>/<publication>.ditamap`` inside the publication
     folder, with folder-relative hrefs (no ``<publication>/`` prefix).
 
     The common static pages lead (feature 010); the per-gram topicrefs are
-    grouped under a single ``<topichead>`` (navtitle ``Grams``) so they sit one
-    level below the ditamap root rather than flooding it as direct children,
-    in ascending gram-number order regardless of CSV row order.
+    nested under a ``<topicref href="grams.dita">`` so Oxygen renders a real
+    "Grams" landing page (like the week chapter topics in ``main``) rather
+    than a nav-only ``<topichead>`` with no content of its own.
     """
     pub_dir = out_dir / publication
     pub_dir.mkdir(parents=True, exist_ok=True)
@@ -1449,24 +1981,13 @@ def emit_test_ditamap(
     root = ET.Element("map")
     _append_map_title(root, _flat_publication_title(publication))
     _append_static_topicrefs(root, static_pages)
-    grams_head = _append_grams_topichead(root)
-    seen: set[str] = set()
-    gram_refs: list[tuple[int, str]] = []
-    for row in rows:
-        if row["publication"] != publication:
-            continue
-        doc_slug = _doc_slug(_effective_doc(row))
-        gram_dir = _gram_folder_name(_effective_gram_id(row))
-        uniq = f"{doc_slug}/{gram_dir}" if doc_slug else gram_dir
-        if uniq in seen:
-            continue
-        seen.add(uniq)
-        topic_file = _topic_filename(_effective_gram_id(row))
-        prefix = f"{doc_slug}/" if doc_slug else ""
-        href = f"{prefix}{gram_dir}/{topic_file}"
-        gram_refs.append((int(_gram_num(_effective_gram_id(row))), href))
-    for _, href in sorted(gram_refs):
-        ET.SubElement(grams_head, "topicref", {"href": href})
+    if seven_q_page:
+        ET.SubElement(root, "topicref", {
+            "href": f"{SEVEN_QUESTIONS_TOPIC_STEM}.dita",
+        })
+    ET.SubElement(root, "topicref", {
+        "href": f"{GRAMS_TOPIC_STEM}.dita",
+    })
     _write_text(map_path, _serialise(root, MAP_DOCTYPE))
     return map_path
 
@@ -1495,12 +2016,27 @@ def write_trainee_ditaval(out_dir: Path) -> Path:
     return path
 
 
-def write_manifest(out_dir: Path, files: list[Path]) -> Path:
-    """Write ``manifest.txt`` listing every produced file (sorted)."""
-    manifest_path = out_dir / "manifest.txt"
-    rels = sorted(p.relative_to(out_dir).as_posix() for p in files)
-    _write_text(manifest_path, "\n".join(rels) + "\n")
-    return manifest_path
+INSTRUCTOR_DITAVAL = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<val>\n'
+    '  <prop att="audience" val="student-only" action="exclude"/>\n'
+    '</val>\n'
+)
+
+
+def write_instructor_ditaval(out_dir: Path) -> Path:
+    """Emit the DITAVAL profile that the instructor edition filters with.
+
+    The mirror of ``trainee.ditaval``: DITA elements authored as
+    student-only content carry ``audience="student-only"`` (today just the
+    in-body 7 Questions section and its nav-panel jump link), and the
+    instructor build passes this profile to strip them. Instructors keep
+    the 7 Questions image via the root-level ``7_questions.dita`` nav topic,
+    which is unfiltered.
+    """
+    path = out_dir / "instructor.ditaval"
+    _write_text(path, INSTRUCTOR_DITAVAL)
+    return path
 
 
 def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
@@ -1523,20 +2059,54 @@ def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
 # Orchestration
 # -----------------------------------------------------------------------------
 
+def clean_publication_folders(out_dir: Path, publications: list[str]) -> list[str]:
+    """Remove each ``out_dir/<pub>`` this run is about to rebuild.
+
+    The publication folder — not the whole ``--out`` tree — is the correct
+    unit of the wipe, and the reason is the ditamap. Every run regenerates
+    ``<pub>/<pub>.ditamap`` wholesale from the rows it was given, so the folder
+    and its map must be rebuilt together: clearing the folder first is what
+    makes a gram *deleted from the PPTX* disappear from the DITA tree instead
+    of lingering as an orphan the map no longer references. Wiping less than a
+    whole publication would leave the tree and its map disagreeing; wiping more
+    would destroy the other documents in a suite built up across runs.
+
+    Returns the publications whose folders actually existed and were removed,
+    for the caller to log.
+    """
+    removed = []
+    for pub in publications:
+        pub_dir = out_dir / pub
+        if pub_dir.exists():
+            shutil.rmtree(pub_dir)
+            removed.append(pub)
+    return removed
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate DITA from the signed-off CSV")
     parser.add_argument("--csv", required=True, type=Path, dest="csv_path")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
     parser.add_argument(
-        "--clean", action="store_true",
-        help="Deprecated no-op: the output tree is now always wiped and rebuilt "
-             "from scratch. Accepted only so existing wrappers keep parsing.")
-    parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
              "(keeps slugified per-gram filenames so paired .glc references "
              "still resolve). Slims the DITA tree for cross-system transit.")
+    parser.add_argument(
+        "--debug-provenance", action="store_true", dest="debug_provenance",
+        default=True,
+        help="Temporary debugging aid: stamp each gram topic with a visible "
+             "instructor-only block mapping its published week-N/gram-NN back "
+             "to the source publication, source chapter/deck title and original "
+             "gram_id (plus the analysis image's source path). Helps trace a "
+             "published page — e.g. a missing analysis image — to the PPTX it "
+             "came from. ON by default during the current debugging phase; pass "
+             "--no-debug-provenance to suppress the block.")
+    parser.add_argument(
+        "--no-debug-provenance", action="store_false", dest="debug_provenance",
+        help="Suppress the source-provenance debug block (see "
+             "--debug-provenance), which is otherwise on by default for now.")
     parser.add_argument(
         "--static-root", type=Path, dest="static_root", default=Path("static"),
         help="Folder of common static pages (welcome.dita, security.dita, …) "
@@ -1544,6 +2114,15 @@ def main(argv: Iterable[str] | None = None) -> int:
              "folder and referenced as the first ditamap entries, ahead of the "
              "Grams nav folder. Default: ./static. A missing folder yields no "
              "shared pages (a logged warning), not an error.")
+    parser.add_argument(
+        "--seven-questions", type=Path, dest="seven_questions",
+        default=Path("7_questions.png"),
+        help="Path to the 7 Questions PNG. Copied into each publication folder "
+             "and referenced as a root-level nav topic (7_questions.dita) in "
+             "every ditamap and as an unfiltered section at the top of each "
+             "gram page (students see it first; instructors see it below the "
+             "analysis sheet). Default: ./7_questions.png. A missing file "
+             "yields dangling hrefs (drop the PNG in and re-run), not an error.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     setup_logging(Path("generate.log"))
@@ -1558,19 +2137,22 @@ def main(argv: Iterable[str] | None = None) -> int:
     else:
         _STUB_WAV_PATH = None
 
+    global _DEBUG_PROVENANCE
+    _DEBUG_PROVENANCE = bool(args.debug_provenance)
+    if _DEBUG_PROVENANCE:
+        LOGGER.info(
+            "Debug provenance enabled: each gram topic will carry a visible "
+            "instructor-only source-provenance block (temporary).")
+
     if not args.csv_path.is_file():
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    # Always rebuild the output tree from scratch. Wiping it up-front verifies
-    # it isn't locked (e.g. a publication folder open in Oxygen) and guarantees
-    # a run can never blend fresh topics with a previous document's leftovers —
-    # the failure mode where a stale dita/ tree silently survives a switch of
-    # input CSV. (``--clean`` is now the default and the flag is a deprecated
-    # no-op, retained only so existing tuned wrappers keep parsing.)
-    if args.out.exists():
-        LOGGER.info("Cleaning existing output tree at %s", args.out)
-        shutil.rmtree(args.out)
+    # No run ever wipes the whole --out tree. The generator's blast radius is
+    # exactly the publication folders its own CSV produces (below); anything
+    # else in the tree belongs to the operator — including, on the target, the
+    # hand-maintained content of Z:\dita. Clearing the whole tree is a manual
+    # act, done deliberately by hand, not a flag a wrapper can carry.
     args.out.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -1609,6 +2191,30 @@ def main(argv: Iterable[str] | None = None) -> int:
             len(duplicates), "y" if len(duplicates) == 1 else "ies",
         )
 
+    # Every publication this run emits, known before anything is written so
+    # each one's folder can be rebuilt from scratch. ``publication`` is a
+    # Zone-A identity column already proven non-blank by check_row_identity.
+    publications = sorted({r["publication"] for r in rows})
+
+    # Rebuild only the publication folders this run owns. A gram dropped from
+    # the PPTX must disappear from the DITA tree, and the ditamap is rewritten
+    # wholesale per publication — so the folder and its map are cleared and
+    # rebuilt together. Publications *not* in this CSV are left untouched, so a
+    # suite of documents can be built up across runs and published one by one.
+    removed = clean_publication_folders(args.out, publications)
+    if removed:
+        LOGGER.info(
+            "Rebuilding publication folder(s) from scratch: %s",
+            ", ".join(removed))
+    preserved = sorted(
+        p.name for p in args.out.iterdir()
+        if p.is_dir() and p.name not in publications)
+    if preserved:
+        LOGGER.info(
+            "Leaving %d other publication folder(s) in %s untouched: %s "
+            "(delete them by hand for a from-scratch rebuild)",
+            len(preserved), args.out, ", ".join(preserved))
+
     written: list[Path] = []
     skipped: list[dict] = []
     errors = 0
@@ -1622,11 +2228,21 @@ def main(argv: Iterable[str] | None = None) -> int:
     except PipelineDataError as exc:
         LOGGER.error("Aborting: %s", exc)
         return 1
+    seven_q_src = args.seven_questions
+    seven_q_available = seven_q_src.is_file()
+    if not seven_q_available:
+        LOGGER.warning(
+            "7 Questions image not found at %s — gram topics will carry a "
+            "dangling href; drop the file in and re-run to resolve.",
+            seven_q_src,
+        )
+
     for key, gram_rows in gram_groups.items():
         try:
             paths, skips, redirected = emit_gram_topic(
                 gram_rows, args.out, args.image_root,
                 master_index=master_index,
+                seven_q=True,
             )
             for path in paths:
                 written.append(path)
@@ -1636,8 +2252,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         except Exception as exc:
             errors += 1
             LOGGER.error("Failed to emit gram %s: %s", key, exc)
-
-    publications = sorted({r["publication"] for r in rows})
 
     # Common static pages (feature 010): copy the static tree into each
     # publication folder, then reference them as the first ditamap entries.
@@ -1651,12 +2265,20 @@ def main(argv: Iterable[str] | None = None) -> int:
             "content nav (top-level Week folders for main, the Grams folder "
             "for progress tests), no shared Welcome/Security pages.",
             args.static_root)
-    static_copied: list[Path] = []
     for pub in publications:
         copied = copy_static_tree(args.static_root, args.out / pub)
-        static_copied.extend(copied)
         if copied:
             LOGGER.info("Copied %d static file(s) into %s/", len(copied), pub)
+
+    # 7 Questions topic: copy the PNG and emit a thin wrapper topic into every
+    # publication folder, then reference it as a root-level ditamap entry
+    # (after static pages, before gram content).
+    for pub in publications:
+        pub_paths = emit_seven_questions_topic(args.out / pub, seven_q_src)
+        LOGGER.info(
+            "Wrote 7 Questions topic/image into %s/ (%d file(s))",
+            pub, len(pub_paths),
+        )
 
     ditamap_paths: list[Path] = []
     if any(r["publication"] == "main" for r in rows):
@@ -1667,20 +2289,25 @@ def main(argv: Iterable[str] | None = None) -> int:
         for path in chapter_topics:
             written.append(path)
             LOGGER.info("Wrote %s", path)
-        ditamap_paths.append(emit_main_ditamap(rows, args.out, static_pages))
+        ditamap_paths.append(
+            emit_main_ditamap(rows, args.out, static_pages, seven_q_page=True)
+        )
         LOGGER.info("Wrote ditamap %s", ditamap_paths[-1])
     for pub in publications:
         if pub != "main":
-            path = emit_test_ditamap(pub, rows, args.out, static_pages)
+            grams_topic = emit_test_grams_topic(pub, rows, args.out)
+            written.append(grams_topic)
+            LOGGER.info("Wrote %s", grams_topic)
+            path = emit_test_ditamap(
+                pub, rows, args.out, static_pages, seven_q_page=True,
+            )
             ditamap_paths.append(path)
             LOGGER.info("Wrote ditamap %s", path)
 
     ditaval_path = write_trainee_ditaval(args.out)
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
-
-    manifest_path = write_manifest(
-        args.out, written + static_copied + ditamap_paths + [ditaval_path])
-    LOGGER.info("Wrote manifest %s", manifest_path)
+    instructor_ditaval_path = write_instructor_ditaval(args.out)
+    LOGGER.info("Wrote DITAVAL profile %s", instructor_ditaval_path)
 
     skipped_path = write_skipped_report(args.out, skipped)
     if skipped_path is not None:

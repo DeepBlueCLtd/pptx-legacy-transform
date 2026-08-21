@@ -305,21 +305,17 @@ Required structure:
 
 Flat — no `<topichead>` elements (FR-012, section 1.11).
 
-### 3.3 `OutputManifest` (`manifest.txt`)
+### 3.3 `OutputManifest` (`manifest.txt`) — **removed**
 
-Plain-text file written at the root of the output tree per R9.
-
-```
-output/main/nordic-fishing-vessels/gram-12/gram_12.dita
-output/main/nordic-fishing-vessels/gram-12/analysis.png
-output/main/nordic-fishing-vessels/gram-12/lofar-1.png
-output/main/nordic-fishing-vessels/gram-12/lofar-2.png
-output/main.ditamap
-...
-```
-
-One file per line, sorted, relative to the output directory. The
-generator overwrites this on every run.
+Superseded. The generator used to write a sorted, one-file-per-line
+listing of everything a run produced at the root of the output tree, so
+a maintainer could diff manifests across runs and clean up stale files
+(R9). Nothing ever consumed it — not `publish_html.py`, not DITA-OT, not
+Oxygen — and once the generator started wiping and rebuilding each
+publication folder it touched, stale output was handled at the source.
+It was also rewritten wholesale every run, so a manifest at the root of
+a tree built up over several scoped runs described only the last of
+them. The generator no longer writes it.
 
 ### 3.4 `SkippedReport` (`skipped.txt`)
 
@@ -353,7 +349,6 @@ GramPlaceholder   ──> CsvRow*        (one per GLC link + one analysis row;
 CsvRow            ──> DitaTopic
 {CsvRow per publication} ──> Ditamap
 {CsvRow that is skipped} ──> SkippedReport entry
-{DitaTopic, Ditamap}    ──> OutputManifest entry
 ```
 
 ---

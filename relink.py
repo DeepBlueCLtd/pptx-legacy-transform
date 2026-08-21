@@ -32,7 +32,7 @@ for p in (PYLIB, SCRIPTS):
 
 for mod in ("extract_to_csv", "introspect_pptx", "deduplicate_csv",
             "generate_dita", "publish_html", "rehydrate_dita",
-            "snapshot_analysis_docs", "relink_glc_to_image", "mock_pptx"):
+            "snapshot_analysis_docs", "relink_glc_to_image", "ingest_gram_images", "mock_pptx"):
     sys.modules.pop(mod, None)
 
 # ---- Config ----------------------------------------------------
