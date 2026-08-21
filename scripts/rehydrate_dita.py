@@ -17,7 +17,10 @@ element ``<data name="original-asset-path" value="P">`` that
    inside the ``.glc``'s ``<data_source><filename>`` — is restored too, so the
    on-PC GLC viewer's adjacency lookup keeps working (FR-009).
 3. Rewrites the lofar href to the local copy and removes the ``<data>``
-   element.
+   element. For a restored audio pair it also adds back the
+   ``companion-audio`` ``<data>`` reference the generator emits beside a
+   locally-owned ``.glc`` (issue #177), without which the restored ``.wav``
+   would sit in the tree unreferenced and never reach published output.
 
 A lofar without the ``<data>`` element is left untouched, so running the
 script twice is a no-op (idempotent). Serialisation matches the generator's
@@ -40,8 +43,8 @@ from typing import Iterable
 
 import generate_dita
 from generate_dita import (
-    ORIGINAL_ASSET_PATH, TOPIC_DOCTYPE, _serialise, _write_text,
-    slugify_asset_name,
+    COMPANION_AUDIO_PATH, ORIGINAL_ASSET_PATH, TOPIC_DOCTYPE, _serialise,
+    _write_text, slugify_asset_name,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -104,6 +107,33 @@ def _copy_back(master_file: Path, dest: Path, *, dry_run: bool) -> None:
     shutil.copy2(master_file, dest)
 
 
+def _add_companion_audio(
+    section: ET.Element, xref: ET.Element, wav_slug: str,
+) -> None:
+    """Name the restored ``.wav`` beside its ``.glc`` link (issue #177).
+
+    The generator emits ``<data name="companion-audio" href="…wav">`` right
+    after the ``<xref>`` of every locally-owned audio pair, so publishers
+    carry the audio into the rendered output; a redirected lofar carries no
+    such reference because it owns no local copy. Restoring the pair
+    therefore has to restore the reference too, in the same position, or the
+    rehydrated topic would not be byte-identical to a never-deduplicated one
+    (SC-004) and the audio would stop at ``dita/``.
+    """
+    data = ET.Element("data", {
+        "name": COMPANION_AUDIO_PATH, "href": wav_slug,
+        "format": "wav", "scope": "local",
+    })
+    for paragraph in section.iter("p"):
+        children = list(paragraph)
+        if xref in children:
+            paragraph.insert(children.index(xref) + 1, data)
+            return
+    # No enclosing <p> (an unexpected shape); keep the reference rather than
+    # dropping it — an extra sibling still publishes the audio.
+    section.append(data)
+
+
 def _rehydrate_section(
     section: ET.Element, topic_dir: Path, data: ET.Element, *, dry_run: bool,
 ) -> str | None:
@@ -130,6 +160,7 @@ def _rehydrate_section(
         _copy_back(master_glc, topic_dir / local_slug, dry_run=dry_run)
         # Restore the adjacent .wav (the pair) named inside the master .glc.
         wav_base = _wav_basename_from_glc(master_glc)
+        wav_slug = ""
         if wav_base:
             wav_slug = slugify_asset_name(wav_base)
             master_wav = master_glc.parent / wav_slug
@@ -139,6 +170,8 @@ def _rehydrate_section(
             restored = local_slug
         if not dry_run:
             xref.set("href", local_slug)
+            if wav_slug:
+                _add_companion_audio(section, xref, wav_slug)
         link = xref
     else:
         LOGGER.warning(

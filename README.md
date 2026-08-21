@@ -20,7 +20,10 @@ pre-rendered spectrogram), occasionally a `.wav` (~18%, raw audio
 rendered live by the on-PC GLC viewer). The generator dispatches on
 the inner asset extension: image assets are embedded inline, audio
 assets are surfaced as a link to the `.glc` (with both `.glc` and
-`.wav` copied next to the topic so the viewer can resolve the audio).
+`.wav` copied next to the topic so the viewer can resolve the audio —
+the copied `.glc` is repointed at the slugified sibling, and the topic
+names the `.wav` in an invisible `<data>` element so the publisher
+carries it into the rendered output too).
 The pipeline extracts everything into an intermediate CSV, lets the
 technical author triage warnings in Excel, then emits the deterministic
 DITA tree.

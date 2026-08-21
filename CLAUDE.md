@@ -130,7 +130,14 @@ the GLC's inner asset extension, not on any CSV flag:**
   titled `Lofar N`, anchored `id="lofar-N"`, classed `lofar-stage`.
 - `.wav` (~18%, rendered live by the on-PC GLC viewer) → surfaced as a link to
   the `.glc`, with both the `.glc` and `.wav` copied beside the topic; titled
-  `WAV N`, anchored `id="wav-N"`, classed `wav-stage`.
+  `WAV N`, anchored `id="wav-N"`, classed `wav-stage`. The pair has to stay
+  linked *and* both halves have to publish (issue #177), which takes two
+  things: the copied `.glc`'s `data_source/filename` is **rewritten** to the
+  slugified sibling the generator wrote (the corpus name it was authored with
+  no longer exists in the tree), and the topic names the `.wav` in an
+  unfiltered `<data name="companion-audio" href="…" format="wav">` — invisible
+  in rendered output, but the only way DITA-OT/Oxygen know to copy audio whose
+  name lives inside a config file they treat as opaque.
 
 The two kinds are numbered on **independent 1..N sequences** (image, audio,
 audio, image → `Lofar 1`, `WAV 1`, `WAV 2`, `Lofar 2`). An audio link is not a

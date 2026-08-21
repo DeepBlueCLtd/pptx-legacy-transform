@@ -74,6 +74,18 @@ _SOURCE_LINE = "__source_line__"
 # redirected (deduplicated) lofar and anchors its reversal (feature 006).
 ORIGINAL_ASSET_PATH = "original-asset-path"
 
+# The ``@name`` of the DITA ``<data>`` element that carries a ``.wav``-backed
+# gram's audio into the published output (issue #177). The page links the
+# ``.glc``; the ``.wav`` is named only *inside* that ``.glc``, which every
+# publisher treats as an opaque resource — so without an explicit reference
+# from the topic the audio never leaves ``dita/`` and the published GLC link
+# resolves to a config file with no audio behind it. ``<data>`` is the
+# standard DITA metadata element (DTD-valid with ``@href``/``@format``/
+# ``@scope``) and renders as nothing in XHTML/webhelp, so the published pages
+# are byte-identical while DITA-OT copies the file it names next to the
+# ``.glc``. Unfiltered — the audio must reach every edition.
+COMPANION_AUDIO_PATH = "companion-audio"
+
 # XML declaration + OASIS DOCTYPE preambles emitted at the head of every
 # generated topic and ditamap. Oxygen identifies a file as DITA by its
 # DOCTYPE public ID; without these its DITA Maps Manager rejects a bare
@@ -508,9 +520,58 @@ def _relpath_posix(target: Path, start_dir: Path) -> str:
     return Path(rel_str).as_posix()
 
 
+def _rewrite_glc_filename(source: Path, target: Path, wav_name: str) -> bool:
+    """Copy the ``.glc`` at ``source`` to ``target``, repointing it at ``wav_name``.
+
+    A ``.wav``-backed ``.glc`` names its audio in ``data_source/filename``,
+    as the original corpus filename (``"Lofar 1_b.wav"``). ``copy_asset``
+    slugifies every asset it copies, so the audio lands beside the topic as
+    ``lofar-1-b.wav`` and the verbatim-copied ``.glc`` used to name a file
+    that was not there — every one of them, in every publication (issue
+    #177). The reference is rewritten here to the sibling the generator
+    actually wrote, so the on-PC GLC viewer resolves it from the DITA tree
+    and from the published output alike.
+
+    Only that one element's text changes: the file is parsed and
+    re-serialised with ``ElementTree``, which round-trips every ``.glc`` in
+    the audited corpus byte-for-byte, and ``copystat`` restores the source
+    mtime, so re-running over an unchanged tree rewrites byte- and
+    stat-identical files (R9).
+
+    Returns ``True`` when the rewrite was written. Returns ``False``
+    (writing nothing) when the ``.glc`` cannot be parsed or carries no
+    ``data_source/filename`` to repoint — the caller then falls back to a
+    verbatim copy, keeping the boundary forgiving: an anomalous config file
+    still travels with its gram rather than aborting the run.
+    """
+    try:
+        tree = ET.parse(source)
+    except ET.ParseError as exc:
+        LOGGER.warning(
+            "GLC malformed, copied verbatim (its audio reference is left "
+            "as-authored and may not resolve): %s: %s", source, exc,
+        )
+        return False
+    element = tree.getroot().find("data_source/filename")
+    if element is None:
+        LOGGER.warning(
+            "GLC has no data_source/filename, copied verbatim (nothing to "
+            "repoint at %s): %s", wav_name, source,
+        )
+        return False
+    element.text = wav_name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(
+        ET.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True)
+    )
+    shutil.copystat(source, target)
+    return True
+
+
 def copy_asset(
     src_relpath: str, image_root: Path, topic_dir: Path,
     target_name: str | None = None,
+    glc_audio_name: str | None = None,
 ) -> tuple[str, Path | None]:
     """Copy the referenced asset next to its topic and return ``(href, written)``.
 
@@ -522,6 +583,11 @@ def copy_asset(
     ``target_name`` overrides the derived filename with an explicit stable
     basename (e.g. ``"demon.png"`` for a demon image whose source name varies);
     the caller is responsible for its uniqueness within the topic folder.
+
+    ``glc_audio_name`` marks the asset as a ``.wav``-backed ``.glc`` and names
+    the audio copy sitting beside it: the copy's ``data_source/filename`` is
+    repointed at that name (see ``_rewrite_glc_filename``) instead of keeping
+    the original corpus name the slugified copy no longer has.
 
     If ``src_relpath`` is empty, returns ``("", None)``.
 
@@ -538,14 +604,19 @@ def copy_asset(
         target_name = slugify_asset_name(Path(src_relpath).name)
     target = topic_dir / target_name
     # Testing aid: when --stub-wav is set, every .wav copy is sourced from
-    # the stub file but keeps its slugified per-gram filename so the
-    # paired .glc's internal `data_source/filename` reference still
-    # resolves at publish time. Keeps gramframe functional with a silent
-    # stub and slims the DITA tree for transit between systems.
+    # the stub file but keeps its slugified per-gram filename — the name the
+    # paired .glc is repointed at (``glc_audio_name``), so the reference
+    # resolves to the stub exactly as it resolves to real audio. Keeps
+    # gramframe functional with a silent stub and slims the DITA tree for
+    # transit between systems.
     if _STUB_WAV_PATH is not None and source.suffix.lower() == ".wav":
         source = _STUB_WAV_PATH
     if source.is_file():
         topic_dir.mkdir(parents=True, exist_ok=True)
+        if glc_audio_name and _rewrite_glc_filename(
+            source, target, glc_audio_name,
+        ):
+            return target_name, target
         # ``copy2`` preserves the source mtime so two consecutive generator
         # runs against an unchanged source tree produce byte- and stat-
         # identical assets, preserving the idempotency contract (R9).
@@ -1224,7 +1295,7 @@ def _append_analysis_section(
 
 
 def _append_glc_viewer_link(
-    parent: ET.Element, glc_href: str, wav_index: int,
+    parent: ET.Element, glc_href: str, wav_index: int, wav_href: str = "",
 ) -> ET.Element:
     """Append a GLC-viewer link block (§1.3) to the gram body.
 
@@ -1233,7 +1304,16 @@ def _append_glc_viewer_link(
     spectrogram to embed, so the gram page links to the ``.glc`` itself
     and the on-PC GLC viewer reads the file and resolves the adjacent
     ``.wav`` for live aural analysis. The companion ``.wav`` is copied
-    next to the ``.glc`` by the caller.
+    next to the ``.glc`` by the caller and named here in a ``<data>``
+    element (``wav_href``, issue #177): nothing else in the topic mentions
+    it — the audio is named only inside the ``.glc``, which a publisher
+    treats as an opaque resource — so without that reference DITA-OT and
+    Oxygen copy the ``.glc`` into the published output and leave its audio
+    behind. ``<data>`` renders as nothing, so the page is unchanged; it
+    carries no ``audience``, so the audio reaches every edition. Passing an
+    empty ``wav_href`` (the redirected pair, whose audio lives beside the
+    master ``.glc`` it links to and is carried by the master's own topic)
+    emits no such reference.
 
     An audio link is **not** a Lofar — it resolves to no spectrogram image —
     so it is titled ``WAV N`` on its own 1..M sequence (``wav_index``,
@@ -1257,6 +1337,11 @@ def _append_glc_viewer_link(
         "href": glc_href, "format": "glc", "scope": "local",
     })
     xref.text = label
+    if wav_href:
+        ET.SubElement(p, "data", {
+            "name": COMPANION_AUDIO_PATH, "href": wav_href,
+            "format": "wav", "scope": "local",
+        })
     return section
 
 
@@ -1525,14 +1610,19 @@ def emit_gram_topic(
                     (_wav_anchor_id(wav_index), f"WAV {wav_index}"))
                 redirected += 1
                 continue
-            glc_href, glc_copied = copy_asset(glc_path, image_root, topic_dir)
+            # The audio is copied first so its slugified sibling name is
+            # known: the .glc copy is repointed at it (issue #177), and the
+            # topic names it too so publishers carry it into the output.
             wav_href, wav_copied = copy_asset(png_path, image_root, topic_dir)
+            glc_href, glc_copied = copy_asset(
+                glc_path, image_root, topic_dir, glc_audio_name=wav_href,
+            )
             if glc_copied is not None:
                 written.append(glc_copied)
             if wav_copied is not None:
                 written.append(wav_copied)
             wav_index += 1
-            _append_glc_viewer_link(body, glc_href, wav_index)
+            _append_glc_viewer_link(body, glc_href, wav_index, wav_href)
             stage_entries.append(
                 (_wav_anchor_id(wav_index), f"WAV {wav_index}"))
             continue

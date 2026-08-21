@@ -198,9 +198,21 @@ same synthesised `WAV N`:
 ```xml
 <section id="wav-N" outputclass="wav-stage">
   <title>WAV N</title>
-  <p><xref href="{slug}.glc" format="glc" scope="local">WAV N</xref></p>
+  <p><xref href="{slug}.glc" format="glc" scope="local">WAV N</xref><data
+       name="companion-audio" href="{slug}.wav" format="wav" scope="local"/></p>
 </section>
 ```
+
+The `<data>` element names the audio so the **publisher** carries it into
+the rendered output (issue #177). DITA-OT (and Oxygen, which builds on it)
+copies a local resource because a topic references it; the `.wav` is named
+only *inside* the `.glc`, which the toolchain never parses, so without this
+reference every published GLC link resolved to a config file with no audio
+behind it. `<data>` is the standard DITA metadata element, renders as
+nothing in XHTML/webhelp (the page is unchanged) and carries no `audience`,
+so the audio reaches every edition. A **redirected** audio pair (§1.4) emits
+no such reference: it owns no local copy, and the audio is carried by the
+master gram whose `.glc` it links.
 
 The label is **not** taken from the CSV `display_text`: in the audited corpus
 the legacy decks label every `.glc` hyperlink `Lofar N`, audio ones included,
@@ -216,6 +228,17 @@ bare filename, not a path), so the generator copies **both** files
 into the per-gram folder under their slugified names (§10) — the
 `.glc` becomes the topic-relative `xref` target, and the `.wav`
 travels with it so the viewer can resolve it.
+
+Because the copy is slugified, the `.glc` copy's `data_source/filename` is
+**rewritten to the sibling name the generator actually wrote** (issue #177):
+a config authored `Lofar 1_b.wav` beside a `lofar-1-b.wav` names nothing.
+The rewrite is a parse-and-serialise of the config with only that one
+element's text changed — every other setting the viewer reads is preserved,
+and the source `.glc` under `--image-root` is never touched. It is
+deterministic (byte- and mtime-identical across runs, R9) and forgiving at
+the boundary: a config that cannot be parsed, or that carries no
+`data_source/filename` to repoint, is copied verbatim with a warning rather
+than aborting the run.
 
 No `<image>` is emitted for these rows: there is no pre-rendered
 spectrogram to embed, and the gram-config table's time/freq metadata
