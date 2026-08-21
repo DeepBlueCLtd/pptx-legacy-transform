@@ -103,30 +103,64 @@ class PackageReleaseTests(unittest.TestCase):
                          "vendor assets must not ship in the archive")
 
     def test_theme_bundle_matches_vendored_bundle(self):
-        # Every GramFrame bundle in the tree must stay byte-identical to the one
-        # publish_html.py vendors, so the production publish and the dev preview
-        # render grams the same way. Three copies exist: the vendored original,
-        # the standalone overlay (install instructions for a foreign template),
-        # and the ready-to-publish pptx-transform template.
+        # The GramFrame bundle the overlay ships must stay byte-identical to the
+        # one publish_html.py vendors, so the production publish and the dev
+        # preview render grams the same way.
         vendored = REPO_ROOT / "scripts" / "vendor" / "gramframe" / "gramframe.bundle.js"
+        overlay = (REPO_ROOT / "theme" / "gramframe-oxygen" / "resources"
+                   / "gramframe.bundle.js")
         self.assertTrue(vendored.is_file(), "vendored GramFrame bundle missing")
-        expected = vendored.read_bytes()
-        for label, copy in (
-            ("theme/gramframe-oxygen",
-             REPO_ROOT / "theme" / "gramframe-oxygen" / "resources"
-             / "gramframe.bundle.js"),
-            ("theme/pptx-transform",
-             REPO_ROOT / "theme" / "pptx-transform" / "resources"
-             / "gramframe.bundle.js"),
-        ):
-            with self.subTest(copy=label):
-                self.assertTrue(copy.is_file(),
-                                f"{label} GramFrame bundle missing")
+        self.assertTrue(overlay.is_file(), "overlay GramFrame bundle missing")
+        self.assertEqual(
+            vendored.read_bytes(), overlay.read_bytes(),
+            "theme/ GramFrame bundle has drifted from scripts/vendor/gramframe/; "
+            "update both copies (and their VERSION files) together")
+
+    def test_publishing_template_payloads_match_their_overlays(self):
+        # pptx-transform is a *wired* template: it carries a verbatim copy of
+        # each overlay's payload rather than referencing it, because Oxygen
+        # needs the files inside the template folder. Every copy is therefore a
+        # drift point — and an overlay bumped on its own (a GramFrame upgrade, a
+        # renamed marker class) silently leaves the template stale and wrong.
+        #
+        # Rather than list the payloads, discover them: any file under
+        # pptx-transform/ whose name matches exactly one file in a sibling
+        # overlay folder must be byte-identical to it. New overlays are then
+        # covered the moment they are wired in, with no test edit.
+        template = REPO_ROOT / "theme" / "pptx-transform"
+        self.assertTrue(template.is_dir(), "pptx-transform template missing")
+
+        sources = {}
+        for overlay in sorted(REPO_ROOT.glob("theme/*")):
+            if not overlay.is_dir() or overlay.name == "pptx-transform":
+                continue
+            for src in overlay.rglob("*"):
+                if src.is_file() and src.name != "README.md":
+                    sources.setdefault(src.name, []).append(src)
+
+        checked = 0
+        for copy in sorted(template.rglob("*")):
+            if not copy.is_file():
+                continue
+            candidates = sources.get(copy.name)
+            # Ambiguous or absent (VERSION lives in several overlays; the stock
+            # Oxygen files have no overlay counterpart) — nothing to compare.
+            if not candidates or len(candidates) > 1:
+                continue
+            src = candidates[0]
+            checked += 1
+            with self.subTest(payload=copy.name):
                 self.assertEqual(
-                    expected, copy.read_bytes(),
-                    f"{label} GramFrame bundle has drifted from "
-                    "scripts/vendor/gramframe/; update every copy (and their "
-                    "VERSION files) together")
+                    src.read_bytes(), copy.read_bytes(),
+                    f"{copy.relative_to(REPO_ROOT)} has drifted from "
+                    f"{src.relative_to(REPO_ROOT)}; re-copy it so the template "
+                    "publishes what the overlay actually specifies")
+        # Guard the guard: if the discovery ever matches nothing, this test
+        # would pass vacuously while every payload silently rots.
+        self.assertGreaterEqual(
+            checked, 5,
+            "expected to check at least the GramFrame bundle, hide-search, "
+            f"gram-nav, gram-toc-overlay and dark-mode payloads; checked {checked}")
 
     def test_publishing_template_wires_the_overlays(self):
         # pptx-transform is the template the operator actually publishes with,
@@ -145,16 +179,36 @@ class PackageReleaseTests(unittest.TestCase):
                   for p in webhelp.findall("parameters/parameter")}
         self.assertEqual(params.get("webhelp.show.child.links"), "yes")
 
+        # Every overlay stylesheet must load AFTER all three stock ones, or the
+        # stock rules win and the overlay silently does nothing.
         css = [c.get("file") for c in webhelp.findall("resources/css")]
-        self.assertIn("resources/hide-search.css", css)
-        self.assertEqual(css[-1], "resources/hide-search.css",
-                         "hide-search.css must load last to win the cascade")
+        stock = ["oxygen-theme.css", "oxygen.css", "notes.css"]
+        overlays = ["resources/hide-search.css", "resources/gram-nav.css",
+                    "resources/gram-toc-overlay.css", "resources/dark-mode.css"]
+        for name in stock + overlays:
+            self.assertIn(name, css)
+        self.assertLess(
+            max(css.index(s) for s in stock),
+            min(css.index(o) for o in overlays),
+            "overlay CSS must come after the stock CSS to win the cascade")
 
-        fragments = webhelp.findall("html-fragments/fragment")
+        # gramframe rides the topic-page head; dark-mode must ride the ALL-pages
+        # head, or the welcome and search pages publish light. Oxygen binds one
+        # fragment per placeholder, so they cannot share one.
+        fragments = {f.get("file"): f.get("placeholder")
+                     for f in webhelp.findall("html-fragments/fragment")}
         self.assertEqual(
-            [(f.get("file"), f.get("placeholder")) for f in fragments],
-            [("page-templates-fragments/libraries/gramframe.xml",
-              "webhelp.fragment.head.topic.page")])
+            fragments.get("page-templates-fragments/libraries/gramframe.xml"),
+            "webhelp.fragment.head.topic.page")
+        self.assertEqual(
+            fragments.get("page-templates-fragments/libraries/dark-mode.xml"),
+            "webhelp.fragment.head")
+        self.assertEqual(len(fragments), len(webhelp.findall("html-fragments/fragment")),
+                         "two fragments share a file entry")
+
+        # The dark-mode overlay is verified against enable.dark.mode=yes; "no"
+        # switches off Oxygen's dark plumbing entirely.
+        self.assertEqual(params.get("webhelp.enable.dark.mode"), "yes")
 
         # Oxygen's schematron asserts every referenced file resolves on disk.
         for el in webhelp.iter():

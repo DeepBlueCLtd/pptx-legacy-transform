@@ -32,13 +32,20 @@
             <parameter name="force-unique" value="true"/>
         </parameters>
         <resources>
+            <!-- Stock, in Oxygen's own order: oxygen-theme.css defines the wh-*
+                 custom properties oxygen.css reads, so it must come first.
+                 Never edit these three — overrides go in the overlay CSS below. -->
             <css file="oxygen-theme.css"/>
             <css file="oxygen.css"/>
             <css file="notes.css"/>
-            <!-- Last, so it wins the cascade: hides #searchForm on any page
-                 lacking the instructor marker (i.e. the student edition).
-                 See theme/oxygen-hide-search/README.md. -->
+            <!-- Project overlays, after the stock styles so they win the
+                 cascade. Each is a verbatim copy of the matching theme/
+                 overlay folder; tests/test_package_release.py enforces that
+                 every copy stays byte-identical to its source. -->
             <css file="resources/hide-search.css"/>
+            <css file="resources/gram-nav.css"/>
+            <css file="resources/gram-toc-overlay.css"/>
+            <css file="resources/dark-mode.css"/>
             <fileset>
                 <include name="resources/**/*"/>
                 <exclude name="resources/**/*.svn"/>
@@ -54,6 +61,14 @@
         <html-fragments>
             <fragment file="page-templates-fragments/libraries/gramframe.xml"
                       placeholder="webhelp.fragment.head.topic.page"/>
+            <!-- Pins data-wh-theme="dark" pre-paint, so no light flash and no
+                 theme picker. Deliberately webhelp.fragment.head, NOT
+                 ...head.topic.page: it must reach every page type (welcome,
+                 search results, index terms), not just topics. Oxygen binds one
+                 fragment per placeholder, so these two cannot share one.
+                 See theme/oxygen-dark-mode/README.md. -->
+            <fragment file="page-templates-fragments/libraries/dark-mode.xml"
+                      placeholder="webhelp.fragment.head"/>
         </html-fragments>
         <online-preview-url>https://www.oxygenxml.com/samples/DITA-WebHelp-Responsive/tiles/oxygen/</online-preview-url>
         <tags>
