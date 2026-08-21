@@ -110,3 +110,16 @@ body:has(p.gram-nav) #wh_topic_toc #wh_close_topic_toc_button {
   display: none !important;
 }
 */
+
+/* 6. Dark theme. The publication ships dark (../oxygen-dark-mode/ pins
+ *    data-wh-theme="dark" on <html>), and there the template renders the
+ *    mini-TOC's own links in a light ink that the white panel above would
+ *    swallow. Repaint the panel in the dark palette ../gram-nav-panel/ uses,
+ *    so the two floating panels match. Scoped to the attribute rather than
+ *    applied unconditionally, so this file still reads correctly if the
+ *    template is ever published light. */
+:root[data-wh-theme="dark"] body:has(p.gram-nav) #wh_topic_toc {
+  background: rgba(13, 17, 23, 0.96);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
