@@ -5,7 +5,8 @@
    - Time / frequency metadata is rendered as an LCD-style readout strip with
      bracketed values.
    - A faint engineering grid sits behind the content column.
-   - The edition strip becomes a classification banner with corner tick marks.
+   - The protective marking runs top and bottom, its text read from the Oxygen
+     publishing template so the preview cannot disagree with production.
 */
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Share+Tech+Mono&display=swap");
@@ -44,42 +45,41 @@ body {
   background-attachment: fixed;
 }
 
-/* ---------- Classification banner ---------- */
-body::before {
-  content: "┄ INSTRUCTOR ┄ TRAINING USE ONLY ┄ CLASS-RESTRICTED ┄";
+/* ---------- Protective marking (issue #175) ----------
+   The text is NOT written here. publish_html.py reads
+   `webhelp.protection.text` out of theme/pptx-transform/pptx-transform.opt —
+   the very parameter the production Oxygen publish uses — and stamps it on
+   <body data-protection="…">, which attr() renders below. One source of truth,
+   so the dev preview and the delivered output cannot state different markings.
+
+   What used to be here was a hardcoded, per-edition string
+   (`┄ INSTRUCTOR ┄ TRAINING USE ONLY ┄ CLASS-RESTRICTED ┄`) — invented dev
+   styling, not a real marking, and with nothing keeping it in step with
+   production. The marking is now identical in both editions, matching Oxygen:
+   it describes the material, not the audience. `data-edition` is still stamped
+   on <body> for dev inspection; it just no longer decides what the bar says.
+
+   Top AND bottom, mirroring the production template's two bars. Both are
+   suppressed entirely when no marking could be read — an empty bar would
+   assert a classification nobody configured. */
+body::before,
+body::after {
+  content: attr(data-protection);
   display: block;
-  background: linear-gradient(90deg, transparent, rgba(255,138,61,0.15) 10%, rgba(255,138,61,0.15) 90%, transparent);
-  border-bottom: 1px solid rgba(255,138,61,0.35);
-  color: var(--instructor);
+  background: linear-gradient(90deg, transparent, rgba(191,235,185,0.16) 10%, rgba(191,235,185,0.16) 90%, transparent);
+  color: #bfebb9;
   font: 600 11px/1 "JetBrains Mono", ui-monospace, monospace;
   letter-spacing: 0.38em;
   text-align: center;
   padding: 10px 12px;
   text-transform: uppercase;
 }
-body:not(:has(.gf-persistent))::before {
-  content: "┄ STUDENT ┄ TRAINING ┄";
-  background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
-  border-bottom-color: rgba(77,208,225,0.35);
-  color: var(--student);
-}
-/* Heuristic for Oxygen-published output (which carries no data-edition
-   attribute): generate_dita stamps a hidden instructor-only marker
-   (.gf-persistent) on EVERY page, so its absence reliably means the
-   student edition — including the week sub-document pages, which the older
-   :has(.ph) heuristic misread as student. When publish_html.py stamped the
-   edition on <body>, the data-edition rules below win regardless. */
-body[data-edition="instructor"]::before {
-  content: "┄ INSTRUCTOR ┄ TRAINING USE ONLY ┄ CLASS-RESTRICTED ┄";
-  background: linear-gradient(90deg, transparent, rgba(255,138,61,0.15) 10%, rgba(255,138,61,0.15) 90%, transparent);
-  border-bottom-color: rgba(255,138,61,0.35);
-  color: var(--instructor);
-}
-body[data-edition="student"]::before {
-  content: "┄ STUDENT ┄ TRAINING ┄";
-  background: linear-gradient(90deg, transparent, rgba(77,208,225,0.12) 10%, rgba(77,208,225,0.12) 90%, transparent);
-  border-bottom-color: rgba(77,208,225,0.35);
-  color: var(--student);
+body::before { border-bottom: 1px solid rgba(191,235,185,0.35); }
+body::after  { border-top:    1px solid rgba(191,235,185,0.35); }
+
+body:not([data-protection])::before,
+body:not([data-protection])::after {
+  display: none;
 }
 
 /* The hidden instructor-only edition marker (stamped by generate_dita on every

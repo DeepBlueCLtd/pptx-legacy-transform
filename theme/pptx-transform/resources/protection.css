@@ -1,0 +1,70 @@
+/*
+ * Protective-marking bars for the Oxygen WebHelp Responsive output (issue #175).
+ *
+ * The bars themselves are emitted by xslt/inc/customProtection.xsl into the
+ * empty placeholders declared by page-templates-fragments/protection-*.xml.
+ * This file only styles them, and it must load LAST of all the template's
+ * stylesheets so nothing later can repaint the marking.
+ *
+ * ONE FIXED COLOUR IN BOTH LIGHT AND DARK MODE. The template runs with
+ * webhelp.enable.dark.mode=yes, so every stock surface colour comes from a
+ * `wh-*` custom property that flips with the theme. A protective marking that
+ * flips with it is a marking you cannot describe in a handling instruction, so
+ * both the background AND the text colour are pinned to literals here -
+ * neither inherits a theme token, and there is deliberately no
+ * [data-wh-theme="dark"] variant.
+ *
+ * `!important` is not defensiveness for its own sake: the dark theme's rules
+ * are scoped under html[data-wh-theme="dark"], which outranks a bare class
+ * selector. Without it a future stock rule could silently recolour the bars.
+ *
+ * The colour matches Fi3ldMan's marking bars (#bfebb9 on black), which is the
+ * appearance this project's own output carried before the template was rebased
+ * onto stock.
+ *
+ * A scenario may override the background per export via
+ * webhelp.protection.background.color, which the XSLT emits as an inline
+ * @style - inline styles beat these rules, so that override still works. The
+ * text colour stays black in every case; pick an override light enough for it.
+ */
+
+.wh_header_protection,
+.wh_footer_protection {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0.45em 1em;
+    background: #bfebb9 none !important;
+    color: #000 !important;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1.4;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+/* The XSLT wraps the text in a container div (and a span, in the footer);
+   restate the colour so neither can pick one up from a theme token. */
+.wh_header_protection .header-container,
+.wh_footer_protection .footer-container,
+.wh_footer_protection span {
+    color: #000 !important;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+}
+
+/* A marking that disappears when the reader prints the page is not a marking.
+   `exact` keeps the background colour in browsers that would otherwise drop it
+   to save ink. */
+@media print {
+    .wh_header_protection,
+    .wh_footer_protection {
+        display: block !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}

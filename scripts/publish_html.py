@@ -591,6 +591,73 @@ def inject_gramframe_plugin(
 THEME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "themes" / "operator-console-v2" / "theme.css"
 THEME_BUNDLE_NAME = "theme.css"
 
+# -----------------------------------------------------------------------------
+# Protective marking — issue #175
+# -----------------------------------------------------------------------------
+# The marking has exactly ONE source of truth: the ``webhelp.protection.text``
+# parameter in the Oxygen publishing template. Oxygen is the production
+# publisher and reads that parameter directly; this dev preview reads the same
+# parameter out of the same file, so the two cannot disagree. The previous
+# hardcoded ``theme.css`` banner string was invented dev styling that would have
+# drifted from the production marking the moment either changed.
+#
+# The marking is identical in both editions — it is a property of the material,
+# not of the audience — so it is stamped on every page of every edition without
+# reference to ``Edition``.
+#
+# Deliberately NOT a constant with a default: a wrong marking is worse than a
+# missing one. If the template cannot be read the preview publishes unmarked and
+# says so loudly, rather than asserting a classification nobody configured.
+PUBLISHING_TEMPLATE_OPT = (
+    Path(__file__).resolve().parents[1]
+    / "theme" / "pptx-transform" / "pptx-transform.opt"
+)
+
+
+def read_protection_marking(opt_path: Path = PUBLISHING_TEMPLATE_OPT) -> "str | None":
+    """Return the protective marking text the Oxygen template publishes with.
+
+    Returns ``None`` — meaning "publish no banner" — when the template is
+    absent or unreadable, or when it switches the marking off via
+    ``webhelp.show.protection``. A blank ``webhelp.protection.text`` is also
+    ``None``: an empty bar states nothing.
+    """
+    if not opt_path.is_file():
+        LOGGER.warning(
+            "publishing template not found at %s; the preview will carry NO "
+            "protective marking", opt_path,
+        )
+        return None
+    try:
+        webhelp = _ET.parse(str(opt_path)).getroot().find("webhelp")
+        params = {
+            p.get("name"): (p.get("value") or "")
+            for p in (webhelp.findall("parameters/parameter") if webhelp is not None else [])
+        }
+    except _ET.ParseError as exc:
+        LOGGER.warning(
+            "publishing template %s is not parseable (%s); the preview will "
+            "carry NO protective marking", opt_path, exc,
+        )
+        return None
+    # Mirror the XSLT exactly: only the literal "yes" turns the bars on.
+    if params.get("webhelp.show.protection") != "yes":
+        LOGGER.info(
+            "publishing template sets webhelp.show.protection=%r; the preview "
+            "carries no protective marking",
+            params.get("webhelp.show.protection"),
+        )
+        return None
+    text = params.get("webhelp.protection.text", "").strip()
+    if not text:
+        LOGGER.warning(
+            "publishing template has an empty webhelp.protection.text; the "
+            "preview will carry NO protective marking",
+        )
+        return None
+    return text
+
+
 _HEAD_CLOSE = "  </head>"
 # Matches any ``<link rel="stylesheet" … href="…/theme.css">`` line, so the
 # idempotency check works regardless of the relative-path depth in the href.
@@ -631,6 +698,7 @@ def inject_operator_console_theme(
     out_root: Path,
     editions: tuple[Edition, ...] = EDITIONS,
     bundle_src: Path = THEME_BUNDLE_SRC,
+    template_opt: Path = PUBLISHING_TEMPLATE_OPT,
 ) -> int:
     """Vendor ``theme.css`` into ``out_root`` and link it from every page.
 
@@ -646,6 +714,13 @@ def inject_operator_console_theme(
     on ``<body>``; the CSS no longer requires these (it detects edition
     and page type via ``:has()`` against elements DITA-OT emits), but
     the attributes remain useful for dev-side inspection and testing.
+
+    Finally stamps ``data-protection`` with the protective marking read
+    from ``template_opt`` — the same Oxygen publishing-template parameter
+    the production publish uses, so preview and production cannot state
+    different markings. ``theme.css`` renders it via ``attr()`` at the top
+    and bottom of every page. When no marking can be read the attribute is
+    omitted and the CSS suppresses both bars (issue #175).
 
     Idempotent: pages that already carry the theme link are left
     alone, preserving byte-determinism across re-runs.
@@ -668,6 +743,7 @@ def inject_operator_console_theme(
         for e in editions
     }
     root_theme = out_root / THEME_BUNDLE_NAME
+    marking = read_protection_marking(template_opt)
 
     count = 0
     for path in sorted(out_root.rglob("*.html")):
@@ -691,7 +767,7 @@ def inject_operator_console_theme(
                 body = new_body
                 changed = True
 
-        body, body_changed = _set_body_attrs(body, edition, page_class)
+        body, body_changed = _set_body_attrs(body, edition, page_class, marking)
         if body_changed:
             changed = True
 
@@ -706,8 +782,9 @@ _BODY_OPEN_RE = re.compile(r"<body(\s[^>]*)?>", re.IGNORECASE)
 
 def _set_body_attrs(
     body: str, edition: str | None, page_class: str | None,
+    marking: str | None = None,
 ) -> tuple[str, bool]:
-    """Set ``data-edition`` and append a page-type class on the ``<body>`` tag.
+    """Set ``data-edition``/``data-protection`` and append a page-type class.
 
     Returns ``(new_body, changed)``. Existing attributes are preserved;
     when ``page_class`` is set and ``class`` already exists, the new
@@ -722,6 +799,15 @@ def _set_body_attrs(
 
     if edition is not None and 'data-edition=' not in attrs:
         new_attrs = f'{new_attrs} data-edition="{edition}"'
+        changed = True
+
+    # Every page of every edition, including the shared landing page: the
+    # marking describes the material, not the audience. Escaped because it
+    # arrives from a template file rather than from this script.
+    if marking and 'data-protection=' not in attrs:
+        escaped = marking.replace("&", "&amp;").replace('"', "&quot;")
+        escaped = escaped.replace("<", "&lt;").replace(">", "&gt;")
+        new_attrs = f'{new_attrs} data-protection="{escaped}"'
         changed = True
 
     if page_class is not None:

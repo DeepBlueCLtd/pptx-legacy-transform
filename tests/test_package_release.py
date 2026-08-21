@@ -65,6 +65,19 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn(
             "theme/oxygen-dark-mode/page-templates-fragments/libraries/dark-mode.xml",
             names)
+        # The protective-marking overlay must reach the target too: without it
+        # the operator's Oxygen publish is unmarked (issue #175).
+        self.assertIn("theme/oxygen-protection/resources/protection.css", names)
+        self.assertIn("theme/oxygen-protection/xslt/inc/customProtection.xsl", names)
+        for fragment in ("protection-header.xml", "protection-footer.xml"):
+            self.assertIn(
+                "theme/oxygen-protection/page-templates-fragments/" + fragment,
+                names)
+        # ...as must the search-flag half of the same XSLT plumbing (issue #178).
+        self.assertIn("theme/oxygen-hide-search/xslt/inc/customSearchFlag.xsl", names)
+        self.assertIn(
+            "theme/oxygen-hide-search/page-templates-fragments/search-flag.xml",
+            names)
         self.assertIn("stock.wav", names)
         self.assertIn("requirements.txt", names)
         self.assertIn("README.md", names)
@@ -184,13 +197,18 @@ class PackageReleaseTests(unittest.TestCase):
         css = [c.get("file") for c in webhelp.findall("resources/css")]
         stock = ["oxygen-theme.css", "oxygen.css", "notes.css"]
         overlays = ["resources/hide-search.css", "resources/gram-nav.css",
-                    "resources/gram-toc-overlay.css", "resources/dark-mode.css"]
+                    "resources/gram-toc-overlay.css", "resources/dark-mode.css",
+                    "resources/protection.css"]
         for name in stock + overlays:
             self.assertIn(name, css)
         self.assertLess(
             max(css.index(s) for s in stock),
             min(css.index(o) for o in overlays),
             "overlay CSS must come after the stock CSS to win the cascade")
+        # A protective marking is the one thing no later stylesheet may repaint.
+        self.assertEqual(
+            css[-1], "resources/protection.css",
+            "protection.css must load LAST so nothing can restyle the marking")
 
         # gramframe rides the topic-page head; dark-mode must ride the ALL-pages
         # head, or the welcome and search pages publish light. Oxygen binds one
@@ -203,8 +221,56 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertEqual(
             fragments.get("page-templates-fragments/libraries/dark-mode.xml"),
             "webhelp.fragment.head")
+        # The protective marking (#175) and the search flag (#178) ride three
+        # body-level placeholders. All three must be bound, and bound to
+        # placeholders that reach EVERY page type — issue #178 was precisely a
+        # customization that reached only the pages built from a topic.
+        self.assertEqual(
+            fragments.get("page-templates-fragments/protection-header.xml"),
+            "webhelp.fragment.before.body")
+        self.assertEqual(
+            fragments.get("page-templates-fragments/protection-footer.xml"),
+            "webhelp.fragment.after.body")
+        self.assertEqual(
+            fragments.get("page-templates-fragments/search-flag.xml"),
+            "webhelp.fragment.after.header")
         self.assertEqual(len(fragments), len(webhelp.findall("html-fragments/fragment")),
                          "two fragments share a file entry")
+        self.assertEqual(
+            len(set(fragments.values())), len(fragments),
+            "Oxygen binds one fragment per placeholder; two share one")
+
+        # Marking parameters (#175). The values are scenario-overridable, but
+        # they must be DECLARED here or oxyf:getParameter has nothing to read.
+        self.assertEqual(params.get("webhelp.show.protection"), "yes")
+        self.assertTrue(
+            (params.get("webhelp.protection.text") or "").strip(),
+            "webhelp.protection.text must ship with a marking, not blank")
+        self.assertIn("webhelp.protection.background.color", params,
+                      "the per-export colour override must be declared")
+
+        # Search visibility (#178). "yes" is the INSTRUCTOR default; only the
+        # student scenario overrides it, so a template shipping "no" would
+        # silently cost the instructor their search box on every page.
+        self.assertEqual(params.get("webhelp.show.search"), "yes")
+
+        # Every page type needs the customizations, so every page-type XSLT
+        # extension point must be wired. Missing createMainPage is exactly how
+        # index.html lost its search box in #178.
+        extensions = {e.get("id"): e.get("file")
+                      for e in webhelp.findall("xslt/extension")}
+        for point in ("com.oxygenxml.webhelp.xsl.createMainPage",
+                      "com.oxygenxml.webhelp.xsl.dita2webhelp",
+                      "com.oxygenxml.webhelp.xsl.createSearchPage",
+                      "com.oxygenxml.webhelp.xsl.createIndexTermsPage"):
+            self.assertIn(point, extensions,
+                          f"{point} unwired: that page type publishes unmarked")
+        # ...and each of those stylesheets must actually pull in both includes.
+        for stylesheet in extensions.values():
+            source = (opt.parent / stylesheet).read_text(encoding="utf-8")
+            with self.subTest(stylesheet=stylesheet):
+                self.assertIn("inc/customProtection.xsl", source)
+                self.assertIn("inc/customSearchFlag.xsl", source)
 
         # The dark-mode overlay is verified against enable.dark.mode=yes; "no"
         # switches off Oxygen's dark plumbing entirely.
@@ -216,6 +282,89 @@ class PackageReleaseTests(unittest.TestCase):
             if ref:
                 self.assertTrue((opt.parent / ref).is_file(),
                                 f"{el.tag} references missing file: {ref}")
+
+    def test_marking_and_search_wiring_agrees_across_files(self):
+        # The protective marking (#175) and the search flag (#178) are each
+        # spread over three files that only agree by convention: a fragment
+        # declares a placeholder class, an XSLT matches that class and reads
+        # named parameters, and (for search) a CSS selects the class the XSLT
+        # emits. Nothing in the toolchain complains when one of them is
+        # renamed — the publish simply runs and the feature silently does
+        # nothing. Neither can be caught by publishing locally either: the
+        # WebHelp CLI needs a licence the project does not have, so this test
+        # is the only automated guard between an edit and a manual Oxygen run.
+        import re
+        import xml.etree.ElementTree as ET
+
+        template = REPO_ROOT / "theme" / "pptx-transform"
+        opt = template / "pptx-transform.opt"
+        webhelp = ET.parse(opt).getroot().find("webhelp")
+        declared = {p.get("name") for p in webhelp.findall("parameters/parameter")}
+
+        def read(rel):
+            return (template / rel).read_text(encoding="utf-8")
+
+        protection = read("xslt/inc/customProtection.xsl")
+        search_flag = read("xslt/inc/customSearchFlag.xsl")
+
+        # 1. Placeholder classes: what the fragment declares is what the XSLT
+        #    matches. A mismatch leaves the raw empty element in the output —
+        #    an unfilled bar or a dead flag.
+        for fragment, klass, xslt in (
+            ("page-templates-fragments/protection-header.xml",
+             "wh_header_protection", protection),
+            ("page-templates-fragments/protection-footer.xml",
+             "wh_footer_protection", protection),
+            ("page-templates-fragments/search-flag.xml",
+             "wh_search_visibility", search_flag),
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(f'class="{klass}"', read(fragment))
+                self.assertIn(f"'{klass}'", xslt,
+                              f"no XSLT template matches {klass}")
+
+        # 2. Fragment shape. Oxygen's includeCustomHTMLContent copies only
+        #    <body>'s children when it finds an <html>/<body> wrapper, and the
+        #    WHOLE document — explanatory comments and all — when it does not.
+        #    Drop the wrapper and every published page grows a block comment.
+        for fragment in ("page-templates-fragments/protection-header.xml",
+                         "page-templates-fragments/protection-footer.xml",
+                         "page-templates-fragments/search-flag.xml"):
+            with self.subTest(fragment=fragment):
+                root = ET.parse(template / fragment).getroot()
+                self.assertEqual(root.tag, "{http://www.w3.org/1999/xhtml}html")
+                self.assertEqual(
+                    [child.tag for child in root],
+                    ["{http://www.w3.org/1999/xhtml}body"],
+                    "the placeholder must sit inside a <body> wrapper")
+
+        # 3. Every parameter the XSLT reads is declared in the .opt. An
+        #    undeclared one reads as empty, which for show.protection means
+        #    silently no marking at all.
+        for xslt, name in ((protection, "customProtection.xsl"),
+                           (search_flag, "customSearchFlag.xsl")):
+            used = set(re.findall(r"oxyf:getParameter\('([^']+)'\)", xslt))
+            self.assertTrue(used, f"{name} reads no parameters at all")
+            with self.subTest(xslt=name):
+                self.assertLessEqual(
+                    used, declared,
+                    f"{name} reads parameters the .opt never declares: "
+                    f"{sorted(used - declared)}")
+
+        # 4. The class the search XSLT *emits* is the class the CSS selects.
+        self.assertIn("wh-search-hidden", search_flag)
+        self.assertIn("wh-search-hidden", read("resources/hide-search.css"))
+        # The old content-inferred rule is what #178 was: it hid the box
+        # wherever the instructor marker was absent, which on index.html and
+        # search.html is BOTH editions. It must not creep back — as a live
+        # rule. The stylesheet quotes it in a comment explaining the fix, so
+        # strip comments before looking.
+        live_css = re.sub(r"/\*.*?\*/", "", read("resources/hide-search.css"),
+                          flags=re.DOTALL)
+        self.assertNotIn(
+            ":not(:has(.gf-persistent))", live_css,
+            "the marker-absence rule hides search on the instructor's own "
+            "landing page; hide only where the student is positively flagged")
 
     def test_rebuild_is_byte_identical(self):
         first = self._build("first.zip")

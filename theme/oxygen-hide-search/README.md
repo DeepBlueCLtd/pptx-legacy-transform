@@ -1,4 +1,4 @@
-# Hide the search bar in the student Oxygen edition (issue #93)
+# Hide the search bar in the student Oxygen edition (issues #93, #178)
 
 The **student** edition of the published documentation has no searchable
 content: the trainee DITAVAL filter strips the instructor-only text
@@ -6,126 +6,145 @@ content: the trainee DITAVAL filter strips the instructor-only text
 body text, so the WebHelp search box only ever returns "no results". This
 overlay hides that search box **in the student edition only**.
 
-The instructor edition keeps its search box: it *does* carry searchable
-text, so search stays useful there.
+The instructor edition keeps its search box on **every** page — it *does*
+carry searchable text, so search stays useful there.
 
-## How it tells the editions apart (no template divergence)
+## How it tells the editions apart
 
-Earlier this overlay required a **student variant** of the publishing
-template — a copy of the instructor template that added an unconditional
-`#searchForm { display: none }`. Keeping two near-identical templates in
-step is the maintenance burden this version removes.
+The two editions publish as **two transformation scenarios**, so which edition
+is being built is known at **build time**. One parameter says so:
 
-Instead, the **pipeline marks each page with its edition** and one shared
-stylesheet does the hiding:
+| Scenario | `webhelp.show.search` | Result |
+| --- | --- | --- |
+| instructor | *(template default)* `yes` | box shown on every page |
+| student | `no` | box hidden on every page |
 
-- `generate_dita` stamps a hidden, instructor-only marker —
-  `<p class="gf-persistent">`, carrying `audience="-trainee"` — onto
-  **every** page (every gram topic, every Week sub-document, and the copied
-  static Welcome/Security pages).
-- The **trainee DITAVAL strips it in the student build**, so instructor
-  pages carry `.gf-persistent` and student pages carry none.
-- `hide-search.css` hides `#searchForm` on any page that does **not** carry
-  the marker (`body:not(:has(.gf-persistent)) #searchForm`).
+`customSearchFlag.xsl` turns that parameter into a hidden `.wh-search-hidden`
+marker, injected on every page via the `webhelp.fragment.after.header`
+placeholder; `hide-search.css` hides `#searchForm` wherever the marker appears.
 
-Because the marker only ever survives in instructor output, the student
-"no instructor" leakage check (SC-002) is unaffected — and `:has()` is the
-same selector mechanism the project's theme already uses to distinguish the
-editions.
+Only the exact value `no` hides the box. A misspelled or unset parameter leaves
+the stock behaviour — a student edition with a useless search box is a wart, an
+instructor edition without one is a defect.
+
+There is still **one shared template**: the two scenarios differ only in their
+`args.filter` DITAVAL and this one parameter. No student-variant template to
+keep in step.
+
+## What changed in #178, and why
+
+This overlay used to infer the edition from the **page content**:
+
+```css
+body:not(:has(.gf-persistent)) #searchForm { display: none !important; }
+```
+
+`generate_dita.py` stamps a hidden, instructor-only `<p class="gf-persistent">`
+(carrying `audience="-trainee"`) onto every **topic**; the trainee DITAVAL
+strips it, so marker-present meant instructor and marker-absent meant student.
+
+**That inference only holds on pages built from a topic.** Oxygen builds
+`index.html` from the *ditamap* and generates `search.html` outright, so
+neither carries the marker in *either* edition. Measured on the instructor
+edition:
+
+| Page | Built from | Marker | Box shown? |
+| --- | --- | --- | --- |
+| `week-1/week_1.html` | topic | 1 | yes |
+| `welcome.html` | topic | 1 | yes |
+| `security.html` | topic | 1 | yes |
+| `index.html` | **ditamap** | **0** | **no** ← the bug |
+| `search.html` | **generated** | **0** | **no** |
+
+With `webhelp.show.main.page.tiles=yes`, `index.html` is where an instructor
+*arrives*. The edition that is supposed to keep search lost the box at exactly
+the point a reader would reach for it.
+
+Two other directions were considered and rejected:
+
+- **Exempt the generated pages** (scope the rule to `body.wh_topic_page`).
+  Cheapest, but it hands the *student* edition a visible-but-useless box on
+  `index.html` — the one page a student is guaranteed to see.
+- **Invert the test against a student-side marker.** There is none: the DITAVAL
+  scheme strips elements, it does not add them.
+
+The scenario parameter is exact on every page in both editions. It became cheap
+once issue #175 brought XSLT extensions into the template for the protective
+marking; the two share that plumbing.
+
+### `search.html` is now deliberate
+
+The instructor edition keeps its search box on the search-results page. The
+student edition hides it there too. Both are intended, and neither is the
+"negligible wart" this README used to describe — that caveat is gone because the
+behaviour it described is gone.
 
 ## What's here
 
 ```text
 oxygen-hide-search/
-└── resources/
-    └── hide-search.css   ← edition-aware: hides #searchForm where the
-                            instructor marker is absent (student pages)
+├── page-templates-fragments/
+│   └── search-flag.xml        ← empty <div class="wh_search_visibility"/>
+├── resources/
+│   └── hide-search.css        ← hides #searchForm where the marker appears
+└── xslt/inc/
+    └── customSearchFlag.xsl   ← parameter → marker (or nothing)
 ```
 
 `#searchForm` is the stable id Oxygen WebHelp Responsive assigns the search
 input widget on every generated page (welcome/index, topic, and the
-search-results page), so one rule covers all of them. CSS, not template
-surgery, is the Oxygen-recommended approach — see *Sources* below.
+search-results page), so one rule covers all of them.
 
-> **Caveat — the dedicated search-results page.** That page is generated by
-> Oxygen, not from a topic, so it carries no marker and its own header
-> search box is hidden in **both** editions. Harmless for the student
-> (search is off there anyway); a negligible wart for the instructor
-> (results still render — only the box on that one page is suppressed).
+`hide-search.css` also keeps `.gf-persistent { display: none }`. That marker no
+longer drives anything here, but `generate_dita.py` still stamps it and the
+empty paragraph must never show.
 
-## Why CSS, not a transformation parameter
+## Why not a stock parameter
 
 Oxygen WebHelp Responsive has **no built-in parameter that disables search**
-(confirmed against the WebHelp Responsive parameter list and the Oxygen
-forum). The supported, scenario-level way to suppress it without editing
-stock templates or writing XSL is to add a small custom CSS that the output
-loads last (so it overrides the stock styles) — and the supported way to
-load a custom CSS from a transformation scenario is an Oxygen **Publishing
-Template** with a `<css>` resource entry.
+(confirmed against the WebHelp Responsive parameter list and the Oxygen forum),
+which is why this overlay defines its own and applies it with a small CSS rule
+rather than editing stock templates.
 
 ## Already done for you in `theme/pptx-transform/`
 
-If you publish with this repo's own template — **`theme/pptx-transform/`** —
-the steps below are **already wired in**: the stylesheet sits at
-`resources/hide-search.css` and `pptx-transform.opt` references it as the
-**last** `<css>` entry, so it wins the cascade. Point *both* scenarios'
-**Templates** tab at `pptx-transform.opt` and publish.
+If you publish with this repo's own template, this is **already wired in**.
+Point *both* scenarios' **Templates** tab at `pptx-transform.opt`, then set
+`webhelp.show.search` = `no` on the **student** scenario only. Leave the
+instructor scenario alone.
 
-The section below is for wiring this overlay into a **different** template.
+## Wiring it into a different template
 
-## Wiring it into the (single, shared) template
-
-You run a **separate transformation scenario per edition**: the instructor
-scenario passes `args.filter` = the `instructor.ditaval` profile (which
-strips the student-only 7 Questions section from gram pages), and the
-student scenario passes `args.filter` = the `trainee.ditaval` profile
-(which strips the instructor-only content). Both `.ditaval` files are
-emitted by `generate_dita.py` beside the DITA source. The two scenarios
-now differ only in which `args.filter` they point at, and can share
-**one** publishing template:
-
-1. **Use your existing publishing template** (the Fi3ldMan-derived one that
-   hosts the GramFrame overlay — see `../gramframe-oxygen/README.md`). There
-   is **no student variant** to maintain any more.
-
-2. **Copy `resources/hide-search.css`** from this folder into that template's
-   `resources/` directory.
-
-3. **Reference it from the template descriptor.** Open the template's `.opt`
-   file and add the CSS inside `<resources>` so it loads after the stock
-   styles and wins the cascade:
+1. Copy `resources/hide-search.css`,
+   `page-templates-fragments/search-flag.xml` and
+   `xslt/inc/customSearchFlag.xsl` into that template.
+2. Declare `<parameter name="webhelp.show.search" value="yes"/>` in its `.opt`.
+3. Add `<css file="resources/hide-search.css"/>` after the stock stylesheets so
+   it wins the cascade.
+4. Bind the fragment:
 
    ```xml
-   <resources>
-     <!-- …existing entries (GramFrame bundle, theme.css, …)… -->
-     <css file="resources/hide-search.css"/>
-   </resources>
+   <fragment file="page-templates-fragments/search-flag.xml"
+             placeholder="webhelp.fragment.after.header"/>
    ```
 
-4. **Point both scenarios at this template.** Edit the instructor *and* the
-   student WebHelp Responsive transformation scenarios → **Templates** tab →
-   select this one template. (Duplicate the stock scenario first if you
-   haven't — the built-ins are read-only.) The CSS itself decides per page
-   whether to hide the box, so the instructor edition keeps its search box
-   and the student edition loses it without any per-scenario CSS difference.
+5. Import `inc/customSearchFlag.xsl` from a stylesheet bound to **each** of the
+   four page-type XSLT extension points (see
+   `../oxygen-protection/README.md`, which lists them). Miss the main-page one
+   and `index.html` regresses to exactly the #178 bug.
+6. Set `webhelp.show.search` = `no` on the student scenario, and republish both
+   editions to confirm.
 
-5. **Republish both editions and confirm:** the search box is gone from the
-   student welcome page and a student topic page, and still present on the
-   instructor pages, with the rest of the header/layout unchanged.
-
-> If you would rather not edit the template `.opt`, you can instead drop
-> `hide-search.css` into the folder you pass to the `webhelp.custom.resources`
-> parameter — but `webhelp.custom.resources` only *copies* the file to the
-> output, it does **not** link it into the page `<head>`. Loading the CSS is
-> what hides the box, so the Publishing Template route above (which links it)
-> is the reliable one.
+> Dropping the CSS into `webhelp.custom.resources` instead will **not** work:
+> that parameter only *copies* the file to the output, it does not link it into
+> the page `<head>`, and loading the CSS is what hides the box.
 
 ## Dev/CI preview note
 
 This overlay is for the **production Oxygen publish**. The
 `scripts/publish_html.py` DITA-OT dev preview does not emit a WebHelp search
 box at all, so there is nothing to hide there; its theme simply hides the
-marker element (`.gf-persistent`) so the empty paragraph never shows.
+`.gf-persistent` marker so the empty paragraph never shows.
 
 ## Sources
 

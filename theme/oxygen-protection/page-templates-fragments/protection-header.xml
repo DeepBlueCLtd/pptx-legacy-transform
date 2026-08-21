@@ -1,0 +1,25 @@
+<!-- <html>/<body> are ignored - only <body>'s children are copied into the page. -->
+<!--
+    Top protective-marking bar placeholder (issue #175).
+
+    Bind this file to the "webhelp.fragment.before.body" placeholder, which is
+    included at the start of <body> on ALL four generated page types (main
+    /tiles, topic, search results, index terms). The element below is
+    deliberately EMPTY: xslt/inc/customProtection.xsl matches it in
+    `copy_template` mode and either fills it with the marking text or drops it
+    entirely, according to the webhelp.show.protection / webhelp.protection.text
+    scenario parameters.
+
+    Do not put the marking text here. Literal text in this file would be part
+    of the template, and on a one-way air-gapped gateway a template edit costs
+    a full re-transfer; a scenario parameter costs nothing.
+
+    The <html>/<body> wrapper is not decoration: Oxygen's includeCustomHTMLContent
+    copies only <body>'s children when it finds that wrapper, and copies the WHOLE
+    document - these comments included - when it does not.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <body>
+        <header class="wh_header_protection"/>
+    </body>
+</html>
