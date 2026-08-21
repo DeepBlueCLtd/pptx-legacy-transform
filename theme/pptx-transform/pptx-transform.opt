@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<publishing-template>
+    <name>pptx-transform</name>
+    <description>Oxygen WebHelp Responsive "tiles" template with the AAAC gram
+        pipeline overlays: GramFrame turns each spectrogram table into an
+        interactive viewer, and one edition-aware stylesheet hides the search
+        box in the student build. Point BOTH the instructor and the trainee-
+        filtered scenario at this single template.</description>
+    <webhelp>
+        <preview-image file="oxygen-tiles.png"/>
+        <parameters>
+            <parameter name="webhelp.show.main.page.tiles" value="yes"/>
+            <parameter name="webhelp.show.main.page.toc" value="no"/>
+            <parameter name="webhelp.top.menu.depth" value="3"/>
+            <!-- Stock default is "no". Without this, a week_N.dita page renders
+                 as a bare <h1>Week N</h1> — it is a nav container with no body
+                 of its own, so its grams are reachable only via the side TOC.
+                 Turning it on gives each week a linked list of its grams.
+                 No effect on topics with no children (grams, welcome,
+                 security). -->
+            <parameter name="webhelp.show.child.links" value="yes"/>
+            <!-- Stock default is "yes", which spends col-lg-3 (25% of the
+                 viewport) on a left sidebar listing every gram in the week.
+                 A gram page is a wide spectrogram driven by GramFrame, so that
+                 width matters more here than a persistent tree. Grams stay
+                 reachable via the week page's child links (above), the top
+                 menu, and the prev/next navigation links. -->
+            <parameter name="webhelp.show.publication.toc" value="no"/>
+            <parameter name="webhelp.enable.dark.mode" value="yes"/>
+            <parameter name="args.figurelink.style" value="TITLE"/>
+            <parameter name="args.tablelink.style" value="TITLE"/>
+            <parameter name="force-unique" value="true"/>
+        </parameters>
+        <resources>
+            <!-- Stock, in Oxygen's own order: oxygen-theme.css defines the wh-*
+                 custom properties oxygen.css reads, so it must come first.
+                 Never edit these three — overrides go in the overlay CSS below. -->
+            <css file="oxygen-theme.css"/>
+            <css file="oxygen.css"/>
+            <css file="notes.css"/>
+            <!-- Project overlays, after the stock styles so they win the
+                 cascade. Each is a verbatim copy of the matching theme/
+                 overlay folder; tests/test_package_release.py enforces that
+                 every copy stays byte-identical to its source. -->
+            <css file="resources/hide-search.css"/>
+            <css file="resources/gram-nav.css"/>
+            <css file="resources/gram-toc-overlay.css"/>
+            <css file="resources/dark-mode.css"/>
+            <fileset>
+                <include name="resources/**/*"/>
+                <exclude name="resources/**/*.svn"/>
+                <exclude name="resources/**/*.git"/>
+            </fileset>
+        </resources>
+        <!-- Loads gramframe.bundle.js into every topic page <head>; it upgrades
+             each <table class="gram-config"> into an interactive spectrogram
+             viewer and no-ops on pages with none. The wrapper element must be
+             html-fragments (a bare <fragments>, or a <fragment> directly under
+             <webhelp>, fails the publish with "Build failed with an exception:
+             null"). See theme/gramframe-oxygen/README.md. -->
+        <html-fragments>
+            <fragment file="page-templates-fragments/libraries/gramframe.xml"
+                      placeholder="webhelp.fragment.head.topic.page"/>
+            <!-- Pins data-wh-theme="dark" pre-paint, so no light flash and no
+                 theme picker. Deliberately webhelp.fragment.head, NOT
+                 ...head.topic.page: it must reach every page type (welcome,
+                 search results, index terms), not just topics. Oxygen binds one
+                 fragment per placeholder, so these two cannot share one.
+                 See theme/oxygen-dark-mode/README.md. -->
+            <fragment file="page-templates-fragments/libraries/dark-mode.xml"
+                      placeholder="webhelp.fragment.head"/>
+        </html-fragments>
+        <online-preview-url>https://www.oxygenxml.com/samples/DITA-WebHelp-Responsive/tiles/oxygen/</online-preview-url>
+        <tags>
+            <tag type="layout">tiles</tag>
+            <tag type="color">blue</tag>
+            <tag type="other">dark-mode</tag>
+        </tags>
+    </webhelp>
+    <pdf>
+        <preview-image file="oxygen.png"/>
+        <tags>
+            <tag type="color">white</tag>
+        </tags>
+        <resources>
+            <css file="oxygen-theme.css"/>
+            <css file="oxygen-print.css"/>
+            <css file="notes.css"/>
+            <fileset>
+                <include name="*.css"/>
+                <include name="resources/**/*.ttf"/>
+            </fileset>
+        </resources>
+    </pdf>
+</publishing-template>

@@ -63,6 +63,16 @@ loads last (so it overrides the stock styles) — and the supported way to
 load a custom CSS from a transformation scenario is an Oxygen **Publishing
 Template** with a `<css>` resource entry.
 
+## Already done for you in `theme/pptx-transform/`
+
+If you publish with this repo's own template — **`theme/pptx-transform/`** —
+the steps below are **already wired in**: the stylesheet sits at
+`resources/hide-search.css` and `pptx-transform.opt` references it as the
+**last** `<css>` entry, so it wins the cascade. Point *both* scenarios'
+**Templates** tab at `pptx-transform.opt` and publish.
+
+The section below is for wiring this overlay into a **different** template.
+
 ## Wiring it into the (single, shared) template
 
 You run a **separate transformation scenario per edition**: the instructor
