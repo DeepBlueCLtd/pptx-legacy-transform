@@ -468,7 +468,11 @@ corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
 overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
 compact top-right overlay on gram pages, so it stops reserving a full-height
 right-hand column and lets the gramframe use the full page width; see that
-folder's `README.md`.
+folder's `README.md`. `theme\oxygen-dark-mode\` is a fifth overlay (one script
+plus one CSS file) that publishes every page in the template's **dark** theme
+and hides the light/dark theme picker, so the production output matches the
+dark dev preview and offers the reader no choice; see that folder's
+`README.md`.
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
@@ -1214,7 +1218,10 @@ never overwrites a previous publication's output.
 
 3. On the **Templates** tab, select the custom publishing template (the
    Fi3ldMan-derived one that carries the GramFrame overlay and any other theme
-   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`.
+   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`. Both
+   editions publish **dark, with no theme picker** once that template carries
+   `theme/oxygen-dark-mode/` — see that folder's `README.md` for the two
+   `.opt` entries it needs.
 
 #### Create the student scenario
 
