@@ -94,6 +94,23 @@ main[role="main"] {
   position: relative;
 }
 
+/* Gram pages get a much wider measure than the 960px reading width above.
+   960px is narrower than a gram's own natural size (a 896px spectrogram plus
+   axis margins comes to ~971px), so at the default measure a gram has no room
+   to fill and the full-width rules below have nothing to demonstrate.
+
+   This width is a DEV-PREVIEW figure only. The production publisher is Oxygen,
+   whose WebHelp Responsive output puts the topic in an uncapped
+   `container-fluid` — effectively the viewport width — so production is wider
+   still. The number here just has to be comfortably more than a gram's natural
+   size for the preview to show the same behaviour.
+
+   Scoped by p.gram-nav, the marker generate_dita.py puts on gram pages only,
+   so the ordinary topic pages keep their reading measure. */
+body:has(p.gram-nav) main[role="main"] {
+  max-width: 1600px;
+}
+
 /* ---------- Topic title ---------- */
 article > h1.topictitle1 {
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -376,6 +393,34 @@ section.lofar-stage .imagecenter img {
   max-width: 100%;
   height: auto;
   filter: contrast(1.05) brightness(1.05) saturate(1.1);
+}
+
+/* ---------- Full-width gram (both editions) ----------
+   publish_html.py injects gramframe.bundle.js into the preview, so the grams
+   here are the same interactive component the Oxygen production output builds
+   — and it renders at the spectrogram's NATURAL size, leaving a band of
+   whitespace down either side of a wider column. That is deliberate in the
+   component: updateSVGLayout sizes the SVG from `renderWidth || naturalWidth`,
+   and only the Expand toggle ever sets renderWidth.
+
+   These two rules override the inline sizes the component writes on itself, so
+   the fill is the default. `!important` is load-bearing — an important author
+   declaration outranks a normal inline one, which is what makes this survive
+   updateSVGLayout rewriting the inline styles on every relayout. So is
+   `height: auto`: with the height pinned, preserveAspectRatio="xMidYMid meet"
+   letterboxes the drawing instead of growing it, and screenToSVG then scales
+   cursor positions against a box the drawing no longer fills.
+
+   This is the dev-preview counterpart of theme/gram-fill-width/ — the rules are
+   identical (no colours involved, so nothing to translate between the light
+   stock template and this dark console). Keep the two in step. */
+.gram-frame-container {
+  width: 100% !important;
+}
+svg.gram-frame-svg {
+  width: 100% !important;
+  height: auto !important;
+  box-sizing: border-box;
 }
 
 /* Metadata readout: LCD strip below the gram */
