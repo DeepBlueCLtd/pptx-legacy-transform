@@ -468,7 +468,11 @@ corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
 overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
 compact top-right overlay on gram pages, so it stops reserving a full-height
 right-hand column and lets the gramframe use the full page width; see that
-folder's `README.md`.
+folder's `README.md`. `theme\oxygen-dark-mode\` is a fifth overlay (one script
+plus one CSS file) that publishes every page in the template's **dark** theme
+and hides the light/dark theme picker, so the production output matches the
+dark dev preview and offers the reader no choice; see that folder's
+`README.md`.
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
@@ -694,7 +698,7 @@ installs, not the user-folder install.
    is a bare filename — no `../` traversal. Each publication's ditamap
    is written **inside its folder** (`dita/<pub>/<pub>.ditamap` with
    folder-relative hrefs — nothing at the `dita/` root except the
-   manifest, skipped report, and DITAVAL profile), so a publication
+   skipped report and DITAVAL profiles), so a publication
    folder is self-contained and can be opened in Oxygen as-is. Output
    is deterministic: re-running the same CSV
    produces byte-identical files (including the copied assets). If a
@@ -967,6 +971,7 @@ canonical air-gapped test surface.
 | `UnicodeDecodeError` when running `write.py`/`dedupe.py` after editing the CSV in Excel. | Excel's default *"CSV (Comma delimited)"* save writes Windows ANSI (cp1252), not UTF-8; older builds of the reader were strict utf-8. | Fixed: the readers now fall back to cp1252, so the **default save just works** — you no longer need the awkward *"CSV (MS-DOS)"* option, and the fallback is logged at DEBUG (no console warning). For a byte-clean round-trip, prefer *Save As → CSV UTF-8*. |
 | `generate_dita.py` warns "Asset missing, href will dangle". | `png_path` (or the WAV's `link_href`) does not resolve to a file under `--image-root`. | Check the path in the CSV row, or pass a different `--image-root`. The topic is emitted with its intended local href anyway — once the asset is in place at the expected source path, re-running the generator copies it without touching the topic XML. |
 | Oxygen / DITA-OT reports `[DOTX008E] The resource '…analysis-20sheet-20.png' cannot be loaded`. | The topic references an asset (here an analysis sheet PNG) that is not present in the built tree — the source file was missing at generate time, so the generator dangled the href. (`-20` is DITA-OT's rendering of the URL-escaped space `%20` in the original filename.) | Catch it upstream: `extract_to_csv.py` now flags any referenced-but-missing asset with `asset file missing on disk` in the CSV `warnings` column and an enumerated `extract.log` list, so re-run extraction and triage those rows (restore the source file, or drop the row) before publishing. To map a published `week-N/gram-NN` back to the source deck/gram it came from, read the source-provenance block at the top of the gram page (on by default for now; `--no-debug-provenance` suppresses it). |
+| Every published page 404s, and the content sits one folder deeper than the links expect — e.g. `html\instructor\main\main\week-1\week_1.html` exists but `html\instructor\main\week-1\week_1.html` (the link `index.html` uses) does not. The outer folder holds only `index.html` and the CSS/resources. | A topic referenced a file **outside its publication folder**, so DITA-OT resolved the job root to the *parent* of the map's folder and mirrored that extra tier into the output — stranding `index.html` and every generated link one level above the content. The usual source was a cross-publication deduplication redirect: `deduplicate_csv.py` grouped byte-identical assets by content alone, so a gram an assessment deck reuses from the week it came from was redirected as `..\..\..\<other-pub>\…` (issue #164). One such reference nests the whole publication. | Fixed on both sides: dedupe no longer groups across publications, and the generator refuses a cross-publication redirect (copying the asset locally with a `lies outside the publication` warning) so an older CSV heals without re-running dedupe. Re-run `dedupe.py` then `write.py`, and republish. To confirm a tree is clean before publishing, check that no `href` in `dita\<pub>\` resolves outside `<pub>\`. |
 | `GLC missing bandwidth` / `bandcentre` warnings in CSV. | Source GLC is missing those band elements (R6). | An **image** GLC-backed gram needs `bandwidth` / `bandcentre` for GramFrame — fix the GLC; see next row. (`time_end` is measured from the image, not the GLC — issue #148 — so a missing `bottom_crop` is no longer warned. `.wav` rows, analysis-sheet rows and dangling GLC rows are exempt.) |
 | `gram time period unknown — could not read image height` warning in CSV. | The gram's image is present on disk but its pixel height couldn't be read (unrecognised/corrupt PNG/JPEG/GIF), so `time_end` is blank (issue #148). | Confirm the file is a valid image in the expected format and re-run; if the image itself is missing you'll instead see `asset file missing on disk` (drop the correct image in). This is a warning, not a fail-fast. |
 | `GLC invalid update_period '…' — assumed 1 s per scan line` warning in CSV. | The GLC states an `update_period` that isn't a positive number, so the seconds-per-scan-line scaling can't be applied and extraction fell back to `1` (issue #160). | Open the `.glc` and fix the value (`<update_period>2</update_period>`), then re-run — the affected gram's `time_end` is otherwise too short by that factor. A GLC with **no** `update_period` is normal and never warns. |
@@ -1214,7 +1219,10 @@ never overwrites a previous publication's output.
 
 3. On the **Templates** tab, select the custom publishing template (the
    Fi3ldMan-derived one that carries the GramFrame overlay and any other theme
-   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`.
+   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`. Both
+   editions publish **dark, with no theme picker** once that template carries
+   `theme/oxygen-dark-mode/` — see that folder's `README.md` for the two
+   `.opt` entries it needs.
 
 #### Create the student scenario
 
@@ -1290,7 +1298,8 @@ This matches the `publish_html.py` dev-preview layout
   technical author is the sole authority.
 - **Output is always rebuilt from scratch.** `extract_to_csv.py`,
   `deduplicate_csv.py`, and `generate_dita.py` each clear their target
-  (the output CSV, the deduped CSV, and the DITA tree respectively) at
+  (the output CSV, the deduped CSV, and — for the generator — each
+  publication folder its CSV produces) at
   the start of a run. This verifies the target isn't locked (e.g. open
   in Excel or Oxygen) and guarantees a failed or re-pointed run can't
   leave a previous document's output behind for a later stage to
@@ -1306,13 +1315,23 @@ This matches the `publish_html.py` dev-preview layout
   Publications *not* in the CSV are left untouched, which is what lets a
   suite of documents be built up in one `dita/` tree over successive
   scoped runs and published one by one.
-- **`generate_dita.py --clean` widens that to the whole tree.** Use it
-  for a from-scratch rebuild of every publication at once; CI, the
-  PR-preview build, the gh-pages regenerate job and `run_pipeline.bat`
-  all pass it, so their determinism comparison starts from a bare tree.
-  On the target, set `CLEAN_ALL = True` in `write.py`/`pipeline.py`.
-  Note `manifest.txt` and `skipped.txt` are rewritten each run either
-  way, so they describe the current run, not the accumulated tree.
+- **Nothing wipes the whole `dita/` tree.** There is no flag for it and no
+  wrapper toggle: the generator's blast radius is exactly the publication
+  folders its own CSV produces. On the target `--out` is `Z:\dita`, whose
+  other contents — anything the author keeps alongside the generated
+  publications — belong to the operator, so clearing it outright is a
+  deliberate manual act: **delete the folder by hand** before the run when
+  you want a from-scratch rebuild of everything. (`generate_dita.py` used
+  to take a `--clean` flag that did this; it was removed because a wipe
+  that broad is too easy to carry accidentally in a tuned wrapper. Passing
+  it now fails fast with argparse's `unrecognized arguments: --clean` —
+  if you see that, delete the flag, and any `CLEAN_ALL` line, from your
+  tuned `write.py` or `pipeline.py`.)
+  Note `skipped.txt` is rewritten each run either way, so it describes
+  the current run, not the accumulated tree. (A `manifest.txt` listing
+  every file produced used to be written beside it; it was removed
+  because nothing consumed it and, sitting at the root of a tree built
+  up over several scoped runs, it described only the last one.)
 - **Windows orchestrator only.** `run_pipeline.bat` is a Windows batch
   file; on POSIX systems run the Python scripts directly.
 - **One third-party dependency.** Only `python-pptx` is required at

@@ -1,0 +1,29 @@
+<!-- <head> is ignored - only its children are copied into the output page head. -->
+<!--
+    Force-dark loader for the Oxygen WebHelp Responsive template (issue #173).
+
+    Loading dark-mode.js pins data-wh-theme="dark" on the <html> element, so
+    every published page renders in the template's dark theme regardless of the
+    reader's browser preference or any earlier choice they made in the theme
+    menu. The companion resources/dark-mode.css hides that menu.
+
+    NOTE the deliberate absence of defer/async: this script must run before the
+    first paint, otherwise the page renders light for a frame and then flips.
+    (The GramFrame fragment beside this one IS deferred - it upgrades the DOM
+    after load, which is the opposite requirement.)
+
+    The bundle ships beside this fragment under resources/dark-mode.js; Oxygen's
+    custom-resources fileset copies resources/** into the output at
+    ${oxygen-webhelp-assets-dir}/template/resources/, so the src below mirrors
+    the path convention the template's other custom scripts already use.
+
+    Bind this fragment to the "webhelp.fragment.head" placeholder - the one that
+    applies to ALL page types (welcome, topic, search results, index terms), not
+    just topic pages. That placeholder is free: the GramFrame fragment occupies
+    "webhelp.fragment.head.topic.page", and Oxygen binds one fragment per
+    placeholder.
+-->
+<head xmlns:whc="http://www.oxygenxml.com/webhelp/components" whc:version="22.0">
+    <script
+        src="${oxygen-webhelp-assets-dir}/template/resources/dark-mode.js?buildId=${oxygen-webhelp-build-number}"></script>
+</head>

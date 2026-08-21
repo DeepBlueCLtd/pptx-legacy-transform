@@ -10,7 +10,7 @@ Export with an **unprocessed** CSV (no `master_png_path` column) and keep the
 output as the reference:
 
 ```bash
-python generate_dita.py --csv source.csv --out dita-baseline --image-root source/ --clean
+python generate_dita.py --csv source.csv --out dita-baseline --image-root source/
 ```
 
 Every asset is copied into its own gram folder, exactly as today.
@@ -34,7 +34,7 @@ duplicate another row are redirected; unique or small assets are untouched.
 ## 2. Export the deduplicated set (US1 — FR-004/005/009)
 
 ```bash
-python generate_dita.py --csv source.dedup.csv --out dita-dedup --image-root source/ --clean
+python generate_dita.py --csv source.dedup.csv --out dita-dedup --image-root source/
 ```
 
 **Verify SC-001 (one physical copy)**: for a `.wav` duplicated N times, the file
@@ -97,7 +97,7 @@ again is a no-op.
 ## 6. Idempotency (SC-006 / FR-013)
 
 ```bash
-python generate_dita.py --csv source.dedup.csv --out dita-dedup2 --image-root source/ --clean
+python generate_dita.py --csv source.dedup.csv --out dita-dedup2 --image-root source/
 diff -r dita-dedup dita-dedup2        # byte-identical
 python deduplicate_csv.py --csv source.csv --image-root source/ --out source.dedup2.csv
 diff source.dedup.csv source.dedup2.csv   # byte-identical

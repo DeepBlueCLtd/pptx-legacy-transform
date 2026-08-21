@@ -88,8 +88,7 @@ Open `extracted.csv` in Excel. The reviewer:
 ```bash
 python generate_dita.py --csv extracted.csv \
                         --out dita/ \
-                        --image-root tests/fixtures/sample-content \
-                        --clean
+                        --image-root tests/fixtures/sample-content
 ```
 
 Expected output under `dita/`:
@@ -105,8 +104,6 @@ Expected output under `dita/`:
 - `progress-test-N/...` flat trees for any test publications, with
   topics and assets sitting side-by-side
 - `main.ditamap` plus one ditamap per progress test, at the output root
-- `manifest.txt` listing every file produced (topics + assets +
-  ditamaps)
 - `skipped.txt` if any rows were skipped (e.g. GLC row whose inner
   asset is missing or has an unrecognised extension)
 
@@ -181,6 +178,5 @@ stage propagates to the wrapper's exit code.
   has lost its BOM. Re-export from Excel via *File → Save As → CSV
   UTF-8*.
 - *Generator emits files but Oxygen fails to build*: check the
-  generator's log for warnings about missing images and the manifest
-  for unexpected files; then run a single-topic Oxygen validation to
-  isolate the offending topic.
+  generator's log for warnings about missing images, then run a
+  single-topic Oxygen validation to isolate the offending topic.

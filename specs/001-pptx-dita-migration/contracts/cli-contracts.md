@@ -114,11 +114,10 @@ total warnings, distinct warning types with counts.
 ## `generate_dita.py`
 
 **Purpose** (Story 1): Consume the signed-off CSV and write DITA
-topics + ditamaps + manifest.
+topics + ditamaps.
 
 ```text
 python generate_dita.py --csv PATH --out PATH --image-root PATH
-                        [--clean]
 ```
 
 | Flag | Required | Type | Description |
@@ -126,7 +125,6 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 | `--csv` | yes | path | Reviewed CSV file |
 | `--out` | yes | path | Output directory; created if missing |
 | `--image-root` | yes | path | Root used to resolve `png_path` columns |
-| `--clean` | no | flag | If set, deletes the existing output directory tree before writing |
 
 **Side effects**:
 
@@ -135,7 +133,6 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 - Writes one ditamap per publication at the `--out/` root
   (e.g. `--out/main.ditamap`, `--out/progress-test-1.ditamap`), each
   alongside its similarly-named content folder.
-- Writes `--out/manifest.txt` listing every file produced.
 - Writes `--out/skipped.txt` listing every row skipped (only if there
   is at least one).
 - Writes `generate.log` (mode `"w"`, UTF-8) in the current working
@@ -144,14 +141,15 @@ python generate_dita.py --csv PATH --out PATH --image-root PATH
 **Exit codes**: `0` on success (even if some rows are skipped); `1` on
 any unhandled error (e.g. CSV missing, malformed CSV, write failure).
 
-**Idempotency contract** (FR-013, R9, SC-004): With `--clean` *not*
-set, running twice with the same CSV produces byte-identical output
-files for every file the second run also produces. With `--clean` set,
-the output tree is deleted before writing on each run.
+**Idempotency contract** (FR-013, R9, SC-004): Running twice with the
+same CSV produces byte-identical output files for every file the second
+run also produces. No invocation deletes the whole `--out` tree — the
+wipe is scoped to the publication folders the CSV produces, and clearing
+`--out` outright is a manual act performed by hand.
 
 **Logging contract** (FR-014):
 
-- INFO: each topic written, each ditamap written, manifest written,
+- INFO: each topic written, each ditamap written,
   skipped count, end-of-run summary (total topics, total ditamaps,
   total skipped, total errors).
 - WARNING: image not found at the resolved `png_path`; row uses the

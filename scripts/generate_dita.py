@@ -1,7 +1,7 @@
 """DITA generator (User Story 1, MVP).
 
 Consumes the signed-off intermediate CSV and writes the DITA topic tree,
-ditamaps, manifest, and skipped report under ``--out``. This is the
+ditamaps, and skipped report under ``--out``. This is the
 deliverable the migration pipeline exists to produce; everything before
 this script feeds it.
 
@@ -1344,6 +1344,17 @@ def emit_gram_topic(
         (missing/blank master, or no master with the matching view) is
         logged as a WARNING and treated as non-redirected so the asset is
         copied locally instead (FR-014).
+
+        A master in a *different publication* is refused the same way
+        (issue #164). The redirect href is relative from this gram's folder
+        to the master's, so a cross-publication master emits
+        ``../../../<other-pub>/…`` — a reference out of the publication
+        folder, which costs far more than the bytes it saves: DITA-OT then
+        roots the job at the parent of the map's folder and pushes the whole
+        publication a tier deeper than its own ``index.html`` and links, so
+        every page 404s. ``deduplicate_csv.py`` no longer groups across
+        publications, but a CSV deduplicated by an older build still carries
+        such targets, and self-contained beats deduplicated every time.
         """
         key = (r.get("master_png_path", "") or "").strip()
         if not key:
@@ -1359,6 +1370,20 @@ def emit_gram_topic(
                 "has no master row with a matching (time_end, bandwidth, bandcentre) view"
                 if suffix == ".wav" else "not found",
             )
+            return None
+        pub_root = (out_dir / require_field(r, "publication")).resolve(strict=False)
+        master_dir = target.topic_dir.resolve(strict=False)
+        if pub_root not in master_dir.parents and master_dir != pub_root:
+            LOGGER.warning(
+                "Redirect target for %s/%s/%s seq=%s lies outside the "
+                "publication: master_png_path=%r resolves to %s. Copying the "
+                "asset locally instead — a cross-publication redirect would "
+                "leave %s referencing another publication's folder, which "
+                "nests the published output an extra level deep.",
+                r["publication"], r["gram_id"], r["topic_type"],
+                r["sequence"], key, master_dir, r["publication"],
+            )
+            return None
         return target
 
     if analysis_rows:
@@ -2014,14 +2039,6 @@ def write_instructor_ditaval(out_dir: Path) -> Path:
     return path
 
 
-def write_manifest(out_dir: Path, files: list[Path]) -> Path:
-    """Write ``manifest.txt`` listing every produced file (sorted)."""
-    manifest_path = out_dir / "manifest.txt"
-    rels = sorted(p.relative_to(out_dir).as_posix() for p in files)
-    _write_text(manifest_path, "\n".join(rels) + "\n")
-    return manifest_path
-
-
 def write_skipped_report(out_dir: Path, skipped: list[dict]) -> Path | None:
     """Write ``skipped.txt`` only when at least one row was skipped."""
     if not skipped:
@@ -2071,13 +2088,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--csv", required=True, type=Path, dest="csv_path")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--image-root", required=True, type=Path, dest="image_root")
-    parser.add_argument(
-        "--clean", action="store_true", dest="clean_all",
-        help="Wipe the whole --out tree before writing, not just this run's "
-             "own publication folder(s). Use for a from-scratch rebuild of "
-             "every publication at once; omit it to build a suite of "
-             "documents into one tree over successive runs (the default, "
-             "which still rebuilds each publication it touches).")
     parser.add_argument(
         "--stub-wav", type=Path, dest="stub_wav", default=None,
         help="Testing aid: copy this file in place of every .wav asset "
@@ -2138,13 +2148,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         LOGGER.error("CSV does not exist: %s", args.csv_path)
         return 1
 
-    # ``--clean`` wipes the whole --out tree up-front, as every run once did.
-    # It stays available for a from-scratch rebuild of every publication at
-    # once (CI and the gh-pages determinism check use it), and an older tuned
-    # wrapper that still passes it keeps its original behaviour exactly.
-    if args.clean_all and args.out.exists():
-        LOGGER.info("--clean: wiping the whole output tree at %s", args.out)
-        shutil.rmtree(args.out)
+    # No run ever wipes the whole --out tree. The generator's blast radius is
+    # exactly the publication folders its own CSV produces (below); anything
+    # else in the tree belongs to the operator — including, on the target, the
+    # hand-maintained content of Z:\dita. Clearing the whole tree is a manual
+    # act, done deliberately by hand, not a flag a wrapper can carry.
     args.out.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -2193,20 +2201,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     # wholesale per publication — so the folder and its map are cleared and
     # rebuilt together. Publications *not* in this CSV are left untouched, so a
     # suite of documents can be built up across runs and published one by one.
-    if not args.clean_all:
-        removed = clean_publication_folders(args.out, publications)
-        if removed:
-            LOGGER.info(
-                "Rebuilding publication folder(s) from scratch: %s",
-                ", ".join(removed))
-        preserved = sorted(
-            p.name for p in args.out.iterdir()
-            if p.is_dir() and p.name not in publications)
-        if preserved:
-            LOGGER.info(
-                "Leaving %d other publication folder(s) in %s untouched: %s "
-                "(pass --clean to wipe the whole tree instead)",
-                len(preserved), args.out, ", ".join(preserved))
+    removed = clean_publication_folders(args.out, publications)
+    if removed:
+        LOGGER.info(
+            "Rebuilding publication folder(s) from scratch: %s",
+            ", ".join(removed))
+    preserved = sorted(
+        p.name for p in args.out.iterdir()
+        if p.is_dir() and p.name not in publications)
+    if preserved:
+        LOGGER.info(
+            "Leaving %d other publication folder(s) in %s untouched: %s "
+            "(delete them by hand for a from-scratch rebuild)",
+            len(preserved), args.out, ", ".join(preserved))
 
     written: list[Path] = []
     skipped: list[dict] = []
@@ -2258,20 +2265,16 @@ def main(argv: Iterable[str] | None = None) -> int:
             "content nav (top-level Week folders for main, the Grams folder "
             "for progress tests), no shared Welcome/Security pages.",
             args.static_root)
-    static_copied: list[Path] = []
     for pub in publications:
         copied = copy_static_tree(args.static_root, args.out / pub)
-        static_copied.extend(copied)
         if copied:
             LOGGER.info("Copied %d static file(s) into %s/", len(copied), pub)
 
     # 7 Questions topic: copy the PNG and emit a thin wrapper topic into every
     # publication folder, then reference it as a root-level ditamap entry
     # (after static pages, before gram content).
-    seven_q_pub_paths: list[Path] = []
     for pub in publications:
         pub_paths = emit_seven_questions_topic(args.out / pub, seven_q_src)
-        seven_q_pub_paths.extend(pub_paths)
         LOGGER.info(
             "Wrote 7 Questions topic/image into %s/ (%d file(s))",
             pub, len(pub_paths),
@@ -2305,12 +2308,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     LOGGER.info("Wrote DITAVAL profile %s", ditaval_path)
     instructor_ditaval_path = write_instructor_ditaval(args.out)
     LOGGER.info("Wrote DITAVAL profile %s", instructor_ditaval_path)
-
-    manifest_path = write_manifest(
-        args.out,
-        written + static_copied + seven_q_pub_paths + ditamap_paths
-        + [ditaval_path, instructor_ditaval_path])
-    LOGGER.info("Wrote manifest %s", manifest_path)
 
     skipped_path = write_skipped_report(args.out, skipped)
     if skipped_path is not None:

@@ -33,7 +33,7 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          stub_wav: "Path | None" = None,
          static_root: "Path | None" = STATIC_ROOT,
          seven_questions: "Path | None" = SEVEN_QUESTIONS_PNG,
-         clean_all: bool = False) -> int:
+         extra_argv: "list[str] | None" = None) -> int:
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     argv = [
@@ -41,10 +41,11 @@ def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
         "--out", str(out_dir),
         "--image-root", str(image_root),
     ]
-    # ``clean_all`` drives the generator's own --clean flag (wipe the whole
-    # tree); ``clean`` above is the harness wiping out_dir before the run.
-    if clean_all:
-        argv += ["--clean"]
+    # ``clean`` is the *harness* wiping out_dir before the run — the generator
+    # itself has no whole-tree wipe. ``extra_argv`` appends raw options, for
+    # asserting on argparse's own handling (e.g. that --clean is rejected).
+    if extra_argv:
+        argv += extra_argv
     if stub_wav is not None:
         argv += ["--stub-wav", str(stub_wav)]
     # Pin --static-root so the feature-010 common pages are sourced from a
@@ -1166,24 +1167,24 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertTrue((self.out / "main" / "main.ditamap").is_file(),
                         "this run's own publication is still written")
 
-    def test_clean_wipes_other_publications_too(self) -> None:
-        """``--clean`` is the from-scratch rebuild of the whole tree, so it
-        removes publications this CSV does not produce."""
-        self.out.mkdir(parents=True, exist_ok=True)
-        earlier = self.out / "progress-test-9" / "progress-test-9.ditamap"
-        earlier.parent.mkdir(parents=True, exist_ok=True)
-        earlier.write_text("<map/>", encoding="utf-8")
-        rc = _run(self.out, clean=False, clean_all=True)
-        self.assertEqual(rc, 0)
-        self.assertFalse(earlier.parent.exists(),
-                         "--clean must wipe the whole tree, other "
-                         "publications included")
+    def test_no_flag_can_wipe_the_whole_out_tree(self) -> None:
+        """``--clean`` is gone, and nothing replaced it.
 
-    def test_scoped_wipe_output_matches_a_full_wipe(self) -> None:
+        The generator's blast radius is exactly the publication folders its
+        own CSV produces. On the target ``--out`` is ``Z:\\dita``, whose other
+        contents belong to the operator, so clearing it outright is a manual
+        act — not something a tuned wrapper can carry a flag for. argparse
+        must therefore *reject* the old flag rather than silently ignore it.
+        """
+        with self.assertRaises(SystemExit) as caught:
+            _run(self.out, extra_argv=["--clean"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_scoped_wipe_output_matches_a_from_scratch_run(self) -> None:
         """The per-publication wipe changes only what survives from *before*
         the run: the files a run writes must be byte-identical either way, so
         the determinism invariant holds across the accumulate workflow."""
-        rc1 = _run(self.out, clean=True, clean_all=True)
+        rc1 = _run(self.out, clean=True)
         self.assertEqual(rc1, 0)
         snapshot = TMP / f"{self._testMethodName}_snapshot"
         if snapshot.exists():
@@ -1216,7 +1217,7 @@ class GenerateDitaTests(unittest.TestCase):
     def test_trainee_ditaval_emitted_with_exact_bytes(self) -> None:
         """``publish_html.py`` aborts unless ``<dita>/trainee.ditaval`` exists
         with the audience-exclude rule, so the generator must produce it
-        every run — even after ``--clean`` wipes the tree."""
+        every run — including the first run into an emptied tree."""
         _run(self.out)
         ditaval = self.out / "trainee.ditaval"
         self.assertTrue(ditaval.is_file(), f"missing {ditaval}")
@@ -1227,22 +1228,21 @@ class GenerateDitaTests(unittest.TestCase):
             '  <prop att="audience" val="-trainee" action="exclude"/>\n'
             '</val>\n',
         )
-        manifest_lines = (self.out / "manifest.txt").read_text(encoding="utf-8").splitlines()
-        self.assertIn("trainee.ditaval", manifest_lines)
 
-    def test_manifest_lists_every_output_file(self) -> None:
+    def test_no_manifest_written(self) -> None:
+        """No ``manifest.txt`` at the ``--out`` root.
+
+        It used to list every file a run produced, but nothing consumed it:
+        not the publisher, not DITA-OT, not Oxygen. Worse, it was rewritten
+        wholesale every run, so after a scoped run (one publication) it
+        described that run while sitting at the root of a tree built up over
+        several — a file named for the tree that told the truth about only
+        part of it. The per-publication wipe already handles stale output,
+        which was the manifest's original justification.
+        """
         _run(self.out)
-        manifest = self.out / "manifest.txt"
-        self.assertTrue(manifest.is_file())
-        listed = set(manifest.read_text(encoding="utf-8").splitlines())
-        listed.discard("")
-        actual = set()
-        for path in self.out.rglob("*"):
-            if path.is_file() and path.name not in {"manifest.txt", "skipped.txt"}:
-                actual.add(path.relative_to(self.out).as_posix())
-        self.assertEqual(listed, actual)
-        self.assertEqual(sorted(listed), list(manifest.read_text(encoding="utf-8").splitlines()[:len(listed)]),
-                         "manifest must be sorted")
+        self.assertFalse((self.out / "manifest.txt").exists(),
+                         "generate_dita.py must not write manifest.txt")
 
 
     # ------------------------------------------------------------------
@@ -1355,14 +1355,13 @@ class GenerateDitaTests(unittest.TestCase):
         section = root.find(".//body/section[@id='seven-questions']")
         self.assertIsNotNone(section, "seven-questions section must still be emitted")
 
-    def test_seven_questions_in_manifest(self) -> None:
-        """The 7_questions.dita topic and PNG are listed in the manifest."""
+    def test_seven_questions_emitted_into_every_publication(self) -> None:
+        """The 7_questions topic and PNG land in each publication folder."""
         _run(self.out)
-        manifest = (self.out / "manifest.txt").read_text(encoding="utf-8")
-        self.assertIn("main/7_questions.dita", manifest)
-        self.assertIn("main/7_questions.png", manifest)
-        self.assertIn("progress-test-1/7_questions.dita", manifest)
-        self.assertIn("progress-test-1/7_questions.png", manifest)
+        for pub in ("main", "progress-test-1"):
+            for name in ("7_questions.dita", "7_questions.png"):
+                path = self.out / pub / name
+                self.assertTrue(path.is_file(), f"missing {path}")
 
 
 class SlugifyAssetNameTests(unittest.TestCase):
@@ -2159,6 +2158,51 @@ class DedupGenerateDitaTests(unittest.TestCase):
         self.assertTrue((g31 / "shared-b.png").is_file())
         topic = ET.parse(g31 / "gram_31.dita").getroot()
         self.assertIsNone(topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"))
+
+    # -- issue #164: a redirect never leaves its publication folder ----------
+    def test_cross_publication_master_falls_back_locally(self) -> None:
+        """A master in another publication must not be linked, even when the
+        CSV asks for it.
+
+        ``deduplicate_csv.py`` no longer groups across publications, but a CSV
+        deduplicated by an older build still carries such targets. Honouring
+        one emits ``../../<other-pub>/…`` out of the publication folder, and
+        DITA-OT answers that by rooting the job at the parent of the map's
+        folder: the whole publication publishes one tier below its own
+        index.html and generated links, so every page 404s. Self-contained
+        beats deduplicated — copy the asset locally and warn."""
+        rows = [
+            self._image_glc_row("30", "Delta", "dedup/img/shared.png"),
+            self._image_glc_row("31", "Echo", "dedup/img/shared_b.png",
+                                master="dedup/img/shared.png"),
+        ]
+        rows[1]["publication"] = "progress-test-1"
+        rows[1]["chapter"] = ""
+        csv_path = self._write_csv(rows)
+        out = self._generate(csv_path)
+        log_text = Path("generate.log").read_text(encoding="utf-8")
+        self.assertIn("outside the publication", log_text)
+        g31 = out / "progress-test-1" / "gram-31"
+        self.assertTrue((g31 / "shared-b.png").is_file(),
+                        "the asset must be copied into its own publication")
+        topic = ET.parse(g31 / "gram_31.dita").getroot()
+        self.assertIsNone(
+            topic.find(f".//data[@name='{generate_dita.ORIGINAL_ASSET_PATH}']"),
+            "a refused redirect records no provenance — nothing was redirected")
+        # The invariant that matters is containment, not depth: an href may
+        # traverse folders (../7_questions.png is a legitimate publication-root
+        # reference) but must never leave the publication folder.
+        pub_dir = (out / "progress-test-1").resolve()
+        escaping = []
+        for el in topic.iter():
+            href = el.get("href") or ""
+            if not href or href.startswith("#"):
+                continue
+            target = (g31 / href).resolve()
+            if pub_dir != target and pub_dir not in target.parents:
+                escaping.append(href)
+        self.assertEqual(escaping, [],
+                         "no href may resolve outside the publication folder")
 
     # -- issue #78: .wav redirects are gated on the (time, freq) view --------
     def test_wav_redirect_view_mismatch_falls_back_locally(self) -> None:

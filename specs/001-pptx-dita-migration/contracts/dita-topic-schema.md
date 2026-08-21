@@ -307,20 +307,13 @@ Notes:
 
 No `topichead` elements (FR-012, section 1.11 of the source spec).
 
-## 7. Manifest (`manifest.txt`)
+## 7. Manifest (`manifest.txt`) — **removed**
 
-Plain text. One line per file produced. Sorted alphabetically.
-Paths relative to `--out`. Includes ditamaps.
-
-```
-main.ditamap
-main/arctic-survey/gram-01/analysis-sheet.docx
-main/arctic-survey/gram-01/gram_01.dita
-main/arctic-survey/gram-01/lofar-1.png
-progress-test-1.ditamap
-progress-test-1/gram-01/gram_01.dita
-...
-```
+The generator used to write a sorted listing of every file a run
+produced at the root of `--out`. Nothing consumed it, the
+per-publication wipe took over its stale-file role, and it described
+only the latest run while sitting at the root of a tree several scoped
+runs may have built. It is no longer written.
 
 ## 8. Filename conventions
 
@@ -371,7 +364,6 @@ look-up table.
 ├── progress-test-2.ditamap
 ├── progress-test-2/
 │   └── ...
-├── manifest.txt
 └── skipped.txt   (only when at least one row was skipped)
 ```
 
@@ -426,8 +418,6 @@ the topic XML stable across runs: dropping the asset into the source
 tree at the expected path and re-running the generator resolves the
 dangling reference without touching the topic file.
 
-The manifest (`§7`) lists every file the generator writes — topics,
-ditamaps, **and** copied assets — relative to `{out}`.
 
 ## 11. HTML preview (development only)
 

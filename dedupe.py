@@ -43,5 +43,10 @@ sys.argv = [
     "--csv", "extract.csv",
     "--image-root", str(SOURCE),
     "--out", "extract.dedupe.csv",
+    # Renumber only — no duplicate detection, so every gram keeps its own
+    # copy of every asset. Deduplication buys disk space at the cost of a
+    # self-contained gram folder; where space is not the constraint, the
+    # trade is not worth making. Comment this out to re-enable it.
+    "--no-dedupe",
 ]
 runpy.run_path(str(DEDUPE), run_name="__main__")
