@@ -453,26 +453,39 @@ ROOT\  (e.g. C:\dev\aaac)
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
 
-`theme\gramframe-oxygen\` is a drop-in overlay (plugin bundle + a `<head>`
+`theme\gramframe-oxygen\` is the drop-in overlay (plugin bundle + a `<head>`
 fragment) the operator installs once into the Oxygen WebHelp template so the
 **production** publish renders interactive grams, mirroring what
 `publish_html.py` already does for the dev preview — see that folder's
-`README.md`. `theme\oxygen-hide-search\` is a second overlay (one CSS rule)
-that hides the useless search box in the **student** edition only, wired in
-through the student transformation scenario — see that folder's `README.md`.
-`theme\gram-nav-panel\` is a third overlay (one CSS file) that pins the
-floating per-gram navigation panel — the in-page stage jump links, `Lofar N`
-and `WAV N` in page order (both editions), plus the instructor-only
-Analysis Sheet link — to the lower-right
-corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
-overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
-compact top-right overlay on gram pages, so it stops reserving a full-height
-right-hand column and lets the gramframe use the full page width; see that
-folder's `README.md`. `theme\oxygen-dark-mode\` is a fifth overlay (one script
-plus one CSS file) that publishes every page in the template's **dark** theme
-and hides the light/dark theme picker, so the production output matches the
-dark dev preview and offers the reader no choice; see that folder's
 `README.md`.
+
+Everything below is **already wired** in `theme\pptx-transform\`, this repo's
+own copy of Oxygen's stock WebHelp Responsive *tiles* template: each overlay's
+payload sits inside the template folder and its `.opt` references it. Point the
+transformation scenario's **Templates** tab at `pptx-transform.opt` and publish.
+The per-folder install notes are for putting an overlay into a **different**
+template.
+
+| Overlay | What it does | How the template loads it |
+|---|---|---|
+| `theme\gramframe-oxygen\` | loads `gramframe.bundle.js`, upgrading each `gram-config` table into an interactive gram | `<head>` fragment at `webhelp.fragment.head.topic.page` |
+| `theme\gram-fill-width\` | makes the gram **consume the full width its column offers** instead of rendering at the spectrogram's natural size and leaving whitespace either side | `<css>` in `<resources>` |
+| `theme\gram-nav-panel\` | pins the floating per-gram nav panel — the in-page stage jump links, `Lofar N` and `WAV N` in page order (both editions), plus the instructor-only Analysis Sheet link — to the lower-right corner | `<css>` in `<resources>` |
+| `theme\gram-toc-overlay\` | floats the WebHelp "On this page" mini-TOC on gram pages so it stops reserving a full-height right-hand column | `<css>` in `<resources>` |
+| `theme\oxygen-dark-mode\` | publishes every page in the template's **dark** theme and hides the light/dark picker, so the output matches the dark dev preview and offers the reader no choice | `<head>` fragment at `webhelp.fragment.head` — every page, not just topics |
+| `theme\oxygen-hide-search\` | hides the useless search box in the **student** edition only | `<css>` in `<resources>` |
+
+The two `<head>` fragments deliberately occupy **different** placeholders —
+Oxygen binds one fragment per placeholder, so they cannot share one.
+
+Because the template carries **copies** rather than references, every payload is
+a drift point. `tests/test_package_release.py` discovers them by filename and
+holds each byte-identical to its overlay, so an overlay edited on its own can't
+silently leave the template stale.
+
+`theme\gram-index-grid.css` is not an overlay at all but a paste-in snippet for
+the end of the template's own `oxygen.css`; see the comment at its head.
+
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`

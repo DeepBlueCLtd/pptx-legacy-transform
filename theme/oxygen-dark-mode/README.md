@@ -138,12 +138,15 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
 `../gram-toc-overlay/` floats the "On this page" mini-TOC on a light panel; it
 now carries a `:root[data-wh-theme="dark"]` block that darkens that panel, so
 the TOC links stay readable here. If you restyle either panel, restyle both.
+`../gram-fill-width/` sets no colours at all — it only sizes the gram — so it
+is theme-agnostic and needs nothing.
+
+
 
 ## How it ships to the air-gapped target
 
 This overlay travels in the pipeline release zip under `theme/` (alongside
-`gramframe-oxygen/`, `oxygen-hide-search/`, `gram-nav-panel/` and
-`gram-toc-overlay/`), so it lands at `ROOT\theme\oxygen-dark-mode\` on the
+the other overlays), so it lands at `ROOT\theme\oxygen-dark-mode\` on the
 target. The operator installs it into the Oxygen template once, per steps 2–5
 above. See README.md, *"Getting pipeline updates onto the target"*.
 
