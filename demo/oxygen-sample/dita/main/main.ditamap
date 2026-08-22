@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE map PUBLIC "-//OASIS//DTD DITA Map//EN" "map.dtd">
+<map>
+  <title>Main<ph audience="-trainee"> — Instructor Version</ph></title>
+  <topicref href="welcome.dita" />
+  <topicref href="security.dita" />
+  <topicref href="7_questions.dita" />
+  <topicref href="week-1/week_1.dita" />
+  <topicref href="week-2/week_2.dita" />
+</map>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="gram_03">
+  <title>Gram 03<ph audience="-trainee" outputclass="vessel-name"> - FR Nebula-class, Category 1, Caprica</ph></title>
+  <body>
+    <p audience="-trainee" outputclass="gf-persistent" />
+    <note audience="-trainee" outputclass="debug-provenance" type="other" othertype="Source provenance (debug)">
+      <p>Source publication: main</p>
+      <p>Source chapter (deck): Instructor Week 2 Grams</p>
+      <p>Source gram number: 14</p>
+      <p>Published as: Week 2 / gram 03</p>
+      <p>Analysis image source: source/Instructor Week 2 Grams/Instructor Week 2 Grams Files/Gram 14/Analysis.png</p>
+    </note>
+    <section id="analysis-sheet" audience="-trainee" outputclass="analysis-sheet">
+      <title>Analysis Sheet</title>
+      <image href="analysis.png" placement="break" align="center" />
+    </section>
+    <section id="seven-questions" audience="student-only" outputclass="seven-questions">
+      <title>7 Questions</title>
+      <image href="../../7_questions.png" placement="break" align="center" />
+    </section>
+    <section id="lofar-1" outputclass="lofar-stage">
+      <title>Lofar 1</title>
+      <table outputclass="gram-config">
+        <tgroup cols="2">
+          <colspec colname="c1" colnum="1" />
+          <colspec colname="c2" colnum="2" />
+          <tbody>
+            <row>
+              <entry namest="c1" nameend="c2">
+                <image href="lofar-1-loop-1.png" placement="break" align="center" />
+              </entry>
+            </row>
+            <row>
+              <entry>time-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>time-end</entry>
+              <entry>156</entry>
+            </row>
+            <row>
+              <entry>freq-start</entry>
+              <entry>0</entry>
+            </row>
+            <row>
+              <entry>freq-end</entry>
+              <entry>100</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
+    </section>
+    <p outputclass="gram-nav">
+      <xref audience="student-only" href="#gram_03/seven-questions">7 Questions</xref>
+      <xref href="#gram_03/lofar-1">Lofar 1</xref>
+      <xref audience="-trainee" href="#gram_03/analysis-sheet">Analysis Sheet</xref>
+    </p>
+  </body>
+</topic>

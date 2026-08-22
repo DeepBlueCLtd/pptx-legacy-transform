@@ -35,6 +35,11 @@ python scripts/generate_dita.py --csv extracted.csv --out dita/ --image-root pat
 python scripts/publish_html.py --dita-ot /path/to/dita-ot-4.2.4   # optional HTML preview
 ```
 
+```bash
+# Rebuild the committed miniature publication used for Oxygen template work
+python demo/oxygen-sample/regenerate.py
+```
+
 There is no build step or linter. `run_pipeline.bat` is a Windows-only
 orchestrator (extract → manual review → generate); on POSIX run the scripts
 directly. **These are dev-host invocations** — the delivered air-gapped target
@@ -119,6 +124,19 @@ root. Data flows strictly forward; the only branch point is a human.
    tree, ditamaps, DITAVAL profiles, and skipped report.
 6. **`scripts/publish_html.py`** — renders DITA → HTML via DITA-OT (dev preview
    only; Oxygen is the production publisher).
+
+`demo/oxygen-sample/` is not a pipeline stage — it is a **committed miniature
+output** of stage 5, the one deliberate exception to "the `dita/` tree is not
+committed". Nine gram pages (two `main` weeks plus a `progress-test-1`), one of
+them carrying 2 demons and 5 lofargrams, so the Oxygen Responsive WebHelp
+template can be tuned without republishing the whole corpus. It is dev-host-only
+and never reaches the air-gapped target. `demo/oxygen-sample/dita/` is always
+regenerable from `sample.csv` + `source/` + `demo/demon-incoming/` + `static/` +
+`7_questions.png` with `--image-root` at the **repo root** (not `source/` — the
+CSV's asset cells are repo-root-relative so the demon rows can reach outside the
+corpus); `tests/test_oxygen_sample.py` byte-compares a fresh run against the
+committed tree, so any change to the generator's XML shape means re-running
+`demo/oxygen-sample/regenerate.py` and committing the result.
 
 ### The core dispatch (read this before touching the generator)
 

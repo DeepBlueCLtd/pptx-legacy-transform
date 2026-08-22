@@ -330,6 +330,7 @@ data.
 | `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`, operator-console theme) resolved beside `publish_html.py`. |
 | `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
 | `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the content nav — the top-level **Week** folders for `main`, the **Grams** folder for the progress tests (feature 010). Override with `--static-root`. |
+| `demo/oxygen-sample/` | **Miniature committed publication** for Oxygen template work — `sample.csv` (the source of truth), `regenerate.py`, the committed `dita/` tree, and `published/` for the hand-published WebHelp output. See [The sample publication](#the-sample-publication-fast-oxygen-iteration). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |
@@ -353,6 +354,12 @@ python scripts/extract_to_csv.py --input-root path/to/content --out extracted.cs
 python scripts/generate_dita.py --csv extracted.csv \
                                 --out dita/ \
                                 --image-root path/to/content
+```
+
+Rebuilding the miniature sample publication used for Oxygen template work:
+
+```bash
+python demo/oxygen-sample/regenerate.py
 ```
 
 A more detailed walkthrough lives in
@@ -943,6 +950,12 @@ When a test fails on the air-gapped network:
 3. Re-run a single test for shorter feedback:
    `python -m unittest tests.test_generate_dita.GenerateDitaTests.test_glc_topic_structure`.
 
+`tests/test_oxygen_sample.py` is the odd one out: it regenerates
+`demo/oxygen-sample/dita/` into a temp directory and byte-compares it against
+the committed tree. If it fails, nothing is broken — the committed sample is
+just stale. Re-run `python demo/oxygen-sample/regenerate.py` and commit the
+result.
+
 ### Jest — rendered HTML output (spec 003)
 
 ```bash
@@ -1300,6 +1313,34 @@ This matches the `publish_html.py` dev-preview layout
 > DITA input, the DITAVAL, the temporary files, and the output — must be on a
 > **mapped drive letter**, not a raw `\\server\share` UNC path. See [Map a
 > drive — DITA-OT cannot read `\\server\share` (UNC) paths](#map-a-drive--dita-ot-cannot-read-serversh-unc-paths).
+
+## The sample publication (fast Oxygen iteration)
+
+Tuning the Oxygen Responsive WebHelp template means publishing, looking, and
+publishing again — by hand, on a technical author's machine. The full corpus is
+far too slow a loop for that, so `demo/oxygen-sample/` holds a **miniature
+publication whose generated DITA tree is committed**: nine gram pages that still
+exercise the week IA, the flat progress-test nav, the static common pages,
+lofar/WAV/analysis/demon blocks, and per-week renumbering.
+
+Open `demo/oxygen-sample/dita/main/main.ditamap` in Oxygen and publish. No
+Python step is needed first — that is the whole reason the tree is committed,
+and it is the one deliberate exception to "`dita/` is not committed".
+
+One page (`main/week-1/gram-02`) carries **two demons and five lofargrams** — a
+combination that appears nowhere in the corpus (grams top out at four lofars),
+built specifically to stretch the template.
+
+Rebuild it after editing `demo/oxygen-sample/sample.csv`:
+
+```bash
+python demo/oxygen-sample/regenerate.py
+```
+
+Then commit both the CSV and the regenerated tree; `tests/test_oxygen_sample.py`
+fails if they are out of step. The roster, the Oxygen scenario settings and the
+synthesised rows are documented in
+[`demo/oxygen-sample/README.md`](demo/oxygen-sample/README.md).
 
 ## Known limitations
 
