@@ -327,10 +327,10 @@ data.
 | `scripts/deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
 | `scripts/rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `scripts/publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
-| `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`, operator-console theme) resolved beside `publish_html.py`. |
+| `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`) resolved beside `publish_html.py`. |
 | `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
 | `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the content nav — the top-level **Week** folders for `main`, the **Grams** folder for the progress tests (feature 010). Override with `--static-root`. |
-| `demo/oxygen-sample/` | **Miniature committed publication** for Oxygen template work — `sample.csv` (the source of truth), `regenerate.py`, the committed `dita/` tree, and `published/` for the hand-published WebHelp output. See [The sample publication](#the-sample-publication-fast-oxygen-iteration). |
+| `demo/oxygen-sample/` | **Miniature committed publication** for Oxygen template work — `sample.csv` (the source of truth), `regenerate.py`, the committed `dita/` tree, and the committed `published/` WebHelp output the design loop edits against (`theme/sync.py`). See [The sample publication](#the-sample-publication-fast-oxygen-iteration). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |
@@ -1341,6 +1341,40 @@ Then commit both the CSV and the regenerated tree; `tests/test_oxygen_sample.py`
 fails if they are out of step. The roster, the Oxygen scenario settings and the
 synthesised rows are documented in
 [`demo/oxygen-sample/README.md`](demo/oxygen-sample/README.md).
+
+### The design loop
+
+Design work happens against the **real Oxygen output**, not the DITA-OT dev
+preview. Oxygen's WebHelp chrome (`#wh_topic_toc`, `.wh_content_area`, the tiles
+welcome page) exists in no other renderer, so a rule tuned anywhere else has to
+be re-verified here anyway — and the preview carries no stylesheet of its own.
+
+`demo/oxygen-sample/published/{instructor,student}/` is a **committed Oxygen
+build** of the sample — the two `pptx-transform.xpr` scenarios publish straight
+into it — so a design change lands as a reviewable HTML diff. `theme/sync.py`
+drives the loop, and is the one command to run after anything:
+
+```bash
+# edit a stylesheet under theme/<overlay>/resources/, then
+python theme/sync.py
+# hard-refresh demo/oxygen-sample/published/instructor/index.html — no republish
+```
+
+It copies each overlay payload into the wired template
+(`theme/pptx-transform/`) and on into the published build's
+`<edition>/oxygen-webhelp/template/`, where Oxygen deploys the template's own
+files verbatim — which is what makes the last step a refresh rather than a
+rebuild. Republish from Oxygen only when the DITA changed or a `.opt` parameter
+did, then run it again: it also **normalises** the per-publish stamps a fresh
+publish leaves behind (the 14-digit `buildId` cache-buster on every asset href,
+the sitemap's `<lastmod>`), so a republish diffs as the design change alone
+rather than rewriting all thirty pages.
+
+`theme/sync.py` is dev-host tooling and never ships in the release zip.
+
+New styling hooks belong in the **DITA source** — an `outputclass` the
+generator emits — never in a preview-only post-processing step, so both
+renderers see them.
 
 ## Known limitations
 

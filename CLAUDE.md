@@ -97,7 +97,7 @@ ROOT\  (e.g. C:\dev\aaac)
 ├── theme\               ← Oxygen overlays for the production publisher (GramFrame plugin: theme\gramframe-oxygen\); ships in the release zip
 └── scripts\
     ├── pylib\           ← pip install --target python-pptx (WinPython sets ENABLE_USER_SITE = False)
-    ├── vendor\          ← publish assets (GramFrame bundle, theme.css), resolved beside publish_html.py (dev/CI-only, not shipped)
+    ├── vendor\          ← publish assets (GramFrame bundle), resolved beside publish_html.py (dev/CI-only, not shipped)
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
 
@@ -313,6 +313,33 @@ self-contained-publication, no-`../` invariant). A missing
 `static/` degrades gracefully (warn, no pages) per the dangling-asset rule.
 Per-publication duplication is intentional: Oxygen publishes each ditamap
 independently, so each must be self-contained.
+
+### Theme work and the design loop (`theme/`)
+
+The **design surface is the real Oxygen output**, not the DITA-OT dev preview:
+the preview carries no stylesheet at all any more (the Operator Console v2 dark
+theme it used to inject is gone — the deliberate choice is to stay close to
+stock Oxygen Responsive WebHelp, so the next Oxygen template upgrade stays
+cheap). Overlay styling therefore targets Oxygen's own chrome, and lives in
+per-concern overlay folders (`theme/gram-nav-panel/`, `theme/gram-fill-width/`,
+`theme/oxygen-hide-search/`, `theme/gram-toc-overlay/`, `theme/oxygen-dark-mode/`,
+`theme/gramframe-oxygen/`), each a `README.md` plus its payload.
+`theme/pptx-transform/` is the **wired template** carrying a byte-identical copy
+of every payload; `tests/test_package_release.py` enforces that.
+
+`theme/sync.py` (dev-host only; the packager skips `theme/*.py`) is the loop —
+run it with no arguments after any change. It copies overlay payloads into the
+template and on into the deployed `oxygen-webhelp/template/` of each committed
+build under `demo/oxygen-sample/published/`, so a CSS/JS edit is live on a hard
+refresh with **no republish**; and it normalises the per-publish `buildId` and
+sitemap `<lastmod>` stamps a fresh Oxygen publish leaves there, so the committed
+diff shows the design change and nothing else. The two `pptx-transform.xpr`
+scenarios publish straight into `published/` (`${pd}`-relative, so any clone
+works); republish only when the DITA or a `.opt` parameter changed.
+
+Keep every new styling hook in the **DITA source** (an `outputclass` the
+generator emits), never in a publish-time HTML rewrite — the topic body DOM is
+shared by both renderers, the page chrome is not.
 
 ## Invariants to preserve
 

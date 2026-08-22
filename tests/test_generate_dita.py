@@ -107,13 +107,13 @@ class GenerateDitaTests(unittest.TestCase):
         ph = root.find("./title/ph[@audience='-trainee']")
         self.assertIsNotNone(ph, "vessel name should be wrapped in <ph audience='-trainee'>")
         self.assertIn("Nordik Jockey", (ph.text or ""))
-        # Operator Console v2 theme targets ``span.ph.vessel-name`` in the
-        # rendered HTML, which DITA-OT only emits when the source ``<ph>``
-        # carries ``outputclass="vessel-name"``.
+        # Styling targets ``span.ph.vessel-name`` in the rendered HTML, which
+        # DITA-OT only emits when the source ``<ph>`` carries
+        # ``outputclass="vessel-name"``.
         self.assertEqual(ph.get("outputclass"), "vessel-name")
 
-    def test_gram_section_outputclasses_match_dark_theme_selectors(self) -> None:
-        """The Operator Console v2 theme styles ``section.analysis-sheet`` and
+    def test_gram_section_outputclasses_match_theme_selectors(self) -> None:
+        """The theme overlays style ``section.analysis-sheet`` and
         ``section.lofar-stage``. DITA-OT only emits those class tokens when
         the source ``<section>`` carries the matching ``outputclass``."""
         rc = _run(self.out)

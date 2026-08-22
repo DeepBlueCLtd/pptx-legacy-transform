@@ -51,7 +51,14 @@ def _rows() -> "list[dict]":
 
 
 def _files(root: Path) -> "set[str]":
-    return {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+    """Every file under *root*, relative and posix-formed.
+
+    ``.DS_Store`` is skipped: macOS Finder drops one into any folder a
+    developer browses, and it is git-ignored, so counting it would fail the
+    snapshot comparison for a file no one authored and no run produces.
+    """
+    return {p.relative_to(root).as_posix() for p in root.rglob("*")
+            if p.is_file() and p.name != ".DS_Store"}
 
 
 def _sections(topic: Path) -> "list[tuple[str, str, str]]":

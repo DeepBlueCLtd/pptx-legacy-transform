@@ -10,6 +10,29 @@
                         <scenarioAssociation-array>
                             <scenarioAssociation>
                                 <field name="url">
+                                    <String>demo/oxygen-sample/dita/main/main.ditamap</String>
+                                </field>
+                                <field name="scenarioIds">
+                                    <list>
+                                        <String>pptx transform - 2026 - student</String>
+                                        <String>pptx transform - 2026 - instructor</String>
+                                    </list>
+                                </field>
+                                <field name="scenarioTypes">
+                                    <list>
+                                        <String>DITAMAP</String>
+                                        <String>DITAMAP</String>
+                                    </list>
+                                </field>
+                                <field name="scenarioStorageLocations">
+                                    <list>
+                                        <Byte>2</Byte>
+                                        <Byte>2</Byte>
+                                    </list>
+                                </field>
+                            </scenarioAssociation>
+                            <scenarioAssociation>
+                                <field name="url">
                                     <String>dita/progress-test-2/progress-test-2.ditamap</String>
                                 </field>
                                 <field name="scenarioIds">
@@ -93,7 +116,7 @@
                                     <String>${cfd}</String>
                                 </field>
                                 <field name="outputDir">
-                                    <String>${pd}/out/instructor</String>
+                                    <String>${pd}/demo/oxygen-sample/published/instructor</String>
                                 </field>
                                 <field name="tempDir">
                                     <String>${pd}/temp/instructor</String>
@@ -132,7 +155,7 @@
                                 <field name="publishingTemplateDataPO">
                                     <publishingTemplate>
                                         <field name="templateRoot">
-                                            <String>C:/git/pptx-legacy-transform/theme/pptx-transform/</String>
+                                            <String>${pd}/theme/pptx-transform/</String>
                                         </field>
                                         <field name="descriptorRelativePath">
                                             <String>pptx-transform.opt</String>
@@ -369,7 +392,7 @@
                                     <String>${cfd}</String>
                                 </field>
                                 <field name="outputDir">
-                                    <String>${pd}/out/student</String>
+                                    <String>${pd}/demo/oxygen-sample/published/student</String>
                                 </field>
                                 <field name="tempDir">
                                     <String>${pd}/temp/student</String>
@@ -417,7 +440,7 @@
                                 <field name="publishingTemplateDataPO">
                                     <publishingTemplate>
                                         <field name="templateRoot">
-                                            <String>C:/git/pptx-legacy-transform/theme/pptx-transform/</String>
+                                            <String>${pd}/theme/pptx-transform/</String>
                                         </field>
                                         <field name="descriptorRelativePath">
                                             <String>pptx-transform.opt</String>

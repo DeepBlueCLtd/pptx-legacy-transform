@@ -69,13 +69,12 @@ publication indexes) carry none, so the overlay matches gram pages exactly and
 leaves every other page's mini-TOC untouched. `:has()` is the same selector
 mechanism `../oxygen-hide-search/` already relies on.
 
-## Oxygen-only — no dev-preview counterpart
+## Oxygen-only, like every overlay here
 
-Unlike `../gram-nav-panel/`, this overlay has **no** dev/CI HTML-preview
-counterpart to keep in step. The "On this page" mini-TOC is an Oxygen WebHelp
-Responsive feature; `publish_html.py`'s DITA-OT HTML5 preview never emits
-`#wh_topic_toc`, so there is nothing to mirror in
-`scripts/vendor/themes/operator-console-v2/theme.css`.
+The "On this page" mini-TOC is an Oxygen WebHelp Responsive feature:
+`publish_html.py`'s DITA-OT HTML5 preview never emits `#wh_topic_toc`. That is
+the general case now — the preview carries no stylesheet at all, and design work
+happens against the committed Oxygen build (see `../sync.py`).
 
 ## Wiring it into the (single, shared) template
 

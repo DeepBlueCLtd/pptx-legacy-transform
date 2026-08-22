@@ -261,3 +261,6 @@ reports/
 # Default outputs of the root wrapper scripts (target-style argv)
 extract.csv
 extract.dedupe.csv
+
+# macOS Finder droppings — they break the oxygen-sample byte-compare
+.DS_Store
