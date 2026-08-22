@@ -2,9 +2,7 @@
 
 The Oxygen WebHelp Responsive template offers the reader a **light / dark
 theme menu** (Auto · Light · Dark) and defaults to whatever their browser
-prefers. The AAAC publications are read as **dark** — the dev/CI preview
-already publishes the dark Operator Console theme
-(`scripts/vendor/themes/operator-console-v2/`), and a spectrogram reads
+prefers. The AAAC publications are read as **dark** — a spectrogram reads
 better on a dark page — so the production Oxygen publish should ship dark
 and offer no choice.
 

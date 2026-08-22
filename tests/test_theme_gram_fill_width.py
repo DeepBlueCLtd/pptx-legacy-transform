@@ -2,7 +2,8 @@
 
 ``theme/gram-fill-width/`` makes each gram consume the width its column
 offers, instead of rendering at the spectrogram's natural size and leaving a
-band of whitespace either side.  It does that by overriding the inline sizes
+band of whitespace either side.  It is verified against the real Oxygen
+output — see ``theme/sync.py`` — since that is the only renderer it targets.  It does that by overriding the inline sizes
 GramFrame writes onto its own elements, which puts two easily-lost details
 under test here.
 
@@ -21,9 +22,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OVERLAY = REPO_ROOT / "theme" / "gram-fill-width" / "resources" / "gram-fill-width.css"
-DEV_THEME = (
-    REPO_ROOT / "scripts" / "vendor" / "themes" / "operator-console-v2" / "theme.css"
-)
 TEMPLATE_OPT = REPO_ROOT / "theme" / "pptx-transform" / "pptx-transform.opt"
 
 # The gramframe bundle's own styles top out here; anything meant to float OVER
@@ -59,38 +57,6 @@ class GramFillWidthTests(unittest.TestCase):
         for rule in FILL_RULES:
             with self.subTest(rule=rule.splitlines()[0]):
                 self.assertIn(rule, css)
-
-    def test_dev_preview_theme_fills_the_gram_the_same_way(self) -> None:
-        """The dev preview renders the same component, so it needs the same fix.
-
-        ``publish_html.py`` injects the bundle into the preview too, so a gram
-        there is the same natural-size component.  The repo's standing rule is
-        that the Oxygen overlay and the operator-console theme stay visually in
-        step; these rules involve no colours, so they are identical rather than
-        merely equivalent.
-        """
-        dev = _rules(DEV_THEME.read_text(encoding="utf-8"))
-        for rule in FILL_RULES:
-            with self.subTest(rule=rule.splitlines()[0]):
-                self.assertIn(
-                    rule, dev,
-                    "operator-console theme has drifted from "
-                    "theme/gram-fill-width/; keep the preview in step.",
-                )
-
-    def test_dev_preview_gives_a_gram_page_room_to_fill(self) -> None:
-        """A gram is ~971px natural; a 960px measure leaves nothing to fill.
-
-        Without a wider gram page the preview cannot show the overlay working
-        at all, which is how this went unnoticed in the first place.
-        """
-        dev = DEV_THEME.read_text(encoding="utf-8")
-        match = re.search(
-            r"body:has\(p\.gram-nav\) main\[role=\"main\"\] \{\s*max-width: (\d+)px",
-            dev,
-        )
-        self.assertIsNotNone(match, "gram pages have no widened measure")
-        self.assertGreater(int(match.group(1)), 1200)
 
     def test_template_wires_the_overlay(self) -> None:
         """A payload copied into the template but never referenced does nothing.

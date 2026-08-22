@@ -1,10 +1,9 @@
 # Floating gram navigation panel for the Oxygen WebHelp Responsive template
 
 A drop-in CSS overlay that styles the **floating gram navigation panel** in
-the **production Oxygen publish**, exactly as
-`scripts/vendor/themes/operator-console-v2/theme.css` already does for the
-dev/CI HTML preview. Like `../oxygen-hide-search/`, it is **not** a complete
-theme — it is one CSS file (plus the wiring) you add to your own Oxygen
+the **production Oxygen publish** — the only renderer it targets, since the
+dev/CI HTML preview carries no stylesheet (see `../sync.py`). Like
+`../oxygen-hide-search/`, it is **not** a complete theme — it is one CSS file (plus the wiring) you add to your own Oxygen
 WebHelp Responsive template (the Fi3ldMan-derived one that already hosts the
 GramFrame overlay).
 

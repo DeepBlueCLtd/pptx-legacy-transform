@@ -26,7 +26,7 @@ gram pages that still exercise **everything** the real publications do:
 | `sample.csv` | **The source of truth.** A real pipeline artefact: `extract_to_csv.py` output over `source/`, trimmed to nine grams and carried through `deduplicate_csv.py --no-dedupe --main-numbering per-week`. |
 | `regenerate.py` | Dev-host runner — rebuilds `dita/` from `sample.csv`. Not one of the air-gapped target wrappers at the repo root, so it never ships in the release zip. |
 | `dita/` | **Generated, and committed.** The tree you open in Oxygen. |
-| `published/` | Where the hand-published Oxygen output is committed (created by the first publish). |
+| `published/` | **The committed Oxygen build** — both editions, written straight here by the `.xpr` scenarios. The design loop edits against this tree. |
 
 `dita/` is the one deliberate exception to "the `dita/` tree is not committed":
 committing it is what lets the author open Oxygen and publish with no Python
@@ -105,13 +105,33 @@ and point the copies at this tree:
 | Output | `${pd}/demo/oxygen-sample/published/instructor` | `${pd}/demo/oxygen-sample/published/student` |
 | Temp | under `temp/` (already git-ignored) | under `temp/` |
 
+The scenarios publish **straight into the committed tree**. Afterwards run:
+
+```bash
+python theme/sync.py          # normalises the fresh publish's stamps
+```
+
+Those same two scenarios are also associated with the full-corpus maps under
+`dita/`. The full set is only ever published on the target network, so that is
+not a conflict — but if you do publish a corpus map here to look at something,
+it lands in `published/` too. Discard it (`git checkout` / `git clean`) before
+committing.
+
+For a CSS or JS change there is no republish at all — `python theme/sync.py`
+pushes the overlay into `published/*/oxygen-webhelp/template/` and a hard
+refresh shows it. See README.md, "The design loop".
+
 `demo/oxygen-sample/dita/progress-test-1/progress-test-1.ditamap` is the second
 publication; publish it the same way when the flat nav shape needs work.
 
-Note the pre-existing gotcha inherited from those scenarios: `templateRoot` is an
-absolute Windows path (`C:/git/pptx-legacy-transform/theme/pptx-transform/`), so
-they only work on a machine where the repo sits at that path.
+Both scenarios point `templateRoot` at `${pd}/theme/pptx-transform/` — `${pd}`
+is the folder holding `pptx-transform.xpr`, i.e. the repo root — so they work
+on any clone, on either OS. It used to be an absolute Windows path, which tied
+them to one machine. Oxygen rewrites the `.xpr` when you edit a scenario through
+its UI, so check the field survived as a variable before committing.
 
-`published/` is **never** verified in CI — Oxygen webhelp output carries build
-timestamps and a generated search index, so it is not byte-reproducible, and
-Oxygen is not available on the runners.
+`published/` is **never** verified in CI — Oxygen webhelp output carries a
+generated search index and is not byte-reproducible, and Oxygen is not available
+on the runners. `theme/sync.py` normalises the two stamps that *would* churn
+every page on every republish (the 14-digit `buildId` cache-buster and the
+sitemap's `<lastmod>`), so the committed diff reads as the design change alone.

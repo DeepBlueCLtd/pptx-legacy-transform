@@ -97,7 +97,7 @@ now differ only in which `args.filter` they point at, and can share
 
    ```xml
    <resources>
-     <!-- …existing entries (GramFrame bundle, theme.css, …)… -->
+     <!-- …existing entries (the stock oxygen*.css, the other overlays, …)… -->
      <css file="resources/hide-search.css"/>
    </resources>
    ```

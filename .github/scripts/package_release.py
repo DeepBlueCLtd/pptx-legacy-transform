@@ -85,7 +85,10 @@ def collect_entries():
     theme_root = REPO_ROOT / "theme"
     if theme_root.is_dir():
         for path in theme_root.rglob("*"):
-            if path.is_file():
+            # theme/*.py is dev-host tooling for the design loop (sync.py),
+            # not an overlay the operator installs.
+            if path.is_file() and not (path.parent == theme_root
+                                       and path.suffix == ".py"):
                 entries.append((path, path.relative_to(REPO_ROOT).as_posix()))
     else:
         print("WARNING: theme/ missing; archive carries no Oxygen overlays", file=sys.stderr)

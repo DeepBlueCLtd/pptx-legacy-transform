@@ -13,7 +13,6 @@ pipeline scripts and their two Python dependencies.
 | `extract.py`, `dedupe.py`, `write.py`, `publish.py`, `introspect.py`, `snapshot.py` | Thin REPL wrappers at the root — tune the Config block per target (see README §"Running on the air-gapped target machine"). |
 | `run_pipeline.bat` | Windows orchestrator (extract → review → generate). |
 | `scripts/vendor/gramframe/gramframe.bundle.js` | Spectrogram-viewer plugin injected by `publish_html.py`. |
-| `scripts/vendor/themes/operator-console-v2/theme.css` | Dark theme injected by `publish_html.py`. |
 | `tests/` (with `tests/fixtures/`) | Standard-library `unittest` suite + 296 KB of self-contained fixtures. |
 | `wheels/` | Offline-installable wheels for `python-pptx` and `lxml` (cp39 / win_amd64). |
 | `README.md` | Full reference: CSV schema, troubleshooting, publish layout. |
@@ -81,9 +80,9 @@ Two manual steps (the .bat handles steps 1+2, you handle step 3).
      `progress-test-*/progress-test-*.ditamap` — each ditamap lives
      inside its publication folder) and use the publish dialog. For the
      student edition, select `dita/trainee.ditaval` as the DITAVAL
-     filter. The Oxygen template must link `theme.css` and
-     `gramframe.bundle.js` from the `scripts/vendor/` paths above —
-     otherwise the published pages will render unstyled.
+     filter. Publish with the `pptx-transform` template installed from
+     `theme/pptx-transform/` — it carries the GramFrame plugin and the
+     project overlays; without it the grams render as plain tables.
 
    - **From the command line** (faster for full-corpus republish):
 
