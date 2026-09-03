@@ -100,6 +100,17 @@ jobs:
           rm -rf "$dest"
           mkdir -p "$dest"
           cp -R html/. "$dest/"
+          # The committed Oxygen build of the miniature sample rides along
+          # under oxygen/. It is *not* rebuilt here — Oxygen is a licensed
+          # desktop publisher and cannot run on the runner — so this serves
+          # whatever was last published by hand and committed. That is exactly
+          # what makes it worth serving: it is the design surface theme/ work
+          # is tuned against, and this is the only way to review a theme change
+          # in a browser from the PR.
+          if [ -d demo/oxygen-sample/published ]; then
+            mkdir -p "$dest/oxygen"
+            cp -R demo/oxygen-sample/published/. "$dest/oxygen/"
+          fi
 
       - name: Commit and push preview
         run: |
@@ -131,11 +142,20 @@ jobs:
           marker="<!-- pr-preview -->"
           body=$(printf '%s\n' \
             "$marker" \
-            "📄 **HTML preview** for this PR is live:" \
+            "📄 **DITA-OT preview** — full corpus, rebuilt from \`source/\` on every push:" \
             "" \
             "- **Landing page:** ${url}" \
             "- Instructor edition: ${url}instructor/" \
             "- Student edition: ${url}student/" \
+            "" \
+            "It carries **no stylesheet** — that is deliberate. It is here to check content, filtering and structure." \
+            "" \
+            "🎨 **Oxygen sample** — the design surface, and the only place theme changes are visible:" \
+            "" \
+            "- Instructor edition: ${url}oxygen/instructor/" \
+            "- Student edition: ${url}oxygen/student/" \
+            "" \
+            "Nine gram pages from \`demo/oxygen-sample/\`, served from the **committed** build — Oxygen is a licensed desktop publisher and cannot run on the runner. It only moves when someone republishes by hand and commits, so on a PR that changes \`theme/\` but not that tree, this shows the *old* design." \
             "" \
             "_Rebuilt on every push to this PR; removed when the PR closes. (May take a minute for GitHub Pages to refresh.)_")
           existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \

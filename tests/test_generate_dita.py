@@ -28,6 +28,24 @@ STATIC_ROOT = REPO_ROOT / "static"
 SEVEN_QUESTIONS_PNG = FIXTURES / "7_questions.png"
 
 
+def _glc_bytes(audio_filename: str, bandwidth: str = "400") -> bytes:
+    """A realistic ``.wav``-backed ``.glc``, shaped like the audited corpus."""
+    return (
+        "<?xml version='1.0' encoding='utf-8'?>\n"
+        "<GAPS_Lite_configuration><data_source><filename>"
+        f"{audio_filename}"
+        "</filename></data_source><settings><lofar><bandwidth>"
+        f"{bandwidth}"
+        "</bandwidth><bandcentre>200</bandcentre></lofar></settings>"
+        "</GAPS_Lite_configuration>"
+    ).encode("utf-8")
+
+
+def _glc_named_audio(glc_path: Path) -> str:
+    """The filename a ``.glc`` names in ``data_source/filename``."""
+    return ET.parse(glc_path).getroot().findtext("data_source/filename") or ""
+
+
 def _run(out_dir: Path, csv_path: Path = FIXTURES / "minimal.csv",
          image_root: Path = FIXTURES, clean: bool = True,
          stub_wav: "Path | None" = None,
@@ -89,13 +107,13 @@ class GenerateDitaTests(unittest.TestCase):
         ph = root.find("./title/ph[@audience='-trainee']")
         self.assertIsNotNone(ph, "vessel name should be wrapped in <ph audience='-trainee'>")
         self.assertIn("Nordik Jockey", (ph.text or ""))
-        # Operator Console v2 theme targets ``span.ph.vessel-name`` in the
-        # rendered HTML, which DITA-OT only emits when the source ``<ph>``
-        # carries ``outputclass="vessel-name"``.
+        # Styling targets ``span.ph.vessel-name`` in the rendered HTML, which
+        # DITA-OT only emits when the source ``<ph>`` carries
+        # ``outputclass="vessel-name"``.
         self.assertEqual(ph.get("outputclass"), "vessel-name")
 
-    def test_gram_section_outputclasses_match_dark_theme_selectors(self) -> None:
-        """The Operator Console v2 theme styles ``section.analysis-sheet`` and
+    def test_gram_section_outputclasses_match_theme_selectors(self) -> None:
+        """The theme overlays style ``section.analysis-sheet`` and
         ``section.lofar-stage``. DITA-OT only emits those class tokens when
         the source ``<section>`` carries the matching ``outputclass``."""
         rc = _run(self.out)
@@ -982,7 +1000,7 @@ class GenerateDitaTests(unittest.TestCase):
         glc_src = TMP / "wav_pair_src" / "supporting" / "gram07" / "config.glc"
         wav_src = TMP / "wav_pair_src" / "supporting" / "gram07" / "audio_clip.wav"
         glc_src.parent.mkdir(parents=True, exist_ok=True)
-        glc_src.write_bytes(b"<GAPS_Lite_configuration/>")
+        glc_src.write_bytes(_glc_bytes("audio_clip.wav"))
         wav_src.write_bytes(b"RIFF\x00\x00\x00\x00WAVEfmt ")
         csv_path = TMP / f"{self._testMethodName}.csv"
         cols = generate_dita.CSV_COLUMNS
@@ -1011,8 +1029,13 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertTrue(wav_copy.is_file(),
                         "the companion .wav must travel with the .glc so the "
                         "on-PC viewer can resolve it")
-        self.assertEqual(glc_copy.read_bytes(), glc_src.read_bytes())
         self.assertEqual(wav_copy.read_bytes(), wav_src.read_bytes())
+        # The copied .glc names the slugified sibling the generator actually
+        # wrote, not the original corpus filename it was authored with
+        # (issue #177) — that name is the only route the on-PC viewer has
+        # to the audio.
+        self.assertEqual(_glc_named_audio(glc_copy), wav_copy.name)
+        self.assertTrue((glc_copy.parent / _glc_named_audio(glc_copy)).is_file())
         # And the topic's xref must point at the slugified .glc.
         topic = gram_dir / "gram_07.dita"
         root = ET.parse(topic).getroot()
@@ -1023,14 +1046,15 @@ class GenerateDitaTests(unittest.TestCase):
 
     def test_stub_wav_substitutes_contents_keeps_slug(self) -> None:
         """``--stub-wav`` swaps every .wav source with the stub file but keeps
-        the slugified per-gram filename so the paired .glc's internal
-        ``data_source/filename`` reference still resolves at publish time.
-        The .glc itself is copied verbatim — only the .wav is stubbed."""
+        the slugified per-gram filename — the name the paired .glc is
+        repointed at — so the .glc's internal ``data_source/filename``
+        reference resolves to the stub. Only the .wav's *contents* are
+        stubbed; the .glc still carries its own settings."""
         glc_src = TMP / "stub_wav_src" / "supporting" / "gram08" / "config.glc"
         wav_src = TMP / "stub_wav_src" / "supporting" / "gram08" / "audio_clip.wav"
         stub_src = TMP / "stub.wav"
         glc_src.parent.mkdir(parents=True, exist_ok=True)
-        glc_src.write_bytes(b"<GAPS_Lite_configuration/>")
+        glc_src.write_bytes(_glc_bytes("audio_clip.wav"))
         wav_src.write_bytes(b"REAL-WAV-CONTENT")
         stub_src.write_bytes(b"STUB-WAV-CONTENT")
         csv_path = TMP / f"{self._testMethodName}.csv"
@@ -1062,8 +1086,9 @@ class GenerateDitaTests(unittest.TestCase):
         self.assertEqual(wav_copy.name, "audio-clip.wav")
         # Contents come from the stub, not the original.
         self.assertEqual(wav_copy.read_bytes(), b"STUB-WAV-CONTENT")
-        # The .glc is copied verbatim — stubbing is wav-only.
-        self.assertEqual(glc_copy.read_bytes(), glc_src.read_bytes())
+        # ...and the .glc names that stub copy, so the reference resolves
+        # under --stub-wav exactly as it does with real audio (issue #177).
+        self.assertEqual(_glc_named_audio(glc_copy), "audio-clip.wav")
 
     def test_glc_row_with_unsupported_extension_is_skipped(self) -> None:
         """The dispatch must reject any extension that is neither image
@@ -1362,6 +1387,158 @@ class GenerateDitaTests(unittest.TestCase):
             for name in ("7_questions.dita", "7_questions.png"):
                 path = self.out / pub / name
                 self.assertTrue(path.is_file(), f"missing {path}")
+
+
+class WavBackedGlcTests(unittest.TestCase):
+    """The ``.glc``/``.wav`` pair must stay linked, and both must publish.
+
+    Issue #177: ``copy_asset`` slugifies the audio but the ``.glc`` used to
+    be copied verbatim, so every copied config named a file that was not
+    beside it; and nothing in the topic named the ``.wav``, so no publisher
+    ever carried it into the rendered output. Both halves are needed — a
+    ``.wav``-backed gram works only when the audio is present *and*
+    correctly named.
+    """
+
+    def setUp(self) -> None:
+        TMP.mkdir(parents=True, exist_ok=True)
+        self.out = TMP / f"out_{self._testMethodName}"
+        if self.out.exists():
+            shutil.rmtree(self.out)
+        self.src = TMP / f"src_{self._testMethodName}"
+        if self.src.exists():
+            shutil.rmtree(self.src)
+        (self.src / "supporting").mkdir(parents=True)
+
+    def _pair(self, glc_body: bytes, wav_name: str = "Lofar 1_b.wav") -> Path:
+        """Write a ``.glc``/``.wav`` pair under ``self.src``; return the CSV."""
+        (self.src / "supporting" / wav_name).write_bytes(b"RIFF-AUDIO")
+        (self.src / "supporting" / "Lofar 1_b.glc").write_bytes(glc_body)
+        csv_path = self.src / "rows.csv"
+        cols = generate_dita.CSV_COLUMNS
+        row = {c: "" for c in cols}
+        row.update({
+            "publication": "main", "chapter": "Arctic Survey",
+            "gram_id": "Gram 02", "vessel_name": "Arctic Surveyor",
+            "topic_type": "glc", "sequence": "1",
+            "topic_filename": "gram_02.dita", "display_text": "Lofar 1",
+            "link_href": "supporting/Lofar 1_b.glc",
+            "glc_path": "supporting/Lofar 1_b.glc",
+            "png_path": f"supporting/{wav_name}",
+        })
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(cols),
+                               quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+            w.writeheader()
+            w.writerow(row)
+        return csv_path
+
+    def _gram_dir(self) -> Path:
+        return self.out / "main" / "arctic-survey" / "gram-02"
+
+    def test_copied_glc_names_the_wav_beside_it(self) -> None:
+        """The core correspondence: whatever the ``.glc`` names must be a
+        file in the same folder. The corpus authors name the original
+        (``Lofar 1_b.wav``); the generator writes the slug
+        (``lofar-1-b.wav``), so the reference has to be repointed."""
+        csv_path = self._pair(_glc_bytes("Lofar 1_b.wav"))
+        self.assertEqual(_run(self.out, csv_path=csv_path, image_root=self.src), 0)
+        glcs = sorted(self.out.rglob("*.glc"))
+        self.assertTrue(glcs, "the wav-backed gram must copy its .glc")
+        for glc in glcs:
+            named = _glc_named_audio(glc)
+            self.assertTrue(
+                (glc.parent / named).is_file(),
+                f"{glc} names {named!r}, which is not beside it",
+            )
+            self.assertEqual(named, "lofar-1-b.wav")
+
+    def test_glc_rewrite_touches_only_the_audio_reference(self) -> None:
+        """Every other setting the on-PC viewer reads survives the rewrite —
+        it is a parse-and-serialise of the config, not a new file."""
+        csv_path = self._pair(_glc_bytes("Lofar 1_b.wav", bandwidth="200"))
+        _run(self.out, csv_path=csv_path, image_root=self.src)
+        root = ET.parse(self._gram_dir() / "lofar-1-b.glc").getroot()
+        self.assertEqual(root.tag, "GAPS_Lite_configuration")
+        self.assertEqual(root.findtext("settings/lofar/bandwidth"), "200")
+        self.assertEqual(root.findtext("settings/lofar/bandcentre"), "200")
+
+    def test_glc_rewrite_is_byte_identical_across_runs(self) -> None:
+        """Idempotency (R9): re-running over unchanged input must not churn
+        the rewritten config — byte- and mtime-identical, like every other
+        copied asset."""
+        csv_path = self._pair(_glc_bytes("Lofar 1_b.wav"))
+        _run(self.out, csv_path=csv_path, image_root=self.src)
+        glc = self._gram_dir() / "lofar-1-b.glc"
+        first, first_mtime = glc.read_bytes(), glc.stat().st_mtime
+        _run(self.out, csv_path=csv_path, image_root=self.src, clean=False)
+        self.assertEqual(glc.read_bytes(), first)
+        self.assertEqual(glc.stat().st_mtime, first_mtime)
+        # And the source config is never touched — the rewrite is on the copy.
+        self.assertEqual(
+            _glc_named_audio(self.src / "supporting" / "Lofar 1_b.glc"),
+            "Lofar 1_b.wav",
+        )
+
+    def test_topic_names_the_wav_so_publishers_carry_it(self) -> None:
+        """Defect 2: the audio is named only *inside* the ``.glc``, which a
+        publisher treats as an opaque resource. The topic therefore names it
+        in a ``<data>`` element — invisible in rendered output, but enough
+        for DITA-OT/Oxygen to copy the file into every edition."""
+        csv_path = self._pair(_glc_bytes("Lofar 1_b.wav"))
+        _run(self.out, csv_path=csv_path, image_root=self.src)
+        root = ET.parse(self._gram_dir() / "gram_02.dita").getroot()
+        section = root.find(".//section[@outputclass='wav-stage']")
+        self.assertIsNotNone(section)
+        data = section.find(
+            f".//data[@name='{generate_dita.COMPANION_AUDIO_PATH}']")
+        self.assertIsNotNone(
+            data, "the wav-stage section must name its .wav for the publisher")
+        self.assertEqual(data.get("href"), "lofar-1-b.wav")
+        self.assertEqual(data.get("scope"), "local")
+        self.assertEqual(data.get("format"), "wav")
+        # Unfiltered: the audio has to reach the student editions too.
+        self.assertIsNone(data.get("audience"))
+        # It names the file that is actually there, and the same file the
+        # copied .glc names — the two halves of the fix agree.
+        self.assertTrue((self._gram_dir() / data.get("href")).is_file())
+        self.assertEqual(
+            _glc_named_audio(self._gram_dir() / "lofar-1-b.glc"),
+            data.get("href"),
+        )
+
+    def test_malformed_glc_is_copied_verbatim_not_dropped(self) -> None:
+        """Forgiving at the boundary: a config we cannot parse still travels
+        with its gram (with a warning) rather than aborting the run."""
+        broken = b"<GAPS_Lite_configuration><data_source><filename>x.wav<"
+        csv_path = self._pair(broken)
+        with self.assertLogs(generate_dita.LOGGER, level="WARNING") as logs:
+            self.assertEqual(
+                _run(self.out, csv_path=csv_path, image_root=self.src), 0)
+        self.assertEqual((self._gram_dir() / "lofar-1-b.glc").read_bytes(), broken)
+        self.assertTrue(any("GLC malformed" in m for m in logs.output))
+
+    def test_glc_without_filename_element_is_copied_verbatim(self) -> None:
+        """Nothing to repoint: an anomalous config with no
+        ``data_source/filename`` is copied as-authored, with a warning."""
+        bare = b"<?xml version='1.0' encoding='utf-8'?>\n<GAPS_Lite_configuration/>"
+        csv_path = self._pair(bare)
+        with self.assertLogs(generate_dita.LOGGER, level="WARNING") as logs:
+            self.assertEqual(
+                _run(self.out, csv_path=csv_path, image_root=self.src), 0)
+        self.assertEqual((self._gram_dir() / "lofar-1-b.glc").read_bytes(), bare)
+        self.assertTrue(
+            any("no data_source/filename" in m for m in logs.output))
+
+    def test_missing_wav_still_repoints_the_glc(self) -> None:
+        """Dangling-asset rule: the audio is absent, so the copy warns and
+        the href stays stable — including the ``.glc``'s internal one, so
+        dropping the file in resolves it with no further churn."""
+        csv_path = self._pair(_glc_bytes("Lofar 1_b.wav"))
+        (self.src / "supporting" / "Lofar 1_b.wav").unlink()
+        self.assertEqual(_run(self.out, csv_path=csv_path, image_root=self.src), 0)
+        self.assertEqual(
+            _glc_named_audio(self._gram_dir() / "lofar-1-b.glc"), "lofar-1-b.wav")
 
 
 class SlugifyAssetNameTests(unittest.TestCase):

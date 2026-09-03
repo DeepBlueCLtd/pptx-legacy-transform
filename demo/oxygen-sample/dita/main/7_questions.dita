@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="seven-questions">
+  <title>7 Questions</title>
+  <body>
+    <p audience="-trainee" outputclass="gf-persistent" />
+    <image href="7_questions.png" placement="break" align="center" />
+  </body>
+</topic>

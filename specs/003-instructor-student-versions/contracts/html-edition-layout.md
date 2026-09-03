@@ -80,11 +80,12 @@ Cardinality:
 ```
 
 The `class="generated"` / `class="deliverables"` / `class="meta"`
-hooks are the styling contract the Operator Console v2 theme targets
-(see `vendor/themes/operator-console-v2/theme.css`). Without them
-the in-theme rules silently fall back to default browser styling —
-the chooser links revert to default link colors and the card layout
-disappears.
+hooks are the styling contract for this page. The Operator Console v2
+theme that once consumed them is gone — the dev preview now renders
+with DITA-OT's own stylesheet, and design work happens against the
+real Oxygen output (`demo/oxygen-sample/published/`, see
+`theme/sync.py`). The hooks stay: they are the page's structure, and
+what any future stylesheet would target.
 
 ### 2.2 Contract clauses
 

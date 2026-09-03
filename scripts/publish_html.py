@@ -382,9 +382,9 @@ def _prune_linked_nav_branches(node: "_Element") -> int:
     direct ``<a>`` — the linked page itself lists those children. Returns
     the number of removed ``<ul>`` subtrees.
 
-    A collapsed ``<li>`` gains the class token ``subdoc`` so the theme can
-    style these entries (the week sub-documents) as section tiles, distinct
-    from plain gram tiles. The indentation text framing the removed ``<ul>``
+    A collapsed ``<li>`` gains the class token ``subdoc`` so a stylesheet can
+    tell these entries (the week sub-documents) from plain gram tiles. The
+    indentation text framing the removed ``<ul>``
     is dropped too, so the entry re-emits flat.
     """
     pruned = 0
@@ -487,10 +487,9 @@ _DITAOT_DATE_META_RE = re.compile(
 # ``<out_root>/<edition>/gramframe.bundle.js`` for each edition, then inject
 # a single relative ``<script>`` tag into every emitted page pointing at the
 # copy that sits at or above it *within its own edition* — never above the
-# edition folder. This mirrors the per-edition ``theme.css`` placement so
-# each ``<out_root>/<edition>/`` subtree is self-contained: copy it out on
-# its own and every page still resolves its bundle. The script no-ops on
-# pages that have no ``gram-config`` tables.
+# edition folder, so each ``<out_root>/<edition>/`` subtree is
+# self-contained: copy it out on its own and every page still resolves its
+# bundle. The script no-ops on pages that have no ``gram-config`` tables.
 
 GRAMFRAME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "gramframe" / "gramframe.bundle.js"
 GRAMFRAME_BUNDLE_NAME = "gramframe.bundle.js"
@@ -545,10 +544,9 @@ def inject_gramframe_plugin(
         body = path.read_text(encoding="utf-8")
         if GRAMFRAME_BUNDLE_NAME in body:
             continue
-        # Reuse the theme page classifier purely for its edition detection —
-        # a page under ``<edition>/`` links that edition's bundle; the shared
-        # landing at the root links the root copy.
-        edition, _ = _theme_classify_page(path.relative_to(out_root).parts, editions)
+        # A page under ``<edition>/`` links that edition's bundle; the
+        # shared landing at the root links the root copy.
+        edition = _edition_of(path.relative_to(out_root).parts, editions)
         bundle_dest = (
             edition_bundles[edition] if edition is not None else root_bundle
         )
@@ -564,266 +562,29 @@ def inject_gramframe_plugin(
 
 
 # -----------------------------------------------------------------------------
-# Operator Console v2 dark theme
+# Page classification
 # -----------------------------------------------------------------------------
 #
-# A single ``theme.css`` (vendored from the design mockups under
-# ``mockups/index-dark/``) drives every page type. The theme itself
-# detects edition and page type from elements DITA-OT already emits
-# (``ul.map`` for index pages, ``.ph`` for instructor edition); the
-# attributes this module sets on ``<body>`` are belt-and-braces — kept
-# so dev-side tooling (grep, dev-tools) can spot the page type at a
-# glance, but the CSS no longer depends on them. The air-gapped Oxygen
-# publish, which doesn't run this module, gets the same styling for
-# free via the ``:has()``-based selectors in ``theme.css``.
-#
-# - ``data-edition="instructor"`` / ``"student"`` — informational; the
-#   CSS detects edition via ``body:has(.ph)`` / ``body:not(:has(.ph))``.
-# - ``class="ditamap-index"`` — informational; the CSS detects index
-#   pages via ``body:has(ul.map)``.
-# - ``class="edition-index"`` is the per-edition "choose a publication"
-#   index (``<edition>/index.html``, written by ``write_edition_index``).
-# - ``class="landing"`` is the shared top-level entry point
-#   (``html/index.html``, written by ``write_shared_landing``).
-#
-# Topic gram pages carry only ``data-edition``.
-
-THEME_BUNDLE_SRC = Path(__file__).parent / "vendor" / "themes" / "operator-console-v2" / "theme.css"
-THEME_BUNDLE_NAME = "theme.css"
-
-# -----------------------------------------------------------------------------
-# Protective marking — issue #175
-# -----------------------------------------------------------------------------
-# The marking has exactly ONE source of truth: the ``webhelp.protection.text``
-# parameter in the Oxygen publishing template. Oxygen is the production
-# publisher and reads that parameter directly; this dev preview reads the same
-# parameter out of the same file, so the two cannot disagree. The previous
-# hardcoded ``theme.css`` banner string was invented dev styling that would have
-# drifted from the production marking the moment either changed.
-#
-# The marking is identical in both editions — it is a property of the material,
-# not of the audience — so it is stamped on every page of every edition without
-# reference to ``Edition``.
-#
-# Deliberately NOT a constant with a default: a wrong marking is worse than a
-# missing one. If the template cannot be read the preview publishes unmarked and
-# says so loudly, rather than asserting a classification nobody configured.
-PUBLISHING_TEMPLATE_OPT = (
-    Path(__file__).resolve().parents[1]
-    / "theme" / "pptx-transform" / "pptx-transform.opt"
-)
+# The preview carries no stylesheet of its own: design work happens against
+# the real Oxygen WebHelp output (``demo/oxygen-sample/published/``, driven by
+# ``theme/sync.py``), whose chrome exists in no other renderer.  What survives
+# here is the edition detection the GramFrame injector needs to keep each
+# ``<out_root>/<edition>/`` subtree self-contained.
 
 
-def read_protection_marking(opt_path: Path = PUBLISHING_TEMPLATE_OPT) -> "str | None":
-    """Return the protective marking text the Oxygen template publishes with.
-
-    Returns ``None`` — meaning "publish no banner" — when the template is
-    absent or unreadable, or when it switches the marking off via
-    ``webhelp.show.protection``. A blank ``webhelp.protection.text`` is also
-    ``None``: an empty bar states nothing.
-    """
-    if not opt_path.is_file():
-        LOGGER.warning(
-            "publishing template not found at %s; the preview will carry NO "
-            "protective marking", opt_path,
-        )
-        return None
-    try:
-        webhelp = _ET.parse(str(opt_path)).getroot().find("webhelp")
-        params = {
-            p.get("name"): (p.get("value") or "")
-            for p in (webhelp.findall("parameters/parameter") if webhelp is not None else [])
-        }
-    except _ET.ParseError as exc:
-        LOGGER.warning(
-            "publishing template %s is not parseable (%s); the preview will "
-            "carry NO protective marking", opt_path, exc,
-        )
-        return None
-    # Mirror the XSLT exactly: only the literal "yes" turns the bars on.
-    if params.get("webhelp.show.protection") != "yes":
-        LOGGER.info(
-            "publishing template sets webhelp.show.protection=%r; the preview "
-            "carries no protective marking",
-            params.get("webhelp.show.protection"),
-        )
-        return None
-    text = params.get("webhelp.protection.text", "").strip()
-    if not text:
-        LOGGER.warning(
-            "publishing template has an empty webhelp.protection.text; the "
-            "preview will carry NO protective marking",
-        )
-        return None
-    return text
-
-
-_HEAD_CLOSE = "  </head>"
-# Matches any ``<link rel="stylesheet" … href="…/theme.css">`` line, so the
-# idempotency check works regardless of the relative-path depth in the href.
-_THEME_LINK_RE = re.compile(r'<link\b[^>]*\bhref="[^"]*theme\.css"', re.IGNORECASE)
-
-
-def _theme_link_for(file_path: Path, theme_dest: Path) -> str:
-    rel = os.path.relpath(theme_dest, start=file_path.parent).replace(os.sep, "/")
-    return f'    <link rel="stylesheet" type="text/css" href="{rel}">'
-
-
-def _theme_classify_page(
+def _edition_of(
     rel_path: tuple[str, ...], editions: tuple[Edition, ...],
-) -> tuple[str | None, str | None]:
-    """Return ``(edition, body_class)`` for an HTML file under ``out_root``.
+) -> str | None:
+    """Return the edition an HTML file belongs to, or ``None`` for the shared
+    landing at ``<out_root>/index.html``.
 
-    ``rel_path`` is the file's path tuple relative to ``out_root``.
-
-    - ``("index.html",)`` → shared landing, no edition, class ``landing``.
-    - ``("<edition>", "index.html")`` → per-edition index, class ``edition-index``.
-    - ``("<edition>", "<pub>", "index.html")`` → DITA-OT map index, class ``ditamap-index``.
-    - Anything deeper under ``<edition>/`` → topic page, no special class.
+    ``rel_path`` is the file's path tuple relative to ``out_root``: anything
+    under ``<edition>/`` belongs to that edition, at any depth.
     """
     edition_names = {e.output_subdir for e in editions}
-    if len(rel_path) == 1 and rel_path[0] == "index.html":
-        return None, "landing"
-    if len(rel_path) >= 1 and rel_path[0] in edition_names:
-        edition = rel_path[0]
-        if len(rel_path) == 2 and rel_path[1] == "index.html":
-            return edition, "edition-index"
-        if len(rel_path) == 3 and rel_path[2] == "index.html":
-            return edition, "ditamap-index"
-        return edition, None
-    return None, None
-
-
-def inject_operator_console_theme(
-    out_root: Path,
-    editions: tuple[Edition, ...] = EDITIONS,
-    bundle_src: Path = THEME_BUNDLE_SRC,
-    template_opt: Path = PUBLISHING_TEMPLATE_OPT,
-) -> int:
-    """Vendor ``theme.css`` into ``out_root`` and link it from every page.
-
-    Drops one copy of the theme at ``<out_root>/theme.css`` (so the
-    shared landing can link it) and another copy at
-    ``<out_root>/<edition>/theme.css`` for each edition (so per-edition
-    index + every DITA-OT map index + every topic page can link a
-    nearby copy with a short relative href).
-
-    For each ``*.html`` under ``out_root``, ensures a
-    ``<link rel="stylesheet" type="text/css" href="…/theme.css">`` sits
-    in ``<head>``. Also stamps ``data-edition`` and page-type classes
-    on ``<body>``; the CSS no longer requires these (it detects edition
-    and page type via ``:has()`` against elements DITA-OT emits), but
-    the attributes remain useful for dev-side inspection and testing.
-
-    Finally stamps ``data-protection`` with the protective marking read
-    from ``template_opt`` — the same Oxygen publishing-template parameter
-    the production publish uses, so preview and production cannot state
-    different markings. ``theme.css`` renders it via ``attr()`` at the top
-    and bottom of every page. When no marking can be read the attribute is
-    omitted and the CSS suppresses both bars (issue #175).
-
-    Idempotent: pages that already carry the theme link are left
-    alone, preserving byte-determinism across re-runs.
-
-    Returns the count of HTML files modified.
-    """
-    if not bundle_src.is_file():
-        raise FileNotFoundError(
-            f"Operator Console v2 theme bundle missing at {bundle_src}."
-        )
-    out_root.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(bundle_src, out_root / THEME_BUNDLE_NAME)
-    for edition in editions:
-        edition_dir = out_root / edition.output_subdir
-        edition_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(bundle_src, edition_dir / THEME_BUNDLE_NAME)
-
-    edition_themes: dict[str, Path] = {
-        e.output_subdir: out_root / e.output_subdir / THEME_BUNDLE_NAME
-        for e in editions
-    }
-    root_theme = out_root / THEME_BUNDLE_NAME
-    marking = read_protection_marking(template_opt)
-
-    count = 0
-    for path in sorted(out_root.rglob("*.html")):
-        rel_parts = path.relative_to(out_root).parts
-        edition, page_class = _theme_classify_page(rel_parts, editions)
-
-        theme_dest = (
-            edition_themes[edition] if edition is not None else root_theme
-        )
-        body = path.read_text(encoding="utf-8")
-
-        changed = False
-
-        if _THEME_LINK_RE.search(body) is None:
-            link_tag = _theme_link_for(path, theme_dest)
-            inserted = f"{link_tag}\n{_HEAD_CLOSE}"
-            new_body, replaced = re.subn(
-                re.escape(_HEAD_CLOSE), inserted, body, count=1,
-            )
-            if replaced:
-                body = new_body
-                changed = True
-
-        body, body_changed = _set_body_attrs(body, edition, page_class, marking)
-        if body_changed:
-            changed = True
-
-        if changed:
-            _write_text(path, body)
-            count += 1
-    return count
-
-
-_BODY_OPEN_RE = re.compile(r"<body(\s[^>]*)?>", re.IGNORECASE)
-
-
-def _set_body_attrs(
-    body: str, edition: str | None, page_class: str | None,
-    marking: str | None = None,
-) -> tuple[str, bool]:
-    """Set ``data-edition``/``data-protection`` and append a page-type class.
-
-    Returns ``(new_body, changed)``. Existing attributes are preserved;
-    when ``page_class`` is set and ``class`` already exists, the new
-    token is appended unless already present.
-    """
-    match = _BODY_OPEN_RE.search(body)
-    if match is None:
-        return body, False
-    attrs = match.group(1) or ""
-    new_attrs = attrs
-    changed = False
-
-    if edition is not None and 'data-edition=' not in attrs:
-        new_attrs = f'{new_attrs} data-edition="{edition}"'
-        changed = True
-
-    # Every page of every edition, including the shared landing page: the
-    # marking describes the material, not the audience. Escaped because it
-    # arrives from a template file rather than from this script.
-    if marking and 'data-protection=' not in attrs:
-        escaped = marking.replace("&", "&amp;").replace('"', "&quot;")
-        escaped = escaped.replace("<", "&lt;").replace(">", "&gt;")
-        new_attrs = f'{new_attrs} data-protection="{escaped}"'
-        changed = True
-
-    if page_class is not None:
-        class_match = re.search(r'\bclass="([^"]*)"', new_attrs)
-        if class_match is None:
-            new_attrs = f'{new_attrs} class="{page_class}"'
-            changed = True
-        elif page_class not in class_match.group(1).split():
-            existing = class_match.group(1)
-            replacement = f'class="{existing} {page_class}"'
-            new_attrs = new_attrs.replace(class_match.group(0), replacement, 1)
-            changed = True
-
-    if not changed:
-        return body, False
-    return body[:match.start()] + f"<body{new_attrs}>" + body[match.end():], True
+    if rel_path and rel_path[0] in edition_names:
+        return rel_path[0]
+    return None
 
 
 def scrub_nondeterministic_metadata(root: Path) -> int:
@@ -1205,11 +966,6 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[gramframe] vendored {GRAMFRAME_BUNDLE_NAME} into {args.out} "
             f"and linked it from {injected} HTML file(s)"
-        )
-        themed = inject_operator_console_theme(args.out)
-        print(
-            f"[theme] vendored {THEME_BUNDLE_NAME} (Operator Console v2) "
-            f"and linked it from {themed} HTML file(s)"
         )
 
     if args.keep_staged:

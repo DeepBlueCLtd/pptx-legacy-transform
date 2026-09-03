@@ -1,10 +1,9 @@
 # Floating gram navigation panel for the Oxygen WebHelp Responsive template
 
 A drop-in CSS overlay that styles the **floating gram navigation panel** in
-the **production Oxygen publish**, exactly as
-`scripts/vendor/themes/operator-console-v2/theme.css` already does for the
-dev/CI HTML preview. Like `../oxygen-hide-search/`, it is **not** a complete
-theme — it is one CSS file (plus the wiring) you add to your own Oxygen
+the **production Oxygen publish** — the only renderer it targets, since the
+dev/CI HTML preview carries no stylesheet (see `../sync.py`). Like
+`../oxygen-hide-search/`, it is **not** a complete theme — it is one CSS file (plus the wiring) you add to your own Oxygen
 WebHelp Responsive template (the Fi3ldMan-derived one that already hosts the
 GramFrame overlay).
 
@@ -57,6 +56,10 @@ arrangement `../oxygen-hide-search/README.md` describes.
 
 ## Wiring it into the (single, shared) template
 
+> **Already wired in `../pptx-transform/`**, this repo's own publishing
+> template — a verbatim copy at `resources/gram-nav.css`, referenced from the
+> `.opt`. The steps below are for installing into a **different** template.
+
 Identical to `../oxygen-hide-search/`:
 
 1. **Use your existing publishing template** (the Fi3ldMan-derived one that
@@ -100,7 +103,7 @@ When you restyle one, restyle the other.
 ## How it ships to the air-gapped target
 
 This overlay travels in the pipeline release zip under `theme/` (alongside
-`gramframe-oxygen/` and `oxygen-hide-search/`), so it lands at
+the other overlays), so it lands at
 `ROOT\theme\gram-nav-panel\` on the target. The operator installs it into the
 Oxygen template once, per step 2 above. See README.md, *"Getting pipeline
 updates onto the target"*.

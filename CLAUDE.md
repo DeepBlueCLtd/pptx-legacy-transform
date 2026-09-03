@@ -35,6 +35,11 @@ python scripts/generate_dita.py --csv extracted.csv --out dita/ --image-root pat
 python scripts/publish_html.py --dita-ot /path/to/dita-ot-4.2.4   # optional HTML preview
 ```
 
+```bash
+# Rebuild the committed miniature publication used for Oxygen template work
+python demo/oxygen-sample/regenerate.py
+```
+
 There is no build step or linter. `run_pipeline.bat` is a Windows-only
 orchestrator (extract → manual review → generate); on POSIX run the scripts
 directly. **These are dev-host invocations** — the delivered air-gapped target
@@ -92,7 +97,7 @@ ROOT\  (e.g. C:\dev\aaac)
 ├── theme\               ← Oxygen overlays for the production publisher (GramFrame plugin: theme\gramframe-oxygen\); ships in the release zip
 └── scripts\
     ├── pylib\           ← pip install --target python-pptx (WinPython sets ENABLE_USER_SITE = False)
-    ├── vendor\          ← publish assets (GramFrame bundle, theme.css), resolved beside publish_html.py (dev/CI-only, not shipped)
+    ├── vendor\          ← publish assets (GramFrame bundle), resolved beside publish_html.py (dev/CI-only, not shipped)
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
 
@@ -120,6 +125,19 @@ root. Data flows strictly forward; the only branch point is a human.
 6. **`scripts/publish_html.py`** — renders DITA → HTML via DITA-OT (dev preview
    only; Oxygen is the production publisher).
 
+`demo/oxygen-sample/` is not a pipeline stage — it is a **committed miniature
+output** of stage 5, the one deliberate exception to "the `dita/` tree is not
+committed". Nine gram pages (two `main` weeks plus a `progress-test-1`), one of
+them carrying 2 demons and 5 lofargrams, so the Oxygen Responsive WebHelp
+template can be tuned without republishing the whole corpus. It is dev-host-only
+and never reaches the air-gapped target. `demo/oxygen-sample/dita/` is always
+regenerable from `sample.csv` + `source/` + `demo/demon-incoming/` + `static/` +
+`7_questions.png` with `--image-root` at the **repo root** (not `source/` — the
+CSV's asset cells are repo-root-relative so the demon rows can reach outside the
+corpus); `tests/test_oxygen_sample.py` byte-compares a fresh run against the
+committed tree, so any change to the generator's XML shape means re-running
+`demo/oxygen-sample/regenerate.py` and committing the result.
+
 ### The core dispatch (read this before touching the generator)
 
 Each gram has hyperlinks; the `Lofar`-labelled ones **always** point to a `.glc`
@@ -130,7 +148,14 @@ the GLC's inner asset extension, not on any CSV flag:**
   titled `Lofar N`, anchored `id="lofar-N"`, classed `lofar-stage`.
 - `.wav` (~18%, rendered live by the on-PC GLC viewer) → surfaced as a link to
   the `.glc`, with both the `.glc` and `.wav` copied beside the topic; titled
-  `WAV N`, anchored `id="wav-N"`, classed `wav-stage`.
+  `WAV N`, anchored `id="wav-N"`, classed `wav-stage`. The pair has to stay
+  linked *and* both halves have to publish (issue #177), which takes two
+  things: the copied `.glc`'s `data_source/filename` is **rewritten** to the
+  slugified sibling the generator wrote (the corpus name it was authored with
+  no longer exists in the tree), and the topic names the `.wav` in an
+  unfiltered `<data name="companion-audio" href="…" format="wav">` — invisible
+  in rendered output, but the only way DITA-OT/Oxygen know to copy audio whose
+  name lives inside a config file they treat as opaque.
 
 The two kinds are numbered on **independent 1..N sequences** (image, audio,
 audio, image → `Lofar 1`, `WAV 1`, `WAV 2`, `Lofar 2`). An audio link is not a
@@ -289,13 +314,39 @@ self-contained-publication, no-`../` invariant). A missing
 Per-publication duplication is intentional: Oxygen publishes each ditamap
 independently, so each must be self-contained.
 
+### Theme work and the design loop (`theme/`)
+
+The **design surface is the real Oxygen output**, not the DITA-OT dev preview:
+the preview carries no stylesheet at all any more (the Operator Console v2 dark
+theme it used to inject is gone — the deliberate choice is to stay close to
+stock Oxygen Responsive WebHelp, so the next Oxygen template upgrade stays
+cheap). Overlay styling therefore targets Oxygen's own chrome, and lives in
+per-concern overlay folders (`theme/gram-nav-panel/`, `theme/gram-fill-width/`,
+`theme/oxygen-hide-search/`, `theme/gram-toc-overlay/`, `theme/oxygen-dark-mode/`,
+`theme/oxygen-protection/`, `theme/gramframe-oxygen/`), each a `README.md`
+plus its payload.
+`theme/pptx-transform/` is the **wired template** carrying a byte-identical copy
+of every payload; `tests/test_package_release.py` enforces that.
+
+`theme/sync.py` (dev-host only; the packager skips `theme/*.py`) is the loop —
+run it with no arguments after any change. It copies overlay payloads into the
+template and on into the deployed `oxygen-webhelp/template/` of each committed
+build under `demo/oxygen-sample/published/`, so a CSS/JS edit is live on a hard
+refresh with **no republish**; and it normalises the per-publish `buildId` and
+sitemap `<lastmod>` stamps a fresh Oxygen publish leaves there, so the committed
+diff shows the design change and nothing else. The two `pptx-transform.xpr`
+scenarios publish straight into `published/` (`${pd}`-relative, so any clone
+works); republish only when the DITA or a `.opt` parameter changed.
+
+Keep every new styling hook in the **DITA source** (an `outputclass` the
+generator emits), never in a publish-time HTML rewrite — the topic body DOM is
+shared by both renderers, the page chrome is not.
+
 ### The Oxygen publishing template (issues #175, #178)
 
-`theme/pptx-transform/` is the template the operator actually publishes with.
-Each sibling `theme/<overlay>/` folder owns one concern and its payload files;
-the template carries a **verbatim copy** of each, because Oxygen needs the files
-inside the template folder. `tests/test_package_release.py` enforces that every
-copy stays byte-identical to its overlay source and that the `.opt` wires it in.
+Two of the overlays above carry XSLT rather than only CSS, and they share one
+mechanism. (`theme/sync.py` propagates their payloads like any other; the
+`.opt` wiring below is the part it cannot do for you.)
 
 Two things are decided at **build time**, not inferred from page content:
 

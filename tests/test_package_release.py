@@ -103,6 +103,12 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertNotIn("run_pipeline.bat", names)
         # Dev-only mock tooling stays out of the deliverable.
         self.assertNotIn("scripts/generate_mock_analysis_sheet.py", names)
+        # theme/ ships the overlays the operator installs, but not the
+        # dev-host design-loop tooling that sits at its root.
+        self.assertNotIn("theme/sync.py", names)
+        self.assertFalse([n for n in names
+                          if n.startswith("theme/") and n.endswith(".py")],
+                         "theme/ python tooling must not ship")
         # The wrappers ship under wrappers/, never at the archive root, so an
         # extract-over-ROOT\ upgrade can't overwrite the operator's tuned copies.
         for wrapper in ("extract.py", "dedupe.py", "write.py",

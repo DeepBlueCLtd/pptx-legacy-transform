@@ -101,6 +101,7 @@
                  every copy stays byte-identical to its source. -->
             <css file="resources/hide-search.css"/>
             <css file="resources/gram-nav.css"/>
+            <css file="resources/gram-fill-width.css"/>
             <css file="resources/gram-toc-overlay.css"/>
             <css file="resources/dark-mode.css"/>
             <!-- LAST, deliberately: a protective marking must be the one thing

@@ -27,15 +27,12 @@ from publish_html import (  # noqa: E402
     EDITIONS,
     Edition,
     GRAMFRAME_BUNDLE_NAME,
-    THEME_BUNDLE_NAME,
     _dita_launcher,
     _dita_ot_command,
     inject_gramframe_plugin,
-    inject_operator_console_theme,
     prettify_html,
     prettify_tree,
     publish,
-    read_protection_marking,
     scrub_nondeterministic_metadata,
     write_edition_index,
     write_shared_landing,
@@ -604,7 +601,6 @@ class InjectGramframePluginTests(unittest.TestCase):
 
     def test_drops_bundle_at_root_and_each_edition(self):
         # Each edition needs its own copy so the edition folder is
-        # self-contained (mirrors the per-edition theme.css placement).
         with TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             out = tmp / "html"
@@ -738,13 +734,11 @@ class EditionStandaloneTests(unittest.TestCase):
         )
 
     def _build_tree(self, out: Path) -> None:
-        """Lay out a representative two-edition tree and run both injectors."""
+        """Lay out a representative two-edition tree and run the injector."""
         tmp = out.parent
         bundle = tmp / "vendor" / "gramframe.bundle.js"
         bundle.parent.mkdir(parents=True, exist_ok=True)
         bundle.write_text("/* gramframe */\n", encoding="utf-8", newline="\n")
-        theme = tmp / "vendor" / "theme.css"
-        theme.write_text("/* theme */\n", encoding="utf-8", newline="\n")
 
         # Shared landing + both editions, each with a publication index and a
         # deep gram topic mirroring what DITA-OT emits for ``main``.
@@ -758,7 +752,6 @@ class EditionStandaloneTests(unittest.TestCase):
                 self._page(),
             )
         inject_gramframe_plugin(out, bundle_src=bundle)
-        inject_operator_console_theme(out, bundle_src=theme)
 
     def test_no_edition_page_references_an_asset_above_its_edition(self):
         with TemporaryDirectory() as tmp_str:
@@ -788,338 +781,6 @@ class EditionStandaloneTests(unittest.TestCase):
                 "edition pages must not reference assets above their edition "
                 "folder:\n" + "\n".join(offenders),
             )
-
-
-# -----------------------------------------------------------------------------
-# Operator Console v2 dark-theme injection
-# -----------------------------------------------------------------------------
-
-
-class InjectOperatorConsoleThemeTests(unittest.TestCase):
-    """Wire theme.css into every emitted HTML page, with the right body
-    classification and data-edition for the page type."""
-
-    @staticmethod
-    def _fake_theme(tmp: Path) -> Path:
-        src = tmp / "vendor" / "theme.css"
-        src.parent.mkdir(parents=True, exist_ok=True)
-        src.write_text("/* operator console */\n", encoding="utf-8", newline="\n")
-        return src
-
-    @staticmethod
-    def _write(path: Path, body: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8", newline="\n")
-
-    @staticmethod
-    def _shell(body_tag: str = "<body>") -> str:
-        return (
-            '<!DOCTYPE html>\n'
-            '<html lang="en">\n'
-            '  <head>\n'
-            '    <meta charset="UTF-8">\n'
-            '    <title>X</title>\n'
-            '  </head>\n'
-            f'  {body_tag}\n'
-            '    <p>x</p>\n'
-            '  </body>\n'
-            '</html>\n'
-        )
-
-    def test_drops_theme_at_root_and_each_edition(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            self._write(out / "index.html", self._shell())
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            self.assertTrue((out / THEME_BUNDLE_NAME).is_file())
-            self.assertTrue((out / "instructor" / THEME_BUNDLE_NAME).is_file())
-            self.assertTrue((out / "student" / THEME_BUNDLE_NAME).is_file())
-
-    def test_shared_landing_gets_landing_class_and_no_edition(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            self._write(out / "index.html", self._shell())
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            body = (out / "index.html").read_text(encoding="utf-8")
-            self.assertIn('<link rel="stylesheet" type="text/css" href="theme.css">', body)
-            self.assertIn('class="landing"', body)
-            self.assertNotIn("data-edition", body)
-
-    def test_edition_index_gets_edition_index_class(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            self._write(out / "instructor" / "index.html", self._shell())
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            body = (out / "instructor" / "index.html").read_text(encoding="utf-8")
-            self.assertIn('data-edition="instructor"', body)
-            self.assertIn('class="edition-index"', body)
-            self.assertIn('href="theme.css"', body)
-
-    def test_publication_index_gets_ditamap_index_class(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            self._write(out / "instructor" / "main" / "index.html", self._shell())
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            body = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
-            self.assertIn('data-edition="instructor"', body)
-            self.assertIn('class="ditamap-index"', body)
-            self.assertIn('href="../theme.css"', body)
-
-    def test_topic_page_gets_edition_only_and_relative_theme_href(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            topic = (
-                out / "instructor" / "main" / "main" / "week-2-grams"
-                / "gram-20" / "gram_20.html"
-            )
-            self._write(topic, self._shell('<body id="gram_20">'))
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            body = topic.read_text(encoding="utf-8")
-            self.assertIn('data-edition="instructor"', body)
-            self.assertNotIn('class="ditamap-index"', body)
-            self.assertNotIn('class="landing"', body)
-            self.assertNotIn('class="edition-index"', body)
-            # Theme css is at out/instructor/theme.css; gram_20.html lives
-            # four directories below that under instructor/main/main/
-            # week-2-grams/gram-20/.
-            self.assertIn(
-                '<link rel="stylesheet" type="text/css" href="../../../../theme.css">',
-                body,
-            )
-            # Existing body attributes are preserved.
-            self.assertIn('id="gram_20"', body)
-
-    def test_student_edition_is_tagged(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            topic = out / "student" / "main" / "main" / "gram-01" / "gram_01.html"
-            self._write(topic, self._shell())
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            body = topic.read_text(encoding="utf-8")
-            self.assertIn('data-edition="student"', body)
-
-    def test_is_idempotent(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            self._write(out / "instructor" / "main" / "index.html", self._shell())
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            once = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            twice = (out / "instructor" / "main" / "index.html").read_text(encoding="utf-8")
-            self.assertEqual(once, twice)
-            self.assertEqual(once.count('href="../theme.css"'), 1)
-            self.assertEqual(once.count('data-edition='), 1)
-            self.assertEqual(once.count('class="ditamap-index"'), 1)
-
-    def test_raises_when_bundle_missing(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            out.mkdir()
-            with self.assertRaises(FileNotFoundError):
-                inject_operator_console_theme(
-                    out, bundle_src=tmp / "does-not-exist.css",
-                )
-
-    def test_vendored_theme_is_present_in_repo(self):
-        self.assertTrue(
-            publish_html.THEME_BUNDLE_SRC.is_file(),
-            f"Vendor the Operator Console v2 theme at "
-            f"{publish_html.THEME_BUNDLE_SRC.relative_to(REPO_ROOT)}",
-        )
-
-
-# -----------------------------------------------------------------------------
-# Protective marking — issue #175
-# -----------------------------------------------------------------------------
-
-
-class ProtectionMarkingTests(unittest.TestCase):
-    """The dev preview's marking comes from the Oxygen publishing template.
-
-    The point of these tests is the *single source of truth*. Oxygen is the
-    production publisher and reads ``webhelp.protection.text`` straight out of
-    the template; the preview must read the same parameter from the same file,
-    or the two outputs can state different classifications while both look
-    fine. Before #175 the preview's banner was a hardcoded, invented string.
-    """
-
-    OPT = """<?xml version="1.0" encoding="UTF-8"?>
-<publishing-template>
-    <webhelp>
-        <parameters>
-{params}
-        </parameters>
-    </webhelp>
-</publishing-template>
-"""
-
-    def _opt(self, tmp: Path, **params: str) -> Path:
-        body = "\n".join(
-            f'            <parameter name="{name}" value="{value}"/>'
-            for name, value in params.items()
-        )
-        path = tmp / "pptx-transform.opt"
-        path.write_text(self.OPT.format(params=body), encoding="utf-8", newline="\n")
-        return path
-
-    def test_reads_the_marking_the_real_template_publishes(self):
-        # Not a fixture: the repo's own template, so an edit to the shipped
-        # marking is an edit to what the preview shows.
-        self.assertEqual(
-            read_protection_marking(), "COMMERCIALLY SENSITIVE",
-        )
-
-    def test_template_opt_path_resolves_in_the_repo(self):
-        self.assertTrue(
-            publish_html.PUBLISHING_TEMPLATE_OPT.is_file(),
-            f"the preview reads its marking from "
-            f"{publish_html.PUBLISHING_TEMPLATE_OPT}, which is missing",
-        )
-
-    def test_switched_off_means_no_marking(self):
-        with TemporaryDirectory() as tmp_str:
-            opt = self._opt(
-                Path(tmp_str),
-                **{"webhelp.show.protection": "no",
-                   "webhelp.protection.text": "COMMERCIALLY SENSITIVE"},
-            )
-            self.assertIsNone(read_protection_marking(opt))
-
-    def test_only_the_literal_yes_turns_it_on(self):
-        # Mirrors the XSLT's own test exactly, so preview and production
-        # cannot disagree about what a stray value means.
-        with TemporaryDirectory() as tmp_str:
-            opt = self._opt(
-                Path(tmp_str),
-                **{"webhelp.show.protection": "YES",
-                   "webhelp.protection.text": "SECRET"},
-            )
-            self.assertIsNone(read_protection_marking(opt))
-
-    def test_blank_marking_is_no_marking(self):
-        # An empty bar states nothing; better to render none and warn.
-        with TemporaryDirectory() as tmp_str:
-            opt = self._opt(
-                Path(tmp_str),
-                **{"webhelp.show.protection": "yes",
-                   "webhelp.protection.text": "   "},
-            )
-            self.assertIsNone(read_protection_marking(opt))
-
-    def test_missing_template_degrades_rather_than_inventing_one(self):
-        # A wrong marking is worse than a missing one, so there is deliberately
-        # no fallback default to a plausible-looking classification.
-        with TemporaryDirectory() as tmp_str:
-            self.assertIsNone(
-                read_protection_marking(Path(tmp_str) / "absent.opt"))
-
-    def test_unparseable_template_degrades_rather_than_crashing(self):
-        with TemporaryDirectory() as tmp_str:
-            path = Path(tmp_str) / "pptx-transform.opt"
-            path.write_text("<not-xml", encoding="utf-8", newline="\n")
-            self.assertIsNone(read_protection_marking(path))
-
-
-class ProtectionMarkingStampTests(unittest.TestCase):
-    """Every page of every edition carries the marking, identically."""
-
-    # Re-wrapped in staticmethod(): accessing them on the other class yields
-    # plain functions, which would rebind as instance methods here.
-    _fake_theme = staticmethod(InjectOperatorConsoleThemeTests._fake_theme)
-    _write = staticmethod(InjectOperatorConsoleThemeTests._write)
-    _shell = staticmethod(InjectOperatorConsoleThemeTests._shell)
-
-    def _publish(self, tmp: Path, pages: "list[str]") -> Path:
-        out = tmp / "html"
-        for page in pages:
-            self._write(out / page, self._shell())
-        inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-        return out
-
-    def test_marking_lands_on_every_page_of_both_editions(self):
-        pages = [
-            "index.html",                                   # shared landing
-            "instructor/index.html",                        # edition index
-            "instructor/main/index.html",                   # ditamap index
-            "instructor/main/main/gram-01/gram_01.html",    # topic
-            "student/index.html",
-            "student/main/index.html",
-            "student/main/main/gram-01/gram_01.html",
-        ]
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = self._publish(tmp, pages)
-            for page in pages:
-                with self.subTest(page=page):
-                    self.assertIn(
-                        'data-protection="COMMERCIALLY SENSITIVE"',
-                        (out / page).read_text(encoding="utf-8"),
-                    )
-
-    def test_both_editions_carry_the_identical_marking(self):
-        # The marking describes the material, not the audience: there is no
-        # per-edition variation to implement, and a divergence would be a bug.
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = self._publish(tmp, [
-                "instructor/main/main/gram-01/gram_01.html",
-                "student/main/main/gram-01/gram_01.html",
-            ])
-            markings = {
-                re.search(
-                    r'data-protection="([^"]*)"',
-                    (out / page).read_text(encoding="utf-8"),
-                ).group(1)
-                for page in ("instructor/main/main/gram-01/gram_01.html",
-                             "student/main/main/gram-01/gram_01.html")
-            }
-            self.assertEqual(len(markings), 1, f"editions disagree: {markings}")
-
-    def test_stamping_is_idempotent(self):
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = self._publish(tmp, ["instructor/main/index.html"])
-            page = out / "instructor" / "main" / "index.html"
-            once = page.read_text(encoding="utf-8")
-            inject_operator_console_theme(out, bundle_src=self._fake_theme(tmp))
-            self.assertEqual(once, page.read_text(encoding="utf-8"))
-            self.assertEqual(once.count("data-protection="), 1)
-
-    def test_no_marking_means_no_attribute(self):
-        # ...and theme.css hides both bars on a page without the attribute,
-        # rather than rendering two empty coloured stripes.
-        with TemporaryDirectory() as tmp_str:
-            tmp = Path(tmp_str)
-            out = tmp / "html"
-            self._write(out / "index.html", self._shell())
-            inject_operator_console_theme(
-                out, bundle_src=self._fake_theme(tmp),
-                template_opt=tmp / "absent.opt",
-            )
-            self.assertNotIn(
-                "data-protection",
-                (out / "index.html").read_text(encoding="utf-8"),
-            )
-
-    def test_theme_renders_the_stamped_marking_and_hardcodes_none(self):
-        css = publish_html.THEME_BUNDLE_SRC.read_text(encoding="utf-8")
-        live = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
-        # Top and bottom, matching the production template's two bars.
-        self.assertIn("content: attr(data-protection)", live)
-        self.assertIn("body::after", live)
-        self.assertIn("body:not([data-protection])", live)
-        # The old invented banner must not come back: it was per-edition and
-        # kept in step with nothing.
-        self.assertNotIn("TRAINING USE ONLY", live)
-        self.assertNotIn("CLASS-RESTRICTED", live)
 
 
 # -----------------------------------------------------------------------------
@@ -1353,7 +1014,7 @@ class PruneMapIndexNavTests(unittest.TestCase):
                          "grams move off the index — the week page lists them")
         self.assertNotIn("gram_07.html", pruned_html)
         self.assertIn("welcome.html", pruned_html)
-        # Collapsed entries are marked for the theme's section-tile styling.
+        # Collapsed entries stay marked, so a stylesheet can tell them apart.
         self.assertEqual(pruned_html.count('class="topicref subdoc"'), 2,
                          "each collapsed li gains the subdoc class token")
 
@@ -1730,6 +1391,106 @@ class PublishedImagePresenceTests(unittest.TestCase):
                         f"{href}: dita and html copies differ "
                         f"({dita_asset} vs {html_asset})"
                     )
+        self.assertEqual(missing, [], "\n".join(missing))
+        self.assertEqual(mismatched, [], "\n".join(mismatched))
+
+
+class PublishedAudioPresenceTests(unittest.TestCase):
+    """Walk the shipped ``dita/`` and ``html/`` trees and assert the
+    ``.wav``-backed grams survive end-to-end (issue #177).
+
+    Such a gram is a *pair*: the page links a ``.glc`` config, and the
+    on-PC GLC viewer reads the audio the config names beside it. The pair
+    used to break in two independent ways — the copied ``.glc`` still named
+    the original corpus filename while the audio had been slugified, and no
+    publisher carried the audio out of ``dita/`` at all, because nothing but
+    the opaque ``.glc`` mentioned it. Neither half is any use alone, so both
+    are asserted here, at the layer where the whole journey is visible.
+
+    Skips (like its image twin) when the trees are absent; CI's web job
+    builds both from ``source/`` and re-runs it.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not DITA_ROOT.is_dir() or not HTML_ROOT.is_dir():
+            raise unittest.SkipTest(
+                "dita/ or html/ tree missing — run the pipeline first"
+            )
+        cls.glc_files = sorted(DITA_ROOT.rglob("*.glc"))
+        if not cls.glc_files:
+            raise unittest.SkipTest("no .glc files under dita/ — no audio grams")
+
+    @staticmethod
+    def _named_audio(glc_path: Path) -> str:
+        """The filename the ``.glc`` names in ``data_source/filename``."""
+        try:
+            root = ET.parse(glc_path).getroot()
+        except ET.ParseError:
+            return ""
+        return (root.findtext("data_source/filename") or "").strip()
+
+    def test_dita_glc_names_the_wav_beside_it(self) -> None:
+        """Defect 1: the copied ``.glc`` must name its slugified sibling.
+
+        A ``.glc`` naming ``Lofar 1_b.wav`` next to a ``lofar-1-b.wav``
+        resolves to nothing — in the DITA tree and in every publication
+        rendered from it.
+        """
+        bad: list[str] = []
+        for glc_path in self.glc_files:
+            named = self._named_audio(glc_path)
+            if not named:
+                continue  # anomalous config, copied verbatim with a warning
+            if not (glc_path.parent / named).is_file():
+                bad.append(
+                    f"{glc_path.relative_to(REPO_ROOT)}: names {named!r}, "
+                    f"which is not beside it "
+                    f"(present: {sorted(p.name for p in glc_path.parent.glob('*.wav'))})"
+                )
+        self.assertEqual(bad, [], f"\n{len(bad)} unresolvable .glc:\n" + "\n".join(bad))
+
+    def test_wav_reaches_every_published_edition(self) -> None:
+        """Defect 2: both halves of the pair must be in the output.
+
+        DITA-OT copies the ``.glc`` because a topic links it; the audio is
+        named only *inside* that config, which the toolchain never parses,
+        so the topic names it too (``<data name="companion-audio">``). Every
+        published ``.glc`` must therefore have its audio beside it, in each
+        edition, byte-identical to the ``dita/`` copy.
+        """
+        published = sorted(HTML_ROOT.rglob("*.glc"))
+        self.assertTrue(
+            published,
+            "no .glc reached html/ — the audio grams lost their config files",
+        )
+        editions = {p.relative_to(HTML_ROOT).parts[0] for p in published}
+        self.assertEqual(
+            editions, {e.output_subdir for e in publish_html.EDITIONS},
+            "every edition must publish the audio grams",
+        )
+        missing: list[str] = []
+        mismatched: list[str] = []
+        for glc_path in published:
+            named = self._named_audio(glc_path)
+            if not named:
+                continue
+            html_audio = glc_path.parent / named
+            if not html_audio.is_file():
+                missing.append(
+                    f"{glc_path.relative_to(REPO_ROOT)}: audio {named!r} was "
+                    f"not copied into the published tree — the GLC link "
+                    f"resolves to a config with no audio behind it"
+                )
+                continue
+            # html/<edition>/<pub>/<rest> ⇄ dita/<pub>/<rest> (see _html_twin).
+            rel = glc_path.relative_to(HTML_ROOT)
+            dita_audio = DITA_ROOT / Path(*rel.parts[1:]).parent / named
+            if dita_audio.is_file() and dita_audio.read_bytes() != html_audio.read_bytes():
+                mismatched.append(
+                    f"{named}: dita and html copies differ "
+                    f"({dita_audio} vs {html_audio})"
+                )
         self.assertEqual(missing, [], "\n".join(missing))
         self.assertEqual(mismatched, [], "\n".join(mismatched))
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="grams">
+  <title>Grams</title>
+  <body>
+    <p audience="-trainee" outputclass="gf-persistent" />
+    <ul outputclass="gram-index">
+      <li>
+        <xref href="gram-01/gram_01.dita" format="dita" outputclass="enterBtn" />
+      </li>
+      <li>
+        <xref href="gram-10/gram_10.dita" format="dita" outputclass="enterBtn" />
+      </li>
+      <li>
+        <xref href="gram-11/gram_11.dita" format="dita" outputclass="enterBtn" />
+      </li>
+    </ul>
+  </body>
+</topic>

@@ -1,0 +1,5 @@
+# The pipeline's CSVs are written UTF-8-with-BOM + CRLF for Excel (see
+# README.md, "Editing the CSV in Excel"). Mark the committed one binary-ish so
+# core.autocrlf on a Windows checkout cannot rewrite its line endings out from
+# under the byte-comparison in tests/test_oxygen_sample.py.
+demo/oxygen-sample/sample.csv -text

@@ -20,7 +20,10 @@ pre-rendered spectrogram), occasionally a `.wav` (~18%, raw audio
 rendered live by the on-PC GLC viewer). The generator dispatches on
 the inner asset extension: image assets are embedded inline, audio
 assets are surfaced as a link to the `.glc` (with both `.glc` and
-`.wav` copied next to the topic so the viewer can resolve the audio).
+`.wav` copied next to the topic so the viewer can resolve the audio —
+the copied `.glc` is repointed at the slugified sibling, and the topic
+names the `.wav` in an invisible `<data>` element so the publisher
+carries it into the rendered output too).
 The pipeline extracts everything into an intermediate CSV, lets the
 technical author triage warnings in Excel, then emits the deterministic
 DITA tree.
@@ -324,9 +327,10 @@ data.
 | `scripts/deduplicate_csv.py` | **Optional** post-process: redirect duplicate large (>10 MiB) assets to a single master copy via the additive `master_png_path` column (feature 006), and renumber within-week gram-number collisions via the additive `target_gram_id` column (feature 008). |
 | `scripts/rehydrate_dita.py` | **Optional** reverse step: restore a redirected lofar to a self-contained gram using only the generated DITA (feature 006). |
 | `scripts/publish_html.py` | Render the generated DITA tree to HTML5 via DITA-OT for development preview (FR-021). |
-| `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`, operator-console theme) resolved beside `publish_html.py`. |
+| `scripts/vendor/` | Publish-time assets (`gramframe.bundle.js`) resolved beside `publish_html.py`. |
 | `run_pipeline.bat` | Windows orchestrator: snapshot → extract → manual review → generate (Story 6, feature 007). |
 | `static/` | **Common pages** (`welcome.dita`, `security.dita`) and their image subfolders, copied into every publication and listed first on each ditamap, ahead of the content nav — the top-level **Week** folders for `main`, the **Grams** folder for the progress tests (feature 010). Override with `--static-root`. |
+| `demo/oxygen-sample/` | **Miniature committed publication** for Oxygen template work — `sample.csv` (the source of truth), `regenerate.py`, the committed `dita/` tree, and the committed `published/` WebHelp output the design loop edits against (`theme/sync.py`). See [The sample publication](#the-sample-publication-fast-oxygen-iteration). |
 | `tests/` | Standard-library `unittest` suite (Story 5). |
 | `tests/fixtures/` | Tiny committed fixtures (minimal CSV, minimal/malformed GLC). |
 | `specs/001-pptx-dita-migration/` | Spec, plan, research, contracts, quickstart, checklists, tasks. |
@@ -350,6 +354,12 @@ python scripts/extract_to_csv.py --input-root path/to/content --out extracted.cs
 python scripts/generate_dita.py --csv extracted.csv \
                                 --out dita/ \
                                 --image-root path/to/content
+```
+
+Rebuilding the miniature sample publication used for Oxygen template work:
+
+```bash
+python demo/oxygen-sample/regenerate.py
 ```
 
 A more detailed walkthrough lives in
@@ -453,34 +463,42 @@ ROOT\  (e.g. C:\dev\aaac)
     └── extract_to_csv.py  generate_dita.py  publish_html.py  …   ← canonical, unmodified
 ```
 
-`theme\gramframe-oxygen\` is a drop-in overlay (plugin bundle + a `<head>`
+`theme\gramframe-oxygen\` is the drop-in overlay (plugin bundle + a `<head>`
 fragment) the operator installs once into the Oxygen WebHelp template so the
 **production** publish renders interactive grams, mirroring what
 `publish_html.py` already does for the dev preview — see that folder's
-`README.md`. `theme\oxygen-hide-search\` is a second overlay that hides the
-useless search box in the **student** edition only, recognising that edition
-from the `trainee.ditaval` its scenario already passes — nothing extra to
-configure; see that folder's `README.md`.
-`theme\gram-nav-panel\` is a third overlay (one CSS file) that pins the
-floating per-gram navigation panel — the in-page stage jump links, `Lofar N`
-and `WAV N` in page order (both editions), plus the instructor-only
-Analysis Sheet link — to the lower-right
-corner; see that folder's `README.md`. `theme\gram-toc-overlay\` is a fourth
-overlay (one CSS file) that floats the WebHelp "On this page" mini-TOC as a
-compact top-right overlay on gram pages, so it stops reserving a full-height
-right-hand column and lets the gramframe use the full page width; see that
-folder's `README.md`. `theme\oxygen-dark-mode\` is a fifth overlay (one script
-plus one CSS file) that publishes every page in the template's **dark** theme
-and hides the light/dark theme picker, so the production output matches the
-dark dev preview and offers the reader no choice; see that folder's
-`README.md`. `theme\oxygen-protection\` is a sixth overlay (two placeholder
-fragments, one XSLT include and one CSS file) that puts a **protective marking
-bar at the top and bottom of every published page**, with the marking text
-supplied by a transformation-scenario parameter rather than baked into the
-template — so changing the marking is a local edit on the target instead of a
-whole new package across the air gap; see that folder's `README.md`.
-`theme\pptx-transform\` is the template itself, carrying a verbatim copy of
-every overlay's payload already wired in — point both scenarios at it.
+`README.md`.
+
+Everything below is **already wired** in `theme\pptx-transform\`, this repo's
+own copy of Oxygen's stock WebHelp Responsive *tiles* template: each overlay's
+payload sits inside the template folder and its `.opt` references it. Point the
+transformation scenario's **Templates** tab at `pptx-transform.opt` and publish.
+The per-folder install notes are for putting an overlay into a **different**
+template.
+
+| Overlay | What it does | How the template loads it |
+|---|---|---|
+| `theme\gramframe-oxygen\` | loads `gramframe.bundle.js`, upgrading each `gram-config` table into an interactive gram | `<head>` fragment at `webhelp.fragment.head.topic.page` |
+| `theme\gram-fill-width\` | makes the gram **consume the full width its column offers** instead of rendering at the spectrogram's natural size and leaving whitespace either side | `<css>` in `<resources>` |
+| `theme\gram-nav-panel\` | pins the floating per-gram nav panel — the in-page stage jump links, `Lofar N` and `WAV N` in page order (both editions), plus the instructor-only Analysis Sheet link — to the lower-right corner | `<css>` in `<resources>` |
+| `theme\gram-toc-overlay\` | floats the WebHelp "On this page" mini-TOC on gram pages so it stops reserving a full-height right-hand column | `<css>` in `<resources>` |
+| `theme\oxygen-dark-mode\` | publishes every page in the template's **dark** theme and hides the light/dark picker, so the output matches the dark dev preview and offers the reader no choice | `<head>` fragment at `webhelp.fragment.head` — every page, not just topics |
+| `theme\oxygen-hide-search\` | hides the useless search box in the **student** edition only, recognising that edition from the DITAVAL its scenario already passes | `<css>` in `<resources>`, plus a body fragment at `webhelp.fragment.after.header` and an `xslt/inc/` include on all four page-type extension points |
+| `theme\oxygen-protection\` | puts a **protective marking bar top and bottom of every page**, its text supplied by a scenario parameter rather than baked into the template — so changing the marking is a local edit on the target, not a new package across the air gap | `<css>` in `<resources>`, plus body fragments at `webhelp.fragment.before.body` / `after.body` and an `xslt/inc/` include on all four page-type extension points |
+
+Every fragment above occupies a **different** placeholder — Oxygen binds one
+fragment per placeholder, so no two can share one. The three body fragments
+each hold a single *empty* element that the XSLT includes fill in or drop
+according to the scenario; the placeholders they use are the ones that reach
+all four generated page types, which is what keeps the marking off no page.
+
+Because the template carries **copies** rather than references, every payload is
+a drift point. `tests/test_package_release.py` discovers them by filename and
+holds each byte-identical to its overlay, so an overlay edited on its own can't
+silently leave the template stale.
+
+`theme\gram-index-grid.css` is not an overlay at all but a paste-in snippet for
+the end of the template's own `oxygen.css`; see the comment at its head.
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
@@ -935,6 +953,12 @@ When a test fails on the air-gapped network:
 3. Re-run a single test for shorter feedback:
    `python -m unittest tests.test_generate_dita.GenerateDitaTests.test_glc_topic_structure`.
 
+`tests/test_oxygen_sample.py` is the odd one out: it regenerates
+`demo/oxygen-sample/dita/` into a temp directory and byte-compares it against
+the committed tree. If it fails, nothing is broken — the committed sample is
+just stale. Re-run `python demo/oxygen-sample/regenerate.py` and commit the
+result.
+
 ### Jest — rendered HTML output (spec 003)
 
 ```bash
@@ -1364,6 +1388,68 @@ This matches the `publish_html.py` dev-preview layout
 > DITA input, the DITAVAL, the temporary files, and the output — must be on a
 > **mapped drive letter**, not a raw `\\server\share` UNC path. See [Map a
 > drive — DITA-OT cannot read `\\server\share` (UNC) paths](#map-a-drive--dita-ot-cannot-read-serversh-unc-paths).
+
+## The sample publication (fast Oxygen iteration)
+
+Tuning the Oxygen Responsive WebHelp template means publishing, looking, and
+publishing again — by hand, on a technical author's machine. The full corpus is
+far too slow a loop for that, so `demo/oxygen-sample/` holds a **miniature
+publication whose generated DITA tree is committed**: nine gram pages that still
+exercise the week IA, the flat progress-test nav, the static common pages,
+lofar/WAV/analysis/demon blocks, and per-week renumbering.
+
+Open `demo/oxygen-sample/dita/main/main.ditamap` in Oxygen and publish. No
+Python step is needed first — that is the whole reason the tree is committed,
+and it is the one deliberate exception to "`dita/` is not committed".
+
+One page (`main/week-1/gram-02`) carries **two demons and five lofargrams** — a
+combination that appears nowhere in the corpus (grams top out at four lofars),
+built specifically to stretch the template.
+
+Rebuild it after editing `demo/oxygen-sample/sample.csv`:
+
+```bash
+python demo/oxygen-sample/regenerate.py
+```
+
+Then commit both the CSV and the regenerated tree; `tests/test_oxygen_sample.py`
+fails if they are out of step. The roster, the Oxygen scenario settings and the
+synthesised rows are documented in
+[`demo/oxygen-sample/README.md`](demo/oxygen-sample/README.md).
+
+### The design loop
+
+Design work happens against the **real Oxygen output**, not the DITA-OT dev
+preview. Oxygen's WebHelp chrome (`#wh_topic_toc`, `.wh_content_area`, the tiles
+welcome page) exists in no other renderer, so a rule tuned anywhere else has to
+be re-verified here anyway — and the preview carries no stylesheet of its own.
+
+`demo/oxygen-sample/published/{instructor,student}/` is a **committed Oxygen
+build** of the sample — the two `pptx-transform.xpr` scenarios publish straight
+into it — so a design change lands as a reviewable HTML diff. `theme/sync.py`
+drives the loop, and is the one command to run after anything:
+
+```bash
+# edit a stylesheet under theme/<overlay>/resources/, then
+python theme/sync.py
+# hard-refresh demo/oxygen-sample/published/instructor/index.html — no republish
+```
+
+It copies each overlay payload into the wired template
+(`theme/pptx-transform/`) and on into the published build's
+`<edition>/oxygen-webhelp/template/`, where Oxygen deploys the template's own
+files verbatim — which is what makes the last step a refresh rather than a
+rebuild. Republish from Oxygen only when the DITA changed or a `.opt` parameter
+did, then run it again: it also **normalises** the per-publish stamps a fresh
+publish leaves behind (the 14-digit `buildId` cache-buster on every asset href,
+the sitemap's `<lastmod>`), so a republish diffs as the design change alone
+rather than rewriting all thirty pages.
+
+`theme/sync.py` is dev-host tooling and never ships in the release zip.
+
+New styling hooks belong in the **DITA source** — an `outputclass` the
+generator emits — never in a preview-only post-processing step, so both
+renderers see them.
 
 ## Known limitations
 
