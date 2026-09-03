@@ -27,6 +27,17 @@
                  reachable via the week page's child links (above), the top
                  menu, and the prev/next navigation links. -->
             <parameter name="webhelp.show.publication.toc" value="no"/>
+            <!-- Stock default is "yes", which reserves a full-height right-hand
+                 column for the per-topic "On this page" mini-TOC — two to six
+                 links, on a page whose whole point is a wide spectrogram. That
+                 list is a derived, audience-blind duplicate of the
+                 <p outputclass="gram-nav"> the generator already emits (which
+                 theme/gram-nav-bar/ puts in the toolbar instead), so it is
+                 retired rather than relocated. Turning it off is also what
+                 frees the width: with neither TOC generated, Oxygen's own
+                 topicComponentsExpander.xsl (mode fix-content-width) hands
+                 #wh_topic_body the full col-12. Issue #179. -->
+            <parameter name="webhelp.show.topic.toc" value="no"/>
             <parameter name="webhelp.enable.dark.mode" value="yes"/>
             <parameter name="args.figurelink.style" value="TITLE"/>
             <parameter name="args.tablelink.style" value="TITLE"/>
@@ -102,7 +113,6 @@
             <css file="resources/hide-search.css"/>
             <css file="resources/gram-nav.css"/>
             <css file="resources/gram-fill-width.css"/>
-            <css file="resources/gram-toc-overlay.css"/>
             <css file="resources/dark-mode.css"/>
             <!-- LAST, deliberately: a protective marking must be the one thing
                  no later stylesheet can repaint. It pins its own background and
@@ -147,6 +157,15 @@
                       placeholder="webhelp.fragment.after.body"/>
             <fragment file="page-templates-fragments/search-flag.xml"
                       placeholder="webhelp.fragment.after.header"/>
+            <!-- Moves <p class="gram-nav"> into the toolbar and marks it up for
+                 resources/gram-nav.css. Deliberately the END of <body> on topic
+                 pages: the script needs the toolbar and the paragraph already
+                 parsed, and running there moves them before the first paint, so
+                 the links never flash at the foot of the article. Gram pages
+                 are the only pages that carry the paragraph, so topic-page
+                 scope loses nothing. See theme/gram-nav-bar/README.md. -->
+            <fragment file="page-templates-fragments/libraries/gram-nav.xml"
+                      placeholder="webhelp.fragment.after.body.topic.page"/>
         </html-fragments>
         <online-preview-url>https://www.oxygenxml.com/samples/DITA-WebHelp-Responsive/tiles/oxygen/</online-preview-url>
         <tags>

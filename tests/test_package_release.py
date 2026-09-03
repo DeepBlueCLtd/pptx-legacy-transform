@@ -78,6 +78,15 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn(
             "theme/oxygen-hide-search/page-templates-fragments/search-flag.xml",
             names)
+        # The gram navigation bar is three files, not one: the stylesheet is
+        # inert without the script that moves the links into the toolbar and
+        # stamps the classes it keys off, and the script never loads without
+        # the fragment (issue #179).
+        self.assertIn("theme/gram-nav-bar/resources/gram-nav.css", names)
+        self.assertIn("theme/gram-nav-bar/resources/gram-nav.js", names)
+        self.assertIn(
+            "theme/gram-nav-bar/page-templates-fragments/libraries/gram-nav.xml",
+            names)
         self.assertIn("stock.wav", names)
         self.assertIn("requirements.txt", names)
         self.assertIn("README.md", names)
@@ -179,7 +188,8 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertGreaterEqual(
             checked, 5,
             "expected to check at least the GramFrame bundle, hide-search, "
-            f"gram-nav, gram-toc-overlay and dark-mode payloads; checked {checked}")
+            f"gram-nav (css + js + fragment) and dark-mode payloads; "
+            f"checked {checked}")
 
     def test_publishing_template_wires_the_overlays(self):
         # pptx-transform is the template the operator actually publishes with,
@@ -198,12 +208,20 @@ class PackageReleaseTests(unittest.TestCase):
                   for p in webhelp.findall("parameters/parameter")}
         self.assertEqual(params.get("webhelp.show.child.links"), "yes")
 
+        # Stock default is "yes". Leaving it on reserves a full-height right-
+        # hand column for a mini-TOC that duplicates the gram-nav links, and —
+        # because Oxygen only widens #wh_topic_body to col-12 when NEITHER TOC
+        # is generated — is what keeps the gramframe off the full page width
+        # (issue #179). Both TOCs must be off for that to happen.
+        self.assertEqual(params.get("webhelp.show.topic.toc"), "no")
+        self.assertEqual(params.get("webhelp.show.publication.toc"), "no")
+
         # Every overlay stylesheet must load AFTER all three stock ones, or the
         # stock rules win and the overlay silently does nothing.
         css = [c.get("file") for c in webhelp.findall("resources/css")]
         stock = ["oxygen-theme.css", "oxygen.css", "notes.css"]
         overlays = ["resources/hide-search.css", "resources/gram-nav.css",
-                    "resources/gram-toc-overlay.css", "resources/dark-mode.css",
+                    "resources/gram-fill-width.css", "resources/dark-mode.css",
                     "resources/protection.css"]
         for name in stock + overlays:
             self.assertIn(name, css)
@@ -240,6 +258,12 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertEqual(
             fragments.get("page-templates-fragments/search-flag.xml"),
             "webhelp.fragment.after.header")
+        # gram-nav rides the END of <body> on topic pages: the script needs the
+        # toolbar and the gram-nav paragraph already parsed, and running there
+        # moves them before the first paint (issue #179).
+        self.assertEqual(
+            fragments.get("page-templates-fragments/libraries/gram-nav.xml"),
+            "webhelp.fragment.after.body.topic.page")
         self.assertEqual(len(fragments), len(webhelp.findall("html-fragments/fragment")),
                          "two fragments share a file entry")
         self.assertEqual(
