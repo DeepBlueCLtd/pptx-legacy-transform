@@ -483,10 +483,14 @@ template.
 | `theme\gram-nav-panel\` | pins the floating per-gram nav panel — the in-page stage jump links, `Lofar N` and `WAV N` in page order (both editions), plus the instructor-only Analysis Sheet link — to the lower-right corner | `<css>` in `<resources>` |
 | `theme\gram-toc-overlay\` | floats the WebHelp "On this page" mini-TOC on gram pages so it stops reserving a full-height right-hand column | `<css>` in `<resources>` |
 | `theme\oxygen-dark-mode\` | publishes every page in the template's **dark** theme and hides the light/dark picker, so the output matches the dark dev preview and offers the reader no choice | `<head>` fragment at `webhelp.fragment.head` — every page, not just topics |
-| `theme\oxygen-hide-search\` | hides the useless search box in the **student** edition only | `<css>` in `<resources>` |
+| `theme\oxygen-hide-search\` | hides the useless search box in the **student** edition only, recognising that edition from the DITAVAL its scenario already passes | `<css>` in `<resources>`, plus a body fragment at `webhelp.fragment.after.header` and an `xslt/inc/` include on all four page-type extension points |
+| `theme\oxygen-protection\` | puts a **protective marking bar top and bottom of every page**, its text supplied by a scenario parameter rather than baked into the template — so changing the marking is a local edit on the target, not a new package across the air gap | `<css>` in `<resources>`, plus body fragments at `webhelp.fragment.before.body` / `after.body` and an `xslt/inc/` include on all four page-type extension points |
 
-The two `<head>` fragments deliberately occupy **different** placeholders —
-Oxygen binds one fragment per placeholder, so they cannot share one.
+Every fragment above occupies a **different** placeholder — Oxygen binds one
+fragment per placeholder, so no two can share one. The three body fragments
+each hold a single *empty* element that the XSLT includes fill in or drop
+according to the scenario; the placeholders they use are the ones that reach
+all four generated page types, which is what keeps the marking off no page.
 
 Because the template carries **copies** rather than references, every payload is
 a drift point. `tests/test_package_release.py` discovers them by filename and
@@ -495,7 +499,6 @@ silently leave the template stale.
 
 `theme\gram-index-grid.css` is not an overlay at all but a paste-in snippet for
 the end of the template's own `oxygen.css`; see the comment at its head.
-
 Unlike `scripts\vendor\` (dev/CI-only), `theme\` ships in the release zip.
 
 This is the repository's own layout too — clone-for-clone, minus `pylib\`
@@ -1246,25 +1249,55 @@ never overwrites a previous publication's output.
    Leave `args.filter` (on the **Parameters** tab) blank — the instructor
    edition includes all content with no audience filtering.
 
-3. On the **Templates** tab, select the custom publishing template (the
-   Fi3ldMan-derived one that carries the GramFrame overlay and any other theme
-   overlays from `theme/`). See `theme/gramframe-oxygen/README.md`. Both
-   editions publish **dark, with no theme picker** once that template carries
-   `theme/oxygen-dark-mode/` — see that folder's `README.md` for the two
-   `.opt` entries it needs.
+3. On the **Templates** tab, select `theme\pptx-transform\pptx-transform.opt` —
+   the project's own publishing template, which carries every overlay from
+   `theme/` already wired in (GramFrame, dark mode, gram nav, protective
+   marking, search visibility). Both editions publish **dark, with no theme
+   picker**.
+
+4. Leave the **Parameters** tab otherwise alone. In particular:
+
+   - **Do not** add a scenario-level `webhelp.logo.image` override. It is
+     declared in the template relative to the template folder; overriding it
+     in the scenario reintroduces a machine-local absolute path into every
+     published page. (Fi3ldMan calls this "the most common way to break an
+     otherwise correct setup".)
+   - There is **no** search-visibility parameter to set. The template works
+     that out from `args.filter`, so a scenario rebuilt from scratch behaves
+     correctly with no extra step.
+
+##### Changing the protective marking
+
+Every published page carries a marking bar top and bottom, reading
+**COMMERCIALLY SENSITIVE**. It is the *same on both editions* — it describes
+the material, not the audience.
+
+To publish at a different marking, change it **on the scenario, on this
+machine** — not in the template:
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `webhelp.protection.text` | `COMMERCIALLY SENSITIVE` | The marking |
+| `webhelp.show.protection` | `yes` | Only the literal `yes` shows the bars |
+| `webhelp.protection.background.color` | *(empty)* | Empty = the fixed colour in the template; set a CSS colour to override for this export |
+
+Set the same values on **both** scenarios. This is deliberately a scenario
+parameter and not template markup: editing the template means transferring a
+whole new package across the one-way gateway, whereas a scenario parameter is a
+local edit here. See `theme/oxygen-protection/README.md`.
 
 #### Create the student scenario
 
-4. Duplicate the **same built-in** scenario again. Name the copy **AAAC Student**.
+5. Duplicate the **same built-in** scenario again. Name the copy **AAAC Student**.
 
-5. In the **Output** tab, set:
+6. In the **Output** tab, set:
 
    | Field | Value |
    |---|---|
    | Output directory | `Z:\html\student\${cfn}` |
    | Temporary files directory | `Z:\dita-temp\student-${cfn}` |
 
-6. On the **Parameters** tab, add or edit:
+7. On the **Parameters** tab, add or edit:
 
    | Parameter | Value |
    |---|---|
@@ -1274,9 +1307,20 @@ never overwrites a previous publication's output.
    `generate_dita.py` writes at the root of its `--out` folder (i.e., one level
    above the per-publication subfolders).
 
-7. On the **Templates** tab, select the **same** custom template as the
-   instructor scenario — there is no need for a separate student template
-   (see `theme/oxygen-hide-search/README.md`).
+   This is the **only** difference between the two scenarios. The template reads
+   `args.filter` to recognise the student edition, and hides the search box
+   accordingly — the trainee filter strips the searchable text, leaving grams
+   that are images with no body text, so the box would only ever return "no
+   results". There is deliberately no second parameter to remember: if you ever
+   rebuild this scenario from the stock built-in, getting `args.filter` right is
+   enough, and getting it *wrong* is obvious the moment you look at the output.
+
+   If you change the protective marking (see the instructor scenario above), set
+   the same values here too: the marking must be identical on both editions.
+
+8. On the **Templates** tab, select the **same**
+   `theme\pptx-transform\pptx-transform.opt` as the instructor scenario — there
+   is no separate student template (see `theme/oxygen-hide-search/README.md`).
 
 #### Publishing each ditamap
 
@@ -1291,6 +1335,37 @@ For every ditamap in the `dita\` tree:
 The `${cfn}` variable expands to the ditamap stem (`main`,
 `progress-test-1`, …), so each publication's HTML lands in its own named
 subfolder and later runs on a different ditamap do not overwrite it.
+
+#### Checking a publish
+
+Some of the template's behaviour exists only in Oxygen's output and cannot be
+seen from the dev preview or the test suite, so check it after a scenario
+change. From the edition's output folder:
+
+```bash
+# Protective marking: expect a hit on EVERY page, in BOTH editions.
+grep -rLc wh_header_protection --include=*.html .   # lists any UNMARKED page
+grep -rLc wh_footer_protection --include=*.html .
+
+# Search box: instructor keeps it everywhere, student has it nowhere.
+for page in index.html search.html welcome.html; do
+  printf "%-14s hidden=%s shown=%s searchForm=%s\n" "$page" \
+    "$(grep -c wh-search-hidden $page)" "$(grep -c wh-search-shown $page)" \
+    "$(grep -c searchForm $page)"
+done
+```
+
+Expected: no page listed by the two `grep -rL` calls; every instructor page
+`hidden=0 shown=1` and every student page `hidden=1 shown=0`.
+
+`index.html` (built from the ditamap) and `search.html` (generated by Oxygen)
+are the two worth checking by eye — they carry no content of their own, so they
+are where a customization that keys off page *content* silently fails.
+
+If a page shows **`hidden=0 shown=0`**, the marker fragment never reached it at
+all: that is a wiring problem in the `.opt`'s `<html-fragments>`, not a wrong
+edition decision. The two are indistinguishable without the `shown` marker,
+which is why it is emitted despite having no styling attached.
 
 #### Resulting folder layout
 

@@ -3,9 +3,10 @@
     <name>pptx-transform</name>
     <description>Oxygen WebHelp Responsive "tiles" template with the AAAC gram
         pipeline overlays: GramFrame turns each spectrogram table into an
-        interactive viewer, and one edition-aware stylesheet hides the search
-        box in the student build. Point BOTH the instructor and the trainee-
-        filtered scenario at this single template.</description>
+        interactive viewer, and every page carries a protective marking bar top
+        and bottom. Point BOTH the instructor and the trainee-filtered scenario
+        at this single template; the only difference between them is the
+        args.filter DITAVAL, from which the template works out the rest.</description>
     <webhelp>
         <preview-image file="oxygen-tiles.png"/>
         <parameters>
@@ -30,7 +31,63 @@
             <parameter name="args.figurelink.style" value="TITLE"/>
             <parameter name="args.tablelink.style" value="TITLE"/>
             <parameter name="force-unique" value="true"/>
+
+            <!-- ===== Protective marking (issue #175) =====================
+                 Consumed by xslt/inc/customProtection.xsl, which fills the two
+                 empty bars declared in page-templates-fragments/protection-*.xml.
+
+                 These are the ONLY settings here that a scenario is expected to
+                 override, and that is the whole point of them: the delivered
+                 target sits behind a one-way air-gap gateway, where editing the
+                 template (CSS, XSLT, page layouts, this file) costs a full
+                 re-transfer, while a scenario parameter is a local edit on the
+                 target. So the marking - the one thing that plausibly differs
+                 per export - is a parameter, not literal markup.
+
+                 The marking is the SAME text and colour in both editions;
+                 there is no per-edition variation to configure.
+
+                 Leave background.color empty to take the single fixed colour
+                 pinned in resources/protection.css (identical in light and dark
+                 mode). Set it only for an export that needs a different one. -->
+            <parameter name="webhelp.show.protection" value="yes"/>
+            <parameter name="webhelp.protection.text" value="COMMERCIALLY SENSITIVE"/>
+            <parameter name="webhelp.protection.background.color" value=""/>
+
+            <!-- ===== Search box, per edition (issue #178) ================
+                 There is deliberately NO parameter here. Search visibility is
+                 derived by xslt/inc/customSearchFlag.xsl from `args.filter`,
+                 by opening the DITAVAL and asking whether it excludes the
+                 instructor audience. The student edition is by definition the
+                 filtered pass, so the setting that MAKES it the student edition
+                 is also what identifies it. Nothing extra to set, and nothing
+                 to forget when the scenarios are rebuilt from scratch.
+
+                 A dedicated webhelp.show.search parameter was tried and
+                 rejected: forgetting it would silently give the student a dead
+                 search box, whereas forgetting args.filter is impossible to
+                 miss - the student build comes out full of instructor content.
+
+                 (Contrast the marking parameters above, which are MEANT to be
+                 set per export and ship with a working default, so forgetting
+                 them changes nothing.) -->
         </parameters>
+
+        <!-- All four page-type extension points import the same two includes,
+             because both customizations must reach every page: a page Oxygen
+             builds from the ditamap (index.html) or generates outright
+             (search.html) is exactly where issue #178's content-inferred rule
+             failed. The four stylesheets are identical apart from a comment. -->
+        <xslt>
+            <extension file="xslt/customMainPage.xsl"
+                       id="com.oxygenxml.webhelp.xsl.createMainPage"/>
+            <extension file="xslt/customTopicPage.xsl"
+                       id="com.oxygenxml.webhelp.xsl.dita2webhelp"/>
+            <extension file="xslt/customSearchPage.xsl"
+                       id="com.oxygenxml.webhelp.xsl.createSearchPage"/>
+            <extension file="xslt/customIndexTermsPage.xsl"
+                       id="com.oxygenxml.webhelp.xsl.createIndexTermsPage"/>
+        </xslt>
         <resources>
             <!-- Stock, in Oxygen's own order: oxygen-theme.css defines the wh-*
                  custom properties oxygen.css reads, so it must come first.
@@ -47,6 +104,11 @@
             <css file="resources/gram-fill-width.css"/>
             <css file="resources/gram-toc-overlay.css"/>
             <css file="resources/dark-mode.css"/>
+            <!-- LAST, deliberately: a protective marking must be the one thing
+                 no later stylesheet can repaint. It pins its own background and
+                 text colour to literals, so it looks the same in light and dark
+                 mode. -->
+            <css file="resources/protection.css"/>
             <fileset>
                 <include name="resources/**/*"/>
                 <exclude name="resources/**/*.svn"/>
@@ -70,6 +132,21 @@
                  See theme/oxygen-dark-mode/README.md. -->
             <fragment file="page-templates-fragments/libraries/dark-mode.xml"
                       placeholder="webhelp.fragment.head"/>
+            <!-- The three body-level placeholders below carry no markup of
+                 their own: each holds ONE empty element that the XSLT
+                 extensions above fill in or drop, according to the scenario
+                 parameters. All three placeholders are included on all four
+                 generated page types (main/tiles, topic, search results, index
+                 terms), which is what makes the marking unmissable and what
+                 fixes issue #178's blind spot on the non-topic pages.
+                 Oxygen binds one fragment per placeholder, so each needs its
+                 own. -->
+            <fragment file="page-templates-fragments/protection-header.xml"
+                      placeholder="webhelp.fragment.before.body"/>
+            <fragment file="page-templates-fragments/protection-footer.xml"
+                      placeholder="webhelp.fragment.after.body"/>
+            <fragment file="page-templates-fragments/search-flag.xml"
+                      placeholder="webhelp.fragment.after.header"/>
         </html-fragments>
         <online-preview-url>https://www.oxygenxml.com/samples/DITA-WebHelp-Responsive/tiles/oxygen/</online-preview-url>
         <tags>

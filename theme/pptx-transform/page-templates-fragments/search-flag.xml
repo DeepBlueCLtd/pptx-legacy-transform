@@ -1,0 +1,23 @@
+<!-- <html>/<body> are ignored - only <body>'s children are copied into the page. -->
+<!--
+    Search-box visibility flag placeholder (issue #178).
+
+    Bind this file to the "webhelp.fragment.after.header" placeholder, which is
+    included on ALL four generated page types (main/tiles, topic, search
+    results, index terms) - including the two that are not built from a topic
+    and so carry no edition marker of their own.
+
+    The element below is deliberately EMPTY: xslt/inc/customSearchFlag.xsl
+    matches it in `copy_template` mode and either replaces it with the hidden
+    `.wh-search-hidden` marker that resources/hide-search.css keys off, or drops
+    it entirely, according to the webhelp.show.search scenario parameter.
+
+    The <html>/<body> wrapper is not decoration: Oxygen's includeCustomHTMLContent
+    copies only <body>'s children when it finds that wrapper, and copies the WHOLE
+    document - these comments included - when it does not.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <body>
+        <div class="wh_search_visibility"/>
+    </body>
+</html>
