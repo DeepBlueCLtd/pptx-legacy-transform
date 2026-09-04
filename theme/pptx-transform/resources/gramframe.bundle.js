@@ -8,7 +8,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   document.head.appendChild(style);
 
   "use strict";
-  const VERSION = "0.1.17";
+  const VERSION = "0.1.18";
   function getVersion() {
     return VERSION;
   }
@@ -3261,6 +3261,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     container.appendChild(area);
     let currentRows = [];
     let renderedKeys = /* @__PURE__ */ new Set();
+    let renderedSelectedKey = null;
     function setCellContent(cell, content) {
       if (content instanceof Node) {
         cell.replaceChildren(content);
@@ -3328,7 +3329,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         existing[i].remove();
       }
     }
-    function revealRow(index) {
+    function revealRow(index, allowUpward = false) {
       const tr = (
         /** @type {HTMLElement|undefined} */
         tbody.children[index]
@@ -3337,6 +3338,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const bottom = tr.offsetTop + tr.offsetHeight - wrapper.clientHeight;
       if (bottom > wrapper.scrollTop) {
         wrapper.scrollTop = bottom;
+        return;
+      }
+      if (!allowUpward) return;
+      const headerCell = (
+        /** @type {HTMLElement|null} */
+        headerRow.firstElementChild
+      );
+      const top = tr.offsetTop - (headerCell ? headerCell.offsetHeight : 0);
+      if (top < wrapper.scrollTop) {
+        wrapper.scrollTop = Math.max(0, top);
       }
     }
     const rowActions = [];
@@ -3377,7 +3388,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       element: table,
       /**
        * Diff `rows` against what is rendered, apply the difference, and keep any
-       * newly added row in view.
+       * newly added or newly selected row in view.
        *
        * Idempotent: calling it twice with equal input performs no DOM writes and
        * no scrolling.
@@ -3396,7 +3407,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         if (renderedKeys.size > 0 && lastAdded !== -1) {
           revealRow(lastAdded);
         }
+        const isSelected = spec.isSelected;
+        const selectedIndex = isSelected ? keys.findIndex((key) => isSelected(key)) : -1;
+        const selectedKey = selectedIndex === -1 ? null : keys[selectedIndex];
+        if (renderedKeys.size > 0 && selectedKey !== null && selectedKey !== renderedSelectedKey) {
+          revealRow(selectedIndex, true);
+        }
         renderedKeys = new Set(keys);
+        renderedSelectedKey = selectedKey;
       },
       /**
        * Remove the table and its listener.

@@ -46,6 +46,17 @@ jobs:
           pip install -r requirements.txt
           python -m unittest discover tests/
 
+      # The GramFrame bundle rides to the air-gapped target inside this zip,
+      # where nobody can update it without another media hop — so a release
+      # must not carry a pin that is already behind (issue #181). A stale pin
+      # fails the release; the step never updates anything itself, because the
+      # bump has to be a reviewed, tested commit (see the script header and
+      # theme/gramframe-oxygen/README.md). An unreachable API passes.
+      - name: Refuse to ship a stale GramFrame
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/update_gramframe.py --check
+
       - name: Build the deliverable zip
         run: |
           tag="v$(date -u +%Y.%m.%d)-${GITHUB_RUN_NUMBER}"
