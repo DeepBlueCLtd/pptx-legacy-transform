@@ -96,10 +96,31 @@ The section below is for installing this overlay into a **different**
 ## Keep the bundle in sync
 
 The bundle here is a copy of `scripts/vendor/gramframe/gramframe.bundle.js`
-(see `resources/VERSION` — currently **v0.1.17**). They must stay byte-identical
+(see `resources/VERSION` — currently **v0.1.18**). They must stay byte-identical
 so the Oxygen production output and the `publish_html.py` dev preview render
-grams the same way; `tests/test_package_release.py` enforces this. When you bump
-GramFrame, update **both** copies and the `VERSION` files together.
+grams the same way; `tests/test_package_release.py` enforces this.
+
+## Bumping GramFrame
+
+One command writes both copies and both `VERSION` files from the newest formal
+release at <https://github.com/DeepBlueCLtd/GramFrame/releases>:
+
+```bash
+python .github/scripts/update_gramframe.py    # fetch + install both copies
+python theme/sync.py                          # -> template, committed builds
+python -m unittest discover tests/            # z-index + drift guards
+```
+
+Then commit, and re-check a gram page in a browser (step 3 above) — the bundle
+is the renderer, so a version bump is a visual change, not just a file swap.
+
+The bundle stays **committed and pinned**; the release zip is never built from
+a live download. Two reasons, both in the script's header: the deliverable has
+to be byte-identical when rebuilt (`tests/test_package_release.py` checks), and
+the bundle that reaches an air-gapped box should be one the suite here has
+actually run against. `--check` is the standing guard — it reports a stale pin
+without changing anything, and the *Package release* workflow runs it so a
+release cannot quietly ship a GramFrame two versions behind (issue #181).
 
 ## How it ships to the air-gapped target
 
