@@ -1,0 +1,42 @@
+<!-- <html>/<body> are ignored - only <body>'s children are copied into the page. -->
+<!--
+    In-header search box loader for the Oxygen WebHelp Responsive template.
+
+    Loading search-in-header.js moves the stock full-width search band up into
+    the header's flex container and stamps `wh_header_search` on <header>, which
+    is what resources/search-in-header.css styles.
+
+    Bind this fragment to "webhelp.fragment.after.search.input". Three reasons:
+
+      - it sits INSIDE the search band itself, and the header markup precedes
+        the band in every page template, so both elements the script needs are
+        already parsed when it runs. Hence no defer/async: the move happens
+        before the first paint, with no flash of the tall band.
+
+      - it is included on every page type that HAS a search box - the topic
+        page, the tiles landing page and the search-results page. (The
+        index-terms page has none, and the script no-ops there anyway.)
+
+      - it is free. Oxygen binds ONE fragment per placeholder, and this
+        template has already spent webhelp.fragment.head (dark-mode),
+        webhelp.fragment.head.topic.page (GramFrame), webhelp.fragment.
+        before.body and .after.body (protection), webhelp.fragment.after.header
+        (search flag) and webhelp.fragment.after.body.topic.page (gram-nav).
+        Note that webhelp.fragment.header and .footer are NOT free either: they
+        are how Oxygen pulls in header.xml and footer.xml.
+
+    The script ships beside this fragment under resources/search-in-header.js;
+    Oxygen's custom-resources fileset copies resources/** into the output at
+    ${oxygen-webhelp-assets-dir}/template/resources/, so the src below mirrors
+    the path convention the template's other custom scripts already use.
+
+    The <html>/<body> wrapper is not decoration: Oxygen's includeCustomHTMLContent
+    copies only <body>'s children when it finds that wrapper, and copies the WHOLE
+    document - these comments included - when it does not.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <body>
+        <script
+            src="${oxygen-webhelp-assets-dir}/template/resources/search-in-header.js?buildId=${oxygen-webhelp-build-number}"></script>
+    </body>
+</html>

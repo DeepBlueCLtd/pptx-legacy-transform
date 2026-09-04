@@ -5,7 +5,7 @@ Dev-host-only (the packager skips ``theme/*.py``), and stdlib-only like the
 rest of the suite.
 
 The design surface is the *real* Oxygen output, not the DITA-OT dev preview:
-Oxygen's WebHelp Responsive chrome (``#wh_topic_toc``, ``.wh_content_area``,
+Oxygen's WebHelp Responsive chrome (``.wh_tools``, ``.wh_content_area``,
 the tiles welcome page) exists in no other renderer, so a rule tuned anywhere
 else has to be re-verified here anyway.
 
@@ -16,8 +16,9 @@ It does three things, each idempotent:
    template ``theme/pptx-transform/`` — the copies
    ``tests/test_package_release.py`` byte-compares.
 2. Copies those on into the ``oxygen-webhelp/template/`` folder of each
-   published build, so a CSS or JS edit is live in the browser on a hard
-   refresh with **no republish**: Oxygen deploys these files verbatim.
+   published build — one per publication, at ``published/<edition>/<pub>/`` —
+   so a CSS or JS edit is live in the browser on a hard refresh with **no
+   republish**: Oxygen deploys these files verbatim.
 3. Normalises the per-publish stamps a fresh Oxygen publish leaves in
    ``demo/oxygen-sample/published/`` (see ``_normalise``).  That tree is
    committed, and without this every republish would rewrite every page and
@@ -45,6 +46,12 @@ DEPLOYED_TEMPLATE = "oxygen-webhelp/template"
 # Files that describe an overlay rather than being part of its payload.
 NOT_PAYLOAD = {"README.md"}
 
+# Not overlays, though they sit alongside them. __pycache__ is the one that
+# bites: importing this module (rather than running it) leaves a directory
+# here that otherwise reads as an overlay whose "payload" is a .pyc, and the
+# template dutifully receives a copy.
+NOT_OVERLAY = {"__pycache__"}
+
 # Oxygen stamps each publish with a 14-digit timestamp (cache-buster on every
 # asset href) and a generation date in the sitemap. Neither says anything about
 # the design, and both would churn all ~30 pages on every republish, so the
@@ -61,6 +68,8 @@ def overlay_payloads():
     """Yield (source, path relative to an overlay root) for every payload file."""
     for overlay in sorted(THEME_ROOT.glob("*")):
         if not overlay.is_dir() or overlay == TEMPLATE:
+            continue
+        if overlay.name in NOT_OVERLAY:
             continue
         for src in sorted(overlay.rglob("*")):
             if src.is_file() and src.name not in NOT_PAYLOAD:
@@ -87,13 +96,26 @@ def sync_template() -> int:
 
 
 def published_builds():
-    """Every published edition that carries a deployed copy of the template."""
+    """Every published build — any folder holding a deployed template copy.
+
+    Oxygen writes one build per publication, and each scenario's output folder
+    ends in ``${cfn}`` (the ditamap's own name), so the builds sit at
+    ``published/<edition>/<publication>/``.  Older trees put a single build
+    straight at ``published/<edition>/``.
+
+    Search at any depth rather than assuming either shape: a build root is
+    simply a folder with an ``oxygen-webhelp/template`` inside it.  Looking
+    only one level down used to mean that clearing an edition's root build
+    left this matching nothing at all — and then sync.py reported "everything
+    already in sync" while deploying nothing and normalising nothing.
+    """
     if not PUBLISHED.is_dir():
         return []
-    return [
-        edition for edition in sorted(PUBLISHED.iterdir())
-        if (edition / DEPLOYED_TEMPLATE).is_dir()
-    ]
+    return sorted({
+        deployed.parent.parent
+        for deployed in PUBLISHED.glob("**/" + DEPLOYED_TEMPLATE)
+        if deployed.is_dir()
+    })
 
 
 def sync_builds() -> int:
@@ -105,8 +127,9 @@ def sync_builds() -> int:
     write turns the committed build into a fiction.
     """
     written = 0
-    for edition in published_builds():
-        deployed = edition / DEPLOYED_TEMPLATE
+    for build in published_builds():
+        deployed = build / DEPLOYED_TEMPLATE
+        label = build.relative_to(PUBLISHED).as_posix()
         for src in sorted(TEMPLATE.rglob("*")):
             if not src.is_file():
                 continue
@@ -114,7 +137,7 @@ def sync_builds() -> int:
             if not dest.is_file():
                 continue
             if _copy(src, dest):
-                print(f"  {edition.name}  {src.relative_to(TEMPLATE).as_posix()}")
+                print(f"  {label}  {src.relative_to(TEMPLATE).as_posix()}")
                 written += 1
     return written
 
@@ -143,13 +166,19 @@ def _normalise(path: Path) -> bool:
 
 
 def normalise_builds() -> int:
-    """Strip the per-publish stamps from every committed build. Idempotent."""
-    changed = 0
-    for edition in published_builds():
-        for path in sorted(edition.rglob("*")):
-            if path.is_file() and _normalise(path):
-                changed += 1
-    return changed
+    """Strip the per-publish stamps from every committed build. Idempotent.
+
+    Collect the files first: an older root-level build and the per-publication
+    builds beneath it are both build roots, so walking each in turn would visit
+    the nested ones twice and double-count them.
+    """
+    files = {
+        path
+        for build in published_builds()
+        for path in build.rglob("*")
+        if path.is_file()
+    }
+    return sum(1 for path in sorted(files) if _normalise(path))
 
 
 def main(argv=None) -> int:

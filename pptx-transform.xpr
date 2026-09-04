@@ -10,12 +10,12 @@
                         <scenarioAssociation-array>
                             <scenarioAssociation>
                                 <field name="url">
-                                    <String>demo/oxygen-sample/dita/main/main.ditamap</String>
+                                    <String>dita/main/main.ditamap</String>
                                 </field>
                                 <field name="scenarioIds">
                                     <list>
-                                        <String>pptx transform - 2026 - student</String>
                                         <String>pptx transform - 2026 - instructor</String>
+                                        <String>pptx transform - 2026 - student</String>
                                     </list>
                                 </field>
                                 <field name="scenarioTypes">
@@ -56,12 +56,12 @@
                             </scenarioAssociation>
                             <scenarioAssociation>
                                 <field name="url">
-                                    <String>dita/main/main.ditamap</String>
+                                    <String>demo/oxygen-sample/dita/main/main.ditamap</String>
                                 </field>
                                 <field name="scenarioIds">
                                     <list>
-                                        <String>pptx transform - 2026 - instructor</String>
                                         <String>pptx transform - 2026 - student</String>
+                                        <String>pptx transform - 2026 - instructor</String>
                                     </list>
                                 </field>
                                 <field name="scenarioTypes">
@@ -116,7 +116,7 @@
                                     <String>${cfd}</String>
                                 </field>
                                 <field name="outputDir">
-                                    <String>${pd}/demo/oxygen-sample/published/instructor</String>
+                                    <String>${pd}/demo/oxygen-sample/published/instructor/${cfn}</String>
                                 </field>
                                 <field name="tempDir">
                                     <String>${pd}/temp/instructor</String>
@@ -392,7 +392,7 @@
                                     <String>${cfd}</String>
                                 </field>
                                 <field name="outputDir">
-                                    <String>${pd}/demo/oxygen-sample/published/student</String>
+                                    <String>${pd}/demo/oxygen-sample/published/student/${cfn}</String>
                                 </field>
                                 <field name="tempDir">
                                     <String>${pd}/temp/student</String>

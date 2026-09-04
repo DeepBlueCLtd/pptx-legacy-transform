@@ -6,8 +6,8 @@ prefers. The AAAC publications are read as **dark** — a spectrogram reads
 better on a dark page — so the production Oxygen publish should ship dark
 and offer no choice.
 
-This overlay does both. Like `../oxygen-hide-search/`, `../gram-nav-panel/`
-and `../gram-toc-overlay/`, it is **not** a complete theme — it is two small
+This overlay does both. Like `../oxygen-hide-search/` and `../gram-nav-bar/`,
+it is **not** a complete theme — it is two small
 files (plus the wiring) you add to your own Oxygen WebHelp Responsive
 template (the Fi3ldMan-derived one that already hosts the GramFrame overlay).
 
@@ -83,8 +83,8 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
 
    ```xml
    <resources>
-     <!-- …existing entries (GramFrame bundle, hide-search.css, gram-nav.css,
-          gram-toc-overlay.css, …)… -->
+     <!-- …existing entries (GramFrame bundle, hide-search.css,
+          gram-nav.css, …)… -->
      <css file="resources/dark-mode.css"/>
    </resources>
    ```
@@ -132,14 +132,13 @@ The folder names mirror the Fi3ldMan template so the files drop straight in.
 
 ## Keeping the other overlays in step
 
-`../gram-nav-panel/` was already dark-styled, so it needs nothing.
-`../gram-toc-overlay/` floats the "On this page" mini-TOC on a light panel; it
-now carries a `:root[data-wh-theme="dark"]` block that darkens that panel, so
-the TOC links stay readable here. If you restyle either panel, restyle both.
-`../gram-fill-width/` sets no colours at all — it only sizes the gram — so it
-is theme-agnostic and needs nothing.
-
-
+`../gram-nav-bar/` is already dark-styled — its link chips use literal dark
+palette colours rather than the template's custom properties — so it needs
+nothing. `../gram-fill-width/` sets no colours at all — it only sizes the gram
+— so it is theme-agnostic and needs nothing either. Oxygen's own "On this page"
+mini-TOC used to need a dark repaint; the template now publishes with
+`webhelp.show.topic.toc=no` and never emits it (issue #179), so that concern
+is gone.
 
 ## How it ships to the air-gapped target
 

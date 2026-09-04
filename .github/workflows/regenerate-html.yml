@@ -1,4 +1,4 @@
-name: Regenerate html/ and publish to gh-pages
+name: Regenerate html/ and publish it and the Oxygen builds to gh-pages
 
 on:
   push:
@@ -13,6 +13,14 @@ on:
       - 'scripts/vendor/**'
       - 'requirements.txt'
       - '.github/workflows/regenerate-html.yml'
+      # The committed Oxygen builds are copied to gh-pages verbatim (see the
+      # "Sync the Oxygen builds" step). Nothing here rebuilds them - the
+      # WebHelp CLI needs a licence this project does not have - so a change
+      # under published/ means someone republished from Oxygen by hand and
+      # the site should pick that up. It does re-run the DITA-OT build above
+      # for a publish-only change, which is wasted work but keeps one writer
+      # to gh-pages instead of two racing for the same branch.
+      - 'demo/oxygen-sample/published/**'
   workflow_dispatch:
 
 concurrency:
@@ -127,12 +135,37 @@ jobs:
           mkdir -p gh-pages-checkout/html
           cp -R main-checkout/html/. gh-pages-checkout/html/
 
-      - name: Ensure link on gh-pages index
+      # A straight copy of the committed builds, not a build: Oxygen is the
+      # production renderer and its WebHelp CLI is licensed, so these trees are
+      # produced by hand and committed. published/index.html comes across with
+      # them and is the entry point over all four editions.
+      - name: Sync the Oxygen builds into gh-pages
+        run: |
+          set -euo pipefail
+          rm -rf gh-pages-checkout/oxygen
+          mkdir -p gh-pages-checkout/oxygen
+          cp -R main-checkout/demo/oxygen-sample/published/. gh-pages-checkout/oxygen/
+          # Pages is case-sensitive where Windows is not, and these trees are
+          # published from a Windows host. A missing entry point is the one
+          # breakage worth failing the run for.
+          for page in oxygen/index.html \
+                      oxygen/instructor/main/index.html \
+                      oxygen/student/main/index.html; do
+            test -f "gh-pages-checkout/${page}" || {
+              echo "expected ${page} in the copied Oxygen tree" >&2
+              exit 1
+            }
+          done
+
+      - name: Ensure links on gh-pages index
         run: |
           set -euo pipefail
           cd gh-pages-checkout
           if ! grep -q 'href="html/"' index.html; then
             sed -i 's|  </ul>|    <li><a href="html/">Published HTML output</a> \&mdash; generated HTML view of the DITA pipeline output.</li>\n  </ul>|' index.html
+          fi
+          if ! grep -q 'href="oxygen/"' index.html; then
+            sed -i 's|  </ul>|    <li><a href="oxygen/">Oxygen WebHelp publications</a> \&mdash; instructor and student editions of each publication, from the production renderer.</li>\n  </ul>|' index.html
           fi
 
       - name: Commit and push
@@ -146,7 +179,7 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          git commit -m "Regenerate html/ from ${GITHUB_SHA::7}"
+          git commit -m "Sync html/ and oxygen/ from ${GITHUB_SHA::7}"
           for attempt in 1 2 3 4; do
             if git push origin gh-pages; then
               exit 0
