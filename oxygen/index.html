@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" data-wh-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AAAC Gram Publications — Review Build</title>
+<!--
+    Hand-written index for the committed Oxygen sample builds.
+
+    NOT produced by Oxygen. The two WebHelp scenarios each publish into
+    published/<edition>/${cfn}/, so this file sits above all four of them and
+    survives every republish. theme/sync.py leaves it alone too: it only walks
+    folders that contain an oxygen-webhelp/template, and this one does not.
+
+    Self-contained on purpose - no external CSS, JS or images - so it works
+    opened straight off disk over file:// and travels with the tree if it is
+    zipped or copied to a web host. Styled to match the publications, which
+    publish dark with no theme picker (theme/oxygen-dark-mode/), and carrying
+    the same protective marking bars (theme/oxygen-protection/, colour pinned
+    to the #bfebb9 in resources/protection.css).
+
+    When a publication is added or renamed, add or edit a card below - there is
+    nothing generating this list.
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --ink: #e6edf3;
+    --muted: #8b949e;
+    --accent: #4dd0e1;
+    --amber: #ff8a3d;
+    --marking-bg: #bfebb9;
+    --marking-ink: #000;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  .marking {
+    background: var(--marking-bg);
+    color: var(--marking-ink);
+    text-align: center;
+    font: 600 13px/1 "Segoe UI", system-ui, sans-serif;
+    letter-spacing: 0.14em;
+    padding: 9px 12px;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 36px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    margin: 36px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  a.card {
+    display: block;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    text-decoration: none;
+    color: inherit;
+  }
+  a.card:hover, a.card:focus {
+    border-color: var(--accent);
+    background: #1b2129;
+  }
+  .edition { font-size: 18px; font-weight: 600; color: var(--accent); }
+  a.card.instructor .edition { color: var(--amber); }
+  .what { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
+  .note {
+    margin-top: 40px;
+    padding: 18px 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: 6px;
+    font-size: 14.5px;
+  }
+  .note p { margin: 0 0 10px; }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { color: var(--ink); }
+  code { font-family: Consolas, "JetBrains Mono", monospace; font-size: 0.9em; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="marking">COMMERCIALLY SENSITIVE</div>
+
+<main>
+  <h1>AAAC Gram Publications</h1>
+  <p class="lede">Review build of the DITA publications produced by the PPTX migration pipeline, rendered by Oxygen WebHelp. Each publication is published twice, once per audience.</p>
+
+  <h2>Main &mdash; 4 weeks, 215 grams</h2>
+  <div class="cards">
+    <a class="card instructor" href="instructor/main/index.html">
+      <span class="edition">Instructor</span>
+      <span class="what">Full content, including the analysis sheet on every gram.</span>
+    </a>
+    <a class="card student" href="student/main/index.html">
+      <span class="edition">Student</span>
+      <span class="what">Analysis sheets filtered out.</span>
+    </a>
+  </div>
+
+  <h2>Progress Test 2 &mdash; 30 grams</h2>
+  <div class="cards">
+    <a class="card instructor" href="instructor/progress-test-2/index.html">
+      <span class="edition">Instructor</span>
+      <span class="what">Full content, including the analysis sheet on every gram.</span>
+    </a>
+    <a class="card student" href="student/progress-test-2/index.html">
+      <span class="edition">Student</span>
+      <span class="what">Analysis sheets filtered out.</span>
+    </a>
+  </div>
+
+  <div class="note">
+    <p><strong>What differs between the two editions.</strong> They are built from the same DITA source; the student edition is the filtered pass. It drops the instructor-only analysis sheet from each gram, drops the matching entry from the gram's jump-link bar, and hides the search box.</p>
+    <p><strong>On a gram page.</strong> Each spectrogram is an interactive viewer &mdash; hover for a cursor readout in time and frequency. The jump links in the toolbar move between the stages of a gram (<code>Lofar 1</code>, <code>Lofar 2</code>, &hellip;).</p>
+    <p><strong>Scope.</strong> This is a sample build for review, not the delivered publication, and the vessel names in it are placeholders.</p>
+  </div>
+</main>
+
+<div class="marking">COMMERCIALLY SENSITIVE</div>
+
+</body>
+</html>
