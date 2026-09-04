@@ -1420,32 +1420,48 @@ synthesised rows are documented in
 ### The design loop
 
 Design work happens against the **real Oxygen output**, not the DITA-OT dev
-preview. Oxygen's WebHelp chrome (`#wh_topic_toc`, `.wh_content_area`, the tiles
+preview. Oxygen's WebHelp chrome (`.wh_tools`, `.wh_content_area`, the tiles
 welcome page) exists in no other renderer, so a rule tuned anywhere else has to
 be re-verified here anyway — and the preview carries no stylesheet of its own.
 
-`demo/oxygen-sample/published/{instructor,student}/` is a **committed Oxygen
-build** of the sample — the two `pptx-transform.xpr` scenarios publish straight
-into it — so a design change lands as a reviewable HTML diff. `theme/sync.py`
-drives the loop, and is the one command to run after anything:
+`demo/oxygen-sample/published/{instructor,student}/<publication>/` is a
+**committed Oxygen build** of the sample — the two `pptx-transform.xpr`
+scenarios publish straight into it, each one's output folder ending in `${cfn}`
+so a ditamap lands in a folder named after itself — so a design change lands as
+a reviewable HTML diff. `theme/sync.py` drives the loop, and is the one command
+to run after anything:
 
 ```bash
 # edit a stylesheet under theme/<overlay>/resources/, then
 python theme/sync.py
-# hard-refresh demo/oxygen-sample/published/instructor/index.html — no republish
+# hard-refresh demo/oxygen-sample/published/index.html — no republish
 ```
 
 It copies each overlay payload into the wired template
 (`theme/pptx-transform/`) and on into the published build's
-`<edition>/oxygen-webhelp/template/`, where Oxygen deploys the template's own
-files verbatim — which is what makes the last step a refresh rather than a
-rebuild. Republish from Oxygen only when the DITA changed or a `.opt` parameter
+`<edition>/<publication>/oxygen-webhelp/template/`, where Oxygen deploys the
+template's own files verbatim — which is what makes the last step a refresh
+rather than a rebuild. It finds those builds by looking for an
+`oxygen-webhelp/template` at **any** depth under `published/`, so a change to
+the publication folder layout cannot leave it silently matching nothing.
+Republish from Oxygen only when the DITA changed or a `.opt` parameter
 did, then run it again: it also **normalises** the per-publish stamps a fresh
 publish leaves behind (the 14-digit `buildId` cache-buster on every asset href,
 the sitemap's `<lastmod>`), so a republish diffs as the design change alone
 rather than rewriting all thirty pages.
 
 `theme/sync.py` is dev-host tooling and never ships in the release zip.
+
+`published/index.html` is hand-written and sits above all four builds (two
+publications × two audiences), because Oxygen publishes each ditamap
+independently and generates no entry point over them. Add a card there when a
+publication is added; nothing generates that list. The whole `published/` tree
+is then copied verbatim to **gh-pages under `/oxygen/`** by
+`regenerate-html.yml` — a copy, not a build, since the WebHelp CLI needs a
+licence CI does not have. What a reviewer sees online is therefore exactly the
+tree you committed: republish by hand, run `theme/sync.py`, commit, and the
+push to `main` syncs it. (The DITA-OT dev preview is published separately, and
+stays at `/html/`.)
 
 New styling hooks belong in the **DITA source** — an `outputclass` the
 generator emits — never in a preview-only post-processing step, so both

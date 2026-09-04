@@ -5,7 +5,7 @@ Dev-host-only (the packager skips ``theme/*.py``), and stdlib-only like the
 rest of the suite.
 
 The design surface is the *real* Oxygen output, not the DITA-OT dev preview:
-Oxygen's WebHelp Responsive chrome (``#wh_topic_toc``, ``.wh_content_area``,
+Oxygen's WebHelp Responsive chrome (``.wh_tools``, ``.wh_content_area``,
 the tiles welcome page) exists in no other renderer, so a rule tuned anywhere
 else has to be re-verified here anyway.
 
