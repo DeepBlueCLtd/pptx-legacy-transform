@@ -2,9 +2,9 @@
 
 A drop-in CSS overlay that makes each gram **consume the full width its column
 offers**, instead of rendering at the spectrogram's natural pixel size and
-leaving a band of whitespace down either side. Like `../gram-nav-panel/` and
-`../gram-toc-overlay/`, it is **not** a complete theme — it is one CSS file you
-add to your own Oxygen WebHelp Responsive template.
+leaving a band of whitespace down either side. Like `../gram-nav-bar/` and
+`../oxygen-hide-search/`, it is **not** a complete theme — it is one CSS file
+you add to your own Oxygen WebHelp Responsive template.
 
 ## The problem it fixes
 
@@ -83,7 +83,7 @@ complaint asked for.
 ## Scope
 
 Keyed on `.gram-frame-container`, which the bundle only ever creates for a gram
-it has upgraded — so unlike `../gram-toc-overlay/` there is nothing to scope to
+it has upgraded — so unlike `../gram-nav-bar/` there is nothing to scope to
 gram pages. No other page has the class.
 
 ## Installing

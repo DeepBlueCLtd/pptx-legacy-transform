@@ -68,7 +68,18 @@
 /* Hide the search box only where the student edition is positively identified,
    i.e. where the scenario's DITAVAL excludes the instructor audience. Applies
    to every page type, the tiles landing page and the search-results page
-   included. */
+   included.
+
+   Hide the whole BAND, not just the form inside it. `.wh_search_input` carries
+   `padding: 40px 0` and a background image of its own (`115px 0` on the tiles
+   page), so suppressing only `#searchForm` left the student edition with an
+   empty ~80px strip under the header on every page. And since
+   ../search-in-header/ moves that band into the header bar, an emptied one
+   would sit there as a blank control beside the top menu. Both selectors are
+   kept: the container is what reclaims the space, and `#searchForm` is the
+   belt-and-braces one that still holds if a future template renders the form
+   outside this wrapper. */
+body:has(.wh-search-hidden) .wh_search_input,
 body:has(.wh-search-hidden) #searchForm {
     display: none !important;
 }

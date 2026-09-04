@@ -67,14 +67,14 @@ class GramFillWidthTests(unittest.TestCase):
         opt = TEMPLATE_OPT.read_text(encoding="utf-8")
         self.assertIn('<css file="resources/gram-fill-width.css"/>', opt)
 
-    def test_floating_panel_stacks_above_the_gramframe(self) -> None:
-        """The jump panel must outrank the gramframe's own z-indexes.
+    def test_jump_links_stack_above_the_gramframe(self) -> None:
+        """The jump links must outrank the gramframe's own z-indexes.
 
-        It is pinned to the viewport and a full-width gram now runs under it,
-        so a tie with the bundle's top layer would let the gram paint over the
-        links on some pages and not others.
+        They ride the sticky toolbar row (issue #179) and a full-width gram now
+        scrolls under it, so a tie with the bundle's top layer would let the
+        gram paint over the links on some pages and not others.
         """
-        nav = REPO_ROOT / "theme" / "gram-nav-panel" / "resources" / "gram-nav.css"
+        nav = REPO_ROOT / "theme" / "gram-nav-bar" / "resources" / "gram-nav.css"
         found = [
             int(v) for v in re.findall(r"z-index:\s*(\d+)",
                                        _rules(nav.read_text(encoding="utf-8")))

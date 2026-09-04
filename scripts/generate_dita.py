@@ -1217,7 +1217,11 @@ def _append_gram_nav_panel(
     On a long gram page the reader wants to jump straight to a numbered
     Lofar — and, for the instructor, the Analysis Sheet — from anywhere.
     We emit a single ``<p outputclass="gram-nav">`` carrying one in-page
-    ``<xref>`` per content section, which the theme pins as a fixed panel.
+    ``<xref>`` per content section. Where it lands is the theme's business:
+    the production Oxygen publish moves it into the WebHelp toolbar and lays
+    it out as a horizontal bar (``theme/gram-nav-bar/``, issue #179). The
+    ``publish_html.py`` dev preview carries no stylesheet, so there it is just
+    a paragraph of links at the foot of the topic.
 
     ``stage_entries`` is the gram's demon/Lofar/WAV sections as
     ``(anchor_id, label)`` in the order they were rendered, so the panel
