@@ -1,1 +1,0 @@
-var contextHelpMap = [{"appname":"", "appid":"welcome", "path":"welcome.html"},{"appname":"", "appid":"security", "path":"security.html"},{"appname":"", "appid":"seven-questions", "path":"7_questions.html"},{"appname":"", "appid":"grams", "path":"grams.html"}];
