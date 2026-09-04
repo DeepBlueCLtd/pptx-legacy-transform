@@ -322,9 +322,9 @@ theme it used to inject is gone — the deliberate choice is to stay close to
 stock Oxygen Responsive WebHelp, so the next Oxygen template upgrade stays
 cheap). Overlay styling therefore targets Oxygen's own chrome, and lives in
 per-concern overlay folders (`theme/gram-nav-bar/`, `theme/gram-fill-width/`,
-`theme/oxygen-hide-search/`, `theme/oxygen-dark-mode/`,
-`theme/oxygen-protection/`, `theme/gramframe-oxygen/`), each a `README.md`
-plus its payload.
+`theme/oxygen-hide-search/`, `theme/search-in-header/`,
+`theme/oxygen-dark-mode/`, `theme/oxygen-protection/`,
+`theme/gramframe-oxygen/`), each a `README.md` plus its payload.
 `theme/pptx-transform/` is the **wired template** carrying a byte-identical copy
 of every payload; `tests/test_package_release.py` enforces that.
 

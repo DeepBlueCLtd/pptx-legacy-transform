@@ -87,6 +87,15 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertIn(
             "theme/gram-nav-bar/page-templates-fragments/libraries/gram-nav.xml",
             names)
+        # Same three-file shape for the in-header search box: the stylesheet
+        # only ever matches once the script has moved the band and stamped the
+        # header, and the script never loads without the fragment.
+        self.assertIn("theme/search-in-header/resources/search-in-header.css", names)
+        self.assertIn("theme/search-in-header/resources/search-in-header.js", names)
+        self.assertIn(
+            "theme/search-in-header/page-templates-fragments/libraries/"
+            "search-in-header.xml",
+            names)
         self.assertIn("stock.wav", names)
         self.assertIn("requirements.txt", names)
         self.assertIn("README.md", names)
@@ -221,7 +230,8 @@ class PackageReleaseTests(unittest.TestCase):
         css = [c.get("file") for c in webhelp.findall("resources/css")]
         stock = ["oxygen-theme.css", "oxygen.css", "notes.css"]
         overlays = ["resources/hide-search.css", "resources/gram-nav.css",
-                    "resources/gram-fill-width.css", "resources/dark-mode.css",
+                    "resources/gram-fill-width.css",
+                    "resources/search-in-header.css", "resources/dark-mode.css",
                     "resources/protection.css"]
         for name in stock + overlays:
             self.assertIn(name, css)
@@ -264,6 +274,14 @@ class PackageReleaseTests(unittest.TestCase):
         self.assertEqual(
             fragments.get("page-templates-fragments/libraries/gram-nav.xml"),
             "webhelp.fragment.after.body.topic.page")
+        # search-in-header rides the inside of the search band itself, which is
+        # after the header markup and present on all three page types that have
+        # a search box. webhelp.fragment.header is NOT an alternative: that is
+        # how Oxygen pulls in header.xml.
+        self.assertEqual(
+            fragments.get(
+                "page-templates-fragments/libraries/search-in-header.xml"),
+            "webhelp.fragment.after.search.input")
         self.assertEqual(len(fragments), len(webhelp.findall("html-fragments/fragment")),
                          "two fragments share a file entry")
         self.assertEqual(
