@@ -1,0 +1,141 @@
+name: Bump GramFrame
+
+# Keeps the vendored GramFrame bundle current without anyone having to notice
+# that GramFrame cut a release. Weekly (and on demand) it asks the releases
+# API whether the pin in theme/gramframe-oxygen/resources/VERSION is behind;
+# when it is, it performs the documented bump — update_gramframe.py, then
+# theme/sync.py, then the unittest suite — and opens (or refreshes) a pull
+# request carrying the result. Nothing lands on main from here: the bump is
+# still a reviewed merge, because our theme overlays override GramFrame's own
+# DOM and inline styles (theme/gram-fill-width/), which GramFrame's tests know
+# nothing about. The PR is where a human opens a gram page and looks.
+#
+# Merging the PR touches theme/**, so package-release.yml cuts a pipeline
+# release carrying the new bundle — the release gate that refuses a stale pin
+# is the other half of this workflow, and this is what keeps it from firing.
+#
+# Token note. A PR opened with the workflow's own GITHUB_TOKEN does not
+# trigger pull_request workflows (tests.yml, pr-preview.yml) — GitHub's
+# recursion guard. The suite therefore runs here, before the PR is opened,
+# and the outcome is recorded in the PR body. To get the PR preview build as
+# well, add a repository secret GRAMFRAME_BUMP_TOKEN (a fine-grained PAT with
+# contents + pull-requests write); the checkout and PR steps use it when it
+# exists and fall back to GITHUB_TOKEN when it does not.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# One bump at a time: a manual dispatch racing the schedule would fight over
+# the same branch.
+concurrency:
+  group: bump-gramframe
+  cancel-in-progress: false
+
+env:
+  BUMP_BRANCH: bump/gramframe
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GRAMFRAME_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      # Exit 0 = current (or the API was unreachable, which is not evidence
+      # of staleness); exit 1 = a newer formal release exists.
+      - name: Is the pin stale?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if python .github/scripts/update_gramframe.py --check; then
+            echo "stale=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "stale=true" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "previous=$(head -n1 theme/gramframe-oxygen/resources/VERSION)" >> "${GITHUB_OUTPUT}"
+
+      - name: Install Python dependencies
+        if: steps.check.outputs.stale == 'true'
+        run: pip install -r requirements.txt
+
+      # The documented three-step bump, verbatim from
+      # theme/gramframe-oxygen/README.md — "Bumping GramFrame".
+      - name: Fetch the release into every vendored copy
+        if: steps.check.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/update_gramframe.py
+
+      - name: Propagate into the template and the committed builds
+        if: steps.check.outputs.stale == 'true'
+        run: python theme/sync.py
+
+      # Not a gate on opening the PR: a red suite is the one thing the
+      # reviewer most needs to see, and a silently absent PR hides it. The
+      # outcome goes into the PR body and fails the run at the end.
+      - name: Run the unittest suite
+        if: steps.check.outputs.stale == 'true'
+        id: tests
+        continue-on-error: true
+        run: python -m unittest discover tests/
+
+      - name: Describe the bump
+        if: steps.check.outputs.stale == 'true'
+        id: describe
+        run: |
+          version="$(head -n1 theme/gramframe-oxygen/resources/VERSION)"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          if [ "${{ steps.tests.outcome }}" = "success" ]; then
+            suite=":white_check_mark: passed"
+          else
+            suite=":x: **FAILED** — see the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          fi
+          {
+            echo "body<<EOF"
+            echo "Automated bump of the vendored GramFrame bundle: **${{ steps.check.outputs.previous }} → ${version}**."
+            echo
+            echo "Release: https://github.com/DeepBlueCLtd/GramFrame/releases/tag/${version}"
+            echo
+            echo "What ran (the documented bump from \`theme/gramframe-oxygen/README.md\`):"
+            echo
+            echo "1. \`.github/scripts/update_gramframe.py\` — fetched the release zip and wrote the bundle + \`VERSION\` into every vendored copy"
+            echo "2. \`theme/sync.py\` — propagated it into the publishing template and the committed sample builds"
+            echo "3. \`python -m unittest discover tests/\` — ${suite}"
+            echo
+            echo "Before merging, open a gram page and confirm the viewer still renders and the theme overlays still bite (the bundle is the renderer, so a version bump is a visual change — README step 3). Merging touches \`theme/**\`, so \`package-release.yml\` will cut a pipeline release carrying the new bundle."
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Open or refresh the pull request
+        if: steps.check.outputs.stale == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GRAMFRAME_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: ${{ env.BUMP_BRANCH }}
+          delete-branch: true
+          commit-message: |
+            Upgrade GramFrame to ${{ steps.describe.outputs.version }}
+
+            Automated bump from ${{ steps.check.outputs.previous }} by the
+            bump-gramframe workflow: update_gramframe.py, theme/sync.py.
+          title: 'Upgrade GramFrame to ${{ steps.describe.outputs.version }}'
+          body: ${{ steps.describe.outputs.body }}
+
+      - name: Fail the run if the suite failed
+        if: steps.check.outputs.stale == 'true' && steps.tests.outcome != 'success'
+        run: |
+          echo "::error::the unittest suite failed against GramFrame ${{ steps.describe.outputs.version }}; see the PR"
+          exit 1

@@ -122,6 +122,17 @@ actually run against. `--check` is the standing guard — it reports a stale pin
 without changing anything, and the *Package release* workflow runs it so a
 release cannot quietly ship a GramFrame two versions behind (issue #181).
 
+You rarely need to run the three commands by hand: the **Bump GramFrame**
+workflow (`.github/workflows/bump-gramframe.yml`) runs the same `--check`
+weekly (and on *Run workflow*), and when the pin is stale performs exactly
+that sequence on a runner and opens a pull request on the `bump/gramframe`
+branch — the suite's outcome is in the PR body. Review it as you would a manual
+bump (step 3 above still applies: open a gram page), and merge; the merge
+touches `theme/**`, so it cuts a pipeline release carrying the new bundle.
+A PR opened with the workflow's own token does not trigger the PR-preview
+build; add a `GRAMFRAME_BUMP_TOKEN` repository secret (see the workflow
+header) if you want that too.
+
 ## How it ships to the air-gapped target
 
 This overlay travels in the pipeline release zip under `theme/` (the only thing
