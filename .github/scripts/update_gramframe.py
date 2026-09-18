@@ -13,16 +13,23 @@ that matter more than the convenience:
     byte-compares it.  An artifact whose contents depend on what GramFrame
     published this morning cannot satisfy that, and the operator's ``.sha256``
     stops meaning anything.
-  * **Testedness.** The bundle that reaches an air-gapped box should be the one
-    the suite actually ran against — ``tests/test_theme_gram_fill_width.py``
-    reads the bundle's own z-index ceiling out of it, for instance.  Fetching
-    at package time ships code no test in this repo has ever seen.
+  * **Reviewedness.** The suite treats the bundle as an opaque file (presence
+    and copy-identity only; GramFrame has its own tests), but our theme
+    overlays do not: ``theme/gram-fill-width/`` overrides the inline sizes the
+    bundle writes onto ``.gram-frame-container`` / ``svg.gram-frame-svg``, and
+    ``tests/test_theme_gram_fill_width.py`` pins the nav above the bundle's
+    z-index ceiling as a hard-coded constant.  A release that moved either
+    would break the Oxygen output with no test in this repo noticing, so the
+    bump has to pass through a pull request where someone opens a gram page.
 
 So the upgrade is an ordinary, reviewable commit: run this, run
 ``theme/sync.py``, run the suite, commit.  ``--check`` is the other half — it
 answers "is the pin stale?" without changing anything, and the release workflow
 runs it so a pipeline release cannot quietly ship a GramFrame two versions old
 (issue #181, where the repo carried v0.1.13 while the target ran v0.1.16).
+``.github/workflows/bump-gramframe.yml`` closes the loop from the other end:
+weekly it runs ``--check``, and on a stale pin runs the three steps above on a
+runner and opens the pull request itself.
 
 The release asset is a zip named ``gramframe-<version>.zip`` carrying
 ``gramframe.bundle.js`` at its root, already under the name both copies use --
