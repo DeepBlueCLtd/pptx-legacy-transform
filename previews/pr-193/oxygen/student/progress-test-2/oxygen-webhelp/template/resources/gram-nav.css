@@ -1,0 +1,153 @@
+/* Gram navigation bar — production Oxygen WebHelp overlay (issue #179).
+ *
+ * generate_dita.py emits one <p outputclass="gram-nav"> on every gram page
+ * (_append_gram_nav_panel). Oxygen passes outputclass through to the HTML
+ * @class, so the published page carries <p class="gram-nav"> holding one
+ * in-page <xref> per content section, in page order. Which entries survive is
+ * decided at BUILD time by the DITAVAL profiles, not here:
+ *
+ *   7 Questions     audience="student-only"  → student edition only
+ *   Lofar N / WAV N / Demon N   unfiltered   → both editions
+ *   Analysis Sheet  audience="-trainee"      → instructor edition only
+ *
+ * so one stylesheet serves both scenarios and needs no edition awareness.
+ *
+ * WHAT THIS FILE DOES
+ *   Styles that paragraph as a horizontal strip of jump links inside
+ *   <nav class="wh_tools"> — the toolbar that already carries the maximise,
+ *   collapse and print buttons — and sticks that toolbar to the top of the
+ *   viewport. resources/gram-nav.js is what actually moves the paragraph into
+ *   the toolbar; this file assumes it has run and keys off the marker classes
+ *   it applies.
+ *
+ * WHY THE TOOLBAR (issue #179). Until now this paragraph was a fixed panel in
+ * the lower-right corner, and the WebHelp "On this page" mini-TOC — a derived,
+ * audience-blind copy of the same anchors — reserved a full-height column down
+ * the right edge, squeezing the gramframe. The gram page is a wide spectrogram;
+ * that width is the most valuable thing on it. The template now publishes with
+ * webhelp.show.topic.toc=no, which retires the mini-TOC and (through Oxygen's
+ * own topicComponentsExpander.xsl, mode fix-content-width) hands #wh_topic_body
+ * the full col-12 width. This paragraph — the better list of the two, because
+ * the pipeline authors it and the DITAVAL filters it — moves into the toolbar,
+ * where it is always on screen and costs the gramframe nothing.
+ *
+ * SCOPE — gram pages only, without :has(). resources/gram-nav.js stamps
+ * `wh_tools_gram_nav` on the toolbar and `wh_tools_row_gram_nav` on its row,
+ * and only when it found a gram-nav paragraph to move. Every rule below hangs
+ * off one of those, so the welcome, security, week and publication index pages
+ * keep the stock toolbar untouched — including its non-sticky default.
+ *
+ * Self-contained (literal colours, no CSS custom properties) because the
+ * Oxygen WebHelp Responsive output does not load the operator-console theme.
+ * Install per ../README.md (copy into your publishing template's resources/
+ * and reference it from the .opt <resources> so it loads last and wins the
+ * cascade).
+ *
+ * ONE RENDERER. The production Oxygen publish is the only target: the
+ * publish_html.py DITA-OT preview carries no stylesheet at all, and design
+ * work happens against the committed Oxygen build (see ../sync.py).
+ */
+
+/* 1. Stick the toolbar row to the top of the viewport, so the links stay on
+ *    screen the whole way down a long gram page — the one property the old
+ *    fixed panel had that a bar in the flow would otherwise lose.
+ *
+ *    Sticky goes on the ROW, not on nav.wh_tools itself: a sticky box only
+ *    travels inside its own containing block, and .wh_tools's parent row is
+ *    exactly as tall as the bar, so sticking the bar would do nothing at all.
+ *    The row's containing block is #wh_topic_container, which spans the topic.
+ *
+ *    z-index clears 1000, where the gramframe's own stack tops out. */
+.wh_tools_row_gram_nav {
+  position: sticky;
+  top: 0;
+  z-index: 1100;
+}
+
+/* 2. Stock oxygen.css gives .wh_tools `margin: 1em 0 2em`, which reads as a
+ *    detached floating slab once the row is sticky. Close the top gap and keep
+ *    a modest one below. `gap` spaces the breadcrumb, the links and the button
+ *    cluster; .wh_tools is already display:flex with justify-content:
+ *    space-between and flex-wrap:wrap, so a long link list wraps to a second
+ *    line rather than crushing the buttons. */
+.wh_tools_gram_nav {
+  margin: 0 0 1.5em;
+  padding: 6px 15px;
+  gap: 10px;
+}
+
+/* 3. The links themselves: a horizontal, wrapping strip taking the empty
+ *    middle of the toolbar (the breadcrumb sits left, the buttons right). */
+.wh_tools_gram_nav p.gram-nav {
+  position: static;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wh_tools_gram_nav p.gram-nav::before {
+  content: "JUMP TO";
+  font: 600 10px/1 "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.22em;
+  color: rgba(230, 237, 243, 0.55);
+  margin: 0 2px 0 0;
+}
+
+.wh_tools_gram_nav p.gram-nav a,
+.wh_tools_gram_nav p.gram-nav a:link,
+.wh_tools_gram_nav p.gram-nav a:visited {
+  display: inline-block;
+  text-decoration: none;
+  color: #4dd0e1;
+  font: 600 11px/1.2 "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.wh_tools_gram_nav p.gram-nav a:hover,
+.wh_tools_gram_nav p.gram-nav a:focus {
+  color: #ffb27a;
+  background: rgba(255, 138, 61, 0.12);
+  border-color: #ff8a3d;
+}
+
+/* 4. The Analysis Sheet entry (instructor edition only) keeps the amber accent
+ *    it has had since issue #91, so it still reads as the instructor
+ *    affordance rather than one more stage link. */
+.wh_tools_gram_nav p.gram-nav a[href$="analysis-sheet"],
+.wh_tools_gram_nav p.gram-nav a[href$="analysis-sheet"]:link,
+.wh_tools_gram_nav p.gram-nav a[href$="analysis-sheet"]:visited {
+  color: #ff8a3d;
+  border-color: rgba(255, 138, 61, 0.5);
+}
+
+.wh_tools_gram_nav p.gram-nav a[href$="analysis-sheet"]::before {
+  content: "\25A4  ";
+  color: #ff8a3d;
+}
+
+/* 5. Fallback for a reader with JavaScript off: gram-nav.js never runs, no
+ *    marker class is applied, and the paragraph stays where Oxygen rendered it
+ *    — at the foot of the article. Lay it out as a readable row there rather
+ *    than leaving it to inherit the bare stock paragraph look. Deliberately
+ *    NOT scoped to a marker class; this is the no-script branch. */
+article p.gram-nav {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 1.5em 0 0;
+}
