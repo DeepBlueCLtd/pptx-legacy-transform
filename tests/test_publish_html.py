@@ -260,8 +260,10 @@ class DitaOtCommandTests(unittest.TestCase):
             target=Path("/html/instructor/main"),
             ditaval=None,
         )
-        self.assertIn("--input=/staged/main.ditamap", argv)
-        self.assertIn("--output=/html/instructor/main", argv)
+        # ``str(Path)`` on Windows spells these with backslashes, so build the
+        # expectation the same way the command builder does.
+        self.assertIn(f"--input={Path('/staged/main.ditamap')}", argv)
+        self.assertIn(f"--output={Path('/html/instructor/main')}", argv)
         self.assertIn("--format=html5", argv)
         self.assertFalse(
             any(arg.startswith("--filter=") for arg in argv),
@@ -275,8 +277,8 @@ class DitaOtCommandTests(unittest.TestCase):
             target=Path("/html/student/main"),
             ditaval=Path("/staged/trainee.ditaval"),
         )
-        self.assertIn("--filter=/staged/trainee.ditaval", argv)
-        self.assertIn("--output=/html/student/main", argv)
+        self.assertIn(f"--filter={Path('/staged/trainee.ditaval')}", argv)
+        self.assertIn(f"--output={Path('/html/student/main')}", argv)
 
 
 class DitaLauncherTests(unittest.TestCase):
@@ -365,11 +367,16 @@ class PublishDualEditionTests(unittest.TestCase):
             calls = [c.args[0] for c in mock_sub.run.call_args_list]
 
             # Both editions now carry a --filter, so classify by output dir.
-            student_calls = [
-                argv for argv in calls
-                if any("/student/" in arg for arg in argv
-                       if arg.startswith("--output="))
-            ]
+            # Compare path *parts*, not a "/student/" substring: on Windows
+            # the --output value is spelled with backslashes.
+            def _edition_calls(edition: str) -> list:
+                return [
+                    argv for argv in calls
+                    if any(edition in Path(arg[len("--output="):]).parts
+                           for arg in argv if arg.startswith("--output="))
+                ]
+
+            student_calls = _edition_calls("student")
             self.assertEqual(len(student_calls), 2)
             for argv in student_calls:
                 self.assertTrue(any(
@@ -378,11 +385,7 @@ class PublishDualEditionTests(unittest.TestCase):
                 ), f"student call missing trainee filter: {argv}")
 
             # Two instructor calls carry --filter=…/instructor.ditaval
-            instructor_calls = [
-                argv for argv in calls
-                if any("/instructor/" in arg for arg in argv
-                       if arg.startswith("--output="))
-            ]
+            instructor_calls = _edition_calls("instructor")
             self.assertEqual(len(instructor_calls), 2)
             for argv in instructor_calls:
                 self.assertTrue(any(

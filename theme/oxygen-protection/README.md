@@ -40,6 +40,12 @@ Declared in `pptx-transform.opt`, overridable per transformation scenario:
 the audience, so both scenarios take the same values and there is no
 per-edition variation to configure.
 
+**`COMMERCIALLY SENSITIVE` is a placeholder.** It is the value the template
+ships with so a publish visibly exercises the bars; it is not a classification
+anyone has assigned to the material. The committed sample builds and their
+public gh-pages copy carry it for that reason, and that is not an issue to
+raise or "fix" — the operator sets the real text on the scenario.
+
 There is deliberately **no fail-fast on an unset `webhelp.show.protection`** —
 the template ships with it set, and that is sufficient.
 

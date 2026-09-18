@@ -3,3 +3,10 @@
 # core.autocrlf on a Windows checkout cannot rewrite its line endings out from
 # under the byte-comparison in tests/test_oxygen_sample.py.
 demo/oxygen-sample/sample.csv -text
+
+# The committed miniature publication is generated output that
+# tests/test_oxygen_sample.py byte-compares against a fresh run. The generator
+# always writes LF, so a Windows checkout with core.autocrlf=true turned every
+# text file in the tree (topics, ditamaps, ditavals, rewritten .glc configs) to
+# CRLF and failed the comparison for 24 files nobody had changed.
+demo/oxygen-sample/dita/** -text
