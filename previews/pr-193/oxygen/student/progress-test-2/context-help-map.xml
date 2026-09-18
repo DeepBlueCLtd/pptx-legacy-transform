@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<map>
-   <appContext helpID="welcome" path="welcome.html"/>
-   <appContext helpID="security" path="security.html"/>
-   <appContext helpID="seven-questions" path="7_questions.html"/>
-   <appContext helpID="grams" path="grams.html"/>
-</map>
