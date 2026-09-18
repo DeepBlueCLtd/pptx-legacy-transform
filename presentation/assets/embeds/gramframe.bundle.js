@@ -1,14 +1,11 @@
-var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 (function() {
   // Inject CSS styles
   const style = document.createElement('style');
-  style.textContent = "/**\n * GramFrame Component Styles - Military/Industrial Theme\n */\n\n/* ---------------------------------------------------------------------------\n * Pre-conversion placeholder\n *\n * A `table.gram-config` is ordinary HTML until GramFrame replaces it, so on a\n * cold load (large spectrogram, slow network, unbundled dev modules) the raw\n * table is painted first: a stretched image followed by the time/freq parameter\n * rows in whatever table styling the host page uses. These rules dress that\n * intermediate state as a loading placeholder in the component's own dark\n * styling - the parameter rows are hidden, the image is dimmed back, and a\n * \"Loading spectrogram\" caption sits over the top. They stop applying the\n * moment the table is swapped for .gram-frame-container.\n *\n * Selectors are deliberately more specific than a bare `table.gram-config td`\n * so host-page table styling (borders, padding, stretched images) does not show\n * through the placeholder.\n * ------------------------------------------------------------------------- */\ntable.gram-config {\n  border-collapse: collapse;\n  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0f0f0f 100%);\n  border: 3px solid #444;\n  border-radius: 8px;\n  box-shadow:\n    inset 0 2px 4px rgba(255,255,255,0.1),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 4px 8px rgba(0,0,0,0.5);\n}\n\n/* Per the config format, the first row holds the image and every later row is a\n   parameter definition - configuration, not content, so hide those rows */\ntable.gram-config tr:not(:first-child) {\n  display: none;\n}\n\ntable.gram-config tr:first-child td {\n  position: relative;\n  padding: 15px;\n  border: 0;\n  background: none;\n}\n\ntable.gram-config tr:first-child img {\n  display: block;\n  width: auto;\n  max-width: 100%;\n  height: auto;\n  opacity: 0.25;\n}\n\ntable.gram-config tr:first-child td::after {\n  content: 'Loading spectrogram';\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  letter-spacing: 2px;\n  text-transform: uppercase;\n  color: #00ff00;\n  text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);\n  white-space: nowrap;\n  pointer-events: none;\n}\n\n/* Initialisation failed: the table is kept in place beside the error message,\n   so drop the placeholder styling and show the config as plain content again */\ntable.gram-config.gram-frame-config-error {\n  background: none;\n  border: 0;\n  box-shadow: none;\n}\n\ntable.gram-config.gram-frame-config-error tr:not(:first-child) {\n  display: table-row;\n}\n\ntable.gram-config.gram-frame-config-error tr:first-child img {\n  opacity: 1;\n}\n\ntable.gram-config.gram-frame-config-error tr:first-child td::after {\n  content: none;\n}\n\n/* Container that replaces the config table */\n.gram-frame-container {\n  position: relative;\n  width: 100%;\n  max-width: 100%;\n  margin: 0;\n  padding: 0;\n  box-sizing: border-box;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  background: #1a1a1a;\n  transition: box-shadow 0.2s ease, border-color 0.2s ease;\n  margin-bottom: 20px;\n}\n\n/* Focus indicator for multiple instances */\n.gram-frame-container.gram-frame-focused {\n  box-shadow: 0 0 0 3px rgba(66, 139, 202, 0.5);\n  border-radius: 8px;\n}\n\n/* Military-style table layout for proper resizing */\n.gram-frame-table {\n  display: table;\n  width: 100%;\n  height: 100%;\n  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0f0f0f 100%);\n  border: 3px solid #444;\n  border-radius: 8px;\n  box-shadow: \n    inset 0 2px 4px rgba(255,255,255,0.1),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 4px 8px rgba(0,0,0,0.5);\n}\n\n.gram-frame-row {\n  display: table-row;\n}\n\n.gram-frame-row:nth-child(2) {\n  height: 100%; /* Main panel row should stretch */\n}\n\n.gram-frame-cell {\n  display: table-cell;\n  vertical-align: middle;\n  padding: 0;\n}\n\n\n/* Main panel with military frame */\n.gram-frame-main-panel {\n  padding: 15px;\n  background: linear-gradient(135deg, #333 0%, #1a1a1a 50%, #000 100%);\n  border: 3px solid #555;\n  border-radius: 8px;\n  box-shadow: \n    inset 0 3px 6px rgba(0,0,0,0.5),\n    inset 0 -2px 4px rgba(255,255,255,0.1),\n    0 0 10px rgba(0,0,0,0.7);\n  position: relative;\n}\n\n.gram-frame-main-panel:before {\n  content: '';\n  position: absolute;\n  top: 5px;\n  left: 5px;\n  right: 5px;\n  bottom: 5px;\n  border: 1px solid #666;\n  border-radius: 4px;\n  pointer-events: none;\n}\n\n/* The SVG has no size until the spectrogram's natural dimensions are known, so\n   the panel is an empty black rectangle between the table being replaced and\n   the image arriving. Caption that gap, and say so plainly if the image never\n   arrives, rather than leaving the analyst looking at a silent black box. */\n.gram-frame-container.gram-frame-loading .gram-frame-main-panel,\n.gram-frame-container.gram-frame-image-error .gram-frame-main-panel {\n  min-height: 120px;\n}\n\n.gram-frame-container.gram-frame-loading .gram-frame-main-panel::after,\n.gram-frame-container.gram-frame-image-error .gram-frame-main-panel::after {\n  content: 'Loading spectrogram';\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  letter-spacing: 2px;\n  text-transform: uppercase;\n  color: #00ff00;\n  text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);\n  white-space: nowrap;\n  pointer-events: none;\n}\n\n.gram-frame-container.gram-frame-image-error .gram-frame-main-panel::after {\n  content: 'Spectrogram image could not be loaded';\n  color: #ff6b6b;\n  text-shadow: none;\n}\n\n/* Expand/collapse image toggle — floats at the top-left of the image region,\n   clear of the time-axis labels (left margin is 60px). Landscape grams only. */\n.gram-frame-expand-toggle {\n  position: absolute;\n  top: 22px;   /* just inside the main-panel padding + SVG top margin */\n  left: 80px;  /* clear of the 60px time-axis margin */\n  z-index: 5;  /* above the SVG overlay */\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 15px;\n  line-height: 1;\n  color: #e6f2ff;\n  background: rgba(20, 30, 45, 0.55);\n  border: 1px solid rgba(180, 200, 230, 0.5);\n  border-radius: 4px;\n  cursor: pointer;\n  transition: background 0.12s ease, border-color 0.12s ease;\n}\n\n.gram-frame-expand-toggle:hover {\n  background: rgba(40, 60, 90, 0.8);\n  border-color: rgba(200, 220, 255, 0.8);\n}\n\n.gram-frame-expand-toggle:active {\n  transform: translateY(1px);\n}\n\n.gram-frame-expand-toggle[aria-pressed=\"true\"] {\n  background: rgba(60, 100, 60, 0.75);\n  border-color: rgba(150, 220, 150, 0.8);\n}\n\n/* SVG container for drawing the spectrogram and overlays */\n.gram-frame-svg {\n  display: block;\n  width: 100%;\n  height: auto;\n  background: #000;\n  border: 2px solid #333;\n  border-radius: 4px;\n  cursor: crosshair;\n  box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);\n}\n\n/* SVG image element for the spectrogram */\n.gram-frame-image {\n  /* Remove width/height CSS to allow SVG attributes to control positioning */\n}\n\n/* SVG axes styling - white on dark background */\n.gram-frame-axis-line {\n  stroke: #fff;\n  stroke-width: 1;\n  fill: none;\n}\n\n.gram-frame-axis-tick {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-major {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-minor {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-label {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 12px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n.gram-frame-axis-label-major {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 10px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n\n\n\n/* Military-style display panel */\n.gram-frame-display-panel {\n  padding: 10px;\n  background: linear-gradient(180deg, #333 0%, #1a1a1a 50%, #000 100%);\n  border-top: 2px solid #555;\n}\n\n.gram-frame-readout {\n  flex: 0 1 auto;\n  width: 100%; /* Definite width so the unified layout's flex sizing applies */\n  padding: 0;\n  background: transparent;\n}\n\n/* Harmonics mode CSS removed - now using unified layout */\n\n/* Harmonics layout container - two columns */\n\n/* Left column for controls - 40% width */\n.gram-frame-harmonics-controls {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n  flex: 0 0 40%;\n  max-width: 40%;\n}\n\n/* Top row in left column */\n.gram-frame-harmonics-top-row {\n  display: flex;\n  gap: 10px;\n  align-items: stretch;\n}\n\n/* Right column for table - 60% width */\n.gram-frame-harmonics-table-column {\n  flex: 0 0 60%;\n  max-width: 60%;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n}\n\n/* Make color picker more compact in harmonics mode */\n.gram-frame-harmonics-mode .gram-frame-color-picker {\n  margin: 0;\n}\n\n/* Harmonic panel layout - always visible in unified layout */\n\n/* Military-style display windows */\n.gram-frame-led {\n  font-family: 'Courier New', monospace;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  color: #00ff00; /* LED green */\n  padding: 6px 0px;\n  border: 0px solid #333;\n  border-radius: 4px;\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  min-width: 100px;\n  text-align: center;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  position: relative;\n  font-size: 11px;\n  height: fit-content;\n}\n\n.gram-frame-led:before {\n  content: '';\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  right: 2px;\n  bottom: 2px;\n  border: 1px solid #444;\n  border-radius: 2px;\n  pointer-events: none;\n}\n\n/* LED label */\n.gram-frame-led-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin-bottom: 4px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n/* LED value */\n.gram-frame-led-value {\n  font-size: 14px;\n  font-weight: bold;\n  text-shadow: 0 0 4px #00ff00;\n}\n\n/* Label-beside-value LED (the doppler speed readout).\n *\n * The default LED stacks its label above its value, which suits the short\n * \"Time (mm:ss)\" / \"Frequency (Hz)\" captions. \"Doppler Speed (kts)\" is long\n * enough to claim a row of its own, so stacking it spent height on a line that\n * was mostly empty either side of the value. Here the label sits to the LEFT of\n * the value and `width: min-content` wraps it, filling the width the stacked\n * form wasted. It breaks into two lines rather than three because MainUI.js\n * joins \"Doppler\" and \"Speed\" with a non-breaking space.\n *\n * The label stays ONE text node (\"Doppler Speed (kts)\"): the wrap is CSS, not\n * markup, so `.gram-frame-led-label:text-is(...)` still matches it (the test\n * helpers locate every LED that way). Do not split it into lines in JS. */\n.gram-frame-led-inline {\n  flex-direction: row;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  padding: 4px 6px;\n}\n\n.gram-frame-led-inline .gram-frame-led-label {\n  margin-bottom: 0;\n  width: min-content;\n  text-align: right;\n  line-height: 1.2;\n}\n\n/* Manual harmonic button. Sized to sit inside the panel header row beside the\n   \"Harmonics\" heading: at its old 6px/12px padding and 80px floor it stood\n   28px tall against the heading's 21px, which both pushed the heading down out\n   of line with the markers panel's and made the pair too wide for the 175px\n   column, so the button overlapped the heading. */\n.gram-frame-manual-button {\n  padding: 3px 6px;\n  min-width: 0;\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  color: #ddd;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  box-shadow:\n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-manual-button:hover {\n  background: linear-gradient(180deg, #7a7a7a 0%, #5a5a5a 50%, #3a3a3a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-manual-button:active {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n/* Style panel: colour band, symbol band, harmonics band */\n.gram-frame-color-picker {\n  margin-top: 0;\n  padding: 8px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  max-width: 200px;\n  flex-shrink: 0;\n}\n\n/* No `.gram-frame-color-picker-label` rule: the panel's \"Style\" heading is\n * gone (each band labels itself), so the caption it styled no longer exists. */\n\n.gram-frame-color-palette {\n  position: relative;\n}\n\n/* One band of the style panel, grouping controls that share a scope. */\n.gram-frame-style-group {\n  margin-bottom: 6px;\n}\n\n.gram-frame-style-group:last-child {\n  margin-bottom: 0;\n}\n\n/* Band caption. Same micro-caps treatment as the panel heading, but ranged left\n   so the bands read as a list beneath the centred title. */\n.gram-frame-style-group-label {\n  font-size: 10px;\n  color: #00ff00;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n  text-align: left;\n  margin-bottom: 4px;\n}\n\n/* A band whose controls fit on one line puts its caption inline with them\n   rather than above. Used by the Symbol and Harmonics bands; the Colour band\n   has no caption at all — the gradient slider needs no naming. */\n.gram-frame-style-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.gram-frame-style-row .gram-frame-style-group-label {\n  margin-bottom: 0;\n}\n\n/* Fences the harmonics-only band off from the controls above it. Lighter than\n   the panel border (#333), which is invisible against the panel's near-black\n   fill — the rule has to be seen to do its job. */\n.gram-frame-style-divider {\n  border-top: 1px solid #4a4a4a;\n  margin: 8px 0 6px;\n}\n\n/* Symbol drop-down embedded to the right of the colour slider. Its `color` is\n   set inline to the selected colour so the glyphs render in that colour. */\n.gram-frame-symbol-select {\n  flex-shrink: 0;\n  padding: 2px 4px;\n  background: #0a0a0a;\n  border: 1px solid #555;\n  border-radius: 2px;\n  font-size: 14px;\n  line-height: 1;\n  cursor: pointer;\n}\n\n/* Harmonic-pin visibility toggle, in the panel's harmonics band.\n   TEMPORARY (symbol-size experiment): the \"Large\" toggle sits inline in the\n   symbol row and shares this styling. Remove that selector, the margin-left\n   override and the blocks below, together with the control once a symbol size\n   is agreed. */\n.gram-frame-pin-toggle,\n.gram-frame-large-symbols-toggle {\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  cursor: pointer;\n  user-select: none;\n}\n\n/* Push the size toggle to the far edge of the symbol row, clear of the\n   drop-down. */\n.gram-frame-large-symbols-toggle {\n  margin-left: auto;\n}\n\n.gram-frame-pin-toggle-input,\n.gram-frame-large-symbols-checkbox {\n  margin: 0;\n  cursor: pointer;\n  accent-color: #00ff00;\n}\n\n.gram-frame-pin-toggle-label,\n.gram-frame-large-symbols-label {\n  font-size: 10px;\n  color: #00ff00;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n.gram-frame-pin-toggle-disabled {\n  cursor: default;\n  opacity: 0.45;\n}\n\n.gram-frame-pin-toggle-disabled .gram-frame-pin-toggle-input {\n  cursor: default;\n}\n\n/* The slider has the band to itself, so it spans the panel: a wider gradient is\n   an easier target. The canvas keeps its 140px backing store — the click\n   handler rescales by the rendered width, and the indicator is positioned in\n   percent, so both follow the CSS width. */\n.gram-frame-color-canvas {\n  display: block;\n  width: 100%;\n  box-sizing: border-box;\n  height: 20px;\n  border: 1px solid #555;\n  border-radius: 2px;\n  cursor: pointer;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);\n}\n\n.gram-frame-color-indicator {\n  position: absolute;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 3px;\n  height: 26px;\n  background: #fff;\n  border: 1px solid #000;\n  border-radius: 1px;\n  pointer-events: none;\n  box-shadow: 0 0 2px rgba(0,0,0,0.8);\n}\n\n/* Analysis mode layout styles */\n.gram-frame-analysis-layout {\n  height: 100%;\n}\n\n.gram-frame-analysis-controls {\n  align-self: flex-start;\n}\n\n.gram-frame-analysis-leds {\n  /* Side-by-side LEDs container */\n}\n\n.gram-frame-analysis-leds .gram-frame-led {\n  /* Ensure LEDs in the horizontal container are sized properly */\n  font-size: 9px; /* Slightly smaller to fit side-by-side */\n}\n\n.gram-frame-analysis-leds .gram-frame-led-label {\n  font-size: 8px; /* Smaller label text */\n  color: #00ff00;\n}\n\n.gram-frame-analysis-markers {\n  height: 100%;\n}\n\n/* Unified table styles for both markers and harmonics */\n\n/*\n * Fixed-height home for a markers/harmonics table.\n *\n * It claims the column's remaining height (flex: 1) but contributes nothing to\n * the layout's intrinsic height, because its only child is absolutely\n * positioned. That is what keeps the panels a constant size however many rows\n * they hold: the tables can no longer push the readout row taller (untidy\n * layout) nor steal vertical space from an expanded spectrogram image.\n */\n.gram-frame-table-area {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n\n.gram-frame-table-container {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  box-sizing: border-box;\n  padding: 0;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow:\n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n  /* Permanent vertical scrollbar so the gutter never appears/disappears as rows\n     are added or removed (no reflow of the table columns). */\n  overflow-y: scroll;\n  overflow-x: hidden;\n  /* Dark-theme scrollbar (Firefox) */\n  scrollbar-width: thin;\n  scrollbar-color: #555 #111;\n}\n\n/* Dark-theme scrollbar (WebKit/Blink) */\n.gram-frame-table-container::-webkit-scrollbar {\n  width: 10px;\n}\n\n.gram-frame-table-container::-webkit-scrollbar-track {\n  background: #111;\n}\n\n.gram-frame-table-container::-webkit-scrollbar-thumb {\n  background: #555;\n  border-radius: 5px;\n  border: 2px solid #111;\n}\n\n.gram-frame-table-container::-webkit-scrollbar-thumb:hover {\n  background: #6a6a6a;\n}\n\n/*\n * Separate (not collapsed) borders: sticky header cells are unreliable with\n * border-collapse, so each cell draws its own right/bottom edge and the first\n * column/header row close the outer edges. Visually identical to the collapsed\n * 1px grid, because border-spacing is zero.\n *\n * Element-qualified because the `gram-frame-table` class is also carried by the\n * component's outer frame <div> (display: table), which must keep its own\n * border. Zeroing the border here matters for the sticky header too — a border\n * on the table box offsets the header cells from the scrollport, which makes\n * them jump when the body first scrolls.\n */\ntable.gram-frame-table {\n  width: 100%;\n  /*\n   * Natural height, NOT the 100% the shared class sets for the outer frame.\n   * A table told to fill its container distributes the surplus across its rows,\n   * so a two-row table drew 50px rows, a six-row table 31px ones, and every row\n   * visibly shrank as the next was added. Rows now stay the height their\n   * content needs and the leftover space simply sits below them.\n   */\n  height: auto;\n  border: 0;\n  border-collapse: separate;\n  border-spacing: 0;\n  font-size: 10px;\n  color: #ccc;\n  table-layout: fixed;\n}\n\n.gram-frame-table th,\n.gram-frame-table td {\n  border: 0;\n  border-right: 1px solid #444;\n  border-bottom: 1px solid #444;\n}\n\n.gram-frame-table th:first-child,\n.gram-frame-table td:first-child {\n  border-left: 1px solid #444;\n}\n\n.gram-frame-table th {\n  background: #222;\n  color: #00ff00;\n  /*\n   * Horizontal padding and letter-spacing are deliberately tight (feature 231):\n   * the markers table gained a fifth column in the same 160px, and at 4px/0.5px\n   * the headers no longer fitted their own text. The narrow columns are the\n   * constraint here, not the label copy.\n   */\n  padding: 4px 1px;\n  text-align: center;\n  border-top: 1px solid #444;\n  font-weight: bold;\n  text-transform: uppercase;\n  letter-spacing: 0;\n  /* Header row stays pinned while the body scrolls beneath it. The z-index sits\n     above the positioned body rows, including a selected row's cells (11). */\n  position: sticky;\n  top: 0;\n  z-index: 20;\n}\n\n.gram-frame-table td {\n  /* Matches the header's tight horizontal padding — see the note above. */\n  padding: 4px 1px;\n  text-align: center;\n  background: #1a1a1a;\n}\n\n.gram-frame-table tbody tr {\n  cursor: pointer;\n  transition: all 0.2s ease;\n  position: relative;\n}\n\n.gram-frame-table tbody tr:hover {\n  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.05),\n    inset 0 -1px 2px rgba(0,0,0,0.2),\n    0 0 4px rgba(255,255,255,0.1);\n}\n\n.gram-frame-table tbody tr:hover td {\n  background: transparent;\n}\n\n/* Legacy markers styles - kept for compatibility */\n.gram-frame-markers-container {\n  padding: 8px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n}\n\n.gram-frame-markers-label {\n  font-size: 10px;\n  color: #00ff00;\n  margin: 0 0 8px 0;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.gram-frame-markers-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 10px;\n  color: #ccc;\n  table-layout: fixed;\n}\n\n.gram-frame-markers-table th {\n  background: #222;\n  color: #00ff00;\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  font-weight: bold;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.gram-frame-markers-table td {\n  padding: 4px;\n  text-align: center;\n  border: 1px solid #444;\n  background: #1a1a1a;\n}\n\n.gram-frame-color-swatch {\n  margin: 0 auto;\n  display: block;\n}\n\n.gram-frame-marker-delete-btn {\n  padding: 2px 6px;\n  border-radius: 2px;\n  transition: background-color 0.2s;\n}\n\n.gram-frame-marker-delete-btn:hover {\n  background-color: #ff4444 !important;\n  color: #fff !important;\n}\n\n/*\n * The Label column shows an abbreviated label (see formatMarkerLabelForTable),\n * so it should never wrap or stretch the row; anything unexpectedly long is\n * clipped rather than allowed to reflow the table.\n *\n * It is also the positioning context for the label button in its top-right\n * corner. The button was stacked above Delete in the actions cell until every\n * marker row had to be tall enough for two controls; out of the flow it costs\n * the row no height, and it now sits in the column it edits.\n */\n.gram-frame-marker-label-cell {\n  position: relative;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Deliberately NOT a positioning context: the button anchors to the CELL, which\n   is the box whose top-right corner it wants. This wrapper is only as tall as\n   the label text and sits vertically centred in the cell, so positioning\n   against it would park the button halfway down instead. */\n.gram-frame-marker-label-content {\n  position: static;\n}\n\n/* Reserves the button's corner so a longer abbreviation is clipped short of it\n   rather than running underneath. */\n.gram-frame-marker-label-text {\n  display: block;\n  padding-right: 14px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.gram-frame-marker-label-btn {\n  position: absolute;\n  top: 1px;\n  right: 0;\n  background: none;\n  border: none;\n  color: #8ab4d8;\n  cursor: pointer;\n  padding: 1px 2px;\n  border-radius: 2px;\n  line-height: 0;\n  transition: background-color 0.2s;\n}\n\n.gram-frame-marker-label-btn:hover {\n  background-color: #8ab4d8;\n  color: #1a1a1a;\n}\n\n/* Marker rendering styles */\n.gram-frame-marker-line {\n  opacity: 0.8;\n}\n\n.gram-frame-marker-point {\n  opacity: 0.9;\n}\n\n/*\n * A marker's on-gram label. Legibility comes from the white rounded plate drawn\n * behind it (issue #243) — the geometry and colours are presentation attributes\n * set by plateLabel(), see src/utils/labelPlate.js. Never a click target: the\n * marker underneath is.\n */\n.gram-frame-marker-label {\n  font-family: Arial, sans-serif;\n  font-size: 12px;\n  font-weight: bold;\n  pointer-events: none;\n  user-select: none;\n}\n\n/*\n * The white plate behind any on-gram label, and the group holding the two. Both\n * are transparent to the pointer so the plate never intercepts a click meant\n * for the feature it annotates, or for the gram beneath it.\n */\n.gram-frame-label-plate,\n.gram-frame-label-plated {\n  pointer-events: none;\n}\n\n/* Military-style mode selection header */\n.gram-frame-mode-header {\n  background: linear-gradient(180deg, #444 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border-bottom: 2px solid #555;\n  display: flex;\n  align-items: flex-start;\n  justify-content: flex-start;\n}\n\n/*\n * The mode buttons, stacked one per row.\n *\n * The gap and the button paddings below were tightened when Sidebands became a\n * fifth mode (issue #241): at the old sizes a fifth row made the whole control\n * panel ~40px taller in every mode whose guidance text is short, which pushed\n * the spectrogram itself that far down the page. Five rows now occupy what four\n * did, so adding the mode cost the gram no vertical space.\n */\n.gram-frame-modes {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  justify-content: center;\n  align-items: stretch;\n  flex: 0 0 auto;\n  flex-shrink: 0;\n}\n\n.gram-frame-mode-group {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  width: 100%;\n  flex-wrap: nowrap;\n}\n\n/* Simplified left panel - no sub-columns needed */\n\n/* Guidance panel */\n/*\n * The guidance panel fills its column and scrolls, rather than growing the\n * control row to fit its text.\n *\n * Same mechanism as the tables beside it (an absolutely positioned child of a\n * relative column), and for the same reason: the guidance column is what gives\n * way when a host is too narrow for the whole row, and the narrower it gets the\n * taller its text wraps. Letting that set the row height pushed the row — and\n * the spectrogram under it — down the page, by as much as 80px on a 1280px host\n * once a fourth table joined the row (issue #241).\n *\n * The row is now as tall as the readouts and the mode buttons need and no\n * taller, in every mode. Two things follow: the gram sits at a constant height\n * instead of moving as the analyst switches mode, and a host too narrow for the\n * full guidance text costs reading length here rather than gram height.\n */\n.gram-frame-guidance-column {\n  position: relative;\n}\n\n.gram-frame-guidance {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  overflow-y: auto;\n  box-sizing: border-box;\n  padding: 8px 12px;\n  background: linear-gradient(135deg, #1a1a1a 0%, #000 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  color: #ccc;\n  font-size: 12px;\n  line-height: 1.4;\n  box-shadow: \n    inset 0 2px 6px rgba(0,0,0,0.8),\n    inset 0 -1px 2px rgba(255,255,255,0.05),\n    0 2px 4px rgba(0,0,0,0.5);\n}\n\n.gram-frame-guidance h4 {\n  margin: 0 0 6px 0;\n  font-size: 11px;\n  color: #00ff00;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  font-weight: bold;\n}\n\n/* Aside inside a guidance heading (e.g. Mouse-Wheel \"(available in all modes)\").\n   Dropping the heading's uppercase and letter-spacing is what lets the qualifier\n   share the heading's line instead of wrapping onto a second one — it was a\n   bullet of its own until it moved up here, and a two-line heading would have\n   given back the height the move was meant to save. Dimmer than the heading so\n   the section still reads by its name first. */\n.gram-frame-guidance h4 .gram-frame-guidance-qualifier {\n  text-transform: none;\n  letter-spacing: 0;\n  font-weight: normal;\n  font-size: 10px;\n  color: #6a6;\n}\n\n.gram-frame-guidance p {\n  margin: 0 0 4px 0;\n}\n\n/* Military-style metal buttons */\n.gram-frame-mode-btn {\n  padding: 5px 6px;\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  color: #ddd;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  flex: 1;\n  min-width: 0;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-command-btn {\n  padding: 6px 8px;\n  background: linear-gradient(180deg, #5a5a5a 0%, #3a3a3a 50%, #1a1a1a 100%);\n  color: #ddd;\n  border: 2px solid #444;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 14px;\n  line-height: 1;\n  flex: 0 0 auto;\n  min-width: 32px;\n  height: 32px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.2),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n}\n\n.gram-frame-mode-btn:hover {\n  background: linear-gradient(180deg, #7a7a7a 0%, #5a5a5a 50%, #3a3a3a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-mode-btn.active {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n  border-color: #4a8a4a;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    inset 0 -1px 2px rgba(255,255,255,0.1),\n    0 0 4px rgba(74, 138, 74, 0.3);\n}\n\n.gram-frame-mode-btn:active {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n.gram-frame-mode-btn:disabled,\n.gram-frame-mode-btn.disabled {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  color: #666;\n  border-color: #333;\n  cursor: not-allowed;\n  opacity: 0.6;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n}\n\n.gram-frame-mode-btn:disabled:hover,\n.gram-frame-mode-btn.disabled:hover {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n  transform: none;\n}\n\n.gram-frame-command-btn:hover:not(:disabled) {\n  background: linear-gradient(180deg, #6a6a6a 0%, #4a4a4a 50%, #2a2a2a 100%);\n  box-shadow: \n    inset 0 1px 2px rgba(255,255,255,0.3),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-command-btn:active:not(:disabled) {\n  transform: translateY(1px);\n  box-shadow: \n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n.gram-frame-command-btn:disabled {\n  background: linear-gradient(180deg, #333 0%, #222 50%, #111 100%);\n  color: #666;\n  border-color: #333;\n  cursor: not-allowed;\n  box-shadow: \n    inset 0 1px 2px rgba(0,0,0,0.3),\n    0 1px 2px rgba(0,0,0,0.1);\n}\n\n/* Clear gram button — trainer pages only */\n.gram-frame-clear-btn {\n  margin-top: 8px;\n  padding: 6px 10px;\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ddd;\n  border: 2px solid #6a3a3a;\n  border-radius: 4px;\n  font-family: inherit;\n  font-size: 12px;\n  font-weight: 600;\n  letter-spacing: 0.5px;\n  cursor: pointer;\n  text-transform: uppercase;\n  box-shadow:\n    inset 0 1px 2px rgba(255,255,255,0.15),\n    inset 0 -1px 2px rgba(0,0,0,0.3),\n    0 2px 4px rgba(0,0,0,0.3);\n  transition: all 0.1s ease;\n  width: 100%;\n}\n\n.gram-frame-clear-btn:hover {\n  background: linear-gradient(180deg, #8a5a5a 0%, #6a3a3a 50%, #4a2a2a 100%);\n  box-shadow:\n    inset 0 1px 2px rgba(255,255,255,0.25),\n    inset 0 -1px 2px rgba(0,0,0,0.4),\n    0 3px 6px rgba(0,0,0,0.4);\n}\n\n.gram-frame-clear-btn:active {\n  transform: translateY(1px);\n  box-shadow:\n    inset 0 2px 4px rgba(0,0,0,0.4),\n    0 1px 2px rgba(0,0,0,0.2);\n}\n\n/* Storage-failure banner — shown inside the component when a save or clear was\n   refused by browser storage (quota, private browsing). Non-blocking: it sits\n   above the controls, wraps rather than clips, and can be dismissed. */\n.gram-frame-storage-warning {\n  box-sizing: border-box;\n  display: flex;\n  align-items: flex-start;\n  gap: 8px;\n  margin: 0 0 8px 0;\n  padding: 8px 10px;\n  background-color: #fff8e1;\n  border: 1px solid #f0ad4e;\n  border-radius: 4px;\n  color: #663c00;\n  font-family: Arial, Helvetica, sans-serif;\n  font-size: 13px;\n  line-height: 1.4;\n  overflow-wrap: break-word;\n  word-wrap: break-word;\n}\n\n.gram-frame-storage-warning-message {\n  flex: 1 1 auto;\n  min-width: 0;\n}\n\n.gram-frame-storage-warning-dismiss {\n  flex: 0 0 auto;\n  padding: 0 4px;\n  background: none;\n  border: none;\n  color: #663c00;\n  font-size: 16px;\n  line-height: 1;\n  cursor: pointer;\n}\n\n.gram-frame-storage-warning-dismiss:hover {\n  color: #a06000;\n}\n\n/* Legacy-browser compatibility warning — shown in place of the component when\n   the browser lacks a required JS/DOM API. Kept legible even in small\n   containers (min sizing, word wrapping) so it is never clipped to nothing. */\n.gram-frame-compat-warning {\n  box-sizing: border-box;\n  display: block;\n  min-width: 0;\n  max-width: 100%;\n  margin: 10px 0;\n  padding: 16px 20px;\n  background-color: #fff8e1;\n  border: 2px solid #f0ad4e;\n  border-radius: 4px;\n  color: #663c00;\n  font-family: Arial, Helvetica, sans-serif;\n  font-size: 14px;\n  line-height: 1.5;\n  overflow-wrap: break-word;\n  word-wrap: break-word;\n}\n\n.gram-frame-compat-warning-heading {\n  display: block;\n  margin-bottom: 6px;\n  font-size: 15px;\n}\n\n.gram-frame-compat-warning-message {\n  margin: 0;\n}\n\n/* Rate input UI styles removed - backend functionality preserved */\n\n/* SVG cursor styles removed - using CSS cursor only */\n\n/* SVG Harmonic line styles */\n\n\n.gram-frame-harmonic-line,\n.gram-frame-harmonic-mini-pin,\n.gram-frame-sideband-line,\n.gram-frame-sideband-mini-pin {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: none;\n  stroke-linecap: round;\n}\n\n\n.gram-frame-harmonic-number,\n.gram-frame-sideband-number {\n  font-family: Arial, sans-serif;\n  font-size: 12px;\n  font-weight: bold;\n  pointer-events: none;\n  /*\n   * Legibility comes from the white rounded plate drawn behind the digits\n   * (issue #243), set as presentation attributes by plateLabel() in\n   * src/utils/labelPlate.js. No drop-shadow: it only blurs the plate's edge.\n   */\n}\n\n/* SVG Harmonic Set styles (new system) */\n\n.gram-frame-harmonic-set-line {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: auto !important;\n  /*cursor: grab !important;*/\n  stroke-linecap: round;\n}\n\n.gram-frame-harmonic-set-line:hover {\n  stroke-width: 3;\n  /* cursor: grab !important; */\n}\n\n.gram-frame-harmonic-set-line:active {\n  cursor: grabbing !important;\n}\n\n/* Legacy harmonic styles (for backward compatibility) */\n.gram-frame-harmonic {\n  position: absolute;\n  height: 1px;\n  background-color: rgba(255, 255, 0, 0.7);\n  pointer-events: none;\n}\n\n\n\n/* Debug grid */\n\n/* Canvas boundary overlay */\n\n/* Message display */\n\n/* Error state */\n.gram-frame-error {\n  padding: 10px;\n  background-color: #f8d7da;\n  color: #721c24;\n  border: 1px solid #f5c6cb;\n  border-radius: 4px;\n  margin: 10px 0;\n}\n\n/* Legacy harmonic panel styles - now using unified table structure */\n\n.gram-frame-harmonic-spacing,\n.gram-frame-harmonic-rate,\n.gram-frame-sideband-freq,\n.gram-frame-sideband-spacing {\n  font-size: 14px;\n  font-weight: bold;\n}\n\n.gram-frame-harmonic-color,\n.gram-frame-sideband-color {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 16px;\n}\n\n.gram-frame-harmonic-symbol-swatch {\n  display: block;\n}\n\n.gram-frame-harmonic-delete,\n.gram-frame-sideband-delete {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ff6666;\n  border: 1px solid #555;\n  border-radius: 2px;\n  width: 20px;\n  height: 20px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  line-height: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: all 0.1s ease;\n}\n\n.gram-frame-harmonic-delete:hover,\n.gram-frame-sideband-delete:hover {\n  background: linear-gradient(180deg, #8a5a5a 0%, #6a3a3a 50%, #4a2a2a 100%);\n  border-color: #777;\n}\n\n.gram-frame-harmonic-delete:active,\n.gram-frame-sideband-delete:active {\n  transform: translateY(1px);\n}\n\n.gram-frame-harmonic-empty {\n  color: #666;\n  font-style: italic;\n  text-align: center;\n  padding: 20px;\n  font-size: 12px;\n}\n\n/* Doppler mode styles */\n.gram-frame-doppler-fPlus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-fMinus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-crosshair {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-curve {\n  pointer-events: none;\n}\n\n/*\n * The vertical extensions are drawn after the f+/f- dots, so while they were\n * hit-testable they sat on top of the very markers the analyst was aiming at.\n * Doppler hit-testing is done in data space against the marker positions, not\n * by hitting an element, so nothing needs these to be targets.\n */\n.gram-frame-doppler-extension {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-guide {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-label {\n  pointer-events: none;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;\n}\n\n/* Cursor position readout styles */\n.gram-frame-cursor-readout {\n  display: flex;\n  gap: 15px;\n  margin-bottom: 10px;\n  padding: 8px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 1px solid #444;\n  border-radius: 4px;\n}\n\n.gram-frame-readout-item {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  min-width: 80px;\n}\n\n.gram-frame-readout-label {\n  font-size: 10px;\n  color: #aaa;\n  text-transform: uppercase;\n  margin-bottom: 2px;\n  font-weight: bold;\n}\n\n.gram-frame-readout-value {\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  font-weight: bold;\n  color: #00ff00;\n  background: #000;\n  padding: 4px 8px;\n  border: 1px solid #333;\n  border-radius: 2px;\n  text-align: center;\n  min-width: 60px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.8);\n}\n\n/* Modal dialog styles */\n.gram-frame-modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  background: rgba(0, 0, 0, 0.7);\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  z-index: 1000;\n}\n\n.gram-frame-modal {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border: 2px solid #555;\n  border-radius: 8px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);\n  min-width: 350px;\n  max-width: 500px;\n  color: #ddd;\n}\n\n.gram-frame-modal-header {\n  padding: 15px 20px;\n  border-bottom: 1px solid #444;\n  background: linear-gradient(180deg, #444 0%, #333 100%);\n  border-radius: 6px 6px 0 0;\n}\n\n.gram-frame-modal-header h3 {\n  margin: 0;\n  font-size: 16px;\n  color: #fff;\n  text-align: center;\n}\n\n.gram-frame-modal-body {\n  padding: 20px;\n}\n\n.gram-frame-modal-input-group {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.gram-frame-modal-input-group label {\n  font-weight: bold;\n  color: #ccc;\n  font-size: 14px;\n}\n\n.gram-frame-modal-input-group input {\n  padding: 10px 12px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  color: #fff;\n  font-size: 14px;\n  font-family: 'Courier New', monospace;\n}\n\n.gram-frame-modal-input-group input:focus {\n  outline: none;\n  border-color: #777;\n  box-shadow: 0 0 4px rgba(119, 119, 119, 0.3);\n}\n\n.gram-frame-modal-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin-top: 4px;\n}\n\n/* Supporting note under a modal input (e.g. how to clear a marker label) */\n.gram-frame-modal-hint {\n  color: #999;\n  font-size: 11px;\n}\n\n.gram-frame-modal-footer {\n  padding: 15px 20px;\n  border-top: 1px solid #444;\n  display: flex;\n  justify-content: flex-end;\n  gap: 10px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  border-radius: 0 0 6px 6px;\n}\n\n.gram-frame-modal-btn {\n  padding: 8px 16px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  transition: all 0.1s ease;\n  min-width: 80px;\n}\n\n.gram-frame-modal-cancel {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ffaaaa;\n}\n\n.gram-frame-modal-cancel:hover {\n  background: linear-gradient(180deg, #7a5a5a 0%, #5a3a3a 50%, #3a2a2a 100%);\n}\n\n.gram-frame-modal-add {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n}\n\n.gram-frame-modal-add:hover {\n  background: linear-gradient(180deg, #5a7a5a 0%, #3a5a3a 50%, #2a3a2a 100%);\n}\n\n.gram-frame-modal-add:disabled {\n  background: linear-gradient(180deg, #444 0%, #333 50%, #222 100%);\n  color: #666;\n  cursor: not-allowed;\n}\n\n.gram-frame-modal-btn:active:not(:disabled) {\n  transform: translateY(1px);\n}\n\n/* Zoom controls removed - now integrated into pan mode command buttons */\n\n/* Unified Layout Styles */\n.gram-frame-unified-layout {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  gap: 2px; /* Match JavaScript gap */\n  width: 100%;\n  height: 100%;\n  overflow: hidden; /* Prevent columns from overflowing container */\n}\n\n.gram-frame-left-column {\n  position: relative; /* Enable absolute positioning for child elements */\n  display: flex;\n  flex-direction: row;\n  gap: 4px;\n  flex: 0 0 600px;\n  width: 600px;\n  overflow: hidden;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n/* Left column sub-columns */\n.gram-frame-mode-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 0 0 130px;\n  width: 130px;\n  padding: 8px;\n  border: none;\n}\n\n.gram-frame-guidance-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 1;\n  min-width: 150px;\n  border: none;\n}\n\n.gram-frame-controls-column {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  flex: 0 0 210px;\n  width: 210px;\n  padding: 0px;\n  border: none;\n}\n\n/*\n * Markers column. Widened from a flat 160px when the Label column was added\n * (feature 231), and made elastic rather than fixed: it takes up to 235px where\n * the host has the width, and gives back down to 185px where it does not.\n *\n * The floor matters. Shrinking the LEFT column past ~620px rewraps the guidance\n * text onto extra lines and grows the whole control row ~50px taller, pushing\n * the gram down the page — so the markers column must not simply be pinned\n * wide. 185px is the floor because it is what the five columns need, and it is\n * funded by the harmonics column next door (200 → 175px) rather than by the\n * left column, leaving the narrow-window layout exactly as it was.\n *\n * These values — and the matching inline styles in\n * MainUI.createUnifiedLayout — must agree.\n */\n.gram-frame-middle-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 3 235px;\n  width: auto;\n  min-width: 185px;\n  max-width: 235px;\n  padding: 5px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n/*\n * The two pin-set tables: harmonics (200 → 175px when the markers column gained\n * its Label column — see the markers-column note above), and sidebands beside\n * it. Both are always visible (issue #241).\n *\n * 175px each — the width the harmonics table has always had — so the two read as\n * a matched pair. Together with the markers table and the readouts beside them,\n * the control row now wants ~1090px; a host narrower than that squeezes the\n * guidance column, which scrolls rather than growing the row taller (see the\n * note on `.gram-frame-guidance`).\n */\n.gram-frame-right-column,\n.gram-frame-sidebands-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 175px;\n  min-width: 175px;\n  width: 175px;\n  padding: 5px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);\n  border: 2px solid #333;\n  border-radius: 4px;\n  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);\n}\n\n.gram-frame-cursor-leds {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 6px;\n  align-items: flex-start;\n  flex: 0 0 auto;\n  height: fit-content;\n}\n\n.gram-frame-markers-persistent-container,\n.gram-frame-harmonics-persistent-container,\n.gram-frame-sidebands-persistent-container {\n  display: flex;\n  flex-direction: column;\n  flex: 1;\n  min-height: 0;\n}\n\n/*\n * Panel header: the heading, plus an optional action slot on the right (the\n * harmonics panel's + Manual button).\n *\n * The rule and the spacing live HERE and not on the h4, which is what keeps the\n * two panels consistent. When the underline was on the heading itself, the\n * markers h4 — a block filling its column — drew a full-width rule, while the\n * harmonics h4 — a flex item beside the button — drew one only as wide as the\n * word. `min-height` holds both rows to the same height so the two headings sit\n * on the same line as each other across the panel.\n */\n.gram-frame-panel-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  min-height: 22px;\n  margin: 0 0 8px 0;\n  padding-bottom: 4px;\n  border-bottom: 1px solid #444;\n  flex-shrink: 0;\n}\n\n.gram-frame-markers-persistent-container h4,\n.gram-frame-harmonics-persistent-container h4,\n.gram-frame-sidebands-persistent-container h4 {\n  margin: 0;\n  padding: 0;\n  border: 0;\n  flex-shrink: 0;\n  color: #ddd;\n  font-size: 14px;\n  text-align: left;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n}\n\n.gram-frame-harmonics-button-container {\n  display: flex;\n  justify-content: center;\n  flex-shrink: 0;\n}\n\n/* Responsive behavior for smaller screens */\n@media (max-width: 1200px) {\n  .gram-frame-unified-layout {\n    flex-direction: column;\n    gap: 8px;\n  }\n  \n  .gram-frame-left-column,\n  .gram-frame-middle-column,\n  .gram-frame-right-column,\n  .gram-frame-sidebands-column {\n    flex: 0 0 auto;\n    min-height: 200px;\n  }\n}\n\n/* Selection highlighting for keyboard control */\n.gram-frame-selected-row {\n  background: linear-gradient(135deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%) !important;\n  color: #aaffaa !important;\n  outline: 2px solid #4a8a4a !important;\n  outline-offset: -1px;\n  position: relative;\n  z-index: 10;\n  box-shadow: \n    inset 0 2px 4px rgba(255,255,255,0.15),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 0 8px rgba(74, 138, 74, 0.6),\n    0 0 2px rgba(74, 138, 74, 0.8) !important;\n}\n\n.gram-frame-selected-row td {\n  color: #aaffaa !important;\n  border-color: #4a8a4a !important;\n  position: relative;\n  z-index: 11;\n}\n\n/* Enhanced table row interactivity - now handled by unified .gram-frame-table styles */\n\n/* Selected Doppler marker highlighting */\n.gram-frame-selected-doppler-marker {\n  stroke: #4a8a4a !important;\n  stroke-width: 3 !important;\n  filter: drop-shadow(0 0 8px rgba(74, 138, 74, 0.6)) !important;\n}\n\n.gram-frame-selected-doppler-marker[fill] {\n  fill: #4a8a4a !important;\n  stroke: #aaffaa !important;\n}\n\n";
+  style.textContent = "/**\n * GramFrame Component Styles - Military/Industrial Theme\n */\n\n/* ---------------------------------------------------------------------------\n * Pre-conversion placeholder\n *\n * A `table.gram-config` is ordinary HTML until GramFrame replaces it, so on a\n * cold load (large spectrogram, slow network, unbundled dev modules) the raw\n * table is painted first: a stretched image followed by the time/freq parameter\n * rows in whatever table styling the host page uses. These rules dress that\n * intermediate state as a loading placeholder in the component's own dark\n * styling - the parameter rows are hidden, the image is dimmed back, and a\n * \"Loading spectrogram\" caption sits over the top. They stop applying the\n * moment the table is swapped for .gram-frame-container.\n *\n * Selectors are deliberately more specific than a bare `table.gram-config td`\n * so host-page table styling (borders, padding, stretched images) does not show\n * through the placeholder.\n * ------------------------------------------------------------------------- */\ntable.gram-config {\n  border-collapse: collapse;\n  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0f0f0f 100%);\n  border: 3px solid #444;\n  border-radius: 8px;\n  box-shadow:\n    inset 0 2px 4px rgba(255,255,255,0.1),\n    inset 0 -2px 4px rgba(0,0,0,0.3),\n    0 4px 8px rgba(0,0,0,0.5);\n}\n\n/* Per the config format, the first row holds the image and every later row is a\n   parameter definition - configuration, not content, so hide those rows */\ntable.gram-config tr:not(:first-child) {\n  display: none;\n}\n\ntable.gram-config tr:first-child td {\n  position: relative;\n  padding: 15px;\n  border: 0;\n  background: none;\n}\n\ntable.gram-config tr:first-child img {\n  display: block;\n  width: auto;\n  max-width: 100%;\n  height: auto;\n  opacity: 0.25;\n}\n\ntable.gram-config tr:first-child td::after {\n  content: 'Loading spectrogram';\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  letter-spacing: 2px;\n  text-transform: uppercase;\n  color: #00ff00;\n  text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);\n  white-space: nowrap;\n  pointer-events: none;\n}\n\n/* Initialisation failed: the table is kept in place beside the error message,\n   so drop the placeholder styling and show the config as plain content again */\ntable.gram-config.gram-frame-config-error {\n  background: none;\n  border: 0;\n  box-shadow: none;\n}\n\ntable.gram-config.gram-frame-config-error tr:not(:first-child) {\n  display: table-row;\n}\n\ntable.gram-config.gram-frame-config-error tr:first-child img {\n  opacity: 1;\n}\n\ntable.gram-config.gram-frame-config-error tr:first-child td::after {\n  content: none;\n}\n\n/* Container that replaces the config table */\n.gram-frame-container {\n  position: relative;\n  width: 100%;\n  max-width: 100%;\n  margin: 0;\n  padding: 0;\n  box-sizing: border-box;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  background: transparent;\n  transition: box-shadow 0.2s ease, border-color 0.2s ease;\n  margin-bottom: 20px;\n}\n\n/* Focus indicator for multiple instances */\n.gram-frame-container.gram-frame-focused {\n  box-shadow: 0 0 0 3px rgba(66, 139, 202, 0.5);\n  border-radius: 8px;\n}\n\n/* The outer frame (not the diffing <table> — see `gram-frame-layout` in\n   table.js).\n *\n * A hairline and a radius, on the panel's own surface. It used to be a 3px\n * bevelled border over a three-stop gradient — an instrument-case look that\n * competed with the readouts inside it for the eye, which is the problem the\n * control-row redesign exists to fix. The frame's job is to say where the\n * component ends. */\n.gram-frame-layout {\n  display: table;\n  /* Fixed, so the cells take the frame's width rather than the width their\n     contents would like. Without it the control row's min-content width — five\n     columns of nowrap labels — sets the component's width, and a host narrower\n     than that gets a clipped third table instead of a squeezed one. */\n  table-layout: fixed;\n  width: 100%;\n  height: 100%;\n  background: var(--gf-surface);\n  border: 1px solid var(--gf-divider);\n  border-radius: 8px;\n  overflow: hidden;\n}\n\n.gram-frame-row {\n  display: table-row;\n}\n\n.gram-frame-row:nth-child(2) {\n  height: 100%; /* Main panel row should stretch */\n}\n\n.gram-frame-cell {\n  display: table-cell;\n  vertical-align: middle;\n  padding: 0;\n}\n\n\n/* The plot area. Unchanged in what it draws — the gram, the axes and every\n * overlay are out of the redesign's scope — but its casing is now the same\n * ground as the panel above it, so the two read as one instrument rather than\n * as two bevelled boxes stacked. */\n.gram-frame-main-panel {\n  padding: 12px;\n  background: #0c0d16;\n  border: 0;\n  border-top: 1px solid var(--gf-divider);\n  position: relative;\n}\n\n/* The SVG has no size until the spectrogram's natural dimensions are known, so\n   the panel is an empty black rectangle between the table being replaced and\n   the image arriving. Caption that gap, and say so plainly if the image never\n   arrives, rather than leaving the analyst looking at a silent black box. */\n.gram-frame-container.gram-frame-loading .gram-frame-main-panel,\n.gram-frame-container.gram-frame-image-error .gram-frame-main-panel {\n  min-height: 120px;\n}\n\n.gram-frame-container.gram-frame-loading .gram-frame-main-panel::after,\n.gram-frame-container.gram-frame-image-error .gram-frame-main-panel::after {\n  content: 'Loading spectrogram';\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  font-family: 'Courier New', monospace;\n  font-size: 14px;\n  letter-spacing: 2px;\n  text-transform: uppercase;\n  color: #00ff00;\n  text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);\n  white-space: nowrap;\n  pointer-events: none;\n}\n\n.gram-frame-container.gram-frame-image-error .gram-frame-main-panel::after {\n  content: 'Spectrogram image could not be loaded';\n  color: #ff6b6b;\n  text-shadow: none;\n}\n\n/* An audio-sourced gram (spec 168) is analysed after the table is replaced:\n   the loading caption stays up, but reads the stage and percentage the setup\n   step writes into data-gram-progress on the main panel (FR-006). */\n.gram-frame-container.gram-frame-analysing .gram-frame-main-panel::after {\n  content: attr(data-gram-progress);\n}\n\n/* While the recording plays, annotation tools are inert (spec 168 FR-013, as\n   narrowed by spec 171 FR-004a) but the gram can be dragged to seek through it\n   (spec 171, FR-015) — so the open hand, not the crosshair and not the arrow.\n   !important because the modes set the cursor inline on the SVG root. */\n.gram-frame-container.gram-frame-playing .gram-frame-svg {\n  cursor: grab !important;\n}\n\n/* The drag itself. Playback is paused for its duration, so the playing class\n   is gone and this rule stands on its own. */\n.gram-frame-container.gram-frame-drag-seek .gram-frame-svg {\n  cursor: grabbing !important;\n}\n\n/* The contrast controls, on the same bar as the transport (spec 171, US2). */\n/* The contrast controls (spec 171, US2). They ride the transport bar, and wrap\n   onto a line of their own when the bar has nothing left to give: the row above\n   is a fixed set of controls, so this pair is the one that yields. */\n.gram-frame-display-range {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: 1 1 300px;\n  min-width: 0;\n}\n\n.gram-frame-display-control {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n}\n\n.gram-frame-display-label {\n  flex: none;\n  font: 400 9px/1 var(--gf-mono);\n  letter-spacing: 0.14em;\n  color: var(--gf-muted);\n  text-transform: uppercase;\n}\n\n.gram-frame-display-slider {\n  flex: 1;\n  min-width: 0;\n  height: 4px;\n  appearance: none;\n  -webkit-appearance: none;\n  background: rgba(247, 247, 250, 0.13);\n  border-radius: 2px;\n  cursor: pointer;\n}\n\n.gram-frame-display-slider::-webkit-slider-thumb {\n  appearance: none;\n  -webkit-appearance: none;\n  width: 9px;\n  height: 9px;\n  border: 0;\n  border-radius: 5px;\n  background: var(--gf-secondary);\n}\n\n.gram-frame-display-slider::-moz-range-thumb {\n  width: 9px;\n  height: 9px;\n  border: 0;\n  border-radius: 5px;\n  background: var(--gf-secondary);\n}\n\n.gram-frame-display-reset {\n  width: auto;\n  padding: 0 8px;\n  font-size: 10.5px;\n}\n\n/* The colour-map choice, on the same bar: a radio row so every map under\n   trial is visible at once and switching between two is one click each way. */\n.gram-frame-colour-map {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 2px 10px;\n  flex: 1 1 100%;\n  font-size: 11px;\n  letter-spacing: 0.03em;\n  text-transform: uppercase;\n  opacity: 0.9;\n}\n\n.gram-frame-colour-map-option {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  cursor: pointer;\n}\n\n.gram-frame-colour-map-option input {\n  margin: 0;\n}\n\n/* The caption naming what the render caps changed (spec 171, FR-024). */\n.gram-frame-degraded-note {\n  margin-top: 8px;\n  padding: 4px 6px;\n  border: 1px solid rgba(230, 200, 120, 0.6);\n  border-radius: 4px;\n  background: rgba(60, 50, 20, 0.75);\n  color: #ffe6a0;\n  font-size: 12px;\n}\n\n/* The transport's live region is for screen readers only (spec 171, FR-026):\n   it carries no visible text of its own, and everything it says is already on\n   the bar for a sighted reader. */\n.gram-frame-transport-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n.gram-frame-transport-span {\n  flex: none;\n  font: 400 10px/1 var(--gf-mono);\n  color: var(--gf-muted);\n  white-space: nowrap;\n}\n\n/* The transport bar under an audio-sourced gram (spec 168, D13).\n *\n * Below the gram, so the scrub track and its bookmark flags line up with the\n * time axis they refer to and the control panel above never changes height.\n * One row, on the panel's own surface: it is chrome for the recording, not a\n * second instrument. */\n.gram-frame-transport {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 10px 12px;\n  min-height: 44px;\n  padding: 7px 12px;\n  box-sizing: border-box;\n  background: var(--gf-surface);\n  border-top: 1px solid rgba(247, 247, 250, 0.08);\n  color: var(--gf-text);\n  font-family: var(--gf-ui);\n}\n\n.gram-frame-transport-group {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  position: relative;\n}\n\n.gram-frame-transport-btn {\n  width: 26px;\n  height: 26px;\n  display: grid;\n  place-items: center;\n  padding: 0;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 5px;\n  color: var(--gf-secondary);\n  font: 400 12px/1 var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-transport-btn .gram-frame-icon {\n  width: 13px;\n  height: 13px;\n}\n\n.gram-frame-transport-btn:hover {\n  border-color: rgba(247, 247, 250, 0.4);\n  color: var(--gf-text);\n}\n\n.gram-frame-transport-btn[aria-pressed=\"true\"] {\n  border-color: var(--gf-accent);\n  color: var(--gf-accent-200);\n  background: var(--gf-accent-900);\n}\n\n/* Play/pause is the one filled control on the bar: it is the thing an analyst\n   reaches for without looking. */\n.gram-frame-transport-primary {\n  width: 30px;\n  height: 30px;\n  background: var(--gf-accent);\n  border: 0;\n  border-radius: 7px;\n  color: var(--gf-bg);\n}\n\n.gram-frame-transport-primary .gram-frame-icon {\n  width: 12px;\n  height: 12px;\n}\n\n.gram-frame-transport-primary:hover,\n.gram-frame-transport-primary[aria-pressed=\"true\"] {\n  background: var(--gf-accent-400);\n  color: var(--gf-bg);\n  border: 0;\n}\n\n.gram-frame-transport-time,\n.gram-frame-transport-duration {\n  flex: none;\n  font: 400 12px/1 var(--gf-mono);\n  font-variant-numeric: tabular-nums;\n}\n\n.gram-frame-transport-duration {\n  color: var(--gf-muted);\n}\n\n.gram-frame-transport-track {\n  position: relative;\n  flex: 1 1 180px;\n  min-width: 140px;\n  height: 30px;\n}\n\n/* The scrub track. A native range input, restyled: the rail is painted by the\n   track itself and the played portion by a gradient stop the reflect pass\n   moves, so there is one element to align rather than three. */\n.gram-frame-transport-seek {\n  position: absolute;\n  left: 0;\n  right: 0;\n  top: 13px;\n  width: 100%;\n  height: 4px;\n  margin: 0;\n  padding: 0;\n  appearance: none;\n  -webkit-appearance: none;\n  background: linear-gradient(\n    to right,\n    var(--gf-accent) 0 var(--gf-played, 0%),\n    rgba(247, 247, 250, 0.13) var(--gf-played, 0%) 100%\n  );\n  border-radius: 2px;\n  cursor: pointer;\n}\n\n.gram-frame-transport-seek::-webkit-slider-thumb {\n  appearance: none;\n  -webkit-appearance: none;\n  width: 11px;\n  height: 11px;\n  border: 0;\n  border-radius: 6px;\n  background: var(--gf-accent-100);\n  box-shadow: 0 0 0 3px rgba(145, 132, 217, 0.28);\n  cursor: pointer;\n}\n\n.gram-frame-transport-seek::-moz-range-thumb {\n  width: 11px;\n  height: 11px;\n  border: 0;\n  border-radius: 6px;\n  background: var(--gf-accent-100);\n  box-shadow: 0 0 0 3px rgba(145, 132, 217, 0.28);\n  cursor: pointer;\n}\n\n/* The flags sit over the track and are transparent to the pointer except where\n   a flag actually is, so scrubbing past one still scrubs. */\n.gram-frame-transport-flags {\n  position: absolute;\n  inset: 0;\n  pointer-events: none;\n}\n\n.gram-frame-transport-flag {\n  position: absolute;\n  top: 2px;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  padding: 0;\n  background: none;\n  border: 0;\n  pointer-events: auto;\n  cursor: pointer;\n}\n\n.gram-frame-transport-flag-plate {\n  padding: 1px 5px;\n  border-radius: 3px;\n  background: var(--gf-text);\n  color: var(--gf-bg);\n  font: 600 9px/1.4 var(--gf-mono);\n  white-space: nowrap;\n}\n\n.gram-frame-transport-flag-stem {\n  width: 1px;\n  height: 9px;\n  background: var(--gf-text);\n}\n\n.gram-frame-transport-divider {\n  flex: none;\n  width: 1px;\n  height: 20px;\n  background: var(--gf-divider);\n}\n\n/* Bookmark is the only outlined-in-accent control on the bar: it is the one\n   thing here that creates something rather than moving the playhead. */\n.gram-frame-transport-bookmark {\n  width: auto;\n  gap: 6px;\n  display: flex;\n  align-items: center;\n  padding: 0 9px;\n  border-color: var(--gf-accent);\n  color: var(--gf-accent-200);\n  font: 500 10.5px var(--gf-ui);\n  white-space: nowrap;\n}\n\n.gram-frame-transport-bookmark:hover {\n  background: rgba(145, 132, 217, 0.14);\n  border-color: var(--gf-accent);\n  color: var(--gf-accent-200);\n}\n\n.gram-frame-transport-saved {\n  height: 26px;\n  padding: 0 8px;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 5px;\n  color: var(--gf-muted);\n  font: 400 10.5px var(--gf-ui);\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-transport-saved:hover:not(:disabled) {\n  border-color: rgba(247, 247, 250, 0.4);\n  color: var(--gf-text);\n}\n\n.gram-frame-transport-saved:disabled {\n  opacity: 0.5;\n  cursor: default;\n}\n\n/* Opening upward: the bar is the last thing on the component, so a list\n   dropping down would be a list off the bottom of it. */\n.gram-frame-transport-saved-list {\n  position: absolute;\n  z-index: 30;\n  right: 0;\n  bottom: calc(100% + 6px);\n  min-width: 150px;\n  padding: 4px;\n  background: var(--gf-bg);\n  border: 1px solid var(--gf-hairline);\n  border-radius: 8px;\n  box-shadow: var(--gf-shadow-md);\n}\n\n.gram-frame-transport-saved-row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n\n.gram-frame-transport-saved-jump {\n  flex: 1;\n  padding: 4px 6px;\n  background: transparent;\n  border: 0;\n  border-radius: 4px;\n  color: var(--gf-text);\n  font: 400 11px/1 var(--gf-mono);\n  text-align: left;\n  cursor: pointer;\n}\n\n.gram-frame-transport-saved-jump:hover {\n  background: var(--gf-hover);\n}\n\n.gram-frame-transport-saved-remove {\n  padding: 2px 5px;\n  background: transparent;\n  border: 0;\n  color: var(--gf-muted);\n  font: 400 13px/1 var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-transport-saved-remove:hover {\n  color: var(--gf-danger-text);\n}\n\n.gram-frame-transport-rate-label {\n  flex: none;\n  font: 400 10px var(--gf-ui);\n  color: var(--gf-muted);\n  white-space: nowrap;\n}\n\n.gram-frame-transport-playback-rate {\n  height: 26px;\n  padding: 0 4px;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 5px;\n  color: var(--gf-text);\n  font: 400 10.5px var(--gf-mono);\n  cursor: pointer;\n}\n\n.gram-frame-transport-playback-rate option {\n  background: var(--gf-bg);\n  color: var(--gf-text);\n}\n\n.gram-frame-transport-volume {\n  flex: none;\n  width: 64px;\n  height: 4px;\n  appearance: none;\n  -webkit-appearance: none;\n  background: rgba(247, 247, 250, 0.13);\n  border-radius: 2px;\n  cursor: pointer;\n}\n\n.gram-frame-transport-volume::-webkit-slider-thumb {\n  appearance: none;\n  -webkit-appearance: none;\n  width: 9px;\n  height: 9px;\n  border: 0;\n  border-radius: 5px;\n  background: var(--gf-secondary);\n}\n\n.gram-frame-transport-volume::-moz-range-thumb {\n  width: 9px;\n  height: 9px;\n  border: 0;\n  border-radius: 5px;\n  background: var(--gf-secondary);\n}\n\n/* The analysed gram is drawn with hard-edged cells rather than the browser's\n   bilinear upscaling. A 0–200 Hz band at 2 Hz per column is 100 pixels wide\n   drawn across 800, and smoothed, each column becomes an 8-pixel gradient:\n   the whole picture reads as a watercolour and the vertical bars a legacy\n   display shows as discrete columns are gone. Pixelated, a column is a\n   column. It applies to the supplied-image instance too, where a PNG is\n   usually near its rendered size and the difference is slight. */\n.gram-frame-spectrogram-image {\n  image-rendering: pixelated;\n}\n\n/* Expand/collapse image toggle — floats at the top-left of the image region,\n   clear of the time-axis labels (left margin is 60px). Landscape grams only. */\n.gram-frame-expand-toggle {\n  position: absolute;\n  top: 22px;   /* just inside the main-panel padding + SVG top margin */\n  left: 80px;  /* clear of the 60px time-axis margin */\n  z-index: 5;  /* above the SVG overlay */\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 15px;\n  line-height: 1;\n  color: #e6f2ff;\n  background: rgba(20, 30, 45, 0.55);\n  border: 1px solid rgba(180, 200, 230, 0.5);\n  border-radius: 4px;\n  cursor: pointer;\n  transition: background 0.12s ease, border-color 0.12s ease;\n}\n\n.gram-frame-expand-toggle:hover {\n  background: rgba(40, 60, 90, 0.8);\n  border-color: rgba(200, 220, 255, 0.8);\n}\n\n.gram-frame-expand-toggle:active {\n  transform: translateY(1px);\n}\n\n.gram-frame-expand-toggle[aria-pressed=\"true\"] {\n  background: rgba(60, 100, 60, 0.75);\n  border-color: rgba(150, 220, 150, 0.8);\n}\n\n/* SVG container for drawing the spectrogram and overlays */\n.gram-frame-svg {\n  display: block;\n  width: 100%;\n  height: auto;\n  background: #000;\n  border: 2px solid #333;\n  border-radius: 4px;\n  cursor: crosshair;\n  box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);\n}\n\n/* SVG image element for the spectrogram */\n.gram-frame-image {\n  /* Remove width/height CSS to allow SVG attributes to control positioning */\n}\n\n/* SVG axes styling - white on dark background */\n.gram-frame-axis-line {\n  stroke: #fff;\n  stroke-width: 1;\n  fill: none;\n}\n\n.gram-frame-axis-tick {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-major {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-tick-minor {\n  stroke: #fff;\n  stroke-width: 1;\n}\n\n.gram-frame-axis-label {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 12px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n.gram-frame-axis-label-major {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n  font-size: 10px;\n  fill: #fff;\n  dominant-baseline: central;\n}\n\n\n\n\n/* Military-style display panel */\n/* ===========================================================================\n * The control row\n *\n * Five columns above the gram: the mode rail, the armed mode's guidance, the\n * cursor readouts, the style panel, and the three annotation tables. They are\n * separated by single hairlines rather than boxed, because five bordered cards\n * of equal weight gave the eye nowhere to land — the readouts are the first\n * read, and everything here is arranged so they win.\n *\n * Dark throughout, and deliberately so: the recognition differential when\n * reading plotted data is higher against a dark ground, which is what the panel\n * is beside. The palette is the design system's, declared once below and used\n * through the variables so a change lands everywhere at once.\n * ======================================================================== */\n\n.gram-frame-container {\n  /* Ground, surface and ink */\n  --gf-bg: #0d0e18;\n  --gf-surface: #171926;\n  --gf-text: #f7f7fa;\n  /* One value for the whole muted tier (~8.5:1 on the surface). Alphas below\n     .60 do not reach 4.5:1 on this ground; do not reintroduce them for text. */\n  --gf-muted: rgba(247, 247, 250, 0.70);\n  --gf-secondary: rgba(247, 247, 250, 0.85);\n\n  /* The non-text tier: rules, hover tints and recesses */\n  --gf-divider: #3a3c4a;\n  --gf-hairline: rgba(247, 247, 250, 0.18);\n  --gf-row-line: rgba(247, 247, 250, 0.07);\n  --gf-hover: rgba(247, 247, 250, 0.06);\n  --gf-row-hover: rgba(247, 247, 250, 0.05);\n  --gf-recess: rgba(0, 0, 0, 0.22);\n  --gf-recess-deep: rgba(0, 0, 0, 0.36);\n\n  /* Accent, and the ramp around it */\n  --gf-accent: #9184d9;\n  --gf-accent-100: #efedfb;\n  --gf-accent-200: #ddd9f6;\n  --gf-accent-400: #aca2e5;\n  --gf-accent-600: #7768c4;\n  --gf-accent-700: #5d4fa3;\n  --gf-accent-800: #433a71;\n  --gf-accent-900: #2b2741;\n  --gf-accent-tint: rgba(145, 132, 217, 0.09);\n\n  /* Destructive, on hover only: nothing here is red at rest */\n  --gf-danger-border: #8d5a5a;\n  --gf-danger-text: #e2b3b3;\n\n  --gf-ui: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  --gf-mono: ui-monospace, Menlo, Consolas, monospace;\n  --gf-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);\n\n  /* The panel's height. The gram is deliberately given as much room as\n     possible, so this is a budget rather than a starting point: a column that\n     needs more room scrolls inside it. */\n  --gf-panel-height: 250px;\n}\n\n/* The control row's own containment context.\n *\n * The panel's responsive behaviour depends on how wide the COMPONENT is, not on\n * how wide the window is: the same page can carry a full-width gram and a\n * half-width one, and a viewport media query would collapse the guidance in\n * both or neither. Scoped to this wrapper rather than the container so the\n * plot area below is outside the containment entirely. */\n.gram-frame-readout {\n  container-type: inline-size;\n  container-name: gramframe-controls;\n  width: 100%;\n  padding: 0;\n  background: transparent;\n}\n\n.gram-frame-unified-layout {\n  display: flex;\n  align-items: stretch;\n  height: var(--gf-panel-height);\n  background: var(--gf-surface);\n  font-family: var(--gf-ui);\n  color: var(--gf-text);\n}\n\n/* Every column but the last is closed by a hairline; the tables run to the\n   panel's own edge. */\n.gram-frame-unified-layout > * {\n  box-sizing: border-box;\n  border-right: 1px solid var(--gf-divider);\n}\n\n.gram-frame-unified-layout > :last-child {\n  border-right: 0;\n}\n\n/* Keyboard focus is one treatment everywhere in the panel — an accent ring,\n   offset so it never reads as a border the control has grown. */\n.gram-frame-unified-layout :focus-visible,\n.gram-frame-symbol-popup :focus-visible,\n.gram-frame-transport :focus-visible {\n  outline: 2px solid var(--gf-accent);\n  outline-offset: 2px;\n}\n\n/* A section kicker: the smallest text in the panel, and the only text set in\n   spaced monospace caps, so it reads as a label rather than as content. */\n.gram-frame-kicker {\n  font: 600 9px/1 var(--gf-mono);\n  letter-spacing: 0.16em;\n  color: var(--gf-muted);\n  text-transform: uppercase;\n}\n\n/* --- Column 1: the mode rail --------------------------------------------- */\n\n.gram-frame-mode-column {\n  flex: 0 0 154px;\n  width: 154px;\n  min-width: 0;\n}\n\n.gram-frame-modes {\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  height: 100%;\n  padding: 10px 10px 8px;\n  box-sizing: border-box;\n}\n\n.gram-frame-modes > .gram-frame-kicker {\n  padding: 0 2px 2px;\n}\n\n.gram-frame-mode-list {\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n}\n\n.gram-frame-mode-spacer {\n  flex: 1;\n}\n\n/* A mode button: glyph, then word. The 2px left border is transparent at rest\n   and accent when armed, so arming changes no geometry — the row does not\n   shift under the pointer as the analyst moves down the rail. */\n.gram-frame-mode-btn {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  height: 27px;\n  padding: 0 8px;\n  border: 0;\n  border-left: 2px solid transparent;\n  border-radius: 0 4px 4px 0;\n  background: transparent;\n  color: var(--gf-secondary);\n  font: 400 11.5px var(--gf-ui);\n  white-space: nowrap;\n  text-align: left;\n  cursor: pointer;\n}\n\n.gram-frame-mode-btn .gram-frame-icon {\n  width: 15px;\n  height: 15px;\n  flex: none;\n}\n\n.gram-frame-mode-btn-label {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.gram-frame-mode-btn:hover:not(:disabled) {\n  background: var(--gf-hover);\n  color: var(--gf-text);\n}\n\n.gram-frame-mode-btn.active {\n  background: var(--gf-accent-900);\n  border-left-color: var(--gf-accent);\n  color: var(--gf-accent-200);\n  font-weight: 500;\n}\n\n.gram-frame-mode-btn:disabled,\n.gram-frame-mode-btn.disabled {\n  opacity: 0.45;\n  cursor: not-allowed;\n}\n\n/* The view controls, at the foot of the rail behind a rule: they act on the\n   view rather than on the armed tool, which is why they are fenced off from\n   the five buttons above and stay put whichever is armed. */\n.gram-frame-mode-commands {\n  display: flex;\n  gap: 4px;\n  padding-top: 6px;\n  border-top: 1px solid var(--gf-divider);\n}\n\n.gram-frame-command-btn {\n  width: 26px;\n  height: 24px;\n  display: grid;\n  place-items: center;\n  padding: 0;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 4px;\n  color: var(--gf-secondary);\n  font: 400 13px var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-command-btn .gram-frame-icon {\n  width: 14px;\n  height: 14px;\n}\n\n.gram-frame-command-btn:hover:not(:disabled) {\n  border-color: var(--gf-accent);\n  color: var(--gf-accent-200);\n}\n\n.gram-frame-command-btn:disabled {\n  opacity: 0.4;\n  cursor: not-allowed;\n}\n\n/* The word behind a glyph: gone from the page, present in the accessibility\n   tree and to anything selecting the button by name. */\n.gram-frame-visually-hidden {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  margin: -1px;\n  padding: 0;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  clip-path: inset(50%);\n  white-space: nowrap;\n  border: 0;\n}\n\n/* --- Column 2: the armed mode's guidance --------------------------------- */\n\n.gram-frame-guidance-column {\n  flex: 0 0 264px;\n  width: 264px;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  background: var(--gf-recess);\n  box-sizing: border-box;\n}\n\n.gram-frame-guidance-header {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  flex: none;\n  height: 28px;\n  padding: 0 10px 0 12px;\n  border-bottom: 1px solid var(--gf-divider);\n}\n\n.gram-frame-guidance-title {\n  font: 600 9px/1 var(--gf-mono);\n  letter-spacing: 0.14em;\n  color: var(--gf-accent);\n  text-transform: uppercase;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.gram-frame-guidance-hide {\n  margin-left: auto;\n  height: 20px;\n  padding: 0 7px;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 4px;\n  color: var(--gf-muted);\n  font: 400 9.5px var(--gf-ui);\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-guidance-hide:hover {\n  border-color: rgba(247, 247, 250, 0.4);\n  color: var(--gf-text);\n}\n\n/* The body scrolls rather than growing the row: Pan carries its own four lines\n   plus the four cross-mode gestures, and the panel's height is a budget. */\n.gram-frame-guidance {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  padding: 8px 12px;\n  box-sizing: border-box;\n}\n\n.gram-frame-guidance h4 {\n  margin: 4px 0 0;\n  font: 600 9px/1 var(--gf-mono);\n  letter-spacing: 0.14em;\n  color: var(--gf-muted);\n  text-transform: uppercase;\n}\n\n.gram-frame-guidance h4:first-child {\n  margin-top: 0;\n}\n\n.gram-frame-guidance h4 .gram-frame-guidance-qualifier {\n  font-weight: 400;\n  letter-spacing: 0;\n  text-transform: none;\n}\n\n/* One line of guidance: the trigger in a fixed track, the outcome beside it.\n   The fixed track is the whole point — it is what lets the gestures of a mode\n   be compared down the column instead of read out of four sentences. */\n.gram-frame-guidance-row {\n  display: flex;\n  gap: 8px;\n  align-items: baseline;\n}\n\n.gram-frame-guidance-trigger {\n  flex: none;\n  width: 76px;\n  font: 500 10px/1.4 var(--gf-ui);\n  color: var(--gf-text);\n}\n\n.gram-frame-guidance-outcome,\n.gram-frame-guidance-note {\n  font: 400 11px/1.4 var(--gf-ui);\n  color: var(--gf-secondary);\n}\n\n.gram-frame-guidance-note {\n  color: var(--gf-muted);\n}\n\n/* Collapsed: the column becomes a 40px rail in the same position, and the\n   ~224px it releases goes to the annotation tables. The space stays dedicated\n   — nothing else ever moves into it. */\n.gram-frame-guidance-column.gram-frame-guidance-collapsed {\n  flex: 0 0 40px;\n  width: 40px;\n  align-items: center;\n  padding: 10px 0;\n  gap: 10px;\n}\n\n.gram-frame-guidance-collapsed .gram-frame-guidance-header,\n.gram-frame-guidance-collapsed .gram-frame-guidance {\n  display: none;\n}\n\n.gram-frame-guidance-rail {\n  display: none;\n  flex-direction: column;\n  align-items: center;\n  gap: 10px;\n}\n\n.gram-frame-guidance-collapsed .gram-frame-guidance-rail {\n  display: flex;\n}\n\n.gram-frame-guidance-reveal {\n  width: 24px;\n  height: 24px;\n  display: grid;\n  place-items: center;\n  padding: 0;\n  background: transparent;\n  border: 1px solid var(--gf-accent-700);\n  border-radius: 4px;\n  color: var(--gf-accent-200);\n  font: 400 11px var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-guidance-reveal:hover {\n  background: var(--gf-accent-900);\n}\n\n.gram-frame-guidance-rail-label {\n  font: 600 9px/1 var(--gf-mono);\n  letter-spacing: 0.16em;\n  color: var(--gf-muted);\n  text-transform: uppercase;\n  writing-mode: vertical-rl;\n}\n\n/* --- Column 3: the instrument face --------------------------------------- */\n\n.gram-frame-readout-column {\n  flex: 0 0 210px;\n  width: 210px;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  padding: 10px 14px 8px;\n  box-sizing: border-box;\n  /* Recessed, and lit from the top edge: it reads as a separate instrument set\n     into the panel rather than as another card sitting on it. */\n  background: var(--gf-recess-deep);\n  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.4);\n}\n\n.gram-frame-readout-kicker {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding-bottom: 8px;\n}\n\n.gram-frame-readout-target {\n  font: 500 9.5px/1 var(--gf-ui);\n  letter-spacing: 0;\n  color: var(--gf-accent-200);\n  text-transform: none;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.gram-frame-readout-spacer {\n  flex: 1;\n}\n\n.gram-frame-led {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: 8px;\n  font-family: var(--gf-mono);\n}\n\n.gram-frame-led-value {\n  font: 400 36px/1 var(--gf-mono);\n  color: var(--gf-text);\n  font-variant-numeric: tabular-nums;\n  letter-spacing: -0.01em;\n  /* The faint bloom is what makes it read as a lit instrument rather than as\n     large text. It is the only glow in the panel, and only the frequency\n     keeps it: the two secondary readings switch it off below. */\n  text-shadow: 0 0 18px rgba(247, 247, 250, 0.2);\n}\n\n.gram-frame-led-accent .gram-frame-led-value {\n  color: var(--gf-accent-200);\n  text-shadow: 0 0 20px rgba(145, 132, 217, 0.35);\n}\n\n.gram-frame-led-unit {\n  font: 400 9.5px/1 var(--gf-mono);\n  letter-spacing: 0.1em;\n  color: var(--gf-muted);\n}\n\n.gram-frame-led-caption {\n  font: 400 9px/1 var(--gf-mono);\n  letter-spacing: 0.14em;\n  color: var(--gf-muted);\n  text-transform: uppercase;\n}\n\n/* The second rank: time and the doppler speed. Half the frequency's size, no\n   bloom, and set in the same grey as the panel's labels rather than in ink,\n   so the frequency is the one reading that is lit. The caption on the left\n   names the row, since at this size the number cannot name itself. */\n.gram-frame-led-secondary {\n  flex: none;\n}\n\n.gram-frame-led-secondary .gram-frame-led-value {\n  font-size: 19px;\n  color: var(--gf-muted);\n  text-shadow: none;\n  margin-left: auto;\n}\n\n/* Time sits directly under the frequency, as the other half of the pointer's\n   coordinate; a small gap rather than a rule, so they read as one reading and\n   its qualifier. */\n.gram-frame-led-secondary:not(.gram-frame-led-inline) {\n  margin-top: 6px;\n}\n\n/* The doppler speed is a derived quantity rather than a coordinate, so it is\n   also fenced off at the foot between two rules. */\n.gram-frame-led-inline {\n  padding: 9px 0;\n  border-top: 1px solid var(--gf-divider);\n  border-bottom: 1px solid var(--gf-divider);\n}\n\n/* --- Column 4: the style panel ------------------------------------------- */\n\n.gram-frame-color-picker {\n  flex: 0 0 222px;\n  width: 222px;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  box-sizing: border-box;\n}\n\n/* Targeting a feature tints the whole column and warms its rules, so \"this\n   changes something that already exists\" is visible from across the panel. */\n.gram-frame-color-picker.gram-frame-style-targeting {\n  border-right-color: var(--gf-accent-700);\n}\n\n.gram-frame-style-tabs {\n  display: flex;\n  align-items: stretch;\n  flex: none;\n  height: 28px;\n  border-bottom: 1px solid var(--gf-divider);\n}\n\n.gram-frame-style-targeting .gram-frame-style-tabs {\n  border-bottom-color: var(--gf-accent-700);\n}\n\n.gram-frame-style-tab {\n  flex: 1;\n  min-width: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 5px;\n  padding: 0 6px;\n  background: transparent;\n  border: 0;\n  color: var(--gf-muted);\n  font: 400 10px var(--gf-ui);\n  letter-spacing: 0.03em;\n  white-space: nowrap;\n  overflow: hidden;\n  cursor: pointer;\n}\n\n.gram-frame-style-tab-selected {\n  border-left: 1px solid var(--gf-divider);\n}\n\n.gram-frame-style-targeting .gram-frame-style-tab-selected {\n  border-left-color: var(--gf-accent-700);\n}\n\n.gram-frame-style-tab:hover:not(:disabled) {\n  background: var(--gf-hover);\n  color: var(--gf-text);\n}\n\n.gram-frame-style-tab:disabled {\n  color: rgba(247, 247, 250, 0.4);\n  cursor: not-allowed;\n}\n\n/* The armed tab. The first is underlined in plain ink and the second in\n   accent, matching what each one changes. */\n.gram-frame-style-tab-new.gram-frame-style-tab-armed {\n  background: var(--gf-hover);\n  border-bottom: 2px solid var(--gf-text);\n  color: var(--gf-text);\n  font-weight: 500;\n}\n\n.gram-frame-style-tab-selected.gram-frame-style-tab-armed {\n  background: var(--gf-accent-900);\n  border-bottom: 2px solid var(--gf-accent);\n  color: var(--gf-accent-100);\n  font-weight: 500;\n}\n\n.gram-frame-style-tab-swatch {\n  font-size: 11px;\n  line-height: 1;\n}\n\n.gram-frame-style-body {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n  padding: 10px 12px;\n  box-sizing: border-box;\n}\n\n.gram-frame-style-targeting .gram-frame-style-body {\n  background: var(--gf-accent-tint);\n}\n\n.gram-frame-style-spacer {\n  flex: 1;\n}\n\n.gram-frame-style-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.gram-frame-style-row[hidden] {\n  display: none;\n}\n\n.gram-frame-style-group-label {\n  flex: none;\n  width: 46px;\n  font: 400 10.5px var(--gf-ui);\n  color: var(--gf-muted);\n}\n\n/* The label field, edited where the label is read. The dialog it replaces meant\n   leaving the panel to change one word of what the panel is about. */\n.gram-frame-style-label-input {\n  flex: 1;\n  min-width: 0;\n  height: 26px;\n  padding: 0 8px;\n  box-sizing: border-box;\n  background: var(--gf-recess-deep);\n  border: 1px solid var(--gf-accent-600);\n  border-radius: 6px;\n  color: var(--gf-text);\n  font: 400 11.5px var(--gf-mono);\n}\n\n/* The colour slider: the one colour control in the panel. */\n.gram-frame-color-slider {\n  position: relative;\n  flex: none;\n  height: 19px;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px var(--gf-hairline);\n  overflow: visible;\n}\n\n.gram-frame-color-canvas {\n  display: block;\n  width: 100%;\n  height: 19px;\n  border-radius: 3px;\n  cursor: crosshair;\n}\n\n/* A bar overhanging the strip top and bottom, rather than a blob sitting on\n   it: the colour under the thumb stays visible, which is the one thing the\n   control exists to show. */\n.gram-frame-color-indicator {\n  position: absolute;\n  top: -3px;\n  bottom: -3px;\n  width: 3px;\n  margin-left: -1.5px;\n  border-radius: 2px;\n  background: var(--gf-text);\n  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);\n  pointer-events: none;\n}\n\n.gram-frame-symbol-select {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 6px;\n  color: var(--gf-text);\n  font: 400 11px var(--gf-ui);\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-symbol-select:hover {\n  border-color: rgba(247, 247, 250, 0.4);\n}\n\n.gram-frame-symbol-glyph {\n  font-size: 13px;\n  line-height: 1;\n}\n\n.gram-frame-symbol-caret {\n  color: var(--gf-muted);\n  font-size: 9px;\n}\n\n/* The symbol popup, positioned against the component rather than against the\n   row that opens it — see `placePopup` in SymbolPicker.js. */\n.gram-frame-symbol-popup {\n  position: absolute;\n  z-index: 30;\n  width: 238px;\n  background: var(--gf-bg);\n  border: 1px solid var(--gf-hairline);\n  border-radius: 8px;\n  box-shadow: var(--gf-shadow-md);\n  overflow: hidden;\n}\n\n.gram-frame-symbol-popup-header {\n  display: flex;\n  align-items: center;\n  height: 26px;\n  padding: 0 10px;\n  border-bottom: 1px solid var(--gf-divider);\n}\n\n/* All seven at once, at the size and in the colour they will be drawn in —\n   which is the comparison an analyst is actually making. */\n.gram-frame-symbol-grid {\n  display: grid;\n  grid-template-columns: repeat(4, 1fr);\n  gap: 4px;\n  padding: 8px;\n}\n\n.gram-frame-symbol-cell {\n  height: 32px;\n  display: grid;\n  place-items: center;\n  background: transparent;\n  border: 1px solid var(--gf-divider);\n  border-radius: 6px;\n  color: var(--gf-symbol-tint, var(--gf-text));\n  font: 400 15px var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-symbol-cell:hover {\n  border-color: rgba(247, 247, 250, 0.4);\n}\n\n.gram-frame-symbol-cell-selected {\n  background: var(--gf-accent-900);\n  border-color: var(--gf-accent);\n}\n\n.gram-frame-symbol-popup-footer {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  border-top: 1px solid var(--gf-divider);\n}\n\n.gram-frame-symbol-popup-footer .gram-frame-style-group-label {\n  width: auto;\n}\n\n.gram-frame-symbol-popup-footer .gram-frame-segmented {\n  margin-left: auto;\n}\n\n/* A segmented control: both options on screen, one filled. */\n.gram-frame-segmented {\n  display: flex;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 6px;\n  overflow: hidden;\n}\n\n.gram-frame-segmented-option {\n  height: 24px;\n  padding: 0 10px;\n  background: transparent;\n  border: 0;\n  color: var(--gf-muted);\n  font: 400 10px var(--gf-ui);\n  letter-spacing: 0.04em;\n  text-transform: uppercase;\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-segmented-option + .gram-frame-segmented-option {\n  border-left: 1px solid var(--gf-hairline);\n}\n\n.gram-frame-segmented-option:hover:not(:disabled) {\n  background: var(--gf-hover);\n}\n\n.gram-frame-segmented-selected {\n  background: var(--gf-accent-900);\n  color: var(--gf-accent-200);\n  font-weight: 500;\n}\n\n.gram-frame-segmented-disabled {\n  opacity: 0.45;\n}\n\n.gram-frame-segmented-disabled .gram-frame-segmented-option {\n  cursor: not-allowed;\n}\n\n.gram-frame-symbol-popup-footer .gram-frame-segmented-option {\n  height: 22px;\n  text-transform: none;\n  letter-spacing: 0;\n  font-size: 10.5px;\n}\n\n.gram-frame-nudge {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n\n.gram-frame-nudge-btn {\n  width: 26px;\n  height: 24px;\n  display: grid;\n  place-items: center;\n  padding: 0;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 4px;\n  color: var(--gf-secondary);\n  font: 400 11px var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-nudge-btn:hover {\n  border-color: var(--gf-accent);\n  color: var(--gf-accent-200);\n}\n\n.gram-frame-nudge-note {\n  margin-left: 4px;\n  font: 400 10px var(--gf-ui);\n  color: var(--gf-muted);\n  white-space: nowrap;\n}\n\n/* The footer states the target in words, so the tabs are never the only place\n   it is said. */\n.gram-frame-style-footer {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: none;\n  margin: 0 12px;\n  padding: 8px 0 10px;\n  border-top: 1px dashed var(--gf-hairline);\n}\n\n.gram-frame-style-targeting .gram-frame-style-footer {\n  border-top: 1px solid var(--gf-accent-800);\n}\n\n.gram-frame-style-footer-glyph {\n  font-size: 13px;\n  line-height: 1;\n  opacity: 0.55;\n}\n\n.gram-frame-style-footer-note {\n  font: 400 10px/1.4 var(--gf-ui);\n  color: var(--gf-muted);\n}\n\n.gram-frame-style-targeting .gram-frame-style-footer-note {\n  color: var(--gf-accent-100);\n}\n\n.gram-frame-style-delete {\n  margin-left: auto;\n  height: 20px;\n  padding: 0 8px;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 4px;\n  color: var(--gf-muted);\n  font: 400 9.5px var(--gf-ui);\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-style-delete:hover {\n  border-color: var(--gf-danger-border);\n  color: var(--gf-danger-text);\n}\n\n/* --- Column 5: the annotation tables ------------------------------------- */\n\n.gram-frame-tables {\n  flex: 1;\n  min-width: 0;\n  display: flex;\n}\n\n.gram-frame-table-column {\n  flex: 1;\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  border-right: 1px solid var(--gf-divider);\n}\n\n.gram-frame-table-column:last-child {\n  border-right: 0;\n}\n\n.gram-frame-panel-header {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  flex: none;\n  height: 28px;\n  padding: 0 10px;\n  box-sizing: border-box;\n  border-bottom: 1px solid var(--gf-divider);\n}\n\n.gram-frame-panel-header h4 {\n  margin: 0;\n  font: 600 10px/1 var(--gf-ui);\n  letter-spacing: 0.1em;\n  color: var(--gf-text);\n  text-transform: uppercase;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n/* How many there are, hidden at zero: a chip reading \"0\" is noise beside an\n   empty state that already says so. */\n.gram-frame-count-chip {\n  flex: none;\n  padding: 3px 6px;\n  border-radius: 8px;\n  background: var(--gf-accent-900);\n  color: var(--gf-accent-200);\n  font: 500 9.5px/1 var(--gf-mono);\n}\n\n.gram-frame-harmonics-button-container {\n  margin-left: auto;\n  flex-shrink: 0;\n}\n\n.gram-frame-manual-button {\n  height: 20px;\n  padding: 0 8px;\n  background: transparent;\n  border: 1px solid var(--gf-accent-700);\n  border-radius: 4px;\n  color: var(--gf-accent-200);\n  font: 500 9.5px var(--gf-ui);\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-manual-button:hover {\n  background: var(--gf-accent-900);\n}\n\n/*\n * Fixed-height home for one of the three tables.\n *\n * It claims the column's remaining height (flex: 1) but contributes nothing to\n * the layout's intrinsic height, because its only child is absolutely\n * positioned. That is what keeps the panels a constant size however many rows\n * they hold: the tables can no longer push the control row taller (untidy\n * layout) nor steal vertical space from an expanded spectrogram image.\n */\n.gram-frame-table-area {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n\n/* The scrollport. `scrollbar-gutter: stable` reserves the scrollbar's width\n   whether or not there is anything to scroll, so the columns do not all shift\n   sideways the moment a table gains its eighth row. It replaces a permanent\n   `overflow-y: scroll`, which reserved the same space by painting a track over\n   an empty table. */\n.gram-frame-table-container {\n  position: absolute;\n  inset: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-gutter: stable;\n  scrollbar-width: thin;\n  scrollbar-color: var(--gf-hairline) transparent;\n}\n\n.gram-frame-table-container::-webkit-scrollbar {\n  width: 8px;\n}\n\n.gram-frame-table-container::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n.gram-frame-table-container::-webkit-scrollbar-thumb {\n  background: var(--gf-hairline);\n  border-radius: 4px;\n}\n\n.gram-frame-table-container::-webkit-scrollbar-thumb:hover {\n  background: rgba(247, 247, 250, 0.3);\n}\n\n.gram-frame-table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-family: var(--gf-ui);\n}\n\n.gram-frame-table th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  padding: 6px 4px 4px;\n  background: var(--gf-surface);\n  font: 600 9.5px/1 var(--gf-mono);\n  letter-spacing: 0.08em;\n  color: var(--gf-muted);\n  text-transform: uppercase;\n  text-align: left;\n  white-space: nowrap;\n}\n\n.gram-frame-table td {\n  padding: 6px 4px;\n  font: 400 11.5px var(--gf-ui);\n  color: var(--gf-text);\n  font-variant-numeric: tabular-nums;\n  border-top: 1px solid var(--gf-row-line);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.gram-frame-table th:first-child,\n.gram-frame-table td:first-child {\n  padding-left: 10px;\n}\n\n.gram-frame-table th:last-child,\n.gram-frame-table td:last-child {\n  padding-right: 10px;\n}\n\n/* Numbers right-align so their digits line up down the column; the units and\n   ordinals beside them are quieter than the figure they qualify. */\n.gram-frame-table th:nth-child(3),\n.gram-frame-table th:nth-child(4),\n.gram-frame-cell-numeric {\n  text-align: right;\n}\n\n.gram-frame-table td.gram-frame-cell-numeric {\n  color: var(--gf-secondary);\n}\n\n.gram-frame-cell-unit {\n  font-size: 9.5px;\n  color: var(--gf-muted);\n}\n\n.gram-frame-cell-action {\n  text-align: right;\n}\n\n.gram-frame-table tbody tr {\n  cursor: pointer;\n}\n\n.gram-frame-table tbody tr:hover td {\n  background: var(--gf-row-hover);\n}\n\n/*\n * The selected row is reversed out whole — light ground, dark ink.\n *\n * It used to be an accent border, which collided with the feature colours the\n * rows themselves carry: a green-bordered row holding a green marker said two\n * things at once. Inversion survives any feature colour, and reads at a glance\n * from the far side of the panel.\n */\n.gram-frame-table tbody tr.gram-frame-selected-row td,\n.gram-frame-table tbody tr.gram-frame-selected-row:hover td {\n  background: var(--gf-text);\n  color: var(--gf-bg);\n  font-weight: 500;\n}\n\n.gram-frame-table tbody tr.gram-frame-selected-row .gram-frame-marker-delete-btn,\n.gram-frame-table tbody tr.gram-frame-selected-row .gram-frame-harmonic-delete,\n.gram-frame-table tbody tr.gram-frame-selected-row .gram-frame-sideband-delete {\n  color: #4a4c56;\n}\n\n/* Instructional, not blank: an empty rectangle says only that nothing is\n   there, never what to do about it. */\n.gram-frame-table-empty td {\n  padding: 14px 10px;\n  border-top: 0;\n  font: 400 11px var(--gf-ui);\n  color: var(--gf-muted);\n  white-space: normal;\n  cursor: default;\n}\n\n.gram-frame-table-empty:hover td {\n  background: transparent;\n}\n\n.gram-frame-marker-label-cell,\n.gram-frame-marker-label-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.gram-frame-marker-color,\n.gram-frame-harmonic-color,\n.gram-frame-sideband-color {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 16px;\n}\n\n.gram-frame-marker-delete-btn,\n.gram-frame-harmonic-delete,\n.gram-frame-sideband-delete {\n  padding: 0;\n  background: none;\n  border: 0;\n  color: var(--gf-muted);\n  font: 400 13px/1 var(--gf-ui);\n  cursor: pointer;\n}\n\n.gram-frame-marker-delete-btn:hover,\n.gram-frame-harmonic-delete:hover,\n.gram-frame-sideband-delete:hover {\n  color: var(--gf-danger-text);\n}\n\n/* The sidebands column's foot. Sideband sets are rare, so this is the space the\n   panel has going spare — and clearing annotations is not a view control, so it\n   is not in the mode rail beside zoom and fit. */\n.gram-frame-tables-footer {\n  flex: none;\n  padding: 8px 10px;\n  border-top: 1px solid var(--gf-divider);\n  background: var(--gf-recess);\n}\n\n.gram-frame-clear-btn {\n  width: 100%;\n  height: 26px;\n  background: transparent;\n  border: 1px solid var(--gf-hairline);\n  border-radius: 5px;\n  color: var(--gf-secondary);\n  font: 400 10.5px var(--gf-ui);\n  letter-spacing: 0.04em;\n  white-space: nowrap;\n  cursor: pointer;\n}\n\n.gram-frame-clear-btn:hover {\n  border-color: var(--gf-danger-border);\n  color: var(--gf-danger-text);\n}\n\n/* --- Responsive ----------------------------------------------------------\n * The panel is designed for a full-width embed (~1400px). Below that the\n * annotation tables shrink first — they are the elastic column — and past the\n * point where they cannot, the guidance column gives up its width to them. The\n * three fixed columns never shrink: the instrument face and the tool list are\n * what the panel is for.\n * ------------------------------------------------------------------------- */\n@container gramframe-controls (max-width: 1180px) {\n  .gram-frame-guidance-column:not(.gram-frame-guidance-open) {\n    flex: 0 0 40px;\n    width: 40px;\n    align-items: center;\n    padding: 10px 0;\n    gap: 10px;\n  }\n\n  .gram-frame-guidance-column:not(.gram-frame-guidance-open) .gram-frame-guidance-header,\n  .gram-frame-guidance-column:not(.gram-frame-guidance-open) .gram-frame-guidance {\n    display: none;\n  }\n\n  .gram-frame-guidance-column:not(.gram-frame-guidance-open) .gram-frame-guidance-rail {\n    display: flex;\n  }\n}\n\n/* Marker rendering styles */\n.gram-frame-marker-line {\n  opacity: 0.8;\n}\n\n.gram-frame-marker-point {\n  opacity: 0.9;\n}\n\n/*\n * A marker's on-gram label. Legibility comes from the white rounded plate drawn\n * behind it (issue #243) — the geometry and colours are presentation attributes\n * set by plateLabel(), see src/utils/labelPlate.js. Never a click target: the\n * marker underneath is.\n */\n.gram-frame-marker-label {\n  font-family: Arial, sans-serif;\n  font-size: 12px;\n  font-weight: bold;\n  pointer-events: none;\n  user-select: none;\n}\n\n/*\n * The white plate behind any on-gram label, and the group holding the two. Both\n * are transparent to the pointer so the plate never intercepts a click meant\n * for the feature it annotates, or for the gram beneath it.\n */\n.gram-frame-label-plate,\n.gram-frame-label-plated {\n  pointer-events: none;\n}\n\n/*\n * The selected feature, on the gram.\n *\n * Two treatments, for the two kinds of thing a feature is made of. Its geometry\n * gets a halo — a wider, translucent white copy drawn beneath it by\n * src/rendering/selectionHalo.js, which is geometry rather than style and so is\n * not expressible here. Its label gets the same inversion its table row gets:\n * dark plate, light text. A white glow behind a white plate would say nothing,\n * and inverting both places means selection reads as one idea.\n */\n.gram-frame-selection-halo {\n  pointer-events: none;\n}\n\n.gram-frame-selected-label .gram-frame-label-plate {\n  fill: var(--gf-bg);\n}\n\n.gram-frame-selected-label text {\n  fill: var(--gf-text);\n}\n\n/* Storage-failure banner — shown inside the component when a save or clear was\n   refused by browser storage (quota, private browsing). Non-blocking: it sits\n   above the controls, wraps rather than clips, and can be dismissed. */\n.gram-frame-storage-warning {\n  box-sizing: border-box;\n  display: flex;\n  align-items: flex-start;\n  gap: 8px;\n  margin: 0 0 8px 0;\n  padding: 8px 10px;\n  background-color: #fff8e1;\n  border: 1px solid #f0ad4e;\n  border-radius: 4px;\n  color: #663c00;\n  font-family: Arial, Helvetica, sans-serif;\n  font-size: 13px;\n  line-height: 1.4;\n  overflow-wrap: break-word;\n  word-wrap: break-word;\n}\n\n.gram-frame-storage-warning-message {\n  flex: 1 1 auto;\n  min-width: 0;\n}\n\n.gram-frame-storage-warning-dismiss {\n  flex: 0 0 auto;\n  padding: 0 4px;\n  background: none;\n  border: none;\n  color: #663c00;\n  font-size: 16px;\n  line-height: 1;\n  cursor: pointer;\n}\n\n.gram-frame-storage-warning-dismiss:hover {\n  color: #a06000;\n}\n\n/* Legacy-browser compatibility warning — shown in place of the component when\n   the browser lacks a required JS/DOM API. Kept legible even in small\n   containers (min sizing, word wrapping) so it is never clipped to nothing. */\n.gram-frame-compat-warning {\n  box-sizing: border-box;\n  display: block;\n  min-width: 0;\n  max-width: 100%;\n  margin: 10px 0;\n  padding: 16px 20px;\n  background-color: #fff8e1;\n  border: 2px solid #f0ad4e;\n  border-radius: 4px;\n  color: #663c00;\n  font-family: Arial, Helvetica, sans-serif;\n  font-size: 14px;\n  line-height: 1.5;\n  overflow-wrap: break-word;\n  word-wrap: break-word;\n}\n\n.gram-frame-compat-warning-heading {\n  display: block;\n  margin-bottom: 6px;\n  font-size: 15px;\n}\n\n.gram-frame-compat-warning-message {\n  margin: 0;\n}\n\n/* Frequency-rate input UI styles removed - the backend value is preserved */\n\n/* SVG cursor styles removed - using CSS cursor only */\n\n/* SVG Harmonic line styles */\n\n\n.gram-frame-harmonic-line,\n.gram-frame-harmonic-mini-pin,\n.gram-frame-sideband-line,\n.gram-frame-sideband-mini-pin {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: none;\n  stroke-linecap: round;\n}\n\n\n.gram-frame-harmonic-number,\n.gram-frame-sideband-number {\n  font-family: Arial, sans-serif;\n  font-size: 12px;\n  font-weight: bold;\n  pointer-events: none;\n  /*\n   * Legibility comes from the white rounded plate drawn behind the digits\n   * (issue #243), set as presentation attributes by plateLabel() in\n   * src/utils/labelPlate.js. No drop-shadow: it only blurs the plate's edge.\n   */\n}\n\n/* SVG Harmonic Set styles (new system) */\n\n.gram-frame-harmonic-set-line {\n  stroke-width: 2;\n  fill: none;\n  pointer-events: auto !important;\n  /*cursor: grab !important;*/\n  stroke-linecap: round;\n}\n\n.gram-frame-harmonic-set-line:hover {\n  stroke-width: 3;\n  /* cursor: grab !important; */\n}\n\n.gram-frame-harmonic-set-line:active {\n  cursor: grabbing !important;\n}\n\n/* Legacy harmonic styles (for backward compatibility) */\n.gram-frame-harmonic {\n  position: absolute;\n  height: 1px;\n  background-color: rgba(255, 255, 0, 0.7);\n  pointer-events: none;\n}\n\n\n\n/* Debug grid */\n\n/* Canvas boundary overlay */\n\n/* Message display */\n\n/* Error state */\n.gram-frame-error {\n  padding: 10px;\n  background-color: #f8d7da;\n  color: #721c24;\n  border: 1px solid #f5c6cb;\n  border-radius: 4px;\n  margin: 10px 0;\n}\n\n/* The colour/symbol swatch each pin-set row leads with. A fixed box so the\n   first column's width does not depend on which symbol a set happens to\n   carry. */\n.gram-frame-harmonic-symbol-swatch {\n  display: block;\n}\n\n/* Doppler mode styles */\n.gram-frame-doppler-fPlus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-fMinus {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-crosshair {\n  pointer-events: auto;\n}\n\n.gram-frame-doppler-curve {\n  pointer-events: none;\n}\n\n/*\n * The vertical extensions are drawn after the f+/f- dots, so while they were\n * hit-testable they sat on top of the very markers the analyst was aiming at.\n * Doppler hit-testing is done in data space against the marker positions, not\n * by hitting an element, so nothing needs these to be targets.\n */\n.gram-frame-doppler-extension {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-guide {\n  pointer-events: none;\n}\n\n.gram-frame-doppler-label {\n  pointer-events: none;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;\n}\n\n/* Modal dialog styles */\n.gram-frame-modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  background: rgba(0, 0, 0, 0.7);\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  z-index: 1000;\n}\n\n.gram-frame-modal {\n  background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);\n  border: 2px solid #555;\n  border-radius: 8px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);\n  min-width: 350px;\n  max-width: 500px;\n  color: #ddd;\n}\n\n.gram-frame-modal-header {\n  padding: 15px 20px;\n  border-bottom: 1px solid #444;\n  background: linear-gradient(180deg, #444 0%, #333 100%);\n  border-radius: 6px 6px 0 0;\n}\n\n.gram-frame-modal-header h3 {\n  margin: 0;\n  font-size: 16px;\n  color: #fff;\n  text-align: center;\n}\n\n.gram-frame-modal-body {\n  padding: 20px;\n}\n\n.gram-frame-modal-input-group {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.gram-frame-modal-input-group label {\n  font-weight: bold;\n  color: #ccc;\n  font-size: 14px;\n}\n\n.gram-frame-modal-input-group input {\n  padding: 10px 12px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  color: #fff;\n  font-size: 14px;\n  font-family: 'Courier New', monospace;\n}\n\n.gram-frame-modal-input-group input:focus {\n  outline: none;\n  border-color: #777;\n  box-shadow: 0 0 4px rgba(119, 119, 119, 0.3);\n}\n\n.gram-frame-modal-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin-top: 4px;\n}\n\n/* Supporting note under a modal input (e.g. how to clear a marker label) */\n.gram-frame-modal-hint {\n  color: #999;\n  font-size: 11px;\n}\n\n.gram-frame-modal-footer {\n  padding: 15px 20px;\n  border-top: 1px solid #444;\n  display: flex;\n  justify-content: flex-end;\n  gap: 10px;\n  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);\n  border-radius: 0 0 6px 6px;\n}\n\n.gram-frame-modal-btn {\n  padding: 8px 16px;\n  border: 2px solid #555;\n  border-radius: 4px;\n  cursor: pointer;\n  font-weight: bold;\n  font-size: 12px;\n  transition: all 0.1s ease;\n  min-width: 80px;\n}\n\n.gram-frame-modal-cancel {\n  background: linear-gradient(180deg, #6a4a4a 0%, #4a2a2a 50%, #2a1a1a 100%);\n  color: #ffaaaa;\n}\n\n.gram-frame-modal-cancel:hover {\n  background: linear-gradient(180deg, #7a5a5a 0%, #5a3a3a 50%, #3a2a2a 100%);\n}\n\n.gram-frame-modal-add {\n  background: linear-gradient(180deg, #4a6a4a 0%, #2a4a2a 50%, #1a2a1a 100%);\n  color: #aaffaa;\n}\n\n.gram-frame-modal-add:hover {\n  background: linear-gradient(180deg, #5a7a5a 0%, #3a5a3a 50%, #2a3a2a 100%);\n}\n\n.gram-frame-modal-add:disabled {\n  background: linear-gradient(180deg, #444 0%, #333 50%, #222 100%);\n  color: #666;\n  cursor: not-allowed;\n}\n\n.gram-frame-modal-btn:active:not(:disabled) {\n  transform: translateY(1px);\n}\n\n/* Zoom controls removed - now integrated into pan mode command buttons */\n\n/*\n * The persistent panels' containers: each fills its column and lets its table\n * scroll rather than growing the row.\n */\n.gram-frame-markers-persistent-container,\n.gram-frame-harmonics-persistent-container,\n.gram-frame-sidebands-persistent-container {\n  display: flex;\n  flex-direction: column;\n  flex: 1;\n  min-height: 0;\n}\n\n/* Selected Doppler marker highlighting */\n.gram-frame-selected-doppler-marker {\n  stroke: #4a8a4a !important;\n  stroke-width: 3 !important;\n  filter: drop-shadow(0 0 8px rgba(74, 138, 74, 0.6)) !important;\n}\n\n.gram-frame-selected-doppler-marker[fill] {\n  fill: #4a8a4a !important;\n  stroke: #aaffaa !important;\n}\n\n/* Region zoom (spec 170) --------------------------------------------------- */\n\n/* While Shift is held over the gram, the cursor advertises that a region\n   selection is available (FR-021). `!important` because the active mode writes\n   `style.cursor` on the same element every mousemove, and an inline value would\n   otherwise win whichever ran last. */\n.gram-frame-svg.gram-frame-region-ready {\n  cursor: zoom-in !important;\n}\n\n/* The gram outside the selection, dimmed so the target region reads as the\n   subject (FR-004). One even-odd-filled path: the outer subpath is the\n   selectable area, the inner one the selection. */\n.gram-frame-region-dim {\n  fill: #000;\n  fill-opacity: 0.45;\n  pointer-events: none;\n}\n\n/* The rubber band itself: a plain white outline, which reads cleanly because\n   everything outside the resulting view is dimmed. */\n.gram-frame-region-box {\n  fill: none;\n  stroke: #fff;\n  stroke-width: 1.5;\n  pointer-events: none;\n}\n\n/* What will actually be on screen after the zoom: the selection grown on\n   whichever axis is the looser fit. Dashed and dimmer, so it reads as a\n   consequence of the solid box rather than as a second thing to aim. Hidden\n   when it coincides with the selection. */\n.gram-frame-region-view {\n  fill: none;\n  stroke: #fff;\n  stroke-opacity: 0.65;\n  stroke-width: 1;\n  stroke-dasharray: 5 4;\n  pointer-events: none;\n}\n\n.gram-frame-region-selection {\n  pointer-events: none;\n}\n\n/* Icon buttons (issue #310) ------------------------------------------------ */\n\n/* The glyph inherits the button's colour, so it follows it through hover,\n   active and disabled exactly as a word would. */\n.gram-frame-icon {\n  width: 18px;\n  height: 18px;\n  display: block;\n  color: inherit;\n  pointer-events: none;\n}\n\n.gram-frame-icon-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n/* A mode button's height comes from its line of text; a glyph is taller than\n   that, so the padding comes back off to keep Pan's row level with the four\n   word rows below it. */\n.gram-frame-mode-btn.gram-frame-icon-btn {\n  padding: 3px 6px;\n}\n\n/* The word an icon stands for: gone from the page, present in the accessibility\n   tree, and still the button's accessible name. */\n.gram-frame-visually-hidden {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  margin: -1px;\n  padding: 0;\n  overflow: hidden;\n  clip-path: inset(50%);\n  white-space: nowrap;\n  border: 0;\n}\n";
   document.head.appendChild(style);
 
   "use strict";
-  const VERSION = "0.1.17";
+  const VERSION = "0.3.0";
   function getVersion() {
     return VERSION;
   }
@@ -20,7 +17,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     // 'analysis', 'harmonics', 'sideband', 'doppler', 'pan' — start in pan so a click doesn't immediately place a marker
     previousMode: null,
     // Previous mode for switching back
-    rate: 1,
+    frequencyRate: 1,
+    // Frequency divider, applied only by utils/coordinates.js; the player carries its own playbackRate
     selectedColor: "#ff6b6b",
     // Currently selected color for new features across all modes
     selectedSymbol: "cross",
@@ -40,6 +38,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     // can tell an annotation change from a cursor move without re-serialising
     // the annotations on each notification (spec 166, AS-4.3).
     annotationRevision: 0,
+    // Which annotations this tab has deleted, by id, with when.
+    //
+    // A deletion is the one annotation change that cannot be represented by the
+    // record's contents: "absent" and "deleted" look identical, so a merge that
+    // only unions what each tab still holds resurrects everything either tab has
+    // ever removed. These are the tombstones that make deletion survive a merge
+    // (issue #269). In-memory and persisted, pruned by age on save.
+    tombstones: {
+      markers: {},
+      harmonicSets: {},
+      sidebandSets: {},
+      // A single curve, so a boolean-with-a-time rather than a map.
+      doppler: null
+    },
     imageDetails: {
       url: "",
       naturalWidth: 0,
@@ -53,6 +65,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     // Whether the image is currently expanded to fill available space.
     // In-memory only, default false, never persisted (independent of feature 155).
     imageExpanded: false,
+    // Whether the per-mode guidance column is collapsed to its 40px rail.
+    //
+    // Chrome, not annotation: it is remembered per user (localStorage) rather
+    // than saved with the gram's markers, so an analyst who works with the rail
+    // closed keeps it closed on the next gram as well as the next visit.
+    guidanceCollapsed: false,
+    // Times an analyst has flagged on the transport's scrub track, oldest first.
+    // Only meaningful on an audio-sourced instance; an empty array everywhere
+    // else, so every listener sees one shape.
+    bookmarks: [],
     config: {
       timeMin: 0,
       timeMax: 0,
@@ -94,6 +116,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       targetType: null,
       startPosition: null
     },
+    // Which of the style panel's two targets is armed: the defaults for the next
+    // created feature, or the selected one. In-memory chrome, never persisted;
+    // selecting a feature arms 'selected', clearing or switching mode returns it
+    // to 'new'.
+    styleTarget: "new",
     // Selection state for keyboard fine control
     selection: {
       selectedType: null,
@@ -102,6 +129,57 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       // ID of selected item
       selectedIndex: null
       // Index in table for display purposes
+    },
+    // The spectrograph player (spec 168). A core slice rather than a mode's: it
+    // describes what the instance is built on, as `imageDetails` does, not how
+    // the analyst is interacting with it. Inert on image-backed instances so
+    // every listener sees one shape.
+    player: {
+      active: false,
+      ready: false,
+      progress: 0,
+      source: "",
+      duration: 0,
+      sampleRate: 0,
+      channels: 0,
+      playhead: 0,
+      playing: false,
+      ended: false,
+      loop: false,
+      playbackRate: 1,
+      volume: 1,
+      muted: false,
+      viewTop: 0,
+      windowSeconds: 10,
+      // Assigned to the element explicitly rather than inherited, and settable
+      // per exercise by `preserve-pitch` (spec 171, FR-021/FR-022).
+      preservesPitch: true,
+      // The contrast controls, 0..1 over the painted level scale (spec 171,
+      // FR-009). View state like zoom: reset on reload, never persisted, never
+      // part of an annotation record; {0, 1} is the image as it loaded.
+      display: { floor: 0, ceiling: 1 },
+      // What the render caps forced, or null on an ordinary load (FR-024).
+      degraded: null,
+      analysis: {
+        fftSize: 1024,
+        hopSize: 512,
+        freqStart: 0,
+        freqEnd: null,
+        columns: 0,
+        frames: 0,
+        // How the analysed grid is turned into a picture. Every default here is
+        // the painting the player already did — one frame per row, no background
+        // normalisation, the 5th to 99.9th percentile of the whole file onto the
+        // colour table, in colour — so a table naming none of them is unaffected.
+        frameAverage: 1,
+        normalisation: "none",
+        normalisationWindow: null,
+        levelFloor: 5,
+        levelCeiling: 99.9,
+        levelSpan: null,
+        levelScope: "file",
+        colourMap: "colour"
+      }
     }
   };
   const globalStateListeners = [];
@@ -136,6 +214,29 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function markAnnotationsChanged(instance) {
     if (instance && instance.state) {
       instance.state.annotationRevision = (instance.state.annotationRevision || 0) + 1;
+    }
+  }
+  function tombstoneBag(instance) {
+    const { state } = instance || /** @type {any} */
+    {};
+    if (!state) {
+      return null;
+    }
+    if (!state.tombstones) {
+      state.tombstones = { markers: {}, harmonicSets: {}, sidebandSets: {}, doppler: null };
+    }
+    return state.tombstones;
+  }
+  function recordDeletion(instance, collection, id) {
+    const bag = tombstoneBag(instance);
+    if (bag && id) {
+      bag[collection][id] = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  function recordDopplerDeletion(instance) {
+    const bag = tombstoneBag(instance);
+    if (bag) {
+      bag.doppler = (/* @__PURE__ */ new Date()).toISOString();
     }
   }
   const pendingDispatches = /* @__PURE__ */ new WeakMap();
@@ -194,7 +295,201 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     return false;
   }
-  const SVG_NS$3 = "http://www.w3.org/2000/svg";
+  function getGlobalStateListeners() {
+    return [...globalStateListeners];
+  }
+  function clearGlobalStateListeners() {
+    globalStateListeners.length = 0;
+  }
+  const MODE_ROSTER = [
+    // Every mode carries a glyph, drawn beside its word rather than in place of
+    // it: in a rail of five stacked tools the shape is what the eye lands on
+    // first, and the word is still there to settle it. The rail's own footer
+    // (zoom out, zoom in, fit) is the place where a glyph replaces a word.
+    { name: "pan", displayName: "Pan", icon: "hand" },
+    // "Cross Cursor" on screen, `analysis` in the code and in stored records.
+    // The two names have coexisted since before this review; renaming the button
+    // is issue #271, not this one.
+    { name: "analysis", displayName: "Cross Cursor", icon: "cross-cursor" },
+    { name: "harmonics", displayName: "Harmonics", icon: "harmonics" },
+    { name: "sideband", displayName: "Sidebands", icon: "sidebands" },
+    { name: "doppler", displayName: "Doppler", icon: "doppler" }
+  ];
+  const MODE_NAMES = MODE_ROSTER.map((entry) => entry.name);
+  function getModeDisplayName(mode) {
+    const entry = MODE_ROSTER.find((candidate) => candidate.name === mode);
+    if (entry) {
+      return entry.displayName;
+    }
+    return typeof mode === "string" && mode.length > 0 ? mode.charAt(0).toUpperCase() + mode.slice(1) : String(mode);
+  }
+  function getModeIcon(mode) {
+    var _a;
+    return (_a = MODE_ROSTER.find((candidate) => candidate.name === mode)) == null ? void 0 : _a.icon;
+  }
+  function createLEDDisplay(label, value, unit, caption) {
+    const led = document.createElement("div");
+    led.className = "gram-frame-led";
+    const labelDiv = document.createElement("div");
+    labelDiv.className = "gram-frame-led-label gram-frame-visually-hidden";
+    labelDiv.textContent = label;
+    led.appendChild(labelDiv);
+    if (caption) {
+      const captionDiv = document.createElement("div");
+      captionDiv.className = "gram-frame-led-caption";
+      captionDiv.textContent = caption;
+      led.appendChild(captionDiv);
+    }
+    const valueDiv = document.createElement("div");
+    valueDiv.className = "gram-frame-led-value";
+    valueDiv.textContent = value;
+    led.appendChild(valueDiv);
+    if (unit) {
+      const unitDiv = document.createElement("div");
+      unitDiv.className = "gram-frame-led-unit";
+      unitDiv.textContent = unit;
+      led.appendChild(unitDiv);
+    }
+    return led;
+  }
+  function setLEDValue(led, value) {
+    const valueDiv = led.querySelector(".gram-frame-led-value");
+    if (valueDiv) {
+      valueDiv.textContent = value;
+    }
+  }
+  function updateLEDDisplays(instance, state) {
+    if (instance.ui.modeLED) {
+      setLEDValue(instance.ui.modeLED, getModeDisplayName(state.mode));
+    }
+    if (instance.ui.frequencyRateLED) {
+      setLEDValue(instance.ui.frequencyRateLED, `${state.frequencyRate}`);
+    }
+  }
+  const COLOR_PALETTE = [
+    "#ff0000",
+    // Red
+    "#ff8000",
+    // Orange
+    "#ffff00",
+    // Yellow
+    "#80ff00",
+    // Yellow-green
+    "#00ff00",
+    // Green
+    "#00ff80",
+    // Green-cyan
+    "#00ffff",
+    // Cyan
+    "#0080ff",
+    // Cyan-blue
+    "#0000ff",
+    // Blue
+    "#8000ff",
+    // Blue-purple
+    "#ff00ff",
+    // Purple
+    "#ff0080"
+    // Purple-red
+  ];
+  function createColorSlider(instance, onPick) {
+    const state = instance.state;
+    const container = document.createElement("div");
+    container.className = "gram-frame-color-slider";
+    const canvas = document.createElement("canvas");
+    canvas.width = 140;
+    canvas.height = 20;
+    canvas.className = "gram-frame-color-canvas";
+    container.appendChild(canvas);
+    if (!state.selectedColor) {
+      state.selectedColor = "#ff6b6b";
+    }
+    drawColorPalette(canvas);
+    const indicator = document.createElement("div");
+    indicator.className = "gram-frame-color-indicator";
+    container.appendChild(indicator);
+    canvas.addEventListener("click", (event) => {
+      const rect2 = canvas.getBoundingClientRect();
+      const x = event.clientX - rect2.left;
+      const scaleX = canvas.width / rect2.width;
+      const canvasX = x * scaleX;
+      const color = getColorFromPosition(canvasX, canvas.width);
+      const apply = instance.interaction.applyColorToSelectedFeature;
+      if (!apply || !apply(color)) {
+        state.selectedColor = color;
+        dispatch(instance);
+      }
+      updateIndicatorPosition(indicator, canvasX, canvas.width);
+      onPick(color);
+    });
+    const control = {
+      setValue(color) {
+        updateIndicatorPosition(indicator, getPositionFromColor(color, canvas.width), canvas.width);
+      }
+    };
+    control.setValue(state.selectedColor);
+    return { element: container, control };
+  }
+  function drawColorPalette(canvas) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+    const width = canvas.width;
+    const height = canvas.height;
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    COLOR_PALETTE.forEach((color, index) => {
+      gradient.addColorStop(index / (COLOR_PALETTE.length - 1), color);
+    });
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+  }
+  function getColorFromPosition(x, width) {
+    const position = Math.max(0, Math.min(1, x / width));
+    const segmentSize = 1 / (COLOR_PALETTE.length - 1);
+    const segmentIndex = position / segmentSize;
+    const lowerIndex = Math.floor(segmentIndex);
+    const upperIndex = Math.min(lowerIndex + 1, COLOR_PALETTE.length - 1);
+    const t = segmentIndex - lowerIndex;
+    if (lowerIndex === upperIndex) {
+      return COLOR_PALETTE[lowerIndex];
+    }
+    const color1 = hexToRgb(COLOR_PALETTE[lowerIndex]);
+    const color2 = hexToRgb(COLOR_PALETTE[upperIndex]);
+    const r = Math.round(color1.r * (1 - t) + color2.r * t);
+    const g = Math.round(color1.g * (1 - t) + color2.g * t);
+    const b = Math.round(color1.b * (1 - t) + color2.b * t);
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  }
+  function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return { r, g, b };
+  }
+  function getPositionFromColor(hexColor, width) {
+    const targetRgb = hexToRgb(hexColor);
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    COLOR_PALETTE.forEach((color, index) => {
+      const colorRgb = hexToRgb(color);
+      const distance = Math.sqrt(
+        Math.pow(targetRgb.r - colorRgb.r, 2) + Math.pow(targetRgb.g - colorRgb.g, 2) + Math.pow(targetRgb.b - colorRgb.b, 2)
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    const segmentSize = 1 / (COLOR_PALETTE.length - 1);
+    const position = closestIndex * segmentSize;
+    return position * width;
+  }
+  function updateIndicatorPosition(indicator, x, width) {
+    const percentage = x / width * 100;
+    indicator.style.left = `${Math.max(0, Math.min(100, percentage))}%`;
+  }
+  const SVG_NS$6 = "http://www.w3.org/2000/svg";
   const DEFAULT_SYMBOL = "cross";
   const SYMBOL_CATALOG = ["cross", "circle", "square", "diamond", "triangle", "triangle-down", "star"];
   const SYMBOL_DISPLAY_NAMES = {
@@ -234,6 +529,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     return pts;
   }
+  function isSymbolLess(symbolType) {
+    return resolveSymbolType(symbolType) === "cross";
+  }
   function createSymbolMark(symbolType, cx, cy, size, color) {
     const r = size / 2;
     const resolved = resolveSymbolType(symbolType);
@@ -243,7 +541,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     let el;
     switch (resolved) {
       case "square": {
-        el = document.createElementNS(SVG_NS$3, "rect");
+        el = document.createElementNS(SVG_NS$6, "rect");
         el.setAttribute("x", String(cx - r));
         el.setAttribute("y", String(cy - r));
         el.setAttribute("width", String(2 * r));
@@ -251,7 +549,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         break;
       }
       case "diamond": {
-        el = document.createElementNS(SVG_NS$3, "polygon");
+        el = document.createElementNS(SVG_NS$6, "polygon");
         el.setAttribute("points", toPoints([
           [cx, cy - r],
           [cx + r, cy],
@@ -261,7 +559,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         break;
       }
       case "triangle": {
-        el = document.createElementNS(SVG_NS$3, "polygon");
+        el = document.createElementNS(SVG_NS$6, "polygon");
         el.setAttribute("points", toPoints([
           [cx, cy - r],
           [cx + r, cy + r],
@@ -270,7 +568,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         break;
       }
       case "triangle-down": {
-        el = document.createElementNS(SVG_NS$3, "polygon");
+        el = document.createElementNS(SVG_NS$6, "polygon");
         el.setAttribute("points", toPoints([
           [cx, cy + r],
           [cx + r, cy - r],
@@ -279,13 +577,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         break;
       }
       case "star": {
-        el = document.createElementNS(SVG_NS$3, "polygon");
+        el = document.createElementNS(SVG_NS$6, "polygon");
         el.setAttribute("points", toPoints(starPoints(cx, cy, r, r * 0.5)));
         break;
       }
       case "circle":
       default: {
-        el = document.createElementNS(SVG_NS$3, "circle");
+        el = document.createElementNS(SVG_NS$6, "circle");
         el.setAttribute("cx", String(cx));
         el.setAttribute("cy", String(cy));
         el.setAttribute("r", String(r));
@@ -300,7 +598,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function createColorIndicator(symbol, color, size = 16) {
     const mark = createSymbolMark(symbol, size / 2, size / 2, size * 0.75, color);
     if (mark) {
-      const svg = document.createElementNS(SVG_NS$3, "svg");
+      const svg = document.createElementNS(SVG_NS$6, "svg");
       svg.setAttribute("class", "gram-frame-symbol-swatch");
       svg.setAttribute("width", String(size));
       svg.setAttribute("height", String(size));
@@ -317,6 +615,67 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     div.style.border = "1px solid #ccc";
     return div;
   }
+  function createSegmented(options, groupLabel, onChange) {
+    const element = document.createElement("div");
+    element.className = "gram-frame-segmented";
+    element.setAttribute("role", "radiogroup");
+    element.setAttribute("aria-label", groupLabel);
+    const buttons = options.map((option) => {
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.className = "gram-frame-segmented-option";
+      button2.setAttribute("role", "radio");
+      button2.setAttribute("aria-checked", "false");
+      button2.textContent = option.label;
+      button2.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (!button2.disabled) {
+          onChange(option.value);
+        }
+      });
+      element.appendChild(button2);
+      return button2;
+    });
+    return {
+      element,
+      setValue(value) {
+        options.forEach((option, index) => {
+          const chosen = option.value === value;
+          buttons[index].classList.toggle("gram-frame-segmented-selected", chosen);
+          buttons[index].setAttribute("aria-checked", chosen ? "true" : "false");
+        });
+      },
+      setEnabled(enabled, reason) {
+        element.classList.toggle("gram-frame-segmented-disabled", !enabled);
+        element.title = enabled ? "" : reason || "";
+        buttons.forEach((button2) => {
+          button2.disabled = !enabled;
+        });
+      }
+    };
+  }
+  function createSymbolSizeTrial(instance) {
+    const state = instance.state;
+    const segmented = createSegmented(
+      [{ value: false, label: "Normal" }, { value: true, label: "Large" }],
+      "Symbol size",
+      (large) => {
+        const apply = instance.interaction.applyLargeSymbolsToSelectedFeature;
+        if (!apply || !apply(large)) {
+          state.largeSymbols = large;
+          dispatch(instance);
+        }
+        segmented.setValue(large);
+        if (instance.interaction.syncStyleControls) {
+          instance.interaction.syncStyleControls();
+        }
+      }
+    );
+    segmented.element.classList.add("gram-frame-large-symbols-toggle");
+    segmented.element.title = `Trial: draw symbols at ${LARGE_SYMBOL_SCALE}× their normal size`;
+    segmented.setValue(!!state.largeSymbols);
+    return segmented.element;
+  }
   const SYMBOL_GLYPHS = {
     "cross": "✕",
     "circle": "●",
@@ -331,255 +690,174 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (!state.selectedSymbol) {
       state.selectedSymbol = DEFAULT_SYMBOL;
     }
-    const select = document.createElement("select");
-    select.className = "gram-frame-symbol-select";
-    select.title = "Symbol";
-    select.setAttribute("aria-label", "Symbol");
-    select.style.color = state.selectedColor;
-    SYMBOL_CATALOG.forEach((symbolId) => {
-      const option = document.createElement("option");
-      option.value = symbolId;
-      option.textContent = SYMBOL_GLYPHS[symbolId];
-      option.title = SYMBOL_DISPLAY_NAMES[symbolId];
-      if (symbolId === state.selectedSymbol) {
-        option.selected = true;
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "gram-frame-symbol-select";
+    button2.title = "Symbol";
+    button2.setAttribute("aria-label", "Symbol");
+    button2.setAttribute("aria-haspopup", "true");
+    button2.setAttribute("aria-expanded", "false");
+    const glyph = document.createElement("span");
+    glyph.className = "gram-frame-symbol-glyph";
+    glyph.style.color = state.selectedColor;
+    const name = document.createElement("span");
+    name.className = "gram-frame-symbol-name";
+    const caret = document.createElement("span");
+    caret.className = "gram-frame-symbol-caret";
+    caret.textContent = "▾";
+    button2.appendChild(glyph);
+    button2.appendChild(name);
+    button2.appendChild(caret);
+    let popup = null;
+    const close = () => {
+      if (!popup) {
+        return;
       }
-      select.appendChild(option);
-    });
-    select.addEventListener("change", () => {
-      const symbol = (
-        /** @type {SymbolType} */
-        select.value
+      popup.remove();
+      popup = null;
+      button2.setAttribute("aria-expanded", "false");
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("mousedown", onOutsideDown, true);
+      button2.focus();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    };
+    const onOutsideDown = (event) => {
+      const target = (
+        /** @type {Node|null} */
+        event.target
       );
-      if (!instance.interaction.applySymbolToSelectedFeature || !instance.interaction.applySymbolToSelectedFeature(symbol)) {
-        state.selectedSymbol = symbol;
+      if (popup && target && !popup.contains(target) && !button2.contains(target)) {
+        close();
       }
+    };
+    button2.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (popup) {
+        close();
+        return;
+      }
+      popup = buildPopup(instance, state, (chosen) => {
+        applySymbol(instance, chosen);
+        close();
+      });
+      instance.ui.container.appendChild(popup);
+      placePopup(popup, button2, instance.ui.container);
+      button2.setAttribute("aria-expanded", "true");
+      document.addEventListener("keydown", onKeyDown, true);
+      document.addEventListener("mousedown", onOutsideDown, true);
     });
-    instance.interaction._symbolControl = {
-      /** @param {SymbolType} symbol */
+    const control = {
       setValue(symbol) {
-        select.value = symbol;
+        const resolved = SYMBOL_GLYPHS[symbol] ? symbol : DEFAULT_SYMBOL;
+        glyph.textContent = SYMBOL_GLYPHS[resolved];
+        name.textContent = shortSymbolName(resolved);
+        button2.title = SYMBOL_DISPLAY_NAMES[resolved];
+        button2.dataset.symbol = resolved;
+        if (popup) {
+          markChosen(popup, resolved);
+        }
       },
-      /** @param {string} color */
       setTint(color) {
-        select.style.color = color;
+        glyph.style.color = color;
+        if (popup) {
+          popup.style.setProperty("--gf-symbol-tint", color);
+        }
       }
     };
-    return select;
-  }
-  function createLargeSymbolToggle(instance) {
-    const label = document.createElement("label");
-    label.className = "gram-frame-large-symbols-toggle";
-    label.title = `Trial: draw the selected feature's symbols at ${LARGE_SYMBOL_SCALE}× their normal size`;
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "gram-frame-large-symbols-checkbox";
-    checkbox.checked = !!instance.state.largeSymbols;
-    checkbox.addEventListener("change", () => {
-      if (!instance.interaction.applyLargeSymbolsToSelectedFeature || !instance.interaction.applyLargeSymbolsToSelectedFeature(checkbox.checked)) {
-        instance.state.largeSymbols = checkbox.checked;
-        dispatch(instance);
-      }
-    });
-    instance.interaction._largeSymbolsControl = {
-      /** @param {boolean} large */
-      setValue(large) {
-        checkbox.checked = large;
-      }
-    };
-    const text = document.createElement("span");
-    text.className = "gram-frame-large-symbols-label";
-    text.textContent = "Large";
-    label.appendChild(checkbox);
-    label.appendChild(text);
-    return label;
-  }
-  const SVG_NS$2 = "http://www.w3.org/2000/svg";
-  const LABEL_PLATE_CLASS = "gram-frame-label-plate";
-  const LABEL_PLATE_GROUP_CLASS = "gram-frame-label-plated";
-  const LABEL_PLATE_FILL = "#fff";
-  const LABEL_TEXT_FILL = "#000";
-  const LABEL_PLATE_PADDING_X = 3;
-  const LABEL_PLATE_RADIUS = 3;
-  const PLATE_ABOVE_RATIO = 0.95;
-  const PLATE_BELOW_RATIO = 0.3;
-  const FALLBACK_CHAR_WIDTH_RATIO = 0.6;
-  function labelPlateExtents(fontSize) {
-    return {
-      above: roundToHalfPixel(fontSize * PLATE_ABOVE_RATIO),
-      below: roundToHalfPixel(fontSize * PLATE_BELOW_RATIO)
-    };
-  }
-  function roundToHalfPixel(value) {
-    return Math.round(value * 2) / 2;
-  }
-  function labelPlateRect({ x, y, textAnchor, width, fontSize }) {
-    const { above, below } = labelPlateExtents(fontSize);
-    let left = x;
-    if (textAnchor === "middle") {
-      left = x - width / 2;
-    } else if (textAnchor === "end") {
-      left = x - width;
-    }
-    return {
-      x: left - LABEL_PLATE_PADDING_X,
-      y: y - above,
-      width: width + LABEL_PLATE_PADDING_X * 2,
-      height: above + below
-    };
-  }
-  let measurementContext;
-  function textMeasurementContext() {
-    if (measurementContext === void 0) {
-      try {
-        measurementContext = document.createElement("canvas").getContext("2d");
-      } catch {
-        measurementContext = null;
-      }
-    }
-    return measurementContext;
-  }
-  function measureLabelWidth(content, fontSize, font = {}) {
-    const { fontFamily = "Arial, sans-serif", fontWeight = "bold" } = font;
-    const text = content || "";
-    const context = textMeasurementContext();
-    if (context) {
-      context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-      const measured = context.measureText(text).width;
-      if (measured > 0) {
-        return measured;
-      }
-    }
-    return text.length * fontSize * FALLBACK_CHAR_WIDTH_RATIO;
-  }
-  function plateLabel(text, options = {}) {
-    const { fill = LABEL_PLATE_FILL, textFill = LABEL_TEXT_FILL } = options;
-    const fontSize = Number(text.getAttribute("font-size"));
-    const width = measureLabelWidth(text.textContent || "", fontSize, {
-      fontFamily: text.getAttribute("font-family") || void 0,
-      fontWeight: text.getAttribute("font-weight") || void 0
-    });
-    const box = labelPlateRect({
-      x: Number(text.getAttribute("x")),
-      y: Number(text.getAttribute("y")),
-      textAnchor: text.getAttribute("text-anchor") || "start",
-      width,
-      fontSize
-    });
-    text.setAttribute("fill", textFill);
-    text.removeAttribute("stroke");
-    text.removeAttribute("stroke-width");
-    text.removeAttribute("paint-order");
-    const plate = document.createElementNS(SVG_NS$2, "rect");
-    plate.setAttribute("class", LABEL_PLATE_CLASS);
-    plate.setAttribute("x", String(box.x));
-    plate.setAttribute("y", String(box.y));
-    plate.setAttribute("width", String(box.width));
-    plate.setAttribute("height", String(box.height));
-    plate.setAttribute("rx", String(LABEL_PLATE_RADIUS));
-    plate.setAttribute("ry", String(LABEL_PLATE_RADIUS));
-    plate.setAttribute("fill", fill);
-    const group = (
-      /** @type {SVGGElement} */
-      document.createElementNS(SVG_NS$2, "g")
+    control.setValue(
+      /** @type {SymbolType} */
+      state.selectedSymbol
     );
-    group.setAttribute("class", LABEL_PLATE_GROUP_CLASS);
-    group.appendChild(plate);
-    group.appendChild(text);
-    return group;
+    return { element: button2, control };
   }
-  const MAX_MARKER_LABEL_LENGTH = 32;
-  const TABLE_LABEL_FULL_LENGTH = 5;
-  const TABLE_LABEL_HEAD_LENGTH = 3;
-  function normalizeMarkerLabel(raw) {
-    if (typeof raw !== "string") {
-      return void 0;
-    }
-    const trimmed = raw.trim();
-    if (trimmed === "") {
-      return void 0;
-    }
-    return trimmed.slice(0, MAX_MARKER_LABEL_LENGTH);
+  function placePopup(popup, button2, container) {
+    const anchor = button2.getBoundingClientRect();
+    const frame = container.getBoundingClientRect();
+    const width = popup.offsetWidth;
+    const left = Math.max(0, Math.min(anchor.left - frame.left, frame.width - width));
+    popup.style.left = `${left}px`;
+    popup.style.top = `${anchor.bottom - frame.top + 6}px`;
   }
-  function formatMarkerLabelForTable(label) {
-    const normalized = normalizeMarkerLabel(label);
-    if (!normalized) {
-      return "";
-    }
-    if (normalized.length <= TABLE_LABEL_FULL_LENGTH) {
-      return normalized;
-    }
-    return `${normalized.slice(0, TABLE_LABEL_HEAD_LENGTH)}..`;
+  function symbolGlyph(symbol) {
+    return SYMBOL_GLYPHS[
+      /** @type {SymbolType} */
+      symbol
+    ] || SYMBOL_GLYPHS[DEFAULT_SYMBOL];
   }
-  const QUADRANT_GAP = 5;
-  const ABOVE_SYMBOL_GAP = 4;
-  const MARKER_LABEL_FONT_SIZE = 12;
-  function markerLabelPlacement(symbol, cx, cy, symbolSize) {
-    const plate = labelPlateExtents(MARKER_LABEL_FONT_SIZE);
-    if (resolveSymbolType(symbol) === "cross") {
-      return {
-        x: cx + QUADRANT_GAP + LABEL_PLATE_PADDING_X,
-        y: cy - QUADRANT_GAP - plate.below,
-        textAnchor: "start"
-      };
-    }
-    if (labelSitsBelowSymbol(symbol)) {
-      const y = cy + symbolSize / 2 + ABOVE_SYMBOL_GAP + plate.above;
-      return { x: cx, y, textAnchor: "middle" };
-    }
-    return { x: cx, y: cy - symbolSize / 2 - ABOVE_SYMBOL_GAP - plate.below, textAnchor: "middle" };
+  function shortSymbolName(symbol) {
+    return SYMBOL_DISPLAY_NAMES[symbol].split(" (")[0];
   }
-  const SCHEMA_VERSION = 1;
-  const STUDENT_TTL_MS = 24 * 60 * 60 * 1e3;
-  const KEY_PREFIX = "gramframe::";
-  const PIN_PREF_KEY = `${KEY_PREFIX}pref::harmonicPin`;
-  const TRAINER_FLAG_SELECTOR = "#gf-persistent, .gf-persistent, [data-gf-persistent]";
-  function isAnnotationExpired(savedAt, nowMs) {
-    const t = Date.parse(
-      /** @type {string} */
-      savedAt
+  function applySymbol(instance, symbol) {
+    const state = instance.state;
+    const apply = instance.interaction.applySymbolToSelectedFeature;
+    if (!apply || !apply(symbol)) {
+      state.selectedSymbol = symbol;
+      dispatch(instance);
+    }
+    if (instance.interaction.syncStyleControls) {
+      instance.interaction.syncStyleControls();
+    }
+  }
+  function buildPopup(instance, state, onChoose) {
+    const popup = document.createElement("div");
+    popup.className = "gram-frame-symbol-popup";
+    popup.style.setProperty("--gf-symbol-tint", state.selectedColor);
+    const header = document.createElement("div");
+    header.className = "gram-frame-symbol-popup-header";
+    const kicker = document.createElement("div");
+    kicker.className = "gram-frame-kicker";
+    kicker.textContent = "Symbol";
+    header.appendChild(kicker);
+    popup.appendChild(header);
+    const grid = document.createElement("div");
+    grid.className = "gram-frame-symbol-grid";
+    SYMBOL_CATALOG.forEach((symbolId) => {
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "gram-frame-symbol-cell";
+      cell.dataset.symbol = symbolId;
+      cell.title = SYMBOL_DISPLAY_NAMES[symbolId];
+      cell.setAttribute("aria-label", SYMBOL_DISPLAY_NAMES[symbolId]);
+      cell.textContent = SYMBOL_GLYPHS[symbolId];
+      cell.addEventListener("click", (event) => {
+        event.preventDefault();
+        onChoose(symbolId);
+      });
+      grid.appendChild(cell);
+    });
+    popup.appendChild(grid);
+    const footer = document.createElement("div");
+    footer.className = "gram-frame-symbol-popup-footer";
+    const sizeLabel = document.createElement("div");
+    sizeLabel.className = "gram-frame-style-group-label";
+    sizeLabel.textContent = "Size";
+    footer.appendChild(sizeLabel);
+    footer.appendChild(createSymbolSizeTrial(instance));
+    popup.appendChild(footer);
+    markChosen(
+      popup,
+      /** @type {SymbolType} */
+      state.selectedSymbol
     );
-    if (Number.isNaN(t)) {
-      return true;
-    }
-    const age = nowMs - t;
-    if (age < -3e5) {
-      return true;
-    }
-    return age > STUDENT_TTL_MS;
+    return popup;
   }
-  function detectUserContext() {
-    if (document.querySelector(TRAINER_FLAG_SELECTOR)) {
-      return "trainer";
-    }
-    const anchors = document.querySelectorAll("a");
-    for (let i = 0; i < anchors.length; i++) {
-      const text = anchors[i].textContent;
-      if (text && text.trim() === "ANALYSIS") {
-        return "trainer";
-      }
-    }
-    return "student";
+  function markChosen(popup, symbol) {
+    popup.querySelectorAll(".gram-frame-symbol-cell").forEach((cell) => {
+      cell.classList.toggle(
+        "gram-frame-symbol-cell-selected",
+        /** @type {HTMLElement} */
+        cell.dataset.symbol === symbol
+      );
+    });
   }
-  function getStorage(context) {
-    try {
-      const storage = context === "trainer" ? localStorage : sessionStorage;
-      const testKey = "__gramframe_test__";
-      storage.setItem(testKey, "1");
-      storage.removeItem(testKey);
-      return storage;
-    } catch (error) {
-      console.warn(`GramFrame: ${context} storage is unavailable — annotations will not persist:`, error);
-      return null;
-    }
-  }
-  function buildStorageKey(instanceIndex) {
-    const pathname = window.location.pathname;
-    if (instanceIndex != null && instanceIndex > 0) {
-      return `${KEY_PREFIX}${pathname}::${instanceIndex}`;
-    }
-    return `${KEY_PREFIX}${pathname}`;
-  }
+  const KEY_PREFIX$1 = "gramframe::";
+  const PIN_PREF_KEY = `${KEY_PREFIX$1}pref::harmonicPin`;
+  const GUIDANCE_PREF_KEY = `${KEY_PREFIX$1}pref::guidanceCollapsed`;
   function loadPinPreference() {
     try {
       const raw = sessionStorage.getItem(PIN_PREF_KEY);
@@ -599,230 +877,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return false;
     }
   }
-  function hasPersistableAnnotations(state) {
-    const hasMarkers = !!(state.analysis && state.analysis.markers && state.analysis.markers.length > 0);
-    const hasHarmonics = !!(state.harmonics && state.harmonics.harmonicSets && state.harmonics.harmonicSets.length > 0);
-    const hasSidebands = !!(state.sidebands && state.sidebands.sidebandSets && state.sidebands.sidebandSets.length > 0);
-    const hasDoppler = !!(state.doppler && (state.doppler.fPlus !== null || state.doppler.fMinus !== null || state.doppler.fZero !== null));
-    return hasMarkers || hasHarmonics || hasSidebands || hasDoppler;
-  }
-  function isFiniteNumber(value) {
-    return typeof value === "number" && Number.isFinite(value);
-  }
-  function isNonEmptyString(value) {
-    return typeof value === "string" && value.length > 0;
-  }
-  function isValidStoredPoint(point) {
-    if (point === null || point === void 0) return true;
-    return !!point && isFiniteNumber(point.time) && isFiniteNumber(point.freq);
-  }
-  function sanitizeStoredAnnotations(data) {
-    let dropped = 0;
-    let markers = [];
-    if (data && data.analysis && Array.isArray(data.analysis.markers)) {
-      markers = data.analysis.markers.filter((m) => {
-        const valid = !!m && isNonEmptyString(m.id) && isNonEmptyString(m.color) && isFiniteNumber(m.time) && isFiniteNumber(m.freq);
-        if (!valid) dropped++;
-        return valid;
-      }).map((m) => {
-        const label = normalizeMarkerLabel(m.label);
-        const { label: _rawLabel, ...rest } = m;
-        return label ? { ...rest, label } : rest;
-      });
-    } else if (data && data.analysis && data.analysis.markers != null) {
-      dropped++;
-    }
-    let harmonicSets = [];
-    if (data && data.harmonics && Array.isArray(data.harmonics.harmonicSets)) {
-      harmonicSets = data.harmonics.harmonicSets.filter((hs) => {
-        const valid = !!hs && isNonEmptyString(hs.id) && isNonEmptyString(hs.color) && isFiniteNumber(hs.anchorTime) && // Strictly positive: spacing 0 makes the harmonic range infinite.
-        isFiniteNumber(hs.spacing) && hs.spacing > 0;
-        if (!valid) dropped++;
-        return valid;
-      });
-    } else if (data && data.harmonics && data.harmonics.harmonicSets != null) {
-      dropped++;
-    }
-    let sidebandSets = [];
-    if (data && data.sidebands && Array.isArray(data.sidebands.sidebandSets)) {
-      sidebandSets = data.sidebands.sidebandSets.filter((sb) => {
-        const valid = !!sb && isNonEmptyString(sb.id) && isNonEmptyString(sb.color) && isFiniteNumber(sb.anchorTime) && isFiniteNumber(sb.fundamentalFreq) && // Strictly positive, for the same reason a harmonic set's is: a spacing
-        // of zero makes the sideband index range infinite.
-        isFiniteNumber(sb.spacing) && sb.spacing > 0;
-        if (!valid) dropped++;
-        return valid;
-      });
-    } else if (data && data.sidebands && data.sidebands.sidebandSets != null) {
-      dropped++;
-    }
-    const rawDoppler = data && data.doppler || {};
-    const doppler = { fPlus: null, fMinus: null, fZero: null, color: null };
-    for (
-      const key of
-      /** @type {const} */
-      ["fPlus", "fMinus", "fZero"]
-    ) {
-      if (isValidStoredPoint(rawDoppler[key])) {
-        doppler[key] = rawDoppler[key] || null;
-      } else {
-        dropped++;
-      }
-    }
-    doppler.color = isNonEmptyString(rawDoppler.color) ? rawDoppler.color : null;
-    const annotations = {
-      version: data && data.version,
-      savedAt: data && data.savedAt,
-      gram: data && data.gram,
-      analysis: { markers },
-      harmonics: { harmonicSets },
-      sidebands: { sidebandSets },
-      doppler
-    };
-    return { annotations, dropped };
-  }
-  function buildGramFingerprint(state) {
-    const url = state.imageDetails && state.imageDetails.url || "";
-    const config = state.config || { timeMin: 0, timeMax: 0, freqMin: 0, freqMax: 0 };
-    return {
-      image: url.split("/").pop() || "",
-      timeMin: config.timeMin,
-      timeMax: config.timeMax,
-      freqMin: config.freqMin,
-      freqMax: config.freqMax
-    };
-  }
-  function fingerprintMatches(stored, expected) {
-    if (!stored) {
-      return true;
-    }
-    return stored.image === expected.image && stored.timeMin === expected.timeMin && stored.timeMax === expected.timeMax && stored.freqMin === expected.freqMin && stored.freqMax === expected.freqMax;
-  }
-  function saveAnnotations(state, instanceIndex, context) {
+  function loadGuidancePreference() {
     try {
-      const storage = getStorage(context || detectUserContext());
-      if (!storage) return false;
-      if (!hasPersistableAnnotations(state)) {
-        const key2 = buildStorageKey(instanceIndex);
-        storage.removeItem(key2);
-        return true;
-      }
-      const data = {
-        version: SCHEMA_VERSION,
-        savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        // `gram` is an ADDITIVE field (which gram this record belongs to). It
-        // MUST NOT trigger a SCHEMA_VERSION bump: legacy records simply lack it
-        // and restore without the identity check (BH-6, BH-23).
-        gram: buildGramFingerprint(state),
-        analysis: {
-          markers: (state.analysis && state.analysis.markers || []).map((m) => {
-            const label = normalizeMarkerLabel(m.label);
-            return {
-              id: m.id,
-              color: m.color,
-              time: m.time,
-              freq: m.freq,
-              // `symbol` is an ADDITIVE field (feature 161). It MUST NOT trigger a
-              // SCHEMA_VERSION bump: legacy records simply lack it and default to
-              // 'cross' (no drawn symbol) on restore.
-              symbol: m.symbol || "cross",
-              // `label` is likewise ADDITIVE (feature 231) and MUST NOT bump
-              // SCHEMA_VERSION. Written only when the marker carries one, so an
-              // unlabelled marker's record is identical to what it was before
-              // labels existed, and restores as unlabelled.
-              ...label ? { label } : {}
-            };
-          })
-        },
-        harmonics: {
-          harmonicSets: (state.harmonics && state.harmonics.harmonicSets || []).map((hs) => ({
-            id: hs.id,
-            color: hs.color,
-            anchorTime: hs.anchorTime,
-            spacing: hs.spacing,
-            // `symbol` is an ADDITIVE field (feature 157-harmonic-pin-symbols). It
-            // MUST NOT trigger a SCHEMA_VERSION bump: the strict version guard in
-            // loadAnnotations would otherwise discard all pre-existing v1 records.
-            // Legacy records simply lack this key and default to 'cross' (the
-            // symbol-less default, feature 161) on restore.
-            symbol: hs.symbol || "cross",
-            // `showPin` is likewise ADDITIVE (harmonic-pin toggle) and MUST NOT
-            // bump SCHEMA_VERSION. Records written before it simply lack the key
-            // and restore as `true` (pin shown), matching their original look.
-            showPin: hs.showPin !== false
-          }))
-        },
-        // `sidebands` is an ADDITIVE section (issue #241). It MUST NOT trigger a
-        // SCHEMA_VERSION bump: the strict version guard in loadAnnotations would
-        // otherwise discard every pre-existing v1 record. Records written before
-        // sidebands existed simply lack the key and restore with none.
-        sidebands: {
-          sidebandSets: (state.sidebands && state.sidebands.sidebandSets || []).map((sb) => ({
-            id: sb.id,
-            color: sb.color,
-            anchorTime: sb.anchorTime,
-            fundamentalFreq: sb.fundamentalFreq,
-            spacing: sb.spacing,
-            symbol: sb.symbol || "cross",
-            showPin: sb.showPin !== false
-          }))
-        },
-        doppler: {
-          fPlus: state.doppler && state.doppler.fPlus ? { time: state.doppler.fPlus.time, freq: state.doppler.fPlus.freq } : null,
-          fMinus: state.doppler && state.doppler.fMinus ? { time: state.doppler.fMinus.time, freq: state.doppler.fMinus.freq } : null,
-          fZero: state.doppler && state.doppler.fZero ? { time: state.doppler.fZero.time, freq: state.doppler.fZero.freq } : null,
-          color: state.doppler && state.doppler.color || null
-        }
-      };
-      const key = buildStorageKey(instanceIndex);
-      storage.setItem(key, JSON.stringify(data));
-      return true;
+      const raw = localStorage.getItem(GUIDANCE_PREF_KEY);
+      return raw === "true" ? true : raw === "false" ? false : null;
     } catch (error) {
-      console.warn("GramFrame: Failed to save annotations — they exist in memory only:", error);
-      return false;
-    }
-  }
-  function loadAnnotations(instanceIndex, context, expectedGram) {
-    try {
-      const resolvedContext = context || detectUserContext();
-      const storage = getStorage(resolvedContext);
-      if (!storage) return null;
-      const key = buildStorageKey(instanceIndex);
-      const raw = storage.getItem(key);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      if (!data || data.version !== SCHEMA_VERSION) {
-        console.warn("GramFrame: Ignoring stored annotations — unrecognised schema version:", data && data.version);
-        return null;
-      }
-      if (resolvedContext === "student" && isAnnotationExpired(data.savedAt, Date.now())) {
-        console.info("GramFrame: Discarding student annotations — older than the 24-hour persistence limit");
-        storage.removeItem(key);
-        return null;
-      }
-      if (expectedGram && !fingerprintMatches(data.gram, expectedGram)) {
-        console.warn("GramFrame: Ignoring stored annotations — they belong to a different spectrogram (image or axis ranges differ).");
-        return null;
-      }
-      const { annotations, dropped } = sanitizeStoredAnnotations(data);
-      if (dropped > 0) {
-        console.warn(`GramFrame: Discarded ${dropped} invalid stored annotation entr${dropped === 1 ? "y" : "ies"} — restoring the rest.`);
-      }
-      return annotations;
-    } catch (error) {
-      console.warn("GramFrame: Failed to load stored annotations — data discarded:", error);
+      console.warn("GramFrame: Could not read the guidance preference — leaving it automatic:", error);
       return null;
     }
   }
-  function clearAnnotations(instanceIndex, context) {
+  function saveGuidancePreference(collapsed) {
     try {
-      const storage = getStorage(context || detectUserContext());
-      if (!storage) return false;
-      const key = buildStorageKey(instanceIndex);
-      storage.removeItem(key);
-      return true;
+      localStorage.setItem(GUIDANCE_PREF_KEY, collapsed ? "true" : "false");
     } catch (error) {
-      console.warn("GramFrame: Failed to clear stored annotations:", error);
-      return false;
+      console.warn("GramFrame: Could not save the guidance preference:", error);
     }
   }
   const WARNING_CLASS = "gram-frame-storage-warning";
@@ -871,161 +939,49 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   }
   function createPinToggle(instance) {
     const state = instance.state;
-    const row = document.createElement("label");
-    row.className = "gram-frame-pin-toggle";
-    row.title = "Draw harmonic and sideband sets with full-height pin lines instead of mini-pins";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "gram-frame-pin-toggle-input";
-    checkbox.checked = state.showHarmonicPin !== false;
-    checkbox.setAttribute("aria-label", "Show tall pins");
-    const text = document.createElement("span");
-    text.className = "gram-frame-pin-toggle-label";
-    text.textContent = "Tall Pins";
-    row.appendChild(checkbox);
-    row.appendChild(text);
-    checkbox.addEventListener("change", () => {
-      const showPin = checkbox.checked;
-      if (!instance.interaction.applyPinToSelectedFeature || !instance.interaction.applyPinToSelectedFeature(showPin)) {
-        state.showHarmonicPin = showPin;
-        if (savePinPreference(showPin)) {
-          clearStorageWarning(instance);
-        } else {
-          showStorageWarning(instance, "The pin preference could not be saved — it applies to this page only.");
-        }
-      }
-    });
-    instance.interaction._pinControl = {
-      /** @param {boolean} showPin */
+    const segmented = createSegmented(
+      [{ value: true, label: "Tall" }, { value: false, label: "Mini" }],
+      "Pin style",
+      (showPin) => choosePinStyle(instance, showPin, segmented.setValue)
+    );
+    segmented.element.classList.add("gram-frame-pin-toggle");
+    segmented.setValue(state.showHarmonicPin !== false);
+    const control = {
       setValue(showPin) {
-        checkbox.checked = showPin;
+        segmented.setValue(showPin);
       },
-      /** @param {boolean} enabled */
       setEnabled(enabled) {
-        checkbox.disabled = !enabled;
-        row.classList.toggle("gram-frame-pin-toggle-disabled", !enabled);
-        row.title = enabled ? "Draw harmonic and sideband sets with full-height pin lines instead of mini-pins" : "Tall pins apply to harmonic and sideband sets only";
+        segmented.setEnabled(enabled, "Tall pins apply to harmonic and sideband sets only");
       }
     };
-    return row;
+    return { element: segmented.element, control };
   }
-  function renderSize(imageDetails) {
-    return {
-      width: imageDetails.renderWidth || imageDetails.naturalWidth,
-      height: imageDetails.renderHeight || imageDetails.naturalHeight
-    };
-  }
-  function getImageBounds(viewport, spectrogramImage = null) {
-    const { margins, imageDetails } = viewport;
-    const { width, height } = renderSize(imageDetails);
-    if (spectrogramImage) {
-      return {
-        left: parseFloat(spectrogramImage.getAttribute("x") || String(margins.left)),
-        top: parseFloat(spectrogramImage.getAttribute("y") || String(margins.top)),
-        width: parseFloat(spectrogramImage.getAttribute("width") || String(width)),
-        height: parseFloat(spectrogramImage.getAttribute("height") || String(height))
-      };
+  function choosePinStyle(instance, showPin, show) {
+    const state = instance.state;
+    const apply = instance.interaction.applyPinToSelectedFeature;
+    if (!apply || !apply(showPin)) {
+      state.showHarmonicPin = showPin;
+      if (savePinPreference(showPin)) {
+        clearStorageWarning(instance);
+      } else {
+        showStorageWarning(instance, "The pin preference could not be saved — it applies to this page only.");
+      }
+      dispatch(instance);
     }
-    return { left: margins.left, top: margins.top, width, height };
+    show(showPin);
   }
-  function getRenderDimensions(viewport) {
-    const { width, height } = renderSize(viewport.imageDetails);
-    return { renderWidth: width, renderHeight: height };
-  }
-  function calculateVisibleDataRange(viewport, spectrogramImage = null) {
-    const { timeMin, timeMax, freqMin, freqMax } = viewport.config;
-    const margins = viewport.margins;
-    const zoomLevel = viewport.zoom.level;
-    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
-    if (zoomLevel === 1) {
-      return { timeMin, timeMax, freqMin, freqMax };
-    }
-    const {
-      left: imageLeft,
-      top: imageTop,
-      width: imageWidth,
-      height: imageHeight
-    } = getImageBounds(viewport, spectrogramImage);
-    const visibleLeft = Math.max(0, margins.left - imageLeft);
-    const visibleRight = Math.min(imageWidth, margins.left + renderWidth - imageLeft);
-    const visibleTop = Math.max(0, margins.top - imageTop);
-    const visibleBottom = Math.min(imageHeight, margins.top + renderHeight - imageTop);
-    const freqRange = freqMax - freqMin;
-    const timeRange = timeMax - timeMin;
-    const visibleFreqMin = freqMin + visibleLeft / imageWidth * freqRange;
-    const visibleFreqMax = freqMin + visibleRight / imageWidth * freqRange;
-    const visibleTimeMax = timeMax - visibleTop / imageHeight * timeRange;
-    const visibleTimeMin = timeMax - visibleBottom / imageHeight * timeRange;
-    return {
-      freqMin: visibleFreqMin,
-      freqMax: visibleFreqMax,
-      timeMin: visibleTimeMin,
-      timeMax: visibleTimeMax
-    };
-  }
-  function screenToSVG(screenX, screenY, svg) {
-    const svgRect = svg.getBoundingClientRect();
-    const viewBox = svg.viewBox.baseVal;
-    if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
-      const scaleX = viewBox.width / svgRect.width;
-      const scaleY = viewBox.height / svgRect.height;
-      return {
-        x: screenX * scaleX + viewBox.x,
-        y: screenY * scaleY + viewBox.y
-      };
-    }
-    return { x: screenX, y: screenY };
-  }
-  function svgToImage(svgX, svgY, viewport, spectrogramImage = null) {
-    const bounds = getImageBounds(viewport, spectrogramImage);
-    const { width, height } = renderSize(viewport.imageDetails);
-    return {
-      x: (svgX - bounds.left) * (width / bounds.width),
-      y: (svgY - bounds.top) * (height / bounds.height)
-    };
-  }
-  function imageToData(imageX, imageY, viewport) {
-    const { config, imageDetails, rate } = viewport;
-    const { freqMin, freqMax, timeMin, timeMax } = config;
-    const { width, height } = renderSize(imageDetails);
-    const rawFreq = freqMin + imageX / width * (freqMax - freqMin);
-    const time = timeMax - imageY / height * (timeMax - timeMin);
-    return { freq: rawFreq / rate, time };
-  }
-  function dataToSVG(dataPoint, viewport, spectrogramImage = null) {
-    const { config } = viewport;
-    const { timeMin, timeMax, freqMin, freqMax } = config;
-    const bounds = getImageBounds(viewport, spectrogramImage);
-    const freqRatio = (dataPoint.freq - freqMin) / (freqMax - freqMin);
-    const timeRatio = (dataPoint.time - timeMin) / (timeMax - timeMin);
-    return {
-      x: bounds.left + freqRatio * bounds.width,
-      y: bounds.top + (1 - timeRatio) * bounds.height
-      // Invert Y
-    };
-  }
-  function isWithinImage(svgPoint, viewport, spectrogramImage = null) {
-    const bounds = getImageBounds(viewport, spectrogramImage);
-    const { width, height } = renderSize(viewport.imageDetails);
-    const image = svgToImage(svgPoint.x, svgPoint.y, viewport, spectrogramImage);
-    return svgPoint.x >= bounds.left && svgPoint.x <= bounds.left + bounds.width && svgPoint.y >= bounds.top && svgPoint.y <= bounds.top + bounds.height && image.x >= 0 && image.x <= width && image.y >= 0 && image.y <= height;
-  }
-  function clampToImage(imageX, imageY, viewport) {
-    const { width, height } = renderSize(viewport.imageDetails);
-    return {
-      x: Math.max(0, Math.min(imageX, width)),
-      y: Math.max(0, Math.min(imageY, height))
-    };
-  }
-  function screenToData(clientX, clientY, svg, viewport, spectrogramImage = null) {
-    const svgRect = svg.getBoundingClientRect();
-    const svgPoint = screenToSVG(clientX - svgRect.left, clientY - svgRect.top, svg);
-    const image = svgToImage(svgPoint.x, svgPoint.y, viewport, spectrogramImage);
-    return {
-      svg: svgPoint,
-      image,
-      data: imageToData(image.x, image.y, viewport)
-    };
+  function findMarkerOwner(instance) {
+    const owner = Object.values(instance.modes || {}).find((mode) => {
+      const candidate = (
+        /** @type {Partial<MarkerOwner>} */
+        mode
+      );
+      return Array.isArray(candidate == null ? void 0 : candidate.markers) && typeof (candidate == null ? void 0 : candidate.removeMarker) === "function" && typeof (candidate == null ? void 0 : candidate.setMarkerLabel) === "function";
+    });
+    return (
+      /** @type {MarkerOwner|null} */
+      owner || null
+    );
   }
   function isPinSetOwner(mode) {
     const candidate = (
@@ -1054,6 +1010,211 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       mode
     );
     return typeof (candidate == null ? void 0 : candidate.refreshPanel) === "function";
+  }
+  function createTableColumn(className, title) {
+    const column = document.createElement("div");
+    column.className = `gram-frame-table-column ${className}`;
+    const header = document.createElement("div");
+    header.className = "gram-frame-panel-header";
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+    header.appendChild(heading);
+    const count = document.createElement("span");
+    count.className = "gram-frame-count-chip";
+    count.hidden = true;
+    header.appendChild(count);
+    column.appendChild(header);
+    return column;
+  }
+  function createAnnotationTables() {
+    const tables = document.createElement("div");
+    tables.className = "gram-frame-tables";
+    const markersContainer = createTableColumn("gram-frame-markers-persistent-container", "Markers");
+    const harmonicsContainer = createTableColumn("gram-frame-harmonics-persistent-container", "Harmonics");
+    const harmonicsButtons = document.createElement("div");
+    harmonicsButtons.className = "gram-frame-harmonics-button-container";
+    const harmonicsHeader = harmonicsContainer.querySelector(".gram-frame-panel-header");
+    if (harmonicsHeader) {
+      harmonicsHeader.classList.add("gram-frame-harmonics-header");
+      harmonicsHeader.appendChild(harmonicsButtons);
+    }
+    const sidebandsContainer = createTableColumn("gram-frame-sidebands-persistent-container", "Sidebands");
+    tables.appendChild(markersContainer);
+    tables.appendChild(harmonicsContainer);
+    tables.appendChild(sidebandsContainer);
+    return { tables, markersContainer, harmonicsContainer, sidebandsContainer };
+  }
+  function refreshTableCounts(instance) {
+    const { analysis, harmonics, sidebands } = instance.state;
+    const { markersContainer, harmonicsContainer, sidebandsContainer } = instance.ui;
+    setCount(markersContainer, analysis ? analysis.markers.length : 0);
+    setCount(harmonicsContainer, harmonics ? harmonics.harmonicSets.length : 0);
+    setCount(sidebandsContainer, sidebands ? sidebands.sidebandSets.length : 0);
+  }
+  function setCount(container, count) {
+    const chip = container ? container.querySelector(".gram-frame-count-chip") : null;
+    if (!(chip instanceof HTMLElement)) {
+      return;
+    }
+    chip.textContent = String(count);
+    chip.hidden = count === 0;
+  }
+  function mountClearAllButton(instance, onClear) {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "gram-frame-clear-btn";
+    button2.textContent = "Clear all annotations";
+    button2.title = "Remove every cross, harmonic set and sideband set";
+    button2.addEventListener("click", (event) => {
+      event.preventDefault();
+      onClear();
+    });
+    const footer = document.createElement("div");
+    footer.className = "gram-frame-tables-footer";
+    footer.appendChild(button2);
+    if (instance.ui.sidebandsContainer) {
+      instance.ui.sidebandsContainer.appendChild(footer);
+    }
+  }
+  function refreshPanels(instance) {
+    Object.values(instance.modes).filter(isPanelOwner).forEach((mode) => mode.refreshPanel());
+    refreshTableCounts(instance);
+  }
+  function commitAnnotationChange(instance, refreshPanel = null, dispatchOptions = void 0) {
+    markAnnotationsChanged(instance);
+    if (typeof refreshPanel === "function") {
+      refreshPanel();
+    }
+    if (instance.featureRenderer) {
+      instance.featureRenderer.renderAllPersistentFeatures();
+    }
+    dispatch(instance, dispatchOptions);
+  }
+  function renderSize(imageDetails) {
+    return {
+      width: imageDetails.renderWidth || imageDetails.naturalWidth,
+      height: imageDetails.renderHeight || imageDetails.naturalHeight
+    };
+  }
+  function getImageBounds(viewport, spectrogramImage = null) {
+    const { margins, imageDetails } = viewport;
+    const { width, height } = renderSize(imageDetails);
+    if (spectrogramImage) {
+      return {
+        left: parseFloat(spectrogramImage.getAttribute("x") || String(margins.left)),
+        top: parseFloat(spectrogramImage.getAttribute("y") || String(margins.top)),
+        width: parseFloat(spectrogramImage.getAttribute("width") || String(width)),
+        height: parseFloat(spectrogramImage.getAttribute("height") || String(height))
+      };
+    }
+    return { left: margins.left, top: margins.top, width, height };
+  }
+  function getRenderDimensions(viewport) {
+    const { width, height } = renderSize(viewport.imageDetails);
+    return { renderWidth: width, renderHeight: height };
+  }
+  function dataFrequencyRange(viewport) {
+    const { freqMin, freqMax } = viewport.config;
+    const rate = viewport.frequencyRate || 1;
+    return { freqMin: freqMin / rate, freqMax: freqMax / rate };
+  }
+  function calculateVisibleDataRange(viewport, spectrogramImage = null) {
+    const { timeMin, timeMax } = viewport.config;
+    const { freqMin, freqMax } = dataFrequencyRange(viewport);
+    const { margins, zoom } = viewport;
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    const stretched = viewport.imageDetails.timeStretch !== void 0;
+    if (zoom.level === 1 && !stretched) {
+      return { timeMin, timeMax, freqMin, freqMax };
+    }
+    const {
+      left: imageLeft,
+      top: imageTop,
+      width: imageWidth,
+      height: imageHeight
+    } = getImageBounds(viewport, spectrogramImage);
+    const visibleLeft = Math.max(0, margins.left - imageLeft);
+    const visibleRight = Math.min(imageWidth, margins.left + renderWidth - imageLeft);
+    const visibleTop = stretched ? margins.top - imageTop : Math.max(0, margins.top - imageTop);
+    const visibleBottom = stretched ? margins.top + renderHeight - imageTop : Math.min(imageHeight, margins.top + renderHeight - imageTop);
+    const freqRange = freqMax - freqMin;
+    const timeRange = timeMax - timeMin;
+    return {
+      freqMin: freqMin + visibleLeft / imageWidth * freqRange,
+      freqMax: freqMin + visibleRight / imageWidth * freqRange,
+      timeMin: timeMax - visibleBottom / imageHeight * timeRange,
+      timeMax: timeMax - visibleTop / imageHeight * timeRange
+    };
+  }
+  function screenToSVG(screenX, screenY, svg) {
+    const svgRect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
+      const scaleX = viewBox.width / svgRect.width;
+      const scaleY = viewBox.height / svgRect.height;
+      return {
+        x: screenX * scaleX + viewBox.x,
+        y: screenY * scaleY + viewBox.y
+      };
+    }
+    return { x: screenX, y: screenY };
+  }
+  function svgToImage(svgX, svgY, viewport, spectrogramImage = null) {
+    const bounds = getImageBounds(viewport, spectrogramImage);
+    const { width, height } = renderSize(viewport.imageDetails);
+    return {
+      x: (svgX - bounds.left) * (width / bounds.width),
+      y: (svgY - bounds.top) * (height / bounds.height)
+    };
+  }
+  function imageToData(imageX, imageY, viewport) {
+    const { config, imageDetails, frequencyRate } = viewport;
+    const { freqMin, freqMax, timeMin, timeMax } = config;
+    const { width, height } = renderSize(imageDetails);
+    const rawFreq = freqMin + imageX / width * (freqMax - freqMin);
+    const time = timeMax - imageY / height * (timeMax - timeMin);
+    return { freq: rawFreq / frequencyRate, time };
+  }
+  function dataToSVG(dataPoint, viewport, spectrogramImage = null) {
+    const { timeMin, timeMax } = viewport.config;
+    const { freqMin, freqMax } = dataFrequencyRange(viewport);
+    const bounds = getImageBounds(viewport, spectrogramImage);
+    const freqRatio = (dataPoint.freq - freqMin) / (freqMax - freqMin);
+    const timeRatio = (dataPoint.time - timeMin) / (timeMax - timeMin);
+    return {
+      x: bounds.left + freqRatio * bounds.width,
+      y: bounds.top + (1 - timeRatio) * bounds.height
+      // Invert Y
+    };
+  }
+  function nudgeData(dataPoint, dx, dy, viewport, spectrogramImage = null) {
+    const svgPoint = dataToSVG(dataPoint, viewport, spectrogramImage);
+    const image = svgToImage(svgPoint.x + dx, svgPoint.y + dy, viewport, spectrogramImage);
+    const clamped = clampToImage(image.x, image.y, viewport);
+    return imageToData(clamped.x, clamped.y, viewport);
+  }
+  function isWithinImage(svgPoint, viewport, spectrogramImage = null) {
+    const bounds = getImageBounds(viewport, spectrogramImage);
+    const { width, height } = renderSize(viewport.imageDetails);
+    const image = svgToImage(svgPoint.x, svgPoint.y, viewport, spectrogramImage);
+    return svgPoint.x >= bounds.left && svgPoint.x <= bounds.left + bounds.width && svgPoint.y >= bounds.top && svgPoint.y <= bounds.top + bounds.height && image.x >= 0 && image.x <= width && image.y >= 0 && image.y <= height;
+  }
+  function clampToImage(imageX, imageY, viewport) {
+    const { width, height } = renderSize(viewport.imageDetails);
+    return {
+      x: Math.max(0, Math.min(imageX, width)),
+      y: Math.max(0, Math.min(imageY, height))
+    };
+  }
+  function screenToData(clientX, clientY, svg, viewport, spectrogramImage = null) {
+    const svgRect = svg.getBoundingClientRect();
+    const svgPoint = screenToSVG(clientX - svgRect.left, clientY - svgRect.top, svg);
+    const image = svgToImage(svgPoint.x, svgPoint.y, viewport, spectrogramImage);
+    return {
+      svg: svgPoint,
+      image,
+      data: imageToData(image.x, image.y, viewport)
+    };
   }
   let currentFocusedInstance = null;
   const registeredInstances = /* @__PURE__ */ new Set();
@@ -1107,14 +1268,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     currentFocusedInstance = null;
   }
-  function isNodeInsideAnyInstance(node) {
+  function instanceContaining(node) {
     if (!(node instanceof Node)) {
-      return false;
+      return null;
     }
     pruneDisconnectedInstances();
-    return Array.from(registeredInstances).some(
+    return Array.from(registeredInstances).find(
       (instance) => !!(instance.ui && instance.ui.container && instance.ui.container.contains(node))
-    );
+    ) || null;
+  }
+  function isNodeInsideAnyInstance(node) {
+    return instanceContaining(node) !== null;
   }
   function addFocusIndicator(instance) {
     if (instance.ui.container) {
@@ -1124,28 +1288,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function removeFocusIndicator(instance) {
     if (instance.ui.container) {
       instance.ui.container.classList.remove("gram-frame-focused");
-    }
-  }
-  function focusNextInstance() {
-    pruneDisconnectedInstances();
-    if (registeredInstances.size <= 1) return;
-    const instancesArray = Array.from(registeredInstances);
-    const currentIndex = currentFocusedInstance ? instancesArray.indexOf(currentFocusedInstance) : -1;
-    const nextIndex = (currentIndex + 1) % instancesArray.length;
-    const next = instancesArray[nextIndex];
-    if (next) {
-      setFocusedInstance(next);
-    }
-  }
-  function focusPreviousInstance() {
-    pruneDisconnectedInstances();
-    if (registeredInstances.size <= 1) return;
-    const instancesArray = Array.from(registeredInstances);
-    const currentIndex = currentFocusedInstance ? instancesArray.indexOf(currentFocusedInstance) : -1;
-    const prevIndex = currentIndex === 0 ? instancesArray.length - 1 : currentIndex - 1;
-    const next = instancesArray[prevIndex];
-    if (next) {
-      setFocusedInstance(next);
     }
   }
   const HOVER_BRACKETS = [
@@ -1418,6 +1560,551 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.reset();
     }
   }
+  function decimalsForInterval(interval) {
+    if (!Number.isFinite(interval) || interval <= 0) {
+      return 0;
+    }
+    for (let decimals = 0; decimals < 3; decimals++) {
+      const scaled = interval * Math.pow(10, decimals);
+      if (Math.abs(scaled - Math.round(scaled)) < 1e-9) {
+        return decimals;
+      }
+    }
+    return 3;
+  }
+  function formatAtInterval(value, interval) {
+    if (!Number.isFinite(interval) || interval <= 0) {
+      return String(Math.round(value));
+    }
+    return value.toFixed(decimalsForInterval(interval));
+  }
+  function formatFrequencyLabel(frequency, interval = 1) {
+    return formatAtInterval(frequency, interval) + "Hz";
+  }
+  function precisionIntervalFor(span) {
+    if (!Number.isFinite(span) || span <= 0) {
+      return 1;
+    }
+    return Math.pow(10, Math.floor(Math.log10(span)) - 1);
+  }
+  function formatTime(seconds) {
+    const sign = seconds < 0 ? "-" : "";
+    const magnitude = Math.abs(seconds);
+    const minutes = Math.floor(magnitude / 60);
+    const remainingSeconds = Math.floor(magnitude % 60);
+    const paddedMinutes = minutes.toString().padStart(2, "0");
+    const paddedSeconds = remainingSeconds.toString().padStart(2, "0");
+    return `${sign}${paddedMinutes}:${paddedSeconds}`;
+  }
+  function formatAxisTime(seconds, interval) {
+    const decimals = decimalsForInterval(interval);
+    if (decimals === 0) {
+      return formatTime(seconds);
+    }
+    const sign = seconds < 0 ? "-" : "";
+    const magnitude = Math.abs(seconds);
+    const minutes = Math.floor(magnitude / 60);
+    const remainingSeconds = magnitude % 60;
+    const paddedMinutes = minutes.toString().padStart(2, "0");
+    const secondsText = remainingSeconds.toFixed(decimals).padStart(decimals + 3, "0");
+    return `${sign}${paddedMinutes}:${secondsText}`;
+  }
+  function renderAxes(instance) {
+    if (!instance.ui.axesGroup) {
+      return;
+    }
+    instance.ui.axesGroup.innerHTML = "";
+    const viewport = instance.state;
+    const { naturalWidth, naturalHeight } = viewport.imageDetails;
+    const margins = viewport.margins;
+    if (!naturalWidth || !naturalHeight) {
+      return;
+    }
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    const visibleRange = calculateVisibleDataRange(viewport, instance.ui.spectrogramImage);
+    renderFrequencyAxis(instance, margins, renderWidth, renderHeight, visibleRange.freqMin, visibleRange.freqMax);
+    renderTimeAxis(instance, margins, renderWidth, renderHeight, visibleRange.timeMin, visibleRange.timeMax);
+  }
+  function renderTimeAxis(instance, margins, _naturalWidth, naturalHeight, timeMin, timeMax) {
+    const axisX = margins.left;
+    const axisStartY = margins.top;
+    const axisEndY = margins.top + naturalHeight;
+    const timeRange = timeMax - timeMin;
+    const axisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    axisLine.setAttribute("x1", String(axisX));
+    axisLine.setAttribute("y1", String(axisStartY));
+    axisLine.setAttribute("x2", String(axisX));
+    axisLine.setAttribute("y2", String(axisEndY));
+    axisLine.setAttribute("class", "gram-frame-axis-line");
+    instance.ui.axesGroup.appendChild(axisLine);
+    if (!(timeRange > 0)) {
+      return;
+    }
+    const { majorInterval, minorInterval, majorStart, minorStart, maxTicks } = calculateAxisTicks(timeMin, timeMax, naturalHeight, 40);
+    const yFor = (time) => axisEndY - (time - timeMin) / timeRange * naturalHeight;
+    const minorCount = Math.floor((timeMax - minorStart) / minorInterval) + 1;
+    if (minorCount > 0 && minorCount <= maxTicks) {
+      for (let i = 0; i < minorCount; i++) {
+        const time = minorStart + i * minorInterval;
+        if (time > timeMax) break;
+        const offsetFromMajor = Math.abs((time - majorStart) % majorInterval / majorInterval);
+        if (offsetFromMajor < 1e-3 || offsetFromMajor > 0.999) continue;
+        const y = yFor(time);
+        const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        tick.setAttribute("x1", String(axisX - 4));
+        tick.setAttribute("y1", String(y));
+        tick.setAttribute("x2", String(axisX));
+        tick.setAttribute("y2", String(y));
+        tick.setAttribute("class", "gram-frame-axis-tick-minor");
+        instance.ui.axesGroup.appendChild(tick);
+      }
+    }
+    const majorCount = Math.floor((timeMax - majorStart) / majorInterval) + 1;
+    if (majorCount <= 0 || majorCount > maxTicks) {
+      return;
+    }
+    for (let i = 0; i < majorCount; i++) {
+      const time = majorStart + i * majorInterval;
+      if (time > timeMax) break;
+      const y = yFor(time);
+      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      tick.setAttribute("x1", String(axisX - 8));
+      tick.setAttribute("y1", String(y));
+      tick.setAttribute("x2", String(axisX));
+      tick.setAttribute("y2", String(y));
+      tick.setAttribute("class", "gram-frame-axis-tick");
+      instance.ui.axesGroup.appendChild(tick);
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", String(axisX - 12));
+      label.setAttribute("y", String(y + 4));
+      label.setAttribute("text-anchor", "end");
+      label.setAttribute("class", "gram-frame-axis-label");
+      label.textContent = formatAxisTime(time, majorInterval);
+      instance.ui.axesGroup.appendChild(label);
+    }
+  }
+  function calculateAxisTicks(min, max, containerSize, targetSpacing = 80) {
+    const range = max - min;
+    const targetMajorTicks = Math.max(2, Math.floor(containerSize / targetSpacing));
+    const rawMajorInterval = range / (targetMajorTicks - 1);
+    function niceNum(value, round) {
+      const exponent = Math.floor(Math.log10(value));
+      const fraction = value / Math.pow(10, exponent);
+      let niceFraction;
+      {
+        if (fraction <= 1) niceFraction = 1;
+        else if (fraction <= 2) niceFraction = 2;
+        else if (fraction <= 5) niceFraction = 5;
+        else niceFraction = 10;
+      }
+      return niceFraction * Math.pow(10, exponent);
+    }
+    const majorInterval = niceNum(rawMajorInterval);
+    let minorInterval;
+    const majorFraction = majorInterval / Math.pow(10, Math.floor(Math.log10(majorInterval)));
+    if (majorFraction === 1) {
+      minorInterval = majorInterval / 5;
+    } else if (majorFraction === 2) {
+      minorInterval = majorInterval / 2;
+    } else if (majorFraction === 5) {
+      minorInterval = majorInterval / 5;
+    } else {
+      minorInterval = majorInterval / 2;
+    }
+    const majorStart = Math.ceil(min / majorInterval) * majorInterval;
+    const minorStart = Math.ceil(min / minorInterval) * minorInterval;
+    const expectedMajorTicks = Math.ceil(range / majorInterval) + 2;
+    const expectedMinorTicks = Math.ceil(range / minorInterval) + 2;
+    const maxTicks = Math.max(200, expectedMajorTicks + expectedMinorTicks);
+    return {
+      majorInterval,
+      minorInterval,
+      majorStart,
+      minorStart,
+      expectedMajorTicks,
+      expectedMinorTicks,
+      maxTicks
+    };
+  }
+  function renderAxisLine(instance, axisConfig) {
+    const axisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    axisLine.setAttribute("x1", String(axisConfig.startX));
+    axisLine.setAttribute("y1", String(axisConfig.y));
+    axisLine.setAttribute("x2", String(axisConfig.endX));
+    axisLine.setAttribute("y2", String(axisConfig.y));
+    axisLine.setAttribute("class", "gram-frame-axis-line");
+    instance.ui.axesGroup.appendChild(axisLine);
+  }
+  function renderAxisTicks(instance, tickData, axisConfig) {
+    tickData.forEach((tickInfo) => {
+      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      tick.setAttribute("x1", String(tickInfo.x));
+      tick.setAttribute("y1", String(axisConfig.y));
+      tick.setAttribute("x2", String(tickInfo.x));
+      tick.setAttribute("y2", String(axisConfig.y + tickInfo.height));
+      tick.setAttribute("class", tickInfo.className);
+      instance.ui.axesGroup.appendChild(tick);
+    });
+  }
+  function renderAxisLabels(instance, labelData, axisConfig) {
+    labelData.forEach((labelInfo) => {
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", String(labelInfo.x));
+      label.setAttribute("y", String(axisConfig.y + 25));
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("class", labelInfo.className);
+      label.textContent = labelInfo.text;
+      instance.ui.axesGroup.appendChild(label);
+    });
+  }
+  function renderFrequencyAxis(instance, margins, naturalWidth, _naturalHeight, freqMin, freqMax) {
+    const axisY = margins.top + _naturalHeight;
+    const axisStartX = margins.left;
+    const axisEndX = margins.left + naturalWidth;
+    const displayFreqMin = freqMin;
+    const displayFreqMax = freqMax;
+    const freqRange = displayFreqMax - displayFreqMin;
+    const axisConfig = { y: axisY, startX: axisStartX, endX: axisEndX };
+    renderAxisLine(instance, axisConfig);
+    const tickCalculation = calculateAxisTicks(displayFreqMin, displayFreqMax, naturalWidth);
+    const minorTickData = [];
+    const majorTickData = [];
+    const labelData = [];
+    const numMinorTicks = Math.floor((displayFreqMax - tickCalculation.minorStart) / tickCalculation.minorInterval) + 1;
+    if (numMinorTicks <= tickCalculation.maxTicks) {
+      for (let i = 0; i < numMinorTicks; i++) {
+        const freq = tickCalculation.minorStart + i * tickCalculation.minorInterval;
+        if (freq > displayFreqMax) break;
+        if (Math.abs(freq % tickCalculation.majorInterval) < 0.01) continue;
+        const x = axisStartX + (freq - displayFreqMin) / freqRange * naturalWidth;
+        minorTickData.push({ x, height: 4, className: "gram-frame-axis-tick-minor" });
+      }
+    }
+    const numMajorTicks = Math.floor((displayFreqMax - tickCalculation.majorStart) / tickCalculation.majorInterval) + 1;
+    if (numMajorTicks <= tickCalculation.maxTicks) {
+      for (let i = 0; i < numMajorTicks; i++) {
+        const freq = tickCalculation.majorStart + i * tickCalculation.majorInterval;
+        if (freq > displayFreqMax) break;
+        const x = axisStartX + (freq - displayFreqMin) / freqRange * naturalWidth;
+        majorTickData.push({ x, height: 8, className: "gram-frame-axis-tick-major" });
+        labelData.push({
+          x,
+          text: formatFrequencyLabel(freq, tickCalculation.majorInterval),
+          className: "gram-frame-axis-label-major"
+        });
+      }
+    } else {
+      const tickCount = 5;
+      const fallbackInterval = freqRange / (tickCount - 1);
+      for (let i = 0; i < tickCount; i++) {
+        const freq = displayFreqMin + i * fallbackInterval;
+        const x = axisStartX + i / (tickCount - 1) * naturalWidth;
+        majorTickData.push({ x, height: 8, className: "gram-frame-axis-tick" });
+        labelData.push({
+          x,
+          text: formatFrequencyLabel(freq, fallbackInterval),
+          className: "gram-frame-axis-label"
+        });
+      }
+    }
+    renderAxisTicks(instance, minorTickData, axisConfig);
+    renderAxisTicks(instance, majorTickData, axisConfig);
+    renderAxisLabels(instance, labelData, axisConfig);
+  }
+  function updateSVGLayout(instance) {
+    const viewport = instance.state;
+    const { naturalWidth, naturalHeight } = viewport.imageDetails;
+    const margins = viewport.margins;
+    if (!naturalWidth || !naturalHeight) {
+      return;
+    }
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    const axesWidth = renderWidth;
+    const axesHeight = renderHeight;
+    const totalWidth = axesWidth + margins.left + margins.right;
+    const totalHeight = axesHeight + margins.top + margins.bottom;
+    instance.ui.container.style.width = "auto";
+    instance.ui.container.style.height = "auto";
+    instance.ui.container.style.aspectRatio = "unset";
+    instance.ui.svg.style.width = `${totalWidth}px`;
+    instance.ui.svg.style.height = `${totalHeight}px`;
+    instance.ui.svg.setAttribute("viewBox", `0 0 ${totalWidth} ${totalHeight}`);
+    instance.ui.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    instance.ui.spectrogramImage.setAttribute("x", String(margins.left));
+    instance.ui.spectrogramImage.setAttribute("y", String(margins.top));
+    instance.ui.spectrogramImage.setAttribute("width", String(axesWidth));
+    instance.ui.spectrogramImage.setAttribute("height", String(axesHeight));
+    if (instance.ui.imageClipRect) {
+      instance.ui.imageClipRect.setAttribute("x", String(margins.left));
+      instance.ui.imageClipRect.setAttribute("y", String(margins.top));
+      instance.ui.imageClipRect.setAttribute("width", String(axesWidth));
+      instance.ui.imageClipRect.setAttribute("height", String(axesHeight));
+    }
+    if (instance.ui.cursorClipRect) {
+      instance.ui.cursorClipRect.setAttribute("x", String(margins.left));
+      instance.ui.cursorClipRect.setAttribute("y", String(margins.top));
+      instance.ui.cursorClipRect.setAttribute("width", String(axesWidth));
+      instance.ui.cursorClipRect.setAttribute("height", String(axesHeight));
+    }
+    applyZoomTransform(instance);
+  }
+  function applyZoomTransform(instance) {
+    const viewport = instance.state;
+    const { level, centerX, centerY } = viewport.zoom;
+    const margins = viewport.margins;
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    if (!instance.ui.spectrogramImage) {
+      return;
+    }
+    if (viewport.imageDetails.timeStretch !== void 0) {
+      applyStretchedTransform(instance, viewport, renderWidth, renderHeight);
+      return;
+    }
+    if (level === 1) {
+      instance.ui.spectrogramImage.setAttribute("x", String(margins.left));
+      instance.ui.spectrogramImage.setAttribute("y", String(margins.top));
+      instance.ui.spectrogramImage.setAttribute("width", String(renderWidth));
+      instance.ui.spectrogramImage.setAttribute("height", String(renderHeight));
+      instance.ui.spectrogramImage.removeAttribute("transform");
+      renderAxes(instance);
+      if (instance.featureRenderer) {
+        instance.featureRenderer.renderAllPersistentFeatures();
+      }
+      return;
+    }
+    const centerImageX = centerX * renderWidth;
+    const centerImageY = centerY * renderHeight;
+    const zoomedWidth = renderWidth * level;
+    const zoomedHeight = renderHeight * level;
+    const newX = margins.left + centerImageX - centerImageX * level;
+    const newY = margins.top + centerImageY - centerImageY * level;
+    instance.ui.spectrogramImage.setAttribute("x", String(newX));
+    instance.ui.spectrogramImage.setAttribute("y", String(newY));
+    instance.ui.spectrogramImage.setAttribute("width", String(zoomedWidth));
+    instance.ui.spectrogramImage.setAttribute("height", String(zoomedHeight));
+    renderAxes(instance);
+    if (instance.featureRenderer) {
+      instance.featureRenderer.renderAllPersistentFeatures();
+    }
+  }
+  function applyStretchedTransform(instance, viewport, renderWidth, renderHeight) {
+    const { zoom, margins, config, player, imageDetails } = viewport;
+    const { level, centerX } = zoom;
+    const stretch = imageDetails.timeStretch || 1;
+    const image = instance.ui.spectrogramImage;
+    const width = renderWidth * level;
+    const height = renderHeight * stretch * level;
+    const x = margins.left + centerX * renderWidth - centerX * renderWidth * level;
+    const span = config.timeMax - config.timeMin;
+    const aboveView = span > 0 ? (config.timeMax - player.viewTop) / span : 1;
+    const y = margins.top - aboveView * height;
+    image.setAttribute("x", String(x));
+    image.setAttribute("y", String(y));
+    image.setAttribute("width", String(width));
+    image.setAttribute("height", String(height));
+    image.removeAttribute("transform");
+    if (instance.ui.imageClipRect) {
+      instance.ui.imageClipRect.setAttribute("y", String(margins.top));
+      instance.ui.imageClipRect.setAttribute("height", String(renderHeight));
+    }
+    renderAxes(instance);
+    if (instance.featureRenderer) {
+      instance.featureRenderer.renderAllPersistentFeatures();
+    }
+  }
+  const PLAYER_RENDER_WIDTH = 900;
+  const PLAYER_RENDER_HEIGHT = 400;
+  function baseRenderSize(instance) {
+    if (isPlayerActive(instance)) {
+      return { width: PLAYER_RENDER_WIDTH, height: PLAYER_RENDER_HEIGHT };
+    }
+    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
+    return { width: naturalWidth, height: naturalHeight };
+  }
+  const followHandles = /* @__PURE__ */ new WeakMap();
+  function playerOf(instance) {
+    return instance.state.player;
+  }
+  function isPlayerActive(instance) {
+    const player = playerOf(instance);
+    return !!(player && player.active);
+  }
+  function isPlaying(instance) {
+    return isPlayerActive(instance) && playerOf(instance).playing;
+  }
+  function visibleWindowSeconds(instance) {
+    const { player, zoom } = instance.state;
+    return player.windowSeconds / zoom.level;
+  }
+  function clampViewTop(instance, seconds) {
+    const { duration } = playerOf(instance);
+    return Math.max(0, Math.min(duration, seconds));
+  }
+  function revealTime(instance, seconds) {
+    if (!isPlayerActive(instance) || isPlaying(instance) || !Number.isFinite(seconds)) {
+      return false;
+    }
+    const player = playerOf(instance);
+    const window2 = visibleWindowSeconds(instance);
+    if (seconds <= player.viewTop && seconds >= player.viewTop - window2) {
+      return false;
+    }
+    const target = clampViewTop(instance, seconds + window2 / 2);
+    if (target === player.viewTop) {
+      return false;
+    }
+    player.viewTop = target;
+    applyView(instance);
+    dispatch(instance);
+    return true;
+  }
+  function applyView(instance) {
+    if (instance.ui.svg) {
+      applyZoomTransform(instance);
+    }
+  }
+  function syncViewToPlayhead(instance) {
+    const controller = instance.player;
+    if (!controller) {
+      return;
+    }
+    const player = playerOf(instance);
+    const duration = player.duration;
+    const current = controller.audio.currentTime;
+    player.playhead = Math.max(0, Math.min(duration, Number.isFinite(current) ? current : 0));
+    player.viewTop = clampViewTop(instance, player.playhead);
+    applyView(instance);
+    dispatch(instance, { frame: true });
+  }
+  function startFollow(instance) {
+    if (followHandles.has(instance) || typeof requestAnimationFrame !== "function") {
+      return;
+    }
+    const step = () => {
+      if (!isPlaying(instance)) {
+        followHandles.delete(instance);
+        return;
+      }
+      syncViewToPlayhead(instance);
+      followHandles.set(instance, requestAnimationFrame(step));
+    };
+    followHandles.set(instance, requestAnimationFrame(step));
+  }
+  function stopFollow(instance) {
+    const handle = followHandles.get(instance);
+    if (handle !== void 0 && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(handle);
+    }
+    followHandles.delete(instance);
+    syncViewToPlayhead(instance);
+  }
+  function updatePlayingClass(instance) {
+    if (instance.ui.container) {
+      instance.ui.container.classList.toggle("gram-frame-playing", isPlaying(instance));
+    }
+  }
+  function seekFromTimeAxisClick(instance, event) {
+    if (!instance.player || !instance.player.isReady()) {
+      return false;
+    }
+    const state = instance.state;
+    const svgRect = instance.ui.svg.getBoundingClientRect();
+    const point = screenToSVG(event.clientX - svgRect.left, event.clientY - svgRect.top, instance.ui.svg);
+    const { renderHeight } = getRenderDimensions(state);
+    const { margins } = state;
+    const onAxisBand = point.x >= 0 && point.x < margins.left && point.y >= margins.top && point.y <= margins.top + renderHeight;
+    if (!onAxisBand) {
+      return false;
+    }
+    const visible = calculateVisibleDataRange(state, instance.ui.spectrogramImage);
+    const fraction = (point.y - margins.top) / renderHeight;
+    instance.player.seek(visible.timeMax - fraction * (visible.timeMax - visible.timeMin));
+    return true;
+  }
+  function addBookmark(instance) {
+    const { player, bookmarks } = instance.state;
+    if (!player.ready) {
+      return null;
+    }
+    const time = player.playhead;
+    if (bookmarks.some((existing) => Math.abs(existing.time - time) < 1)) {
+      return null;
+    }
+    const bookmark = {
+      id: `bookmark-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      time,
+      label: ""
+    };
+    bookmarks.push(bookmark);
+    bookmarks.sort((a, b) => a.time - b.time);
+    renumber(bookmarks);
+    dispatch(instance);
+    return bookmark;
+  }
+  function removeBookmark(instance, id) {
+    const { bookmarks } = instance.state;
+    const index = bookmarks.findIndex((bookmark) => bookmark.id === id);
+    if (index === -1) {
+      return;
+    }
+    bookmarks.splice(index, 1);
+    renumber(bookmarks);
+    dispatch(instance);
+  }
+  function renumber(bookmarks) {
+    bookmarks.forEach((bookmark, index) => {
+      bookmark.label = String(index + 1);
+    });
+  }
+  const SEEK_STEP_SECONDS = 5;
+  const SEEK_STEP_SHIFT_SECONDS = 30;
+  function handleTransportKey(instance, event) {
+    const controller = instance.player;
+    if (!controller || !controller.isReady()) {
+      return false;
+    }
+    const target = event.target;
+    const onButton = target instanceof Element && target.tagName === "BUTTON";
+    const step = event.shiftKey ? SEEK_STEP_SHIFT_SECONDS : SEEK_STEP_SECONDS;
+    const player = instance.state.player;
+    const playhead = player.playhead;
+    switch (event.key) {
+      case " ":
+      case "Enter":
+        if (onButton) return false;
+        controller.toggle().catch((error) => {
+          console.warn("GramFrame: playback could not start:", error instanceof Error ? error.message : String(error));
+        });
+        return true;
+      case "k":
+      case "K":
+        controller.toggle().catch((error) => {
+          console.warn("GramFrame: playback could not start:", error instanceof Error ? error.message : String(error));
+        });
+        return true;
+      case "j":
+      case "J":
+        controller.seek(playhead - step);
+        return true;
+      case "l":
+      case "L":
+        controller.seek(playhead + step);
+        return true;
+      case "Home":
+        controller.restart();
+        return true;
+      case "m":
+      case "M":
+        controller.setMute(!player.muted);
+        return true;
+      case "b":
+      case "B":
+        addBookmark(instance);
+        return true;
+      default:
+        return false;
+    }
+  }
   const MOVEMENT_INCREMENTS = {
     normal: 1,
     // Arrow keys alone: 1-pixel increments
@@ -1426,6 +2113,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   };
   let globalKeyboardHandler = null;
   let globalMousedownHandler = null;
+  let globalFocusinHandler = null;
   let keyboardHandlerInitialized = false;
   function initializeKeyboardControl(instance) {
     registerInstance(instance);
@@ -1438,6 +2126,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       };
       document.addEventListener("mousedown", globalMousedownHandler);
+      globalFocusinHandler = (event) => {
+        const owner = instanceContaining(event.target);
+        if (owner) {
+          setFocusedInstance(owner);
+        }
+      };
+      document.addEventListener("focusin", globalFocusinHandler);
       keyboardHandlerInitialized = true;
     }
   }
@@ -1451,6 +2146,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       if (globalMousedownHandler) {
         document.removeEventListener("mousedown", globalMousedownHandler);
         globalMousedownHandler = null;
+      }
+      if (globalFocusinHandler) {
+        document.removeEventListener("focusin", globalFocusinHandler);
+        globalFocusinHandler = null;
       }
       keyboardHandlerInitialized = false;
     }
@@ -1471,15 +2170,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     const focusedInstance = getFocusedInstance();
     if (event.key === "Tab") {
-      if (!focusedInstance || getRegisteredInstanceCount() <= 1) {
-        return;
-      }
-      if (event.shiftKey) {
-        focusPreviousInstance();
-      } else {
-        focusNextInstance();
-      }
-      event.preventDefault();
       return;
     }
     if (!focusedInstance) {
@@ -1491,7 +2181,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       return;
     }
+    if (isPlayerActive(focusedInstance) && handleTransportKey(focusedInstance, event)) {
+      event.preventDefault();
+      return;
+    }
     if (!isArrowKey(event.key)) {
+      return;
+    }
+    if (isPlaying(focusedInstance)) {
       return;
     }
     const selection = focusedInstance.state.selection;
@@ -1502,13 +2199,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     event.stopPropagation();
     const increment = event.shiftKey ? MOVEMENT_INCREMENTS.fast : MOVEMENT_INCREMENTS.normal;
     const movement = calculateMovementFromKey(event.key, increment);
+    nudgeSelection(focusedInstance, movement);
+  }
+  function nudgeSelection(instance, movement) {
+    const selection = instance.state.selection;
+    if (!selection || !selection.selectedType || !selection.selectedId) {
+      return;
+    }
     if (selection.selectedType === "marker") {
-      moveSelectedMarker(focusedInstance, selection.selectedId, movement);
-    } else {
-      const owner = findPinSetOwner(focusedInstance, selection.selectedType);
-      if (owner) {
-        moveSelectedPinSet(focusedInstance, owner, selection.selectedId, movement);
-      }
+      moveSelectedMarker(instance, selection.selectedId, movement);
+      return;
+    }
+    const owner = findPinSetOwner(instance, selection.selectedType);
+    if (owner) {
+      moveSelectedPinSet(instance, owner, selection.selectedId, movement);
     }
   }
   function isArrowKey(key) {
@@ -1537,26 +2241,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (!marker) {
       return;
     }
-    const currentSVG = dataToSVG(
-      { freq: marker.freq * instance.state.rate, time: marker.time },
+    const newData = nudgeData(
+      { freq: marker.freq, time: marker.time },
+      movement.dx,
+      movement.dy,
       instance.state,
       instance.ui.spectrogramImage
     );
-    const newSVG = {
-      x: currentSVG.x + movement.dx,
-      y: currentSVG.y + movement.dy
-    };
-    const image = svgToImage(newSVG.x, newSVG.y, instance.state, instance.ui.spectrogramImage);
-    const clamped = clampToImage(image.x, image.y, instance.state);
-    const newData = imageToData(clamped.x, clamped.y, instance.state);
     marker.freq = newData.freq;
     marker.time = newData.time;
-    markAnnotationsChanged(instance);
-    if (instance.featureRenderer) {
-      instance.featureRenderer.renderAllPersistentFeatures();
-    }
-    refreshPanels(instance);
-    dispatch(instance);
+    commitAnnotationChange(instance, () => refreshPanels(instance));
   }
   function moveSelectedPinSet(instance, owner, setId, movement) {
     const set = owner.sets.find((candidate) => candidate.id === setId);
@@ -1573,7 +2267,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
     if (movement.dx !== 0) {
       const reference = dataToSVG(
-        { freq: instance.state.config.freqMin, time: timeMax },
+        { freq: dataFrequencyRange(viewport).freqMin, time: timeMax },
         viewport,
         image
       );
@@ -1583,7 +2277,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     if (movement.dy !== 0) {
       const anchorSVG = dataToSVG(
-        { freq: instance.state.config.freqMin, time: set.anchorTime },
+        { freq: dataFrequencyRange(viewport).freqMin, time: set.anchorTime },
         viewport,
         image
       );
@@ -1594,31 +2288,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       owner.updateSet(setId, updates);
     }
   }
-  function setSelection(instance, type, id, index) {
-    setFocusedInstance(instance);
-    const selection = instance.state.selection;
-    selection.selectedType = type;
-    selection.selectedId = id;
-    selection.selectedIndex = index;
-    updateSelectionVisuals(instance);
-    if (instance.interaction.syncStyleControls) {
-      instance.interaction.syncStyleControls();
-    }
-    dispatch(instance);
+  function removeHarmonicSet(instance, id) {
+    removePinSet(instance, "harmonicSet", id);
   }
-  function clearSelection(instance) {
-    const selection = instance.state.selection;
-    selection.selectedType = null;
-    selection.selectedId = null;
-    selection.selectedIndex = null;
-    updateSelectionVisuals(instance);
-    if (instance.interaction.syncStyleControls) {
-      instance.interaction.syncStyleControls();
+  function removeSidebandSet(instance, id) {
+    removePinSet(instance, "sidebandSet", id);
+  }
+  function removePinSet(instance, selectionType, id) {
+    const owner = findPinSetOwner(instance, selectionType);
+    if (owner) {
+      owner.removeSet(id);
     }
-    dispatch(instance);
   }
   function getSelectedFeature(instance) {
-    const sel = instance.state.selection;
+    const { selection: sel, styleTarget } = instance.state;
+    if (styleTarget === "new") {
+      return null;
+    }
     if (!sel || !sel.selectedType || !sel.selectedId) {
       return null;
     }
@@ -1708,392 +2394,639 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     refreshFeatureVisuals(instance, selected.type);
     return true;
   }
-  function removeHarmonicSet(instance, id) {
-    removePinSet(instance, "harmonicSet", id);
+  const SVG_NS$5 = "http://www.w3.org/2000/svg";
+  const LABEL_PLATE_CLASS = "gram-frame-label-plate";
+  const LABEL_PLATE_GROUP_CLASS = "gram-frame-label-plated";
+  const LABEL_PLATE_FILL = "#fff";
+  const LABEL_TEXT_FILL = "#000";
+  const LABEL_PLATE_PADDING_X = 3;
+  const LABEL_PLATE_RADIUS = 3;
+  const PLATE_ABOVE_RATIO = 0.95;
+  const PLATE_BELOW_RATIO = 0.3;
+  const FALLBACK_CHAR_WIDTH_RATIO = 0.6;
+  function labelPlateExtents(fontSize) {
+    return {
+      above: roundToHalfPixel(fontSize * PLATE_ABOVE_RATIO),
+      below: roundToHalfPixel(fontSize * PLATE_BELOW_RATIO)
+    };
   }
-  function removeSidebandSet(instance, id) {
-    removePinSet(instance, "sidebandSet", id);
+  function roundToHalfPixel(value) {
+    return Math.round(value * 2) / 2;
   }
-  function removePinSet(instance, selectionType, id) {
-    const owner = findPinSetOwner(instance, selectionType);
-    if (owner) {
-      owner.removeSet(id);
+  function labelPlateRect({ x, y, textAnchor, width, fontSize }) {
+    const { above, below } = labelPlateExtents(fontSize);
+    let left = x;
+    if (textAnchor === "middle") {
+      left = x - width / 2;
+    } else if (textAnchor === "end") {
+      left = x - width;
+    }
+    return {
+      x: left - LABEL_PLATE_PADDING_X,
+      y: y - above,
+      width: width + LABEL_PLATE_PADDING_X * 2,
+      height: above + below
+    };
+  }
+  let measurementContext;
+  function textMeasurementContext() {
+    if (measurementContext === void 0) {
+      try {
+        measurementContext = document.createElement("canvas").getContext("2d");
+      } catch {
+        measurementContext = null;
+      }
+    }
+    return measurementContext;
+  }
+  function measureLabelWidth(content, fontSize, font = {}) {
+    const { fontFamily = "Arial, sans-serif", fontWeight = "bold" } = font;
+    const text = content || "";
+    const context = textMeasurementContext();
+    if (context) {
+      context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      const measured = context.measureText(text).width;
+      if (measured > 0) {
+        return measured;
+      }
+    }
+    return text.length * fontSize * FALLBACK_CHAR_WIDTH_RATIO;
+  }
+  function plateLabel(text, options = {}) {
+    const { fill = LABEL_PLATE_FILL, textFill = LABEL_TEXT_FILL } = options;
+    const fontSize = Number(text.getAttribute("font-size"));
+    const width = measureLabelWidth(text.textContent || "", fontSize, {
+      fontFamily: text.getAttribute("font-family") || void 0,
+      fontWeight: text.getAttribute("font-weight") || void 0
+    });
+    const box = labelPlateRect({
+      x: Number(text.getAttribute("x")),
+      y: Number(text.getAttribute("y")),
+      textAnchor: text.getAttribute("text-anchor") || "start",
+      width,
+      fontSize
+    });
+    text.setAttribute("fill", textFill);
+    text.removeAttribute("stroke");
+    text.removeAttribute("stroke-width");
+    text.removeAttribute("paint-order");
+    const plate = document.createElementNS(SVG_NS$5, "rect");
+    plate.setAttribute("class", LABEL_PLATE_CLASS);
+    plate.setAttribute("x", String(box.x));
+    plate.setAttribute("y", String(box.y));
+    plate.setAttribute("width", String(box.width));
+    plate.setAttribute("height", String(box.height));
+    plate.setAttribute("rx", String(LABEL_PLATE_RADIUS));
+    plate.setAttribute("ry", String(LABEL_PLATE_RADIUS));
+    plate.setAttribute("fill", fill);
+    const group = (
+      /** @type {SVGGElement} */
+      document.createElementNS(SVG_NS$5, "g")
+    );
+    group.setAttribute("class", LABEL_PLATE_GROUP_CLASS);
+    group.appendChild(plate);
+    group.appendChild(text);
+    return group;
+  }
+  const MAX_MARKER_LABEL_LENGTH = 32;
+  const TABLE_LABEL_FULL_LENGTH = 5;
+  const TABLE_LABEL_HEAD_LENGTH = 3;
+  function normalizeMarkerLabel(raw) {
+    if (typeof raw !== "string") {
+      return void 0;
+    }
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      return void 0;
+    }
+    return trimmed.slice(0, MAX_MARKER_LABEL_LENGTH);
+  }
+  function formatMarkerLabelForTable(label) {
+    const normalized = normalizeMarkerLabel(label);
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.length <= TABLE_LABEL_FULL_LENGTH) {
+      return normalized;
+    }
+    return `${normalized.slice(0, TABLE_LABEL_HEAD_LENGTH)}..`;
+  }
+  const QUADRANT_GAP = 5;
+  const ABOVE_SYMBOL_GAP = 4;
+  const MARKER_LABEL_FONT_SIZE = 12;
+  function markerLabelPlacement(symbol, cx, cy, symbolSize) {
+    const plate = labelPlateExtents(MARKER_LABEL_FONT_SIZE);
+    if (resolveSymbolType(symbol) === "cross") {
+      return {
+        x: cx + QUADRANT_GAP + LABEL_PLATE_PADDING_X,
+        y: cy - QUADRANT_GAP - plate.below,
+        textAnchor: "start"
+      };
+    }
+    if (labelSitsBelowSymbol(symbol)) {
+      const y = cy + symbolSize / 2 + ABOVE_SYMBOL_GAP + plate.above;
+      return { x: cx, y, textAnchor: "middle" };
+    }
+    return { x: cx, y: cy - symbolSize / 2 - ABOVE_SYMBOL_GAP - plate.below, textAnchor: "middle" };
+  }
+  function describeSelection(instance) {
+    const { selection, analysis, harmonics, sidebands } = instance.state;
+    if (!selection || !selection.selectedType || !selection.selectedId) {
+      return null;
+    }
+    const ordinal = (selection.selectedIndex ?? 0) + 1;
+    if (selection.selectedType === "marker") {
+      const marker = (analysis ? analysis.markers : []).find((candidate) => candidate.id === selection.selectedId);
+      if (!marker) {
+        return null;
+      }
+      return {
+        label: normalizeMarkerLabel(marker.label) || `Marker ${ordinal}`,
+        time: marker.time,
+        freq: marker.freq
+      };
+    }
+    if (selection.selectedType === "harmonicSet") {
+      const set2 = (harmonics ? harmonics.harmonicSets : []).find((candidate) => candidate.id === selection.selectedId);
+      return set2 ? { label: `Harmonics ${ordinal}`, time: set2.anchorTime, freq: set2.spacing } : null;
+    }
+    const set = (sidebands ? sidebands.sidebandSets : []).find((candidate) => candidate.id === selection.selectedId);
+    return set ? { label: `Sidebands ${ordinal}`, time: set.anchorTime, freq: set.fundamentalFreq } : null;
+  }
+  function createCursorReadout() {
+    const column = document.createElement("div");
+    column.className = "gram-frame-readout-column";
+    const kicker = document.createElement("div");
+    kicker.className = "gram-frame-kicker gram-frame-readout-kicker";
+    kicker.textContent = "Cursor";
+    column.appendChild(kicker);
+    const freqLED = createLEDDisplay("Frequency (Hz)", "0.0", "HZ");
+    freqLED.classList.add("gram-frame-led-accent");
+    column.appendChild(freqLED);
+    const timeLED = createLEDDisplay("Time (mm:ss)", formatTime(0), "MM:SS", "Time");
+    timeLED.classList.add("gram-frame-led-secondary");
+    column.appendChild(timeLED);
+    const spacer = document.createElement("div");
+    spacer.className = "gram-frame-readout-spacer";
+    column.appendChild(spacer);
+    const speedLED = createLEDDisplay("Doppler Speed (kts)", "0.0", "KTS", "Doppler");
+    speedLED.classList.add("gram-frame-led-secondary", "gram-frame-led-inline");
+    column.appendChild(speedLED);
+    return { column, timeLED, freqLED, speedLED, kicker };
+  }
+  function refreshReadoutTarget(instance) {
+    const { kicker, timeLED, freqLED } = instance.ui;
+    if (!kicker) {
+      return;
+    }
+    const selected = describeSelection(instance);
+    kicker.replaceChildren();
+    if (!selected) {
+      kicker.textContent = "Cursor";
+      return;
+    }
+    const word = document.createElement("span");
+    word.textContent = "Selected";
+    kicker.appendChild(word);
+    const name = document.createElement("span");
+    name.className = "gram-frame-readout-target";
+    name.textContent = selected.label;
+    kicker.appendChild(name);
+    if (timeLED) {
+      setLEDValue(timeLED, formatTime(selected.time));
+    }
+    if (freqLED) {
+      setLEDValue(freqLED, selected.freq.toFixed(2));
     }
   }
-  function updateSelectionVisuals(instance) {
-    refreshPanels(instance);
+  function describeStyleTarget(instance) {
+    const { selection, styleTarget } = instance.state;
+    const selectedId = selection ? selection.selectedId : null;
+    const selectedType = selection ? selection.selectedType : null;
+    if (!selectedType || !selectedId) {
+      return { editing: false, selectable: false, name: "", labelled: false, label: "" };
+    }
+    const ordinal = (selection.selectedIndex ?? 0) + 1;
+    const marker = selectedType === "marker" ? findMarker(instance, selectedId) : null;
+    const label = marker ? normalizeMarkerLabel(marker.label) || "" : "";
+    const family = selectedType === "harmonicSet" ? "Harmonics" : selectedType === "sidebandSet" ? "Sidebands" : "Marker";
+    return {
+      editing: styleTarget === "selected",
+      selectable: true,
+      name: label || `${family} ${ordinal}`,
+      // Only a marker carries free text today; a pin set is named by what it is.
+      labelled: styleTarget === "selected" && !!marker,
+      label
+    };
   }
-  function refreshPanels(instance) {
-    Object.values(instance.modes).filter(isPanelOwner).forEach((mode) => mode.refreshPanel());
+  function setStyleTarget(instance, target) {
+    instance.state.styleTarget = target;
+    if (instance.interaction.syncStyleControls) {
+      instance.interaction.syncStyleControls();
+    }
+    dispatch(instance);
   }
-  const COLOR_PALETTE = [
-    "#ff0000",
-    // Red
-    "#ff8000",
-    // Orange
-    "#ffff00",
-    // Yellow
-    "#80ff00",
-    // Yellow-green
-    "#00ff00",
-    // Green
-    "#00ff80",
-    // Green-cyan
-    "#00ffff",
-    // Cyan
-    "#0080ff",
-    // Cyan-blue
-    "#0000ff",
-    // Blue
-    "#8000ff",
-    // Blue-purple
-    "#ff00ff",
-    // Purple
-    "#ff0080"
-    // Purple-red
-  ];
-  function createGroupLabel(text) {
+  function renameSelectedMarker(instance, value) {
+    const selection = currentSelection(instance);
+    if (!selection || selection.selectedType !== "marker" || !selection.selectedId) {
+      return;
+    }
+    const owner = findMarkerOwner(instance);
+    if (owner) {
+      owner.setMarkerLabel(selection.selectedId, value);
+    }
+    if (instance.interaction.syncStyleControls) {
+      instance.interaction.syncStyleControls();
+    }
+    refreshReadoutTarget(instance);
+  }
+  function deleteStyleTarget(instance) {
+    const selection = currentSelection(instance);
+    if (!selection || !selection.selectedId) {
+      return;
+    }
+    const id = selection.selectedId;
+    if (selection.selectedType === "harmonicSet") {
+      instance.interaction.removeHarmonicSet(id);
+      return;
+    }
+    if (selection.selectedType === "sidebandSet") {
+      instance.interaction.removeSidebandSet(id);
+      return;
+    }
+    const owner = findMarkerOwner(instance);
+    if (owner) {
+      owner.removeMarker(id);
+    }
+  }
+  function currentSelection(instance) {
+    return instance.state.selection;
+  }
+  function findMarker(instance, id) {
+    const owner = findMarkerOwner(instance);
+    return owner ? owner.markers.find((marker) => marker.id === id) || null : null;
+  }
+  function createRow(text, control, className) {
+    const row = document.createElement("div");
+    row.className = className ? `gram-frame-style-row ${className}` : "gram-frame-style-row";
     const label = document.createElement("div");
     label.className = "gram-frame-style-group-label";
     label.textContent = text;
-    return label;
+    row.appendChild(label);
+    row.appendChild(control);
+    return row;
   }
-  function createColorPicker(instance) {
-    const state = instance.state;
+  function createStylePanel(instance) {
     const container = document.createElement("div");
-    container.className = "gram-frame-color-picker";
-    container.style.display = "block";
-    const colorGroup = document.createElement("div");
-    colorGroup.className = "gram-frame-style-group";
-    container.appendChild(colorGroup);
-    const paletteContainer = document.createElement("div");
-    paletteContainer.className = "gram-frame-color-palette";
-    colorGroup.appendChild(paletteContainer);
-    const sliderContainer = document.createElement("div");
-    sliderContainer.className = "gram-frame-color-slider";
-    sliderContainer.style.position = "relative";
-    paletteContainer.appendChild(sliderContainer);
-    const canvas = document.createElement("canvas");
-    canvas.width = 140;
-    canvas.height = 20;
-    canvas.className = "gram-frame-color-canvas";
-    sliderContainer.appendChild(canvas);
-    if (!state.selectedColor) {
-      state.selectedColor = "#ff6b6b";
-    }
-    drawColorPalette(canvas);
-    const indicator = document.createElement("div");
-    indicator.className = "gram-frame-color-indicator";
-    sliderContainer.appendChild(indicator);
-    const symbolGroup = document.createElement("div");
-    symbolGroup.className = "gram-frame-style-group";
-    container.appendChild(symbolGroup);
-    const symbolRow = document.createElement("div");
-    symbolRow.className = "gram-frame-style-row";
-    symbolGroup.appendChild(symbolRow);
-    symbolRow.appendChild(createGroupLabel("Symbol"));
-    const symbolSelect = createSymbolSelect(instance);
-    symbolRow.appendChild(symbolSelect);
-    symbolRow.appendChild(createLargeSymbolToggle(instance));
-    const divider = document.createElement("div");
-    divider.className = "gram-frame-style-divider";
-    container.appendChild(divider);
-    const harmonicsGroup = document.createElement("div");
-    harmonicsGroup.className = "gram-frame-style-group";
-    container.appendChild(harmonicsGroup);
-    const harmonicsRow = document.createElement("div");
-    harmonicsRow.className = "gram-frame-style-row";
-    harmonicsGroup.appendChild(harmonicsRow);
-    harmonicsRow.appendChild(createGroupLabel("Pin sets"));
-    harmonicsRow.appendChild(createPinToggle(instance));
-    canvas.addEventListener("click", (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const scaleX = canvas.width / rect.width;
-      const canvasX = x * scaleX;
-      const color = getColorFromPosition(canvasX, canvas.width);
-      if (!instance.interaction.applyColorToSelectedFeature || !instance.interaction.applyColorToSelectedFeature(color)) {
-        state.selectedColor = color;
-      }
-      symbolSelect.style.color = color;
-      updateIndicatorPosition(indicator, canvasX, canvas.width);
+    container.className = "gram-frame-color-picker gram-frame-style-column";
+    const tabs = document.createElement("div");
+    tabs.className = "gram-frame-style-tabs";
+    const newTab = document.createElement("button");
+    newTab.type = "button";
+    newTab.className = "gram-frame-style-tab gram-frame-style-tab-new";
+    newTab.textContent = "New features";
+    newTab.title = "Set the style every feature you add from now on will take";
+    newTab.addEventListener("click", (event) => {
+      event.preventDefault();
+      setStyleTarget(instance, "new");
     });
-    const showColor = (color) => {
-      const position = getPositionFromColor(color, canvas.width);
-      updateIndicatorPosition(indicator, position, canvas.width);
-      symbolSelect.style.color = color;
-    };
+    const selectedTab = document.createElement("button");
+    selectedTab.type = "button";
+    selectedTab.className = "gram-frame-style-tab gram-frame-style-tab-selected";
+    selectedTab.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!selectedTab.disabled) {
+        setStyleTarget(instance, "selected");
+      }
+    });
+    tabs.appendChild(newTab);
+    tabs.appendChild(selectedTab);
+    container.appendChild(tabs);
+    const body = document.createElement("div");
+    body.className = "gram-frame-style-body";
+    container.appendChild(body);
+    const labelInput = document.createElement("input");
+    labelInput.type = "text";
+    labelInput.className = "gram-frame-style-label-input";
+    labelInput.maxLength = MAX_MARKER_LABEL_LENGTH;
+    labelInput.title = "Optional — clear the field to remove the label";
+    labelInput.setAttribute("aria-label", "Marker label");
+    labelInput.addEventListener("input", () => renameSelectedMarker(instance, labelInput.value));
+    const labelRow = createRow("Label", labelInput, "gram-frame-style-row-label");
+    const color = createColorSlider(instance, () => {
+      if (instance.interaction.syncStyleControls) {
+        instance.interaction.syncStyleControls();
+      }
+    });
+    const symbol = createSymbolSelect(instance);
+    const symbolRow = createRow("Symbol", symbol.element, "gram-frame-style-row-symbol");
+    const pin = createPinToggle(instance);
+    const pinRow = createRow("Pin sets", pin.element);
+    const nudge = document.createElement("div");
+    nudge.className = "gram-frame-nudge";
+    [["←", -1, "Nudge left"], ["→", 1, "Nudge right"]].forEach(([glyph, sign, title]) => {
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.className = "gram-frame-nudge-btn";
+      button2.textContent = /** @type {string} */
+      glyph;
+      button2.title = /** @type {string} */
+      title;
+      button2.addEventListener("click", (event) => {
+        event.preventDefault();
+        const step = event.shiftKey ? MOVEMENT_INCREMENTS.fast : MOVEMENT_INCREMENTS.normal;
+        nudgeSelection(instance, { dx: (
+          /** @type {number} */
+          sign * step
+        ), dy: 0 });
+      });
+      nudge.appendChild(button2);
+    });
+    const nudgeNote = document.createElement("span");
+    nudgeNote.className = "gram-frame-nudge-note";
+    nudgeNote.textContent = "or arrow keys";
+    nudge.appendChild(nudgeNote);
+    const nudgeRow = createRow("Nudge", nudge);
+    body.appendChild(labelRow);
+    body.appendChild(color.element);
+    body.appendChild(symbolRow);
+    body.appendChild(pinRow);
+    body.appendChild(nudgeRow);
+    const spacer = document.createElement("div");
+    spacer.className = "gram-frame-style-spacer";
+    body.appendChild(spacer);
+    const footer = document.createElement("div");
+    footer.className = "gram-frame-style-footer";
+    const footerGlyph = document.createElement("span");
+    footerGlyph.className = "gram-frame-style-footer-glyph";
+    const footerNote = document.createElement("div");
+    footerNote.className = "gram-frame-style-footer-note";
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "gram-frame-style-delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.title = "Delete the selected feature";
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      deleteStyleTarget(instance);
+    });
+    footer.appendChild(footerGlyph);
+    footer.appendChild(footerNote);
+    footer.appendChild(deleteButton);
+    container.appendChild(footer);
     instance.interaction.syncStyleControls = () => {
-      const { color, symbol, showPin, pinApplies, largeSymbols } = getActiveStyle(instance);
-      showColor(color);
-      if (instance.interaction._symbolControl) {
-        instance.interaction._symbolControl.setValue(symbol);
-        instance.interaction._symbolControl.setTint(color);
+      const style = getActiveStyle(instance);
+      color.control.setValue(style.color);
+      symbol.control.setValue(style.symbol);
+      symbol.control.setTint(style.color);
+      pin.control.setValue(style.showPin);
+      pin.control.setEnabled(style.pinApplies);
+      const target = describeStyleTarget(instance);
+      container.classList.toggle("gram-frame-style-targeting", target.editing);
+      newTab.classList.toggle("gram-frame-style-tab-armed", !target.editing);
+      selectedTab.classList.toggle("gram-frame-style-tab-armed", target.editing);
+      selectedTab.disabled = !target.selectable;
+      selectedTab.title = target.selectable ? `Restyle ${target.name}` : "Select a row to restyle that feature";
+      writeTabFace(
+        selectedTab,
+        target.selectable ? `Selected: ${target.name}` : "Selected: none",
+        target.selectable ? style.color : "",
+        symbolGlyph(style.symbol)
+      );
+      labelRow.hidden = !target.labelled;
+      if (target.labelled && document.activeElement !== labelInput) {
+        labelInput.value = target.label;
       }
-      if (instance.interaction._pinControl) {
-        instance.interaction._pinControl.setValue(showPin);
-        instance.interaction._pinControl.setEnabled(pinApplies);
-      }
-      if (instance.interaction._largeSymbolsControl) {
-        instance.interaction._largeSymbolsControl.setValue(largeSymbols);
-      }
+      nudgeRow.hidden = !target.editing;
+      footerGlyph.style.color = style.color;
+      footerGlyph.textContent = target.editing ? "" : symbolGlyph(style.symbol);
+      footerNote.textContent = target.editing ? `changes ${target.name} only` : "applies to every feature you add, in any mode";
+      deleteButton.hidden = !target.editing;
     };
-    const initialPosition = getPositionFromColor(state.selectedColor, canvas.width);
-    updateIndicatorPosition(indicator, initialPosition, canvas.width);
+    instance.interaction.syncStyleControls();
     return container;
   }
-  function drawColorPalette(canvas) {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
+  function writeTabFace(tab, text, color, glyph) {
+    tab.replaceChildren();
+    if (color) {
+      const swatch = document.createElement("span");
+      swatch.className = "gram-frame-style-tab-swatch";
+      swatch.style.color = color;
+      swatch.textContent = glyph;
+      tab.appendChild(swatch);
+    }
+    const word = document.createElement("span");
+    word.textContent = text;
+    tab.appendChild(word);
+  }
+  const NAVIGATION_GUIDANCE = [
+    { trigger: "Shift + drag", outcome: "a box to zoom into that region" },
+    { trigger: "Ctrl + scroll", outcome: "to zoom around the pointer" },
+    { trigger: "Scroll", outcome: "to pan when zoomed in" },
+    { trigger: "Wheel-button drag", outcome: "to pan when zoomed in" }
+  ];
+  function withNavigationGuidance(content) {
+    const own = resolveGuidance(content).map((section) => ({
+      title: section.title,
+      qualifier: section.qualifier,
+      items: section.lines.map((line2) => line2.trigger === "" ? line2.outcome : { trigger: line2.trigger, outcome: line2.outcome })
+    }));
+    return {
+      sections: [...own, { title: "In every mode", items: [...NAVIGATION_GUIDANCE] }]
+    };
+  }
+  function resolveGuidance(content) {
+    if (!content || typeof content !== "object") {
+      return [];
+    }
+    const sections = Array.isArray(content.sections) ? content.sections : [{ title: content.title, qualifier: void 0, items: content.items }];
+    return sections.filter((section) => section && typeof section === "object").map((section) => ({
+      title: typeof section.title === "string" ? section.title : "",
+      qualifier: typeof section.qualifier === "string" ? section.qualifier : "",
+      lines: resolveLines(section.items)
+    })).filter((section) => section.title !== "" || section.lines.length > 0);
+  }
+  function resolveLines(items) {
+    if (!Array.isArray(items)) {
+      return [];
+    }
+    return items.map((item) => {
+      if (typeof item === "string") {
+        return { trigger: "", outcome: item };
+      }
+      if (item && typeof item === "object") {
+        return {
+          trigger: typeof item.trigger === "string" ? item.trigger : "",
+          outcome: typeof item.outcome === "string" ? item.outcome : ""
+        };
+      }
+      return { trigger: "", outcome: "" };
+    }).filter((line2) => line2.trigger !== "" || line2.outcome !== "");
+  }
+  function buildGuidanceRow(line2) {
+    const row = document.createElement("div");
+    row.className = "gram-frame-guidance-row";
+    if (line2.trigger !== "") {
+      const trigger = document.createElement("div");
+      trigger.className = "gram-frame-guidance-trigger";
+      trigger.textContent = line2.trigger;
+      row.appendChild(trigger);
+    }
+    const outcome = document.createElement("div");
+    outcome.className = line2.trigger === "" ? "gram-frame-guidance-note" : "gram-frame-guidance-outcome";
+    outcome.textContent = line2.outcome;
+    row.appendChild(outcome);
+    return row;
+  }
+  function buildGuidanceHeading(section) {
+    const title = document.createElement("h4");
+    title.textContent = section.title;
+    if (section.qualifier !== "") {
+      const qualifier = document.createElement("span");
+      qualifier.className = "gram-frame-guidance-qualifier";
+      qualifier.textContent = ` (${section.qualifier})`;
+      title.appendChild(qualifier);
+    }
+    return title;
+  }
+  function renderSecureGuidance(container, content) {
+    container.replaceChildren();
+    resolveGuidance(content).forEach((section) => {
+      if (section.title !== "") {
+        container.appendChild(buildGuidanceHeading(section));
+      }
+      section.lines.forEach((line2) => {
+        container.appendChild(buildGuidanceRow(line2));
+      });
+    });
+  }
+  function updateGuidancePanel(guidancePanel, content) {
+    if (!guidancePanel) {
+      console.warn("Guidance panel element not found");
       return;
     }
-    const width = canvas.width;
-    const height = canvas.height;
-    const gradient = ctx.createLinearGradient(0, 0, width, 0);
-    COLOR_PALETTE.forEach((color, index) => {
-      gradient.addColorStop(index / (COLOR_PALETTE.length - 1), color);
+    if (!content) {
+      console.warn("No guidance content provided");
+      return;
+    }
+    try {
+      renderSecureGuidance(guidancePanel, content);
+    } catch (error) {
+      console.error("Error updating guidance panel:", error);
+      guidancePanel.replaceChildren();
+      const errorMsg = document.createElement("p");
+      errorMsg.textContent = "Error loading guidance content";
+      guidancePanel.appendChild(errorMsg);
+    }
+  }
+  const hasChosen = /* @__PURE__ */ new WeakMap();
+  function createGuidanceColumn(instance) {
+    const stored = loadGuidancePreference();
+    instance.state.guidanceCollapsed = stored === true;
+    hasChosen.set(instance, stored !== null);
+    const column = document.createElement("div");
+    column.className = "gram-frame-guidance-column";
+    const header = document.createElement("div");
+    header.className = "gram-frame-guidance-header";
+    const title = document.createElement("div");
+    title.className = "gram-frame-guidance-title";
+    const hide = document.createElement("button");
+    hide.type = "button";
+    hide.className = "gram-frame-guidance-hide";
+    hide.textContent = "Hide";
+    hide.title = "Hide guidance";
+    hide.addEventListener("click", (event) => {
+      event.preventDefault();
+      setGuidanceCollapsed(instance, true);
     });
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-  }
-  function getColorFromPosition(x, width) {
-    const position = Math.max(0, Math.min(1, x / width));
-    const segmentSize = 1 / (COLOR_PALETTE.length - 1);
-    const segmentIndex = position / segmentSize;
-    const lowerIndex = Math.floor(segmentIndex);
-    const upperIndex = Math.min(lowerIndex + 1, COLOR_PALETTE.length - 1);
-    const t = segmentIndex - lowerIndex;
-    if (lowerIndex === upperIndex) {
-      return COLOR_PALETTE[lowerIndex];
-    }
-    const color1 = hexToRgb(COLOR_PALETTE[lowerIndex]);
-    const color2 = hexToRgb(COLOR_PALETTE[upperIndex]);
-    const r = Math.round(color1.r * (1 - t) + color2.r * t);
-    const g = Math.round(color1.g * (1 - t) + color2.g * t);
-    const b = Math.round(color1.b * (1 - t) + color2.b * t);
-    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-  }
-  function hexToRgb(hex) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return { r, g, b };
-  }
-  function getPositionFromColor(hexColor, width) {
-    const targetRgb = hexToRgb(hexColor);
-    let closestIndex = 0;
-    let minDistance = Infinity;
-    COLOR_PALETTE.forEach((color, index) => {
-      const colorRgb = hexToRgb(color);
-      const distance = Math.sqrt(
-        Math.pow(targetRgb.r - colorRgb.r, 2) + Math.pow(targetRgb.g - colorRgb.g, 2) + Math.pow(targetRgb.b - colorRgb.b, 2)
-      );
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = index;
-      }
+    header.appendChild(title);
+    header.appendChild(hide);
+    const body = document.createElement("div");
+    body.className = "gram-frame-guidance";
+    const rail = document.createElement("div");
+    rail.className = "gram-frame-guidance-rail";
+    const reveal = document.createElement("button");
+    reveal.type = "button";
+    reveal.className = "gram-frame-guidance-reveal";
+    reveal.textContent = "›";
+    reveal.title = "Show guidance";
+    reveal.setAttribute("aria-label", "Show guidance");
+    reveal.addEventListener("click", (event) => {
+      event.preventDefault();
+      setGuidanceCollapsed(instance, false);
     });
-    const segmentSize = 1 / (COLOR_PALETTE.length - 1);
-    const position = closestIndex * segmentSize;
-    return position * width;
+    const railLabel = document.createElement("div");
+    railLabel.className = "gram-frame-guidance-rail-label";
+    railLabel.textContent = "Guidance";
+    rail.appendChild(reveal);
+    rail.appendChild(railLabel);
+    column.appendChild(header);
+    column.appendChild(body);
+    column.appendChild(rail);
+    return { column, body, title };
   }
-  function updateIndicatorPosition(indicator, x, width) {
-    const percentage = x / width * 100;
-    indicator.style.left = `${Math.max(0, Math.min(100, percentage))}%`;
+  function setGuidanceCollapsed(instance, collapsed) {
+    instance.state.guidanceCollapsed = collapsed;
+    hasChosen.set(instance, true);
+    saveGuidancePreference(collapsed);
+    applyGuidanceCollapsed(instance);
+    dispatch(instance);
   }
-  function capitalizeFirstLetter(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-  }
-  function getModeDisplayName(mode) {
-    const displayNames = {
-      "analysis": "Cross Cursor",
-      "harmonics": "Harmonics",
-      "sideband": "Sidebands",
-      "doppler": "Doppler",
-      "pan": "Pan"
-    };
-    return displayNames[mode] || capitalizeFirstLetter(mode);
-  }
-  function createLEDDisplay(label, value) {
-    const led = document.createElement("div");
-    led.className = "gram-frame-led";
-    const labelDiv = document.createElement("div");
-    labelDiv.className = "gram-frame-led-label";
-    labelDiv.textContent = label;
-    const valueDiv = document.createElement("div");
-    valueDiv.className = "gram-frame-led-value";
-    valueDiv.textContent = value;
-    led.appendChild(labelDiv);
-    led.appendChild(valueDiv);
-    return led;
-  }
-  function setLEDValue(led, value) {
-    const valueDiv = led.querySelector(".gram-frame-led-value");
-    if (valueDiv) {
-      valueDiv.textContent = value;
+  function applyGuidanceCollapsed(instance) {
+    const { guidanceColumn } = instance.ui;
+    if (!guidanceColumn) {
+      return;
     }
+    const collapsed = !!instance.state.guidanceCollapsed;
+    const chosen = hasChosen.get(instance) === true;
+    guidanceColumn.classList.toggle("gram-frame-guidance-collapsed", collapsed);
+    guidanceColumn.classList.toggle("gram-frame-guidance-open", chosen && !collapsed);
   }
-  function updateLEDDisplays(instance, state) {
-    if (instance.ui.modeLED) {
-      setLEDValue(instance.ui.modeLED, getModeDisplayName(state.mode));
+  function showGuidanceForMode(instance, mode) {
+    const { guidanceTitle, guidancePanel } = instance.ui;
+    if (guidanceTitle) {
+      guidanceTitle.textContent = getModeDisplayName(instance.state.mode);
     }
-    if (instance.ui.rateLED) {
-      setLEDValue(instance.ui.rateLED, `${state.rate}`);
+    if (guidancePanel) {
+      updateGuidancePanel(guidancePanel, withNavigationGuidance(mode.getGuidanceText()));
     }
-  }
-  function createFlexLayout(className, gap = "10px", direction = "row") {
-    const container = document.createElement("div");
-    container.className = className;
-    container.style.display = "flex";
-    container.style.flexDirection = direction;
-    container.style.gap = gap;
-    return container;
-  }
-  function createFullFlexLayout(className, gap = "10px") {
-    const container = createFlexLayout(className, gap);
-    container.style.width = "100%";
-    container.style.height = "100%";
-    return container;
-  }
-  function createFlexColumn(className, gap = "10px") {
-    return createFlexLayout(className, gap, "column");
-  }
-  function formatTime(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    const paddedMinutes = minutes.toString().padStart(2, "0");
-    const paddedSeconds = remainingSeconds.toString().padStart(2, "0");
-    return `${paddedMinutes}:${paddedSeconds}`;
   }
   function createUnifiedLayout(instance) {
-    const unifiedLayoutContainer = (
-      /** @type {HTMLDivElement} */
-      createFullFlexLayout("gram-frame-unified-layout", "2px")
-    );
-    unifiedLayoutContainer.style.flexDirection = "row";
-    unifiedLayoutContainer.style.flexWrap = "nowrap";
-    const leftColumn = (
-      /** @type {HTMLDivElement} */
-      createFullFlexLayout("gram-frame-left-column", "4px")
-    );
-    leftColumn.style.flex = "1 1 750px";
-    leftColumn.style.maxWidth = "750px";
-    leftColumn.style.width = "auto";
-    leftColumn.style.minWidth = "0";
-    leftColumn.style.flexDirection = "row";
-    const modeColumn = (
-      /** @type {HTMLDivElement} */
-      createFlexColumn("gram-frame-mode-column", "8px")
-    );
-    modeColumn.style.flex = "0 0 130px";
-    modeColumn.style.width = "130px";
-    const guidanceColumn = (
-      /** @type {HTMLDivElement} */
-      createFlexColumn("gram-frame-guidance-column", "8px")
-    );
-    guidanceColumn.style.flex = "1";
-    const controlsColumn = (
-      /** @type {HTMLDivElement} */
-      createFlexColumn("gram-frame-controls-column", "1px")
-    );
-    controlsColumn.style.flex = "0 0 220px";
-    controlsColumn.style.width = "220px";
-    const cursorContainer = document.createElement("div");
-    cursorContainer.className = "gram-frame-cursor-leds";
-    const timeLED = createLEDDisplay("Time (mm:ss)", formatTime(0));
-    cursorContainer.appendChild(timeLED);
-    const freqLED = createLEDDisplay("Frequency (Hz)", "0.0");
-    cursorContainer.appendChild(freqLED);
-    const speedLED = createLEDDisplay("Doppler Speed (kts)", "0.0");
-    speedLED.classList.add("gram-frame-led-inline");
-    speedLED.style.gridColumn = "1 / -1";
-    cursorContainer.appendChild(speedLED);
-    controlsColumn.appendChild(cursorContainer);
-    const colorPicker = createColorPicker(instance);
-    controlsColumn.appendChild(colorPicker);
-    leftColumn.appendChild(modeColumn);
-    leftColumn.appendChild(guidanceColumn);
-    leftColumn.appendChild(controlsColumn);
-    const middleColumn = (
-      /** @type {HTMLDivElement} */
-      createFlexColumn("gram-frame-middle-column")
-    );
-    middleColumn.style.flex = "0 3 235px";
-    middleColumn.style.width = "auto";
-    const markersContainer = createMarkersContainer();
-    middleColumn.appendChild(markersContainer);
-    const rightColumn = (
-      /** @type {HTMLDivElement} */
-      createFlexColumn("gram-frame-right-column")
-    );
-    const harmonicsContainer = createHarmonicsContainer();
-    rightColumn.appendChild(harmonicsContainer);
-    const sidebandsColumn = (
-      /** @type {HTMLDivElement} */
-      createFlexColumn("gram-frame-sidebands-column")
-    );
-    const sidebandsContainer = createSidebandsContainer();
-    sidebandsColumn.appendChild(sidebandsContainer);
-    unifiedLayoutContainer.appendChild(leftColumn);
-    unifiedLayoutContainer.appendChild(middleColumn);
-    unifiedLayoutContainer.appendChild(rightColumn);
-    unifiedLayoutContainer.appendChild(sidebandsColumn);
+    const unifiedLayoutContainer = document.createElement("div");
+    unifiedLayoutContainer.className = "gram-frame-unified-layout";
+    const modeColumn = document.createElement("div");
+    modeColumn.className = "gram-frame-mode-column";
+    const guidance = createGuidanceColumn(instance);
+    const readout = createCursorReadout();
+    const stylePanel = createStylePanel(instance);
+    const tables = createAnnotationTables();
+    unifiedLayoutContainer.appendChild(modeColumn);
+    unifiedLayoutContainer.appendChild(guidance.column);
+    unifiedLayoutContainer.appendChild(readout.column);
+    unifiedLayoutContainer.appendChild(stylePanel);
+    unifiedLayoutContainer.appendChild(tables.tables);
     return {
       unifiedLayoutContainer,
-      leftColumn,
-      middleColumn,
-      rightColumn,
-      sidebandsColumn,
       modeColumn,
-      guidanceColumn,
-      controlsColumn,
-      markersContainer,
-      harmonicsContainer,
-      sidebandsContainer,
-      timeLED,
-      freqLED,
-      speedLED,
-      colorPicker
+      guidanceColumn: guidance.column,
+      guidancePanel: guidance.body,
+      guidanceTitle: guidance.title,
+      readoutColumn: readout.column,
+      markersContainer: tables.markersContainer,
+      harmonicsContainer: tables.harmonicsContainer,
+      sidebandsContainer: tables.sidebandsContainer,
+      timeLED: readout.timeLED,
+      freqLED: readout.freqLED,
+      speedLED: readout.speedLED,
+      kicker: readout.kicker,
+      colorPicker: stylePanel
     };
   }
-  function createSidebandsContainer() {
-    const sidebandsContainer = document.createElement("div");
-    sidebandsContainer.className = "gram-frame-sidebands-persistent-container";
-    const header = document.createElement("div");
-    header.className = "gram-frame-panel-header";
-    const label = document.createElement("h4");
-    label.textContent = "Sidebands";
-    header.appendChild(label);
-    sidebandsContainer.appendChild(header);
-    return sidebandsContainer;
-  }
-  function createMarkersContainer() {
-    const markersContainer = document.createElement("div");
-    markersContainer.className = "gram-frame-markers-persistent-container";
-    const markersHeader = document.createElement("div");
-    markersHeader.className = "gram-frame-panel-header";
-    const markersLabel = document.createElement("h4");
-    markersLabel.textContent = "Markers";
-    markersHeader.appendChild(markersLabel);
-    markersContainer.appendChild(markersHeader);
-    return markersContainer;
-  }
-  function createHarmonicsContainer() {
-    const harmonicsContainer = document.createElement("div");
-    harmonicsContainer.className = "gram-frame-harmonics-persistent-container";
-    const harmonicsHeader = document.createElement("div");
-    harmonicsHeader.className = "gram-frame-panel-header gram-frame-harmonics-header";
-    const harmonicsLabel = document.createElement("h4");
-    harmonicsLabel.textContent = "Harmonics";
-    const harmonicsButtonContainer = document.createElement("div");
-    harmonicsButtonContainer.className = "gram-frame-harmonics-button-container";
-    harmonicsButtonContainer.style.flexShrink = "0";
-    harmonicsHeader.appendChild(harmonicsLabel);
-    harmonicsHeader.appendChild(harmonicsButtonContainer);
-    harmonicsContainer.appendChild(harmonicsHeader);
-    return harmonicsContainer;
-  }
   function updateUniversalCursorReadouts(instance, dataCoords) {
+    const { selection } = instance.state;
+    if (selection && selection.selectedId) {
+      return;
+    }
     if (instance.ui.timeLED) {
       const timeValue = instance.ui.timeLED.querySelector(".gram-frame-led-value");
       if (timeValue) {
@@ -2107,83 +3040,521 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
     }
   }
-  function updatePersistentPanels(instance) {
-    Object.values(instance.modes).filter(isPanelOwner).forEach((mode) => mode.refreshPanel());
+  function isPowerOfTwo(n) {
+    return Number.isInteger(n) && n >= 2 && (n & n - 1) === 0;
+  }
+  function createFFT(size) {
+    if (!isPowerOfTwo(size)) {
+      throw new Error(`FFT size must be a power of two, got ${size}`);
+    }
+    const bits = Math.log2(size);
+    const reversed = new Uint32Array(size);
+    for (let i = 0; i < size; i++) {
+      let r = 0;
+      let x = i;
+      for (let b = 0; b < bits; b++) {
+        r = r << 1 | x & 1;
+        x >>= 1;
+      }
+      reversed[i] = r;
+    }
+    const half = size / 2;
+    const cos = new Float32Array(half);
+    const sin = new Float32Array(half);
+    for (let k = 0; k < half; k++) {
+      const angle = -2 * Math.PI * k / size;
+      cos[k] = Math.cos(angle);
+      sin[k] = Math.sin(angle);
+    }
+    function forward(re, im) {
+      if (re.length !== size || im.length !== size) {
+        throw new Error(`FFT of size ${size} given arrays of length ${re.length}/${im.length}`);
+      }
+      for (let i = 0; i < size; i++) {
+        const j = reversed[i];
+        if (j > i) {
+          let t = re[i];
+          re[i] = re[j];
+          re[j] = t;
+          t = im[i];
+          im[i] = im[j];
+          im[j] = t;
+        }
+      }
+      for (let span = 2; span <= size; span <<= 1) {
+        const halfSpan = span >> 1;
+        const stride = size / span;
+        for (let start = 0; start < size; start += span) {
+          for (let k = 0; k < halfSpan; k++) {
+            const wr = cos[k * stride];
+            const wi = sin[k * stride];
+            const a = start + k;
+            const b = a + halfSpan;
+            const xr = re[b] * wr - im[b] * wi;
+            const xi = re[b] * wi + im[b] * wr;
+            re[b] = re[a] - xr;
+            im[b] = im[a] - xi;
+            re[a] += xr;
+            im[a] += xi;
+          }
+        }
+      }
+    }
+    return { size, forward };
+  }
+  const SPLIT_WINDOW_BINS = 25;
+  function splitWindowBinsFor(hz, binWidth) {
+    return Math.max(1, Math.round(hz / binWidth));
+  }
+  const SPLIT_GUARD_BINS = 3;
+  const SPLIT_REJECT_DB = 3;
+  const NORMALISATION_MODES = ["none", "split-window", "per-bin"];
+  function powerToDecibels(grid) {
+    const db = new Float32Array(grid.length);
+    for (let i = 0; i < grid.length; i++) db[i] = 10 * Math.log10(grid[i] + 1e-12);
+    return db;
+  }
+  function splitWindowPass(row, columns, prefix, out, window2, guard) {
+    prefix[0] = 0;
+    for (let k = 0; k < columns; k++) prefix[k + 1] = prefix[k] + row[k];
+    for (let k = 0; k < columns; k++) {
+      const outerFrom = Math.max(0, k - window2);
+      const outerTo = Math.min(columns - 1, k + window2);
+      const innerFrom = Math.max(0, k - guard);
+      const innerTo = Math.min(columns - 1, k + guard);
+      const count = outerTo - outerFrom + 1 - (innerTo - innerFrom + 1);
+      if (count > 0) {
+        const sum = prefix[outerTo + 1] - prefix[outerFrom] - (prefix[innerTo + 1] - prefix[innerFrom]);
+        out[k] = sum / count;
+      } else {
+        out[k] = prefix[columns] / columns;
+      }
+    }
+  }
+  function splitWindowNormalise(db, frames, columns, windowBins) {
+    const window2 = Math.min(windowBins, Math.max(1, Math.floor((columns - 1) / 2)));
+    const guard = Math.min(SPLIT_GUARD_BINS, Math.max(0, window2 - 1));
+    const out = new Float32Array(db.length);
+    const row = new Float32Array(columns);
+    const clipped = new Float32Array(columns);
+    const background = new Float32Array(columns);
+    const prefix = new Float32Array(columns + 1);
+    for (let f = 0; f < frames; f++) {
+      const start = f * columns;
+      for (let k = 0; k < columns; k++) row[k] = db[start + k];
+      splitWindowPass(row, columns, prefix, background, window2, guard);
+      for (let k = 0; k < columns; k++) {
+        clipped[k] = row[k] > background[k] + SPLIT_REJECT_DB ? background[k] : row[k];
+      }
+      splitWindowPass(clipped, columns, prefix, background, window2, guard);
+      for (let k = 0; k < columns; k++) out[start + k] = row[k] - background[k];
+    }
+    return out;
+  }
+  function perBinMedians(db, frames, columns) {
+    const cap = 4096;
+    const stride = Math.max(1, Math.floor(frames / cap));
+    const count = Math.floor((frames - 1) / stride) + 1;
+    const sample = new Float32Array(count);
+    const medians = new Float32Array(columns);
+    for (let k = 0; k < columns; k++) {
+      for (let f = 0, j = 0; f < frames; f += stride, j++) sample[j] = db[f * columns + k];
+      const sorted = Float32Array.from(sample).sort();
+      medians[k] = sorted[Math.floor(0.5 * (count - 1))];
+    }
+    return medians;
+  }
+  function normaliseDecibels(db, frames, columns, mode, options = {}) {
+    if (mode === "split-window") {
+      const windowBins = options.windowBins && options.windowBins >= 1 ? Math.floor(options.windowBins) : SPLIT_WINDOW_BINS;
+      return splitWindowNormalise(db, frames, columns, windowBins);
+    }
+    if (mode === "per-bin") {
+      const medians = perBinMedians(db, frames, columns);
+      const out = new Float32Array(db.length);
+      for (let f = 0; f < frames; f++) {
+        const start = f * columns;
+        for (let k = 0; k < columns; k++) out[start + k] = db[start + k] - medians[k];
+      }
+      return out;
+    }
+    return db;
+  }
+  const COLOUR_MAPS = Object.freeze(["colour", "grey", "inferno", "magma", "viridis", "plasma"]);
+  const COLOUR_LUT = buildLut([
+    [0, [0, 0, 110]],
+    [0.45, [30, 70, 210]],
+    [0.68, [225, 215, 40]],
+    [0.88, [255, 140, 0]],
+    [1, [220, 20, 20]]
+  ]);
+  const GREY_LUT = buildLut([
+    [0, [255, 255, 255]],
+    [1, [0, 0, 0]]
+  ]);
+  const INFERNO_LUT = fromHex(
+    "00000401000501010601010802010a02020c02020e03021004031204031405041706041907051b08051d09061f0a07220b07240c08260d08290e092b10092d110a30120a32140b34150b37160b39180c3c190c3e1b0c411c0c431e0c451f0c48210c4a230c4c240c4f260c51280b53290b552b0b572d0b592f0a5b310a5c320a5e340a5f3609613809623909633b09643d09653e0966400a67420a68440a68450a69470b6a490b6a4a0c6b4c0c6b4d0d6c4f0d6c510e6c520e6d540f6d550f6d57106e59106e5a116e5c126e5d126e5f136e61136e62146e64156e65156e67166e69166e6a176e6c186e6d186e6f196e71196e721a6e741a6e751b6e771c6d781c6d7a1d6d7c1d6d7d1e6d7f1e6c801f6c82206c84206b85216b87216b88226a8a226a8c23698d23698f24699025689225689326679526679727669827669a28659b29649d29649f2a63a02a63a22b62a32c61a52c60a62d60a82e5fa92e5eab2f5ead305dae305cb0315bb1325ab3325ab43359b63458b73557b93556ba3655bc3754bd3853bf3952c03a51c13a50c33b4fc43c4ec63d4dc73e4cc83f4bca404acb4149cc4248ce4347cf4446d04545d24644d34743d44842d54a41d74b3fd84c3ed94d3dda4e3cdb503bdd513ade5238df5337e05536e15635e25734e35933e45a31e55c30e65d2fe75e2ee8602de9612bea632aeb6429eb6628ec6726ed6925ee6a24ef6c23ef6e21f06f20f1711ff1731df2741cf3761bf37819f47918f57b17f57d15f67e14f68013f78212f78410f8850ff8870ef8890cf98b0bf98c0af98e09fa9008fa9207fa9407fb9606fb9706fb9906fb9b06fb9d07fc9f07fca108fca309fca50afca60cfca80dfcaa0ffcac11fcae12fcb014fcb216fcb418fbb61afbb81dfbba1ffbbc21fbbe23fac026fac228fac42afac62df9c72ff9c932f9cb35f8cd37f8cf3af7d13df7d340f6d543f6d746f5d949f5db4cf4dd4ff4df53f4e156f3e35af3e55df2e661f2e865f2ea69f1ec6df1ed71f1ef75f1f179f2f27df2f482f3f586f3f68af4f88ef5f992f6fa96f8fb9af9fc9dfafda1fcffa4"
+  );
+  const MAGMA_LUT = fromHex(
+    "00000401000501010601010802010902020b02020d03030f03031204041405041606051806051a07061c08071e0907200a08220b09240c09260d0a290e0b2b100b2d110c2f120d31130d34140e36150e38160f3b180f3d19103f1a10421c10441d11471e114920114b21114e22115024125325125527125829115a2a115c2c115f2d11612f116331116533106734106936106b38106c390f6e3b0f703d0f713f0f72400f74420f75440f764510774710784910784a10794c117a4e117b4f127b51127c52137c54137d56147d57157e59157e5a167e5c167f5d177f5f187f601880621980641a80651a80671b80681c816a1c816b1d816d1d816e1e81701f81721f817320817521817621817822817922827b23827c23827e24828025828125818326818426818627818827818928818b29818c29818e2a81902a81912b81932b80942c80962c80982d80992d809b2e7f9c2e7f9e2f7fa02f7fa1307ea3307ea5317ea6317da8327daa337dab337cad347cae347bb0357bb2357bb3367ab5367ab73779b83779ba3878bc3978bd3977bf3a77c03a76c23b75c43c75c53c74c73d73c83e73ca3e72cc3f71cd4071cf4070d0416fd2426fd3436ed5446dd6456cd8456cd9466bdb476adc4869de4968df4a68e04c67e24d66e34e65e44f64e55064e75263e85362e95462ea5661eb5760ec5860ed5a5fee5b5eef5d5ef05f5ef1605df2625df2645cf3655cf4675cf4695cf56b5cf66c5cf66e5cf7705cf7725cf8745cf8765cf9785df9795df97b5dfa7d5efa7f5efa815ffb835ffb8560fb8761fc8961fc8a62fc8c63fc8e64fc9065fd9266fd9467fd9668fd9869fd9a6afd9b6bfe9d6cfe9f6dfea16efea36ffea571fea772fea973feaa74feac76feae77feb078feb27afeb47bfeb67cfeb77efeb97ffebb81febd82febf84fec185fec287fec488fec68afec88cfeca8dfecc8ffecd90fecf92fed194fed395fed597fed799fed89afdda9cfddc9efddea0fde0a1fde2a3fde3a5fde5a7fde7a9fde9aafdebacfcecaefceeb0fcf0b2fcf2b4fcf4b6fcf6b8fcf7b9fcf9bbfcfbbdfcfdbf"
+  );
+  const VIRIDIS_LUT = fromHex(
+    "44015444025645045745055946075a46085c460a5d460b5e470d60470e6147106347116447136548146748166848176948186a481a6c481b6d481c6e481d6f481f70482071482173482374482475482576482677482878482979472a7a472c7a472d7b472e7c472f7d46307e46327e46337f463480453581453781453882443983443a83443b84433d84433e85423f854240864241864142874144874045884046883f47883f48893e49893e4a893e4c8a3d4d8a3d4e8a3c4f8a3c508b3b518b3b528b3a538b3a548c39558c39568c38588c38598c375a8c375b8d365c8d365d8d355e8d355f8d34608d34618d33628d33638d32648e32658e31668e31678e31688e30698e306a8e2f6b8e2f6c8e2e6d8e2e6e8e2e6f8e2d708e2d718e2c718e2c728e2c738e2b748e2b758e2a768e2a778e2a788e29798e297a8e297b8e287c8e287d8e277e8e277f8e27808e26818e26828e26828e25838e25848e25858e24868e24878e23888e23898e238a8d228b8d228c8d228d8d218e8d218f8d21908d21918c20928c20928c20938c1f948c1f958b1f968b1f978b1f988b1f998a1f9a8a1e9b8a1e9c891e9d891f9e891f9f881fa0881fa1881fa1871fa28720a38620a48621a58521a68522a78522a88423a98324aa8325ab8225ac8226ad8127ad8128ae8029af7f2ab07f2cb17e2db27d2eb37c2fb47c31b57b32b67a34b67935b77937b87838b9773aba763bbb753dbc743fbc7340bd7242be7144bf7046c06f48c16e4ac16d4cc26c4ec36b50c46a52c56954c56856c66758c7655ac8645cc8635ec96260ca6063cb5f65cb5e67cc5c69cd5b6ccd5a6ece5870cf5773d05675d05477d1537ad1517cd2507fd34e81d34d84d44b86d54989d5488bd6468ed64590d74393d74195d84098d83e9bd93c9dd93ba0da39a2da37a5db36a8db34aadc32addc30b0dd2fb2dd2db5de2bb8de29bade28bddf26c0df25c2df23c5e021c8e020cae11fcde11dd0e11cd2e21bd5e21ad8e219dae319dde318dfe318e2e418e5e419e7e419eae51aece51befe51cf1e51df4e61ef6e620f8e621fbe723fde725"
+  );
+  const PLASMA_LUT = fromHex(
+    "0d088710078813078916078a19068c1b068d1d068e20068f2206902406912605912805922a05932c05942e05952f059631059733059735049837049938049a3a049a3c049b3e049c3f049c41049d43039e44039e46039f48039f4903a04b03a14c02a14e02a25002a25102a35302a35502a45601a45801a45901a55b01a55c01a65e01a66001a66100a76300a76400a76600a76700a86900a86a00a86c00a86e00a86f00a87100a87201a87401a87501a87701a87801a87a02a87b02a87d03a87e03a88004a88104a78305a78405a78606a68707a68808a68a09a58b0aa58d0ba58e0ca48f0da4910ea3920fa39410a29511a19613a19814a099159f9a169f9c179e9d189d9e199da01a9ca11b9ba21d9aa31e9aa51f99a62098a72197a82296aa2395ab2494ac2694ad2793ae2892b02991b12a90b22b8fb32c8eb42e8db52f8cb6308bb7318ab83289ba3388bb3488bc3587bd3786be3885bf3984c03a83c13b82c23c81c33d80c43e7fc5407ec6417dc7427cc8437bc9447aca457acb4679cc4778cc4977cd4a76ce4b75cf4c74d04d73d14e72d24f71d35171d45270d5536fd5546ed6556dd7566cd8576bd9586ada5a6ada5b69db5c68dc5d67dd5e66de5f65de6164df6263e06363e16462e26561e26660e3685fe4695ee56a5de56b5de66c5ce76e5be76f5ae87059e97158e97257ea7457eb7556eb7655ec7754ed7953ed7a52ee7b51ef7c51ef7e50f07f4ff0804ef1814df1834cf2844bf3854bf3874af48849f48948f58b47f58c46f68d45f68f44f79044f79143f79342f89441f89540f9973ff9983ef99a3efa9b3dfa9c3cfa9e3bfb9f3afba139fba238fca338fca537fca636fca835fca934fdab33fdac33fdae32fdaf31fdb130fdb22ffdb42ffdb52efeb72dfeb82cfeba2cfebb2bfebd2afebe2afec029fdc229fdc328fdc527fdc627fdc827fdca26fdcb26fccd25fcce25fcd025fcd225fbd324fbd524fbd724fad824fada24f9dc24f9dd25f8df25f8e125f7e225f7e425f6e626f6e826f5e926f5eb27f4ed27f3ee27f3f027f2f227f1f426f1f525f0f724f0f921"
+  );
+  function fromHex(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return bytes;
+  }
+  const LUTS = {
+    colour: COLOUR_LUT,
+    grey: GREY_LUT,
+    inferno: INFERNO_LUT,
+    magma: MAGMA_LUT,
+    viridis: VIRIDIS_LUT,
+    plasma: PLASMA_LUT
+  };
+  function lutFor(map) {
+    return LUTS[map] || COLOUR_LUT;
+  }
+  function isDarkForLoud(map) {
+    return map === "grey";
+  }
+  function buildLut(stops) {
+    const lut = new Uint8Array(256 * 3);
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255;
+      let s = 0;
+      while (s < stops.length - 2 && t > stops[s + 1][0]) s++;
+      const [p0, c0] = stops[s];
+      const [p1, c1] = stops[s + 1];
+      const f = p1 === p0 ? 0 : Math.max(0, Math.min(1, (t - p0) / (p1 - p0)));
+      for (let ch = 0; ch < 3; ch++) {
+        lut[i * 3 + ch] = Math.round(c0[ch] + (c1[ch] - c0[ch]) * f);
+      }
+    }
+    return lut;
+  }
+  function levelsToPixels(levels, frames, columns, map = "colour") {
+    const lut = lutFor(map);
+    const pixels = new Uint8ClampedArray(frames * columns * 4);
+    for (let f = 0; f < frames; f++) {
+      const y = frames - 1 - f;
+      const rowIn = f * columns;
+      const rowOut = y * columns * 4;
+      for (let k = 0; k < columns; k++) {
+        const level = levels[rowIn + k] * 3;
+        const p = rowOut + k * 4;
+        pixels[p] = lut[level];
+        pixels[p + 1] = lut[level + 1];
+        pixels[p + 2] = lut[level + 2];
+        pixels[p + 3] = 255;
+      }
+    }
+    return pixels;
+  }
+  const MAX_GRAM_ROWS = 32768;
+  const MAX_GRAM_COLUMNS = 4096;
+  const LEVEL_SCOPES = ["file", "row"];
+  const ROW_SAMPLE_CAP = 1024;
+  function fittingHopSize(frames, hopSize) {
+    let hop = hopSize;
+    while (Math.ceil(frames * hopSize / hop) > MAX_GRAM_ROWS) hop *= 2;
+    return hop;
+  }
+  function fitGramSize(frames, columns, plan) {
+    if (columns > MAX_GRAM_COLUMNS) {
+      throw new Error(
+        `The analysed spectrogram would be ${columns} columns wide, above the ${MAX_GRAM_COLUMNS}-column limit. Lower fft-size (currently ${plan.fftSize}) or narrow freq-start/freq-end.`
+      );
+    }
+    if (frames <= MAX_GRAM_ROWS) {
+      return null;
+    }
+    return { parameter: "hop-size", requested: plan.hopSize, used: fittingHopSize(frames, plan.hopSize) };
+  }
+  function checkGramSize(frames, columns, plan) {
+    if (frames > MAX_GRAM_ROWS) {
+      throw new Error(
+        `The analysed spectrogram would be ${frames} rows tall, above the ${MAX_GRAM_ROWS}-row limit. Set hop-size to ${fittingHopSize(frames, plan.hopSize)} (or shorten the recording).`
+      );
+    }
+    if (columns > MAX_GRAM_COLUMNS) {
+      throw new Error(
+        `The analysed spectrogram would be ${columns} columns wide, above the ${MAX_GRAM_COLUMNS}-column limit. Lower fft-size (currently ${plan.fftSize}) or narrow freq-start/freq-end.`
+      );
+    }
+  }
+  function percentileRange(db, from, to, floorPercentile, ceilingPercentile, span, sampleCap) {
+    const n = to - from;
+    const stride = Math.max(1, Math.floor(n / sampleCap));
+    const sampleCount = Math.floor((n - 1) / stride) + 1;
+    const sample = new Float32Array(sampleCount);
+    for (let i = from, j = 0; i < to; i += stride, j++) sample[j] = db[i];
+    sample.sort();
+    const at = (percentile) => sample[Math.min(sampleCount - 1, Math.max(0, Math.floor(percentile / 100 * (sampleCount - 1))))];
+    const floor = at(floorPercentile);
+    let ceiling = span !== null && span > 0 ? floor + span : at(ceilingPercentile);
+    if (ceiling <= floor) {
+      ceiling = floor + 1;
+    }
+    return { floor, ceiling };
+  }
+  function writeLevels(db, levels, from, to, range) {
+    const scale = 255 / (range.ceiling - range.floor);
+    for (let i = from; i < to; i++) {
+      const v = (db[i] - range.floor) * scale;
+      levels[i] = v <= 0 ? 0 : v >= 255 ? 255 : Math.round(v);
+    }
+  }
+  function decibelsToLevels(db, options = {}) {
+    const floorPercentile = options.floorPercentile === void 0 ? 5 : options.floorPercentile;
+    const ceilingPercentile = options.ceilingPercentile === void 0 ? 99.9 : options.ceilingPercentile;
+    const span = options.levelSpan === void 0 ? null : options.levelSpan;
+    const n = db.length;
+    const levels = new Uint8Array(n);
+    const columns = options.columns || 0;
+    if (options.levelScope === "row" && columns > 0) {
+      for (let from = 0; from < n; from += columns) {
+        const to = Math.min(n, from + columns);
+        writeLevels(db, levels, from, to, percentileRange(db, from, to, floorPercentile, ceilingPercentile, span, ROW_SAMPLE_CAP));
+      }
+      return levels;
+    }
+    writeLevels(db, levels, 0, n, percentileRange(db, 0, n, floorPercentile, ceilingPercentile, span, 1e6));
+    return levels;
+  }
+  function powerToLevels(grid, options = {}) {
+    const db = powerToDecibels(grid);
+    const normalisation = options.normalisation || "none";
+    const normalised = normalisation === "none" ? db : normaliseDecibels(db, options.frames || 0, options.columns || 0, normalisation, { windowBins: options.windowBins });
+    return decibelsToLevels(normalised, options);
+  }
+  function paintGram(levels, frames, columns, map = "colour") {
+    const canvas = document.createElement("canvas");
+    canvas.width = columns;
+    canvas.height = frames;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error(`Could not create a ${columns}×${frames} canvas to paint the spectrogram`);
+    }
+    const image = context.createImageData(columns, frames);
+    image.data.set(levelsToPixels(levels, frames, columns, map));
+    context.putImageData(image, 0, 0);
+    const url = canvas.toDataURL("image/png");
+    if (!url || !url.startsWith("data:image/png")) {
+      throw new Error(`The browser could not encode a ${columns}×${frames} spectrogram image`);
+    }
+    return url;
+  }
+  function parseConfigValue(text) {
+    if (typeof text !== "string") {
+      return null;
+    }
+    const trimmed = text.trim();
+    if (trimmed === "") {
+      return null;
+    }
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? value : null;
+  }
+  function numberParam(params, name) {
+    const cell = params.get(name);
+    if (!cell) {
+      return null;
+    }
+    const value = parseConfigValue(cell.text);
+    if (value === null) {
+      console.warn(`GramFrame: Ignoring ${name} in row ${cell.row} — "${cell.text}" is not a single numeric value`);
+      return null;
+    }
+    return value;
+  }
+  function choiceParam(params, name, choices) {
+    const cell = params.get(name);
+    if (!cell) return null;
+    const value = cell.text.trim().toLowerCase();
+    if (!choices.includes(value)) {
+      throw new Error(`Invalid ${name}: "${cell.text}" — must be one of ${choices.join(", ")}`);
+    }
+    return value;
+  }
+  function positiveParam(params, name, unit) {
+    const value = numberParam(params, name);
+    if (value !== null && !(value > 0)) {
+      throw new Error(`Invalid ${name}: ${value} — must be a number of ${unit} above zero`);
+    }
+    return value;
+  }
+  function readParameterRows(configTable) {
+    const params = /* @__PURE__ */ new Map();
+    configTable.querySelectorAll("tr").forEach((row, index) => {
+      var _a, _b;
+      try {
+        const cells = row.querySelectorAll("td");
+        if (cells.length === 2) {
+          const name = ((_a = cells[0].textContent) == null ? void 0 : _a.trim()) || "";
+          const text = ((_b = cells[1].textContent) == null ? void 0 : _b.trim()) || "";
+          if (name) {
+            params.set(name, { text, row: index + 1 });
+          }
+        }
+      } catch (error) {
+        console.warn(`GramFrame: Error parsing row ${index + 1}:`, error instanceof Error ? error.message : String(error));
+      }
+    });
+    return params;
+  }
+  function extractImageConfig(instance, imgElement, params) {
+    const srcAttribute = imgElement.getAttribute("src");
+    if (!srcAttribute || !srcAttribute.trim()) {
+      throw new Error("Image element has no src attribute: the spectrogram <img> must point at an image");
+    }
+    instance.state.imageDetails.url = imgElement.src;
+    const timeStart = numberParam(params, "time-start");
+    const timeEnd = numberParam(params, "time-end");
+    const freqStart = numberParam(params, "freq-start");
+    const freqEnd = numberParam(params, "freq-end");
+    const config = instance.state.config;
+    if (timeStart === null || timeEnd === null) {
+      throw new Error("Missing required time configuration: both time-start and time-end must be present with valid numeric values");
+    }
+    if (timeStart >= timeEnd) {
+      throw new Error(`Invalid time range: start (${timeStart}) must be less than end (${timeEnd})`);
+    }
+    config.timeMin = timeStart;
+    config.timeMax = timeEnd;
+    if (freqStart === null || freqEnd === null) {
+      throw new Error("Missing required frequency configuration: both freq-start and freq-end must be present with valid numeric values");
+    }
+    if (freqStart >= freqEnd) {
+      throw new Error(`Invalid frequency range: start (${freqStart}) must be less than end (${freqEnd})`);
+    }
+    config.freqMin = freqStart;
+    config.freqMax = freqEnd;
+  }
+  function readPaintingParams(params, player) {
+    const frameAverage = numberParam(params, "frame-average");
+    if (frameAverage !== null) {
+      if (!Number.isInteger(frameAverage) || frameAverage < 1 || frameAverage > 64) {
+        throw new Error(`Invalid frame-average: ${frameAverage} — must be a whole number between 1 and 64`);
+      }
+      player.analysis.frameAverage = frameAverage;
+    }
+    const normalisation = choiceParam(params, "normalisation", NORMALISATION_MODES);
+    if (normalisation !== null) player.analysis.normalisation = normalisation;
+    const colourMap = choiceParam(params, "colour-map", COLOUR_MAPS);
+    if (colourMap !== null) player.analysis.colourMap = /** @type {import('../audio/colourMap.js').ColourMapName} */
+    colourMap;
+    const levelScope = choiceParam(params, "level-scope", LEVEL_SCOPES);
+    if (levelScope !== null) player.analysis.levelScope = levelScope;
+    const normalisationWindow = positiveParam(params, "normalisation-window", "hertz");
+    if (normalisationWindow !== null) player.analysis.normalisationWindow = normalisationWindow;
+    const levelSpan = positiveParam(params, "level-span", "decibels");
+    if (levelSpan !== null) player.analysis.levelSpan = levelSpan;
+    const levelFloor = numberParam(params, "level-floor");
+    if (levelFloor !== null) {
+      player.analysis.levelFloor = levelFloor;
+    }
+    const levelCeiling = numberParam(params, "level-ceiling");
+    if (levelCeiling !== null) {
+      player.analysis.levelCeiling = levelCeiling;
+    }
+    const { levelFloor: floor, levelCeiling: ceiling } = player.analysis;
+    if (floor < 0 || ceiling > 100 || floor >= ceiling) {
+      throw new Error(`Invalid display percentiles: level-floor ${floor} and level-ceiling ${ceiling} — both must lie in 0..100 with the floor below the ceiling`);
+    }
+  }
+  function extractAudioConfig(instance, audioElement, params) {
+    const src = audioElement.getAttribute("src") ? audioElement.src : "";
+    if (!src) {
+      throw new Error("Audio element has no src attribute");
+    }
+    const state = instance.state;
+    const player = state.player;
+    player.active = true;
+    player.source = src;
+    state.imageDetails.url = src;
+    if (params.has("time-start") || params.has("time-end")) {
+      console.warn("GramFrame: time-start/time-end are ignored on an audio-sourced gram — the recording defines the time range");
+    }
+    const fftSize = numberParam(params, "fft-size");
+    if (fftSize !== null) {
+      if (!isPowerOfTwo(fftSize) || fftSize < 64 || fftSize > 32768) {
+        throw new Error(`Invalid fft-size: ${fftSize} — must be a power of two between 64 and 32768`);
+      }
+      player.analysis.fftSize = fftSize;
+    }
+    const hopSize = numberParam(params, "hop-size");
+    if (hopSize !== null) {
+      if (!Number.isInteger(hopSize) || hopSize < 1) {
+        throw new Error(`Invalid hop-size: ${hopSize} — must be a whole number of samples, 1 or more`);
+      }
+      player.analysis.hopSize = hopSize;
+    } else {
+      player.analysis.hopSize = player.analysis.fftSize / 2;
+    }
+    const freqStart = numberParam(params, "freq-start");
+    if (freqStart !== null) {
+      if (freqStart < 0) {
+        throw new Error(`Invalid freq-start: ${freqStart} — must not be negative`);
+      }
+      player.analysis.freqStart = freqStart;
+    }
+    const freqEnd = numberParam(params, "freq-end");
+    if (freqEnd !== null) {
+      if (freqEnd <= player.analysis.freqStart) {
+        throw new Error(`Invalid frequency range: freq-end (${freqEnd}) must be greater than freq-start (${player.analysis.freqStart})`);
+      }
+      player.analysis.freqEnd = freqEnd;
+    }
+    const windowSeconds = numberParam(params, "window-seconds");
+    if (windowSeconds !== null) {
+      if (!(windowSeconds > 0)) {
+        throw new Error(`Invalid window-seconds: ${windowSeconds} — must be greater than 0`);
+      }
+      player.windowSeconds = windowSeconds;
+    }
+    readPaintingParams(params, player);
+    const preservePitch = params.get("preserve-pitch");
+    if (preservePitch) {
+      const value = preservePitch.text.trim().toLowerCase();
+      if (!["true", "false", "yes", "no"].includes(value)) {
+        throw new Error(`Invalid preserve-pitch: "${preservePitch.text}" — must be true or false`);
+      }
+      player.preservesPitch = value === "true" || value === "yes";
+    }
   }
   function extractConfigData(instance) {
     if (!instance.configTable) {
       console.warn("GramFrame: No config table provided for configuration extraction");
       return;
     }
-    try {
-      const imgElement = instance.configTable.querySelector("img");
-      if (!imgElement) {
-        throw new Error("No image element found in config table");
+    const params = readParameterRows(instance.configTable);
+    const audioElement = instance.configTable.querySelector("audio");
+    const imgElement = instance.configTable.querySelector("img");
+    if (audioElement) {
+      if (imgElement) {
+        console.warn("GramFrame: the config table holds both an <audio> and an <img>; the audio is used and the image ignored");
       }
-      if (!imgElement.src) {
-        throw new Error("Image element has no src attribute");
-      }
-      instance.state.imageDetails.url = imgElement.src;
-    } catch (error) {
-      console.error("GramFrame: Error setting up image:", error instanceof Error ? error.message : String(error));
+      extractAudioConfig(instance, audioElement, params);
+      return;
     }
-    try {
-      const rows = instance.configTable.querySelectorAll("tr");
-      let timeStart = null;
-      let timeEnd = null;
-      let freqStart = null;
-      let freqEnd = null;
-      rows.forEach((row, index) => {
-        var _a, _b;
-        try {
-          const cells = row.querySelectorAll("td");
-          if (cells.length === 2) {
-            const param = ((_a = cells[0].textContent) == null ? void 0 : _a.trim()) || "";
-            const valueText = ((_b = cells[1].textContent) == null ? void 0 : _b.trim()) || "0";
-            const value = parseFloat(valueText);
-            if (isNaN(value)) {
-              console.warn(`GramFrame: Invalid numeric value in row ${index + 1}: value="${valueText}"`);
-              return;
-            }
-            if (param === "time-start") {
-              timeStart = value;
-            } else if (param === "time-end") {
-              timeEnd = value;
-            } else if (param === "freq-start") {
-              freqStart = value;
-            } else if (param === "freq-end") {
-              freqEnd = value;
-            }
-          }
-        } catch (error) {
-          console.warn(`GramFrame: Error parsing row ${index + 1}:`, error instanceof Error ? error.message : String(error));
-        }
-      });
-      if (timeStart === null || timeEnd === null) {
-        throw new Error("Missing required time configuration: both time-start and time-end must be present with valid numeric values");
-      }
-      if (timeStart >= timeEnd) {
-        throw new Error(`Invalid time range: start (${timeStart}) must be less than end (${timeEnd})`);
-      }
-      instance.state.config.timeMin = timeStart;
-      instance.state.config.timeMax = timeEnd;
-      if (freqStart === null || freqEnd === null) {
-        throw new Error("Missing required frequency configuration: both freq-start and freq-end must be present with valid numeric values");
-      }
-      if (freqStart >= freqEnd) {
-        throw new Error(`Invalid frequency range: start (${freqStart}) must be less than end (${freqEnd})`);
-      }
-      instance.state.config.freqMin = freqStart;
-      instance.state.config.freqMax = freqEnd;
-    } catch (error) {
-      throw error;
+    if (!imgElement) {
+      throw new Error("No image element found in config table: the first row must contain an <img> with the spectrogram");
     }
+    extractImageConfig(instance, imgElement, params);
   }
   function createComponentStructure(instanceId) {
     const container = document.createElement("div");
     container.className = "gram-frame-container gram-frame-loading";
     const table = document.createElement("div");
-    table.className = "gram-frame-table";
+    table.className = "gram-frame-layout";
     container.appendChild(table);
     const modeRow = document.createElement("div");
     modeRow.className = "gram-frame-row";
@@ -2263,331 +3634,278 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     extractConfigData(instance);
     return setupComponentTable(instance, configTable);
   }
-  function renderAxes(instance) {
-    if (!instance.ui.axesGroup) {
-      return;
+  function screenToDataWithZoom(instance, event) {
+    const point = screenToData(
+      event.clientX,
+      event.clientY,
+      instance.ui.svg,
+      instance.state,
+      instance.ui.spectrogramImage
+    );
+    if (!isWithinImage(point.svg, instance.state, instance.ui.spectrogramImage)) {
+      return null;
     }
-    instance.ui.axesGroup.innerHTML = "";
-    const viewport = instance.state;
-    const { naturalWidth, naturalHeight } = viewport.imageDetails;
-    const margins = viewport.margins;
-    if (!naturalWidth || !naturalHeight) {
-      return;
-    }
-    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
-    const visibleRange = calculateVisibleDataRange(viewport, instance.ui.spectrogramImage);
-    renderFrequencyAxis(instance, margins, renderWidth, renderHeight, visibleRange.freqMin, visibleRange.freqMax);
-    renderTimeAxis(instance, margins, renderWidth, renderHeight, visibleRange.timeMin, visibleRange.timeMax);
-  }
-  function renderTimeAxis(instance, margins, _naturalWidth, naturalHeight, timeMin, timeMax) {
-    const axisX = margins.left;
-    const axisStartY = margins.top;
-    const axisEndY = margins.top + naturalHeight;
-    const axisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    axisLine.setAttribute("x1", String(axisX));
-    axisLine.setAttribute("y1", String(axisStartY));
-    axisLine.setAttribute("x2", String(axisX));
-    axisLine.setAttribute("y2", String(axisEndY));
-    axisLine.setAttribute("class", "gram-frame-axis-line");
-    instance.ui.axesGroup.appendChild(axisLine);
-    const timeRange = timeMax - timeMin;
-    const tickCount = 5;
-    const tickInterval = timeRange / (tickCount - 1);
-    for (let i = 0; i < tickCount; i++) {
-      const time = timeMin + i * tickInterval;
-      const y = axisEndY - i / (tickCount - 1) * naturalHeight;
-      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      tick.setAttribute("x1", String(axisX - 8));
-      tick.setAttribute("y1", String(y));
-      tick.setAttribute("x2", String(axisX));
-      tick.setAttribute("y2", String(y));
-      tick.setAttribute("class", "gram-frame-axis-tick");
-      instance.ui.axesGroup.appendChild(tick);
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", String(axisX - 12));
-      label.setAttribute("y", String(y + 4));
-      label.setAttribute("text-anchor", "end");
-      label.setAttribute("class", "gram-frame-axis-label");
-      label.textContent = formatTime(time);
-      instance.ui.axesGroup.appendChild(label);
-    }
-  }
-  function calculateAxisTicks(min, max, containerSize, targetSpacing = 80) {
-    const range = max - min;
-    const targetMajorTicks = Math.max(2, Math.floor(containerSize / targetSpacing));
-    const rawMajorInterval = range / (targetMajorTicks - 1);
-    function niceNum(value, round) {
-      const exponent = Math.floor(Math.log10(value));
-      const fraction = value / Math.pow(10, exponent);
-      let niceFraction;
-      {
-        if (fraction <= 1) niceFraction = 1;
-        else if (fraction <= 2) niceFraction = 2;
-        else if (fraction <= 5) niceFraction = 5;
-        else niceFraction = 10;
-      }
-      return niceFraction * Math.pow(10, exponent);
-    }
-    const majorInterval = niceNum(rawMajorInterval);
-    let minorInterval;
-    const majorFraction = majorInterval / Math.pow(10, Math.floor(Math.log10(majorInterval)));
-    if (majorFraction === 1) {
-      minorInterval = majorInterval / 5;
-    } else if (majorFraction === 2) {
-      minorInterval = majorInterval / 2;
-    } else if (majorFraction === 5) {
-      minorInterval = majorInterval / 5;
-    } else {
-      minorInterval = majorInterval / 2;
-    }
-    const majorStart = Math.ceil(min / majorInterval) * majorInterval;
-    const minorStart = Math.ceil(min / minorInterval) * minorInterval;
-    const expectedMajorTicks = Math.ceil(range / majorInterval) + 2;
-    const expectedMinorTicks = Math.ceil(range / minorInterval) + 2;
-    const maxTicks = Math.max(200, expectedMajorTicks + expectedMinorTicks);
     return {
-      majorInterval,
-      minorInterval,
-      majorStart,
-      minorStart,
-      expectedMajorTicks,
-      expectedMinorTicks,
-      maxTicks
+      svgCoords: point.svg,
+      imageX: point.image.x,
+      imageY: point.image.y,
+      dataCoords: point.data
     };
   }
-  function formatFrequencyLabels(frequency) {
-    return Math.round(frequency) + "Hz";
+  function acceptsOffImageDrag(instance) {
+    const mode = instance.currentMode;
+    return !!mode && typeof mode.acceptsOffImageDrag === "function" && mode.acceptsOffImageDrag();
   }
-  function renderAxisLine(instance, axisConfig) {
-    const axisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    axisLine.setAttribute("x1", String(axisConfig.startX));
-    axisLine.setAttribute("y1", String(axisConfig.y));
-    axisLine.setAttribute("x2", String(axisConfig.endX));
-    axisLine.setAttribute("y2", String(axisConfig.y));
-    axisLine.setAttribute("class", "gram-frame-axis-line");
-    instance.ui.axesGroup.appendChild(axisLine);
+  function unboundedDataCoords(instance, event) {
+    return screenToData(
+      event.clientX,
+      event.clientY,
+      instance.ui.svg,
+      instance.state,
+      instance.ui.spectrogramImage
+    ).data;
   }
-  function renderAxisTicks(instance, tickData, axisConfig) {
-    tickData.forEach((tickInfo) => {
-      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      tick.setAttribute("x1", String(tickInfo.x));
-      tick.setAttribute("y1", String(axisConfig.y));
-      tick.setAttribute("x2", String(tickInfo.x));
-      tick.setAttribute("y2", String(axisConfig.y + tickInfo.height));
-      tick.setAttribute("class", tickInfo.className);
-      instance.ui.axesGroup.appendChild(tick);
+  const SVG_NS$4 = "http://www.w3.org/2000/svg";
+  const ICON_BOX = 24;
+  const LINE_BOX = 16;
+  function handShapes() {
+    const fingers = [
+      { x: 7.1, y: 4.5, height: 8.5 },
+      // index
+      { x: 10.2, y: 2.8, height: 10.2 },
+      // middle
+      { x: 13.3, y: 3.8, height: 9.2 },
+      // ring
+      { x: 16.4, y: 6.2, height: 6.8 }
+      // little
+    ];
+    const shapes = fingers.map(({ x, y, height }) => rect(x, y, 2.7, height, 1.35));
+    const thumb = rect(2.6, 11.4, 2.7, 7.6, 1.35);
+    thumb.setAttribute("transform", "rotate(-38 4 15)");
+    shapes.push(thumb);
+    shapes.push(rect(7.1, 10, 12, 10.6, 4));
+    return shapes;
+  }
+  function fitShapes() {
+    return [
+      "M4 9V6a2 2 0 0 1 2-2h3",
+      "M15 4h3a2 2 0 0 1 2 2v3",
+      "M20 15v3a2 2 0 0 1-2 2h-3",
+      "M9 20H6a2 2 0 0 1-2-2v-3"
+    ].map((d) => {
+      const path = document.createElementNS(SVG_NS$4, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", "2.2");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      return path;
     });
   }
-  function renderAxisLabels(instance, labelData, axisConfig) {
-    labelData.forEach((labelInfo) => {
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", String(labelInfo.x));
-      label.setAttribute("y", String(axisConfig.y + 25));
-      label.setAttribute("text-anchor", "middle");
-      label.setAttribute("class", labelInfo.className);
-      label.textContent = labelInfo.text;
-      instance.ui.axesGroup.appendChild(label);
-    });
+  function rect(x, y, width, height, radius) {
+    const shape = document.createElementNS(SVG_NS$4, "rect");
+    shape.setAttribute("x", String(x));
+    shape.setAttribute("y", String(y));
+    shape.setAttribute("width", String(width));
+    shape.setAttribute("height", String(height));
+    shape.setAttribute("rx", String(radius));
+    shape.setAttribute("fill", "currentColor");
+    return shape;
   }
-  function renderFrequencyAxis(instance, margins, naturalWidth, _naturalHeight, freqMin, freqMax) {
-    const axisY = margins.top + _naturalHeight;
-    const axisStartX = margins.left;
-    const axisEndX = margins.left + naturalWidth;
-    const rate = instance.state.rate;
-    const displayFreqMin = freqMin / rate;
-    const displayFreqMax = freqMax / rate;
-    const freqRange = displayFreqMax - displayFreqMin;
-    const axisConfig = { y: axisY, startX: axisStartX, endX: axisEndX };
-    renderAxisLine(instance, axisConfig);
-    const tickCalculation = calculateAxisTicks(displayFreqMin, displayFreqMax, naturalWidth);
-    const minorTickData = [];
-    const majorTickData = [];
-    const labelData = [];
-    const numMinorTicks = Math.floor((displayFreqMax - tickCalculation.minorStart) / tickCalculation.minorInterval) + 1;
-    if (numMinorTicks <= tickCalculation.maxTicks) {
-      for (let i = 0; i < numMinorTicks; i++) {
-        const freq = tickCalculation.minorStart + i * tickCalculation.minorInterval;
-        if (freq > displayFreqMax) break;
-        if (Math.abs(freq % tickCalculation.majorInterval) < 0.01) continue;
-        const x = axisStartX + (freq - displayFreqMin) / freqRange * naturalWidth;
-        minorTickData.push({ x, height: 4, className: "gram-frame-axis-tick-minor" });
-      }
-    }
-    const numMajorTicks = Math.floor((displayFreqMax - tickCalculation.majorStart) / tickCalculation.majorInterval) + 1;
-    if (numMajorTicks <= tickCalculation.maxTicks) {
-      for (let i = 0; i < numMajorTicks; i++) {
-        const freq = tickCalculation.majorStart + i * tickCalculation.majorInterval;
-        if (freq > displayFreqMax) break;
-        const x = axisStartX + (freq - displayFreqMin) / freqRange * naturalWidth;
-        majorTickData.push({ x, height: 8, className: "gram-frame-axis-tick-major" });
-        labelData.push({
-          x,
-          text: formatFrequencyLabels(freq),
-          className: "gram-frame-axis-label-major"
-        });
-      }
-    } else {
-      const tickCount = 5;
-      for (let i = 0; i < tickCount; i++) {
-        const freq = displayFreqMin + i * freqRange / (tickCount - 1);
-        const x = axisStartX + i / (tickCount - 1) * naturalWidth;
-        majorTickData.push({ x, height: 8, className: "gram-frame-axis-tick" });
-        labelData.push({
-          x,
-          text: formatFrequencyLabels(freq),
-          className: "gram-frame-axis-label"
-        });
-      }
-    }
-    renderAxisTicks(instance, minorTickData, axisConfig);
-    renderAxisTicks(instance, majorTickData, axisConfig);
-    renderAxisLabels(instance, labelData, axisConfig);
+  function line(d) {
+    const path = document.createElementNS(SVG_NS$4, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", String(LINE_STROKE));
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    return path;
   }
-  function updateSVGLayout(instance) {
-    const viewport = instance.state;
-    const { naturalWidth, naturalHeight } = viewport.imageDetails;
-    const margins = viewport.margins;
-    if (!naturalWidth || !naturalHeight) {
-      return;
-    }
-    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
-    const axesWidth = renderWidth;
-    const axesHeight = renderHeight;
-    const totalWidth = axesWidth + margins.left + margins.right;
-    const totalHeight = axesHeight + margins.top + margins.bottom;
-    instance.ui.container.style.width = "auto";
-    instance.ui.container.style.height = "auto";
-    instance.ui.container.style.aspectRatio = "unset";
-    instance.ui.svg.style.width = `${totalWidth}px`;
-    instance.ui.svg.style.height = `${totalHeight}px`;
-    instance.ui.svg.setAttribute("viewBox", `0 0 ${totalWidth} ${totalHeight}`);
-    instance.ui.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-    instance.ui.spectrogramImage.setAttribute("x", String(margins.left));
-    instance.ui.spectrogramImage.setAttribute("y", String(margins.top));
-    instance.ui.spectrogramImage.setAttribute("width", String(axesWidth));
-    instance.ui.spectrogramImage.setAttribute("height", String(axesHeight));
-    if (instance.ui.imageClipRect) {
-      instance.ui.imageClipRect.setAttribute("x", String(margins.left));
-      instance.ui.imageClipRect.setAttribute("y", String(margins.top));
-      instance.ui.imageClipRect.setAttribute("width", String(axesWidth));
-      instance.ui.imageClipRect.setAttribute("height", String(axesHeight));
-    }
-    if (instance.ui.cursorClipRect) {
-      instance.ui.cursorClipRect.setAttribute("x", String(margins.left));
-      instance.ui.cursorClipRect.setAttribute("y", String(margins.top));
-      instance.ui.cursorClipRect.setAttribute("width", String(axesWidth));
-      instance.ui.cursorClipRect.setAttribute("height", String(axesHeight));
-    }
-    applyZoomTransform(instance);
+  function solid(d) {
+    const path = document.createElementNS(SVG_NS$4, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "currentColor");
+    return path;
   }
-  function applyZoomTransform(instance) {
-    const viewport = instance.state;
-    const { level, centerX, centerY } = viewport.zoom;
-    const margins = viewport.margins;
-    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
-    if (!instance.ui.spectrogramImage) {
-      return;
-    }
-    if (level === 1) {
-      instance.ui.spectrogramImage.setAttribute("x", String(margins.left));
-      instance.ui.spectrogramImage.setAttribute("y", String(margins.top));
-      instance.ui.spectrogramImage.setAttribute("width", String(renderWidth));
-      instance.ui.spectrogramImage.setAttribute("height", String(renderHeight));
-      instance.ui.spectrogramImage.removeAttribute("transform");
-      renderAxes(instance);
-      if (instance.featureRenderer) {
-        instance.featureRenderer.renderAllPersistentFeatures();
-      }
-      return;
-    }
-    const centerImageX = centerX * renderWidth;
-    const centerImageY = centerY * renderHeight;
-    const zoomedWidth = renderWidth * level;
-    const zoomedHeight = renderHeight * level;
-    const newX = margins.left + centerImageX - centerImageX * level;
-    const newY = margins.top + centerImageY - centerImageY * level;
-    instance.ui.spectrogramImage.setAttribute("x", String(newX));
-    instance.ui.spectrogramImage.setAttribute("y", String(newY));
-    instance.ui.spectrogramImage.setAttribute("width", String(zoomedWidth));
-    instance.ui.spectrogramImage.setAttribute("height", String(zoomedHeight));
-    renderAxes(instance);
-    if (instance.featureRenderer) {
-      instance.featureRenderer.renderAllPersistentFeatures();
-    }
+  function dot(cx, cy, r) {
+    const shape = document.createElementNS(SVG_NS$4, "circle");
+    shape.setAttribute("cx", String(cx));
+    shape.setAttribute("cy", String(cy));
+    shape.setAttribute("r", String(r));
+    shape.setAttribute("fill", "currentColor");
+    return shape;
   }
-  function createModeSwitchingUI(modeCell, state, modeSwitchCallback, modes = {}) {
+  const LINE_STROKE = 1.3;
+  function crossCursorShapes() {
+    const ring = document.createElementNS(SVG_NS$4, "circle");
+    ring.setAttribute("cx", "8");
+    ring.setAttribute("cy", "8");
+    ring.setAttribute("r", "3.4");
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke", "currentColor");
+    ring.setAttribute("stroke-width", String(LINE_STROKE));
+    return [ring, line("M8 .8v3.4M8 11.8v3.4M.8 8h3.4M11.8 8h3.4")];
+  }
+  function harmonicsShapes() {
+    return [line("M2 3v10M5.5 5v8M9 2v11M12.5 6v7")];
+  }
+  function sidebandsShapes() {
+    return [line("M8 1.5v13M4.5 5v6M1.5 6.5v3M11.5 5v6M14.5 6.5v3")];
+  }
+  function dopplerShapes() {
+    return [line("M3 14c0-5 10-7 10-12"), dot(3, 14, 1.1), dot(13, 2, 1.1)];
+  }
+  function bookmarkShapes() {
+    const path = line("M4 2h8v12l-4-3.2L4 14z");
+    path.setAttribute("stroke-width", "1.4");
+    return [path];
+  }
+  function volumeShapes() {
+    return [line("M8 2.5 4.5 5.5H2v5h2.5L8 13.5zM11 5.5a3.4 3.4 0 0 1 0 5M13 3.5a6 6 0 0 1 0 9")];
+  }
+  function mutedShapes() {
+    return [line("M8 2.5 4.5 5.5H2v5h2.5L8 13.5z"), line("M11 6l4 4M15 6l-4 4")];
+  }
+  function playShapes() {
+    return [solid("M4 2.5 13 8l-9 5.5z")];
+  }
+  function pauseShapes() {
+    return [solid("M3.5 2.5h3.2v11H3.5zM9.3 2.5h3.2v11H9.3z")];
+  }
+  function restartShapes() {
+    return [solid("M4 3h1.6v10H4zM13 3v10L6.4 8z")];
+  }
+  const ICONS = {
+    hand: { box: ICON_BOX, build: handShapes },
+    fit: { box: ICON_BOX, build: fitShapes },
+    "cross-cursor": { box: LINE_BOX, build: crossCursorShapes },
+    harmonics: { box: LINE_BOX, build: harmonicsShapes },
+    sidebands: { box: LINE_BOX, build: sidebandsShapes },
+    doppler: { box: LINE_BOX, build: dopplerShapes },
+    bookmark: { box: LINE_BOX, build: bookmarkShapes },
+    volume: { box: LINE_BOX, build: volumeShapes },
+    muted: { box: LINE_BOX, build: mutedShapes },
+    play: { box: LINE_BOX, build: playShapes },
+    pause: { box: LINE_BOX, build: pauseShapes },
+    restart: { box: LINE_BOX, build: restartShapes }
+  };
+  function createIcon(name) {
+    const entry = name ? ICONS[name] : void 0;
+    if (!entry) {
+      return null;
+    }
+    const svg = (
+      /** @type {SVGSVGElement} */
+      document.createElementNS(SVG_NS$4, "svg")
+    );
+    svg.setAttribute("class", "gram-frame-icon");
+    svg.setAttribute("viewBox", `0 0 ${entry.box} ${entry.box}`);
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    entry.build().forEach((shape) => svg.appendChild(shape));
+    return svg;
+  }
+  function createIconLabel(text) {
+    const label = document.createElement("span");
+    label.className = "gram-frame-visually-hidden";
+    label.textContent = text;
+    return label;
+  }
+  function createModeSwitchingUI(modeCell, activeMode, modeSwitchCallback, modes = {}) {
     const modesContainer = document.createElement("div");
     modesContainer.className = "gram-frame-modes";
-    const modeTypes = ["pan", "analysis", "harmonics", "sideband", "doppler"];
+    const kicker = document.createElement("div");
+    kicker.className = "gram-frame-kicker";
+    kicker.textContent = "Mode";
+    modesContainer.appendChild(kicker);
+    const list = document.createElement("div");
+    list.className = "gram-frame-mode-list";
+    modesContainer.appendChild(list);
+    const commandRow = document.createElement("div");
+    commandRow.className = "gram-frame-mode-commands";
+    const modeTypes = MODE_NAMES;
     const modeButtons = {};
     const commandButtons = {};
     modeTypes.forEach((modeType) => {
       const modeInstance = modes[modeType];
-      const commandButtonDefs = modeInstance && typeof modeInstance.getCommandButtons === "function" ? modeInstance.getCommandButtons() : [];
-      const modeGroup = document.createElement("div");
-      modeGroup.className = "gram-frame-mode-group";
       commandButtons[modeType] = [];
-      const preButtons = commandButtonDefs.slice(0, Math.floor(commandButtonDefs.length / 2));
-      preButtons.forEach((buttonDef) => {
-        const cmdButton = createCommandButton(buttonDef);
-        modeGroup.appendChild(cmdButton);
-        commandButtons[modeType].push(cmdButton);
-      });
-      const button = document.createElement("button");
-      button.className = "gram-frame-mode-btn";
-      button.textContent = getModeDisplayName(modeType);
-      button.dataset.mode = modeType;
-      if (modeType === state.mode) {
-        button.classList.add("active");
+      const button2 = document.createElement("button");
+      button2.type = "button";
+      button2.className = "gram-frame-mode-btn";
+      const displayName = getModeDisplayName(modeType);
+      applyModeFace(button2, displayName, getModeIcon(modeType));
+      button2.title = displayName;
+      button2.dataset.mode = modeType;
+      if (modeType === activeMode) {
+        button2.classList.add("active");
       }
-      const modeInstanceForDisabled = modes[modeType];
-      if (modeInstanceForDisabled && typeof modeInstanceForDisabled.isEnabled === "function") {
-        if (!modeInstanceForDisabled.isEnabled()) {
-          button.disabled = true;
-          button.classList.add("disabled");
-        }
+      if (modeInstance && typeof modeInstance.isEnabled === "function" && !modeInstance.isEnabled()) {
+        button2.disabled = true;
+        button2.classList.add("disabled");
       }
-      button.addEventListener("click", (event) => {
+      button2.addEventListener("click", (event) => {
         event.preventDefault();
-        if (!button.disabled) {
+        if (!button2.disabled) {
           modeSwitchCallback(modeType);
         }
       });
-      modeButtons[modeType] = button;
-      modeGroup.appendChild(button);
-      const postButtons = commandButtonDefs.slice(Math.floor(commandButtonDefs.length / 2));
-      postButtons.forEach((buttonDef) => {
+      modeButtons[modeType] = button2;
+      list.appendChild(button2);
+      const commandButtonDefs = modeInstance && typeof modeInstance.getCommandButtons === "function" ? modeInstance.getCommandButtons() : [];
+      commandButtonDefs.forEach((buttonDef) => {
         const cmdButton = createCommandButton(buttonDef);
-        modeGroup.appendChild(cmdButton);
+        commandRow.appendChild(cmdButton);
         commandButtons[modeType].push(cmdButton);
       });
-      modesContainer.appendChild(modeGroup);
     });
-    const guidancePanel = document.createElement("div");
-    guidancePanel.className = "gram-frame-guidance";
+    const spacer = document.createElement("div");
+    spacer.className = "gram-frame-mode-spacer";
+    modesContainer.appendChild(spacer);
+    modesContainer.appendChild(commandRow);
     modeCell.appendChild(modesContainer);
-    modeCell.appendChild(guidancePanel);
     return {
       modesContainer,
       modeButtons,
-      commandButtons,
-      guidancePanel
+      commandButtons
     };
   }
-  function createCommandButton(buttonDef) {
-    const button = document.createElement("button");
-    button.className = "gram-frame-command-btn";
-    button.textContent = buttonDef.label;
-    button.title = buttonDef.title;
-    if (buttonDef.isEnabled) {
-      button.disabled = !buttonDef.isEnabled();
+  function applyModeFace(button2, text, icon) {
+    const glyph = createIcon(icon);
+    if (glyph) {
+      button2.appendChild(glyph);
     }
-    button.addEventListener("click", (event) => {
+    const label = document.createElement("span");
+    label.className = "gram-frame-mode-btn-label";
+    label.textContent = text;
+    button2.appendChild(label);
+  }
+  function applyButtonFace(button2, text, icon) {
+    const glyph = createIcon(icon);
+    if (!glyph) {
+      button2.textContent = text;
+      return;
+    }
+    button2.classList.add("gram-frame-icon-btn");
+    button2.appendChild(glyph);
+    button2.appendChild(createIconLabel(text));
+  }
+  function createCommandButton(buttonDef) {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "gram-frame-command-btn";
+    applyButtonFace(button2, buttonDef.label, buttonDef.icon);
+    button2.title = buttonDef.title;
+    if (buttonDef.isEnabled) {
+      button2.disabled = !buttonDef.isEnabled();
+    }
+    button2.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       buttonDef.action();
     });
-    return button;
+    return button2;
   }
   function updateCommandButtonStates(commandButtons, modes) {
     Object.keys(commandButtons).forEach((modeType) => {
@@ -2595,10 +3913,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       if (modeInstance && typeof modeInstance.getCommandButtons === "function") {
         const buttonDefs = modeInstance.getCommandButtons();
         const buttons = commandButtons[modeType];
-        buttons.forEach((button, index) => {
+        buttons.forEach((button2, index) => {
           const buttonDef = buttonDefs[index];
           if (buttonDef && buttonDef.isEnabled) {
-            button.disabled = !buttonDef.isEnabled();
+            button2.disabled = !buttonDef.isEnabled();
           }
         });
       }
@@ -2607,30 +3925,52 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function updateModeButtonStates(modeButtons, modes) {
     Object.keys(modeButtons).forEach((modeType) => {
       const modeInstance = modes[modeType];
-      const button = modeButtons[modeType];
-      if (modeInstance && typeof modeInstance.isEnabled === "function" && button) {
+      const button2 = modeButtons[modeType];
+      if (modeInstance && typeof modeInstance.isEnabled === "function" && button2) {
         const isEnabled = modeInstance.isEnabled();
-        button.disabled = !isEnabled;
+        button2.disabled = !isEnabled;
         if (isEnabled) {
-          button.classList.remove("disabled");
+          button2.classList.remove("disabled");
         } else {
-          button.classList.add("disabled");
+          button2.classList.add("disabled");
         }
       }
     });
   }
+  function anchorHoldingPoint(point, anchor, level, newLevel) {
+    if (newLevel <= 1) {
+      return 0.5;
+    }
+    return clamp01$1((anchor * (1 - level) + point * (level - newLevel)) / (1 - newLevel));
+  }
+  function viewCentre(anchor, level) {
+    if (level <= 1) {
+      return 0.5;
+    }
+    return anchor + (0.5 - anchor) / level;
+  }
+  function anchorForCentre(centre, level) {
+    if (level <= 1) {
+      return 0.5;
+    }
+    const visibleFraction = 1 / level;
+    return clamp01$1((centre - visibleFraction / 2) / (1 - visibleFraction));
+  }
+  function clamp01$1(value) {
+    return Math.max(0, Math.min(1, value));
+  }
   const BOTTOM_GAP = 16;
   function isLandscape(instance) {
-    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
-    return naturalWidth > 0 && naturalHeight > 0 && naturalWidth > naturalHeight;
+    const { width, height } = baseRenderSize(instance);
+    return width > 0 && height > 0 && width > height;
   }
   function computeAvailableRenderSize(instance) {
     const margins = instance.state.margins;
-    const { naturalWidth, naturalHeight } = instance.state.imageDetails;
+    const { width: baseWidth, height: baseHeight } = baseRenderSize(instance);
     const cell = instance.ui.mainCell;
     const svg = instance.ui.svg;
     if (!cell || !svg) {
-      return { width: naturalWidth, height: naturalHeight };
+      return { width: baseWidth, height: baseHeight };
     }
     const cellStyle = window.getComputedStyle(cell);
     const padL = parseFloat(cellStyle.paddingLeft) || 0;
@@ -2640,10 +3980,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     const width = cell.clientWidth - padL - padR - svgBorderX - margins.left - margins.right;
     const svgRect = svg.getBoundingClientRect();
     const imageTopViewport = svgRect.top + margins.top;
-    const height = window.innerHeight - imageTopViewport - margins.bottom - BOTTOM_GAP;
+    const transport = isPlayerActive(instance) ? cell.querySelector(".gram-frame-transport") : null;
+    const transportHeight = transport instanceof HTMLElement ? transport.offsetHeight + (parseFloat(window.getComputedStyle(transport).marginTop) || 0) : 0;
+    const height = window.innerHeight - imageTopViewport - margins.bottom - BOTTOM_GAP - transportHeight;
     return {
-      width: Math.max(naturalWidth, Math.round(width)),
-      height: Math.max(naturalHeight, Math.round(height))
+      width: Math.max(baseWidth, Math.round(width)),
+      height: Math.max(baseHeight, Math.round(height))
     };
   }
   function applyExpandLayout(instance) {
@@ -2659,8 +4001,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         imageDetails.renderHeight = settled.height;
       }
     } else {
-      imageDetails.renderWidth = imageDetails.naturalWidth;
-      imageDetails.renderHeight = imageDetails.naturalHeight;
+      const base = baseRenderSize(instance);
+      imageDetails.renderWidth = base.width;
+      imageDetails.renderHeight = base.height;
     }
     updateSVGLayout(instance);
     renderAxes(instance);
@@ -2669,11 +4012,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     dispatch(instance);
   }
-  function updateToggleButton(button, expanded) {
-    button.setAttribute("aria-pressed", expanded ? "true" : "false");
-    button.setAttribute("aria-label", expanded ? "Collapse image" : "Expand image");
-    button.title = expanded ? "Collapse image" : "Expand image";
-    button.textContent = expanded ? "⤢" : "⤡";
+  function updateToggleButton(button2, expanded) {
+    button2.setAttribute("aria-pressed", expanded ? "true" : "false");
+    button2.setAttribute("aria-label", expanded ? "Collapse image" : "Expand image");
+    button2.title = expanded ? "Collapse image" : "Expand image";
+    button2.textContent = expanded ? "⤢" : "⤡";
   }
   function setImageExpanded(instance, expanded) {
     if (!isLandscape(instance)) {
@@ -2699,31 +4042,48 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (!isLandscape(instance)) {
       return null;
     }
-    const button = document.createElement("button");
-    button.className = "gram-frame-expand-toggle";
-    button.type = "button";
-    updateToggleButton(button, instance.state.imageExpanded === true);
-    button.addEventListener("click", (e) => {
+    const button2 = document.createElement("button");
+    button2.className = "gram-frame-expand-toggle";
+    button2.type = "button";
+    updateToggleButton(button2, instance.state.imageExpanded === true);
+    button2.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       setImageExpanded(instance, !instance.state.imageExpanded);
     });
-    instance.ui.mainCell.appendChild(button);
-    instance.ui.expandToggleButton = button;
-    return button;
+    instance.ui.mainCell.appendChild(button2);
+    instance.ui.expandToggleButton = button2;
+    return button2;
+  }
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 10;
+  function zoomLevel(instance) {
+    return instance.state.zoom.level;
+  }
+  function isZoomedIn(instance) {
+    return zoomLevel(instance) > MIN_ZOOM;
   }
   function zoomIn(instance) {
-    const zoom = instance.state.zoom;
-    const newLevel = Math.min(zoom.level * 1.5, 10);
-    setZoom(instance, newLevel, zoom.centerX, zoom.centerY);
+    zoomAboutViewCentre(instance, Math.min(zoomLevel(instance) * 1.5, MAX_ZOOM));
   }
   function zoomOut(instance) {
-    const zoom = instance.state.zoom;
-    const newLevel = Math.max(zoom.level / 1.5, 1);
-    setZoom(instance, newLevel, zoom.centerX, zoom.centerY);
+    zoomAboutViewCentre(instance, Math.max(zoomLevel(instance) / 1.5, MIN_ZOOM));
   }
-  function zoomReset(instance) {
-    setZoom(instance, 1, 0.5, 0.5);
+  function zoomAboutViewCentre(instance, newLevel) {
+    const { zoom, player } = instance.state;
+    const centreX = viewCentre(zoom.centerX, zoom.level);
+    const centreY = viewCentre(zoom.centerY, zoom.level);
+    if (isPlayerActive(instance)) {
+      const centreTime = player.viewTop - visibleWindowSeconds(instance) / 2;
+      zoom.level = newLevel;
+      player.viewTop = clampViewTop(instance, centreTime + visibleWindowSeconds(instance) / 2);
+    }
+    if (newLevel <= MIN_ZOOM) {
+      fitView(instance);
+      return;
+    }
+    const anchorY = isPlayerActive(instance) ? 0.5 : anchorForCentre(centreY, newLevel);
+    setZoom(instance, newLevel, anchorForCentre(centreX, newLevel), anchorY);
   }
   function setZoom(instance, level, centerX, centerY) {
     const zoom = instance.state.zoom;
@@ -2745,14 +4105,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     const shifted = screenToSVG(dxPx, dyPx, instance.ui.svg);
     const svgDeltaX = shifted.x - origin.x;
     const svgDeltaY = shifted.y - origin.y;
-    const zoomLevel = instance.state.zoom.level;
+    const level = zoomLevel(instance);
     return {
-      normalizedDeltaX: -(svgDeltaX / renderWidth) / zoomLevel,
-      normalizedDeltaY: -(svgDeltaY / renderHeight) / zoomLevel
+      normalizedDeltaX: -(svgDeltaX / renderWidth) / level,
+      normalizedDeltaY: -(svgDeltaY / renderHeight) / level
     };
   }
   function panByNormalized(instance, deltaX, deltaY) {
-    const zoom = instance.state.zoom;
+    const { zoom, player } = instance.state;
+    if (isPlayerActive(instance)) {
+      player.viewTop = clampViewTop(instance, player.viewTop - deltaY * player.windowSeconds);
+      const newCenterX2 = zoom.level > 1 ? Math.max(0, Math.min(1, zoom.centerX + deltaX)) : zoom.centerX;
+      setZoom(instance, zoom.level, newCenterX2, zoom.centerY);
+      return;
+    }
     if (zoom.level <= 1) {
       return;
     }
@@ -2761,22 +4127,64 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     setZoom(instance, zoom.level, newCenterX, newCenterY);
   }
   function zoomAtImagePoint(instance, factor, imageX, imageY) {
-    const currentLevel = instance.state.zoom.level;
-    const newLevel = Math.max(1, Math.min(currentLevel * factor, 10));
+    const state = instance.state;
+    const { zoom, player } = state;
+    const currentLevel = zoom.level;
+    const newLevel = Math.max(MIN_ZOOM, Math.min(currentLevel * factor, MAX_ZOOM));
     if (newLevel === currentLevel) {
       return;
     }
-    if (newLevel <= 1) {
-      zoomReset(instance);
+    const { renderWidth, renderHeight } = getRenderDimensions(state);
+    if (isPlayerActive(instance)) {
+      const pointerTime = imageToData(imageX, imageY, state).time;
+      const fraction = (player.viewTop - pointerTime) / visibleWindowSeconds(instance);
+      zoom.level = newLevel;
+      player.viewTop = clampViewTop(instance, pointerTime + fraction * visibleWindowSeconds(instance));
+      setZoom(instance, newLevel, anchorHoldingPoint(imageX / renderWidth, zoom.centerX, currentLevel, newLevel), 0.5);
       return;
     }
-    const imageDetails = instance.state.imageDetails;
-    const { naturalWidth, naturalHeight } = imageDetails;
-    const renderWidth = imageDetails.renderWidth || naturalWidth;
-    const renderHeight = imageDetails.renderHeight || naturalHeight;
-    const centerX = Math.max(0, Math.min(1, imageX / renderWidth));
-    const centerY = Math.max(0, Math.min(1, imageY / renderHeight));
-    setZoom(instance, newLevel, centerX, centerY);
+    if (newLevel <= MIN_ZOOM) {
+      fitView(instance);
+      return;
+    }
+    setZoom(
+      instance,
+      newLevel,
+      anchorHoldingPoint(imageX / renderWidth, zoom.centerX, currentLevel, newLevel),
+      anchorHoldingPoint(imageY / renderHeight, zoom.centerY, currentLevel, newLevel)
+    );
+  }
+  function zoomToRegion(instance, region) {
+    const state = instance.state;
+    const { zoom, player } = state;
+    const { renderWidth, renderHeight } = getRenderDimensions(state);
+    if (!(region.width > 0) || !(region.height > 0)) {
+      return;
+    }
+    const centreX = (region.x + region.width / 2) / renderWidth;
+    const across = renderWidth / region.width;
+    if (isPlayerActive(instance)) {
+      const topTime = imageToData(0, region.y, state).time;
+      const bottomTime = imageToData(0, region.y + region.height, state).time;
+      const seconds = topTime - bottomTime;
+      const through = seconds > 0 ? player.windowSeconds / seconds : across;
+      const level2 = Math.max(MIN_ZOOM, Math.min(across, through, MAX_ZOOM));
+      zoom.level = level2;
+      player.viewTop = clampViewTop(instance, (topTime + bottomTime) / 2 + visibleWindowSeconds(instance) / 2);
+      setZoom(instance, level2, anchorForCentre(centreX, level2), 0.5);
+      return;
+    }
+    const level = Math.max(MIN_ZOOM, Math.min(across, renderHeight / region.height, MAX_ZOOM));
+    const centreY = (region.y + region.height / 2) / renderHeight;
+    setZoom(instance, level, anchorForCentre(centreX, level), anchorForCentre(centreY, level));
+  }
+  function fitView(instance) {
+    const { zoom, player } = instance.state;
+    if (isPlayerActive(instance)) {
+      zoom.level = MIN_ZOOM;
+      player.viewTop = clampViewTop(instance, player.viewTop);
+    }
+    setZoom(instance, MIN_ZOOM, 0.5, 0.5);
   }
   function updateZoomControlStates(instance) {
     if (instance.ui.commandButtons && instance.modes) {
@@ -2800,45 +4208,351 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
     }
   }
-  const WHEEL_ZOOM_STEP = 1.2;
-  function screenToDataWithZoom(instance, event) {
-    const point = screenToData(
-      event.clientX,
-      event.clientY,
-      instance.ui.svg,
-      instance.state,
-      instance.ui.spectrogramImage
-    );
-    if (!isWithinImage(point.svg, instance.state, instance.ui.spectrogramImage)) {
-      return null;
-    }
+  function selectionBounds(viewport, spectrogramImage = null) {
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    const { margins } = viewport;
+    const image = getImageBounds(viewport, spectrogramImage);
     return {
-      svgCoords: point.svg,
-      imageX: point.image.x,
-      imageY: point.image.y,
-      dataCoords: point.data
+      left: Math.max(margins.left, image.left),
+      top: Math.max(margins.top, image.top),
+      right: Math.min(margins.left + renderWidth, image.left + image.width),
+      bottom: Math.min(margins.top + renderHeight, image.top + image.height)
     };
   }
-  function handleWheel(instance, event) {
-    const result = screenToDataWithZoom(instance, event);
-    if (!result) {
+  function withinBounds(point, bounds) {
+    return point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom;
+  }
+  function selectionRect(bounds, start, current) {
+    const x = Math.max(bounds.left, Math.min(bounds.right, current.x));
+    const y = Math.max(bounds.top, Math.min(bounds.bottom, current.y));
+    const movedX = x - start.x;
+    const movedY = y - start.y;
+    return {
+      x: Math.min(start.x, x),
+      y: Math.min(start.y, y),
+      width: Math.abs(movedX),
+      height: Math.abs(movedY),
+      movedX,
+      movedY
+    };
+  }
+  function containFactor(viewport, rect2) {
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    if (!(rect2.width > 0) || !(rect2.height > 0)) {
+      return 1;
+    }
+    return Math.min(renderWidth / rect2.width, renderHeight / rect2.height);
+  }
+  function containedView(viewport, bounds, rect2, limits) {
+    const { renderWidth, renderHeight } = getRenderDimensions(viewport);
+    const level = viewport.zoom.level;
+    const capped = Math.max(limits.min, Math.min(level * containFactor(viewport, rect2), limits.max));
+    const factor = capped / level;
+    const width = renderWidth / factor;
+    const height = renderHeight / factor;
+    const centreX = rect2.x + rect2.width / 2;
+    const centreY = rect2.y + rect2.height / 2;
+    return {
+      x: slideInside(centreX - width / 2, width, bounds.left, bounds.right),
+      y: slideInside(centreY - height / 2, height, bounds.top, bounds.bottom),
+      width,
+      height
+    };
+  }
+  function slideInside(start, length, min, max) {
+    if (length >= max - min) {
+      return min + (max - min - length) / 2;
+    }
+    return Math.max(min, Math.min(start, max - length));
+  }
+  function rectToRegion(viewport, spectrogramImage, rect2) {
+    const topLeft = svgToImage(rect2.x, rect2.y, viewport, spectrogramImage);
+    const bottomRight = svgToImage(rect2.x + rect2.width, rect2.y + rect2.height, viewport, spectrogramImage);
+    const upper = imageToData(topLeft.x, topLeft.y, viewport);
+    const lower = imageToData(bottomRight.x, bottomRight.y, viewport);
+    return {
+      region: {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y
+      },
+      freqSpan: lower.freq - upper.freq,
+      // Time runs upward: the rectangle's top edge is the later time.
+      timeSpan: upper.time - lower.time
+    };
+  }
+  const SVG_NS$3 = "http://www.w3.org/2000/svg";
+  const READOUT_FONT_SIZE = 12;
+  function regionSpanText(freqSpan, timeSpan) {
+    const freq = formatFrequencyLabel(freqSpan, precisionIntervalFor(freqSpan));
+    const time = formatAxisTime(timeSpan, precisionIntervalFor(timeSpan));
+    return `${freq} × ${time}`;
+  }
+  function createRegionOverlay() {
+    const overlay = (
+      /** @type {SVGGElement} */
+      document.createElementNS(SVG_NS$3, "g")
+    );
+    overlay.setAttribute("class", "gram-frame-region-selection");
+    const dim = document.createElementNS(SVG_NS$3, "path");
+    dim.setAttribute("class", "gram-frame-region-dim");
+    dim.setAttribute("fill-rule", "evenodd");
+    overlay.appendChild(dim);
+    const resulting = document.createElementNS(SVG_NS$3, "rect");
+    resulting.setAttribute("class", "gram-frame-region-view");
+    overlay.appendChild(resulting);
+    const box = document.createElementNS(SVG_NS$3, "rect");
+    box.setAttribute("class", "gram-frame-region-box");
+    overlay.appendChild(box);
+    return overlay;
+  }
+  function renderRegionOverlay(overlay, view) {
+    const { rect: rect2, bounds } = view;
+    const outer = `M${bounds.left} ${bounds.top}H${bounds.right}V${bounds.bottom}H${bounds.left}Z`;
+    overlay.children[0].setAttribute("d", `${outer}${boxPath(rect2)}`);
+    sizeRect(
+      /** @type {SVGRectElement} */
+      overlay.children[1],
+      view.view
+    );
+    sizeRect(
+      /** @type {SVGRectElement} */
+      overlay.children[2],
+      rect2
+    );
+    overlay.children[1].setAttribute("visibility", sameRect(rect2, view.view) ? "hidden" : "visible");
+    while (overlay.children.length > 3 && overlay.lastChild) {
+      overlay.removeChild(overlay.lastChild);
+    }
+    overlay.appendChild(plateLabel(readoutText(view)));
+  }
+  function boxPath(rect2) {
+    return `M${rect2.x} ${rect2.y}H${rect2.x + rect2.width}V${rect2.y + rect2.height}H${rect2.x}Z`;
+  }
+  function sizeRect(element, rect2) {
+    element.setAttribute("x", String(rect2.x));
+    element.setAttribute("y", String(rect2.y));
+    element.setAttribute("width", String(rect2.width));
+    element.setAttribute("height", String(rect2.height));
+  }
+  function sameRect(a, b) {
+    return Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1;
+  }
+  function readoutText({ rect: rect2, bounds, freqSpan, timeSpan }) {
+    const text = (
+      /** @type {SVGTextElement} */
+      document.createElementNS(SVG_NS$3, "text")
+    );
+    const above = rect2.y - 6;
+    text.setAttribute("class", "gram-frame-region-readout");
+    text.setAttribute("x", String(rect2.x + rect2.width / 2));
+    text.setAttribute("y", String(above - READOUT_FONT_SIZE < bounds.top ? rect2.y + rect2.height + READOUT_FONT_SIZE + 4 : above));
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", String(READOUT_FONT_SIZE));
+    text.setAttribute("font-family", "Arial, sans-serif");
+    text.setAttribute("font-weight", "bold");
+    text.textContent = regionSpanText(freqSpan, timeSpan);
+    return text;
+  }
+  const CLICK_THRESHOLD_PX = 5;
+  const REGION_READY_CLASS = "gram-frame-region-ready";
+  const ZOOM_LIMITS = { min: MIN_ZOOM, max: MAX_ZOOM };
+  const sessions = /* @__PURE__ */ new WeakMap();
+  function viewportOf(instance) {
+    return instance.state;
+  }
+  function svgPointOf(instance, event) {
+    const svg = instance.ui.svg;
+    const rect2 = svg.getBoundingClientRect();
+    return screenToSVG(event.clientX - rect2.left, event.clientY - rect2.top, svg);
+  }
+  function drawSelection(instance, session) {
+    if (!session.overlay) {
       return;
     }
-    if (event.ctrlKey) {
-      const factor = event.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
-      zoomAtImagePoint(instance, factor, result.imageX, result.imageY);
-      event.preventDefault();
-    } else if (instance.state.zoom.level > 1) {
-      const { normalizedDeltaX } = pixelDeltaToNormalizedPan(instance, -event.deltaY, 0);
-      panByNormalized(instance, normalizedDeltaX, 0);
-      event.preventDefault();
+    const bounds = boundsFor(instance);
+    const rect2 = selectionRect(bounds, session.start, session.current);
+    const { freqSpan, timeSpan } = regionOf(instance, rect2);
+    const view = containedView(viewportOf(instance), bounds, rect2, ZOOM_LIMITS);
+    renderRegionOverlay(session.overlay, { rect: rect2, view, bounds, freqSpan, timeSpan });
+  }
+  function boundsFor(instance) {
+    return selectionBounds(viewportOf(instance), instance.ui.spectrogramImage);
+  }
+  function regionOf(instance, rect2) {
+    return rectToRegion(viewportOf(instance), instance.ui.spectrogramImage, rect2);
+  }
+  function teardown(instance, session) {
+    if (session.overlay && session.overlay.parentNode) {
+      session.overlay.parentNode.removeChild(session.overlay);
     }
+    session.overlay = null;
+    setRegionHint(instance, false);
+  }
+  function finishSelection(instance, session) {
+    const rect2 = selectionRect(boundsFor(instance), session.start, session.current);
+    teardown(instance, session);
+    if (Math.abs(rect2.movedX) < CLICK_THRESHOLD_PX && Math.abs(rect2.movedY) < CLICK_THRESHOLD_PX) {
+      return;
+    }
+    zoomToRegion(instance, regionOf(instance, rect2).region);
+  }
+  function sessionFor(instance) {
+    const existing = sessions.get(instance);
+    if (existing) {
+      return existing;
+    }
+    const origin = { x: 0, y: 0 };
+    const created = {
+      handler: new BaseDragHandler(instance, {
+        resolveTarget: () => ({ kind: "region", id: null, type: null }),
+        onDragStart: () => {
+          created.overlay = instance.ui.svg.appendChild(createRegionOverlay());
+          setRegionHint(instance, true);
+          drawSelection(instance, created);
+        },
+        onDragMove: () => drawSelection(instance, created),
+        onDragEnd: () => finishSelection(instance, created),
+        onDragCancel: () => teardown(instance, created)
+      }, null),
+      start: origin,
+      current: origin,
+      overlay: null
+    };
+    sessions.set(instance, created);
+    return created;
+  }
+  function setRegionHint(instance, ready) {
+    if (instance.ui.svg) {
+      instance.ui.svg.classList.toggle(REGION_READY_CLASS, ready);
+    }
+  }
+  function isSelectingRegion(instance) {
+    const session = sessions.get(instance);
+    return !!(session && session.handler.isDragging());
+  }
+  function startRegionSelection(instance, event) {
+    const point = svgPointOf(instance, event);
+    if (!withinBounds(point, boundsFor(instance))) {
+      return false;
+    }
+    const session = sessionFor(instance);
+    session.start = point;
+    session.current = point;
+    if (!session.handler.startDrag(null, event)) {
+      return false;
+    }
+    event.preventDefault();
+    return true;
+  }
+  function handleRegionPointerMove(instance, event) {
+    if (isSelectingRegion(instance)) {
+      const session = (
+        /** @type {RegionSession} */
+        sessions.get(instance)
+      );
+      session.current = svgPointOf(instance, event);
+      drawSelection(instance, session);
+      return true;
+    }
+    setRegionHint(instance, event.shiftKey && !hasActiveDrag(instance) && !isPlaying(instance) && withinBounds(svgPointOf(instance, event), boundsFor(instance)));
+    return false;
+  }
+  function finishRegionSelection(instance, event) {
+    if (!isSelectingRegion(instance)) {
+      return false;
+    }
+    const session = (
+      /** @type {RegionSession} */
+      sessions.get(instance)
+    );
+    session.current = svgPointOf(instance, event);
+    session.handler.endDrag(null, event);
+    return true;
+  }
+  const CLICK_SLOP_PX = 4;
+  function isClick(origin, event) {
+    return Math.abs(event.clientX - origin.x) <= CLICK_SLOP_PX && Math.abs(event.clientY - origin.y) <= CLICK_SLOP_PX;
+  }
+  const activeSeeks = /* @__PURE__ */ new WeakMap();
+  function isDragSeeking(instance) {
+    return activeSeeks.has(instance);
+  }
+  function startDragSeek(instance, event) {
+    const controller = instance.player;
+    if (event.button !== 0 || !controller || !controller.isReady() || !controller.playerState.playing) {
+      return false;
+    }
+    if (event.shiftKey) {
+      return false;
+    }
+    if (activeSeeks.has(instance)) {
+      return true;
+    }
+    controller.pause();
+    const origin = { x: event.clientX, y: event.clientY };
+    const last = { x: event.clientX, y: event.clientY };
+    const onMove = (moveEvent) => {
+      const { normalizedDeltaX, normalizedDeltaY } = pixelDeltaToNormalizedPan(
+        instance,
+        moveEvent.clientX - last.x,
+        moveEvent.clientY - last.y
+      );
+      panByNormalized(instance, normalizedDeltaX, normalizedDeltaY);
+      last.x = moveEvent.clientX;
+      last.y = moveEvent.clientY;
+    };
+    const onUp = (upEvent) => {
+      if (upEvent.button !== 0) {
+        return;
+      }
+      endDragSeek(instance, !isClick(origin, upEvent));
+    };
+    activeSeeks.set(instance, { origin, last, onMove, onUp });
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    instance.ui.container.classList.add("gram-frame-drag-seek");
+    event.preventDefault();
+    return true;
+  }
+  function endDragSeek(instance, resume = true) {
+    const seek = activeSeeks.get(instance);
+    if (!seek) {
+      return false;
+    }
+    activeSeeks.delete(instance);
+    window.removeEventListener("mousemove", seek.onMove);
+    window.removeEventListener("mouseup", seek.onUp);
+    instance.ui.container.classList.remove("gram-frame-drag-seek");
+    const controller = instance.player;
+    if (!controller || !resume) {
+      return true;
+    }
+    controller.seek(controller.playerState.viewTop);
+    controller.play().catch((error) => {
+      console.warn("GramFrame: playback could not resume after the drag:", error instanceof Error ? error.message : String(error));
+    });
+    return true;
+  }
+  function resumeFromClick(instance, origin, event) {
+    const controller = instance.player;
+    if (!controller || !controller.isReady() || controller.playerState.playing) {
+      return false;
+    }
+    if (event.button !== 0 || !origin || !isClick(origin, event)) {
+      return false;
+    }
+    controller.play().catch((error) => {
+      console.warn("GramFrame: playback could not start from the click:", error instanceof Error ? error.message : String(error));
+    });
+    return true;
   }
   function wheelPanHandler(instance) {
     if (!instance.interaction._wheelPanHandler) {
       let previousCursor = "";
       instance.interaction._wheelPanHandler = new BaseDragHandler(instance, {
-        resolveTarget: () => instance.state.zoom.level > 1 ? { kind: "pan", id: null, type: null } : null,
+        resolveTarget: () => isZoomedIn(instance) ? { kind: "pan", id: null, type: null } : null,
         onDragStart: (_target, _position, event) => {
           previousCursor = instance.ui.svg ? instance.ui.svg.style.cursor : "";
           if (event) {
@@ -2870,6 +4584,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }, null);
     }
     return instance.interaction._wheelPanHandler;
+  }
+  const WHEEL_ZOOM_STEP = 1.2;
+  function handleWheel(instance, event) {
+    const result = screenToDataWithZoom(instance, event);
+    if (!result) {
+      return;
+    }
+    if (event.ctrlKey) {
+      const factor = event.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
+      zoomAtImagePoint(instance, factor, result.imageX, result.imageY);
+      event.preventDefault();
+    } else if (isZoomedIn(instance)) {
+      const { normalizedDeltaX } = pixelDeltaToNormalizedPan(instance, -event.deltaY, 0);
+      panByNormalized(instance, normalizedDeltaX, 0);
+      event.preventDefault();
+    }
   }
   function setupEventListeners(instance) {
     const registered = [];
@@ -2923,9 +4653,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
     };
     Object.keys(instance.ui.modeButtons || {}).forEach((mode) => {
-      const button = instance.ui.modeButtons[mode];
-      if (button) {
-        listen(button, "click", () => {
+      const button2 = instance.ui.modeButtons[mode];
+      if (button2) {
+        listen(button2, "click", () => {
           instance._switchMode(
             /** @type {ModeType} */
             mode
@@ -2952,11 +4682,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       wheelPan.handleMouseMove(null, event);
       return;
     }
+    if (handleRegionPointerMove(instance, event)) {
+      return;
+    }
+    const { state } = instance;
     const result = screenToDataWithZoom(instance, event);
     if (result) {
       const { svgCoords, imageX, imageY, dataCoords } = result;
       const svgRect = instance.ui.svg.getBoundingClientRect();
-      instance.state.cursorPosition = {
+      state.cursorPosition = {
         x: event.clientX - svgRect.left,
         y: event.clientY - svgRect.top,
         svgX: svgCoords.x,
@@ -2971,12 +4705,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         instance.currentMode.handleMouseMove(event, dataCoords);
       }
     } else {
-      instance.state.cursorPosition = null;
+      state.cursorPosition = null;
+      if (acceptsOffImageDrag(instance) && instance.currentMode && typeof instance.currentMode.handleMouseMove === "function") {
+        instance.currentMode.handleMouseMove(event, unboundedDataCoords(instance, event));
+      }
     }
     dispatch(instance, { frame: true });
   }
   function handleMouseDown(instance, event) {
     setFocusedInstance(instance);
+    if (event.button === 0 && isPlayerActive(instance) && seekFromTimeAxisClick(instance, event)) {
+      event.preventDefault();
+      return;
+    }
+    if (isPlaying(instance)) {
+      startDragSeek(instance, event);
+      return;
+    }
     if (event.button === 1) {
       event.preventDefault();
       wheelPanHandler(instance).startDrag(null, event);
@@ -2988,9 +4733,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (hasActiveDrag(instance)) {
       return;
     }
+    if (event.shiftKey && startRegionSelection(instance, event)) {
+      return;
+    }
     const result = screenToDataWithZoom(instance, event);
-    if (result) {
-      const { dataCoords } = result;
+    const dataCoords = result ? result.dataCoords : acceptsOffImageDrag(instance) ? unboundedDataCoords(instance, event) : null;
+    if (dataCoords) {
       if (instance.currentMode && typeof instance.currentMode.handleMouseDown === "function") {
         instance.currentMode.handleMouseDown(event, dataCoords);
       }
@@ -3007,11 +4755,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     if (event.button !== 0) {
       return;
     }
+    if (isPlaying(instance) || isDragSeeking(instance)) {
+      return;
+    }
+    if (finishRegionSelection(instance, event)) {
+      return;
+    }
     const result = screenToDataWithZoom(instance, event);
-    if (result) {
-      const { dataCoords } = result;
+    const upCoords = result ? result.dataCoords : acceptsOffImageDrag(instance) ? unboundedDataCoords(instance, event) : null;
+    if (upCoords) {
       if (instance.currentMode && typeof instance.currentMode.handleMouseUp === "function") {
-        instance.currentMode.handleMouseUp(event, dataCoords);
+        instance.currentMode.handleMouseUp(event, upCoords);
       }
     } else if (hasActiveDrag(instance)) {
       cancelActiveDrag(instance);
@@ -3030,6 +4784,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       event.preventDefault();
       return;
     }
+    if (isPlaying(instance)) {
+      return;
+    }
     const result = screenToDataWithZoom(instance, event);
     if (result) {
       const { dataCoords } = result;
@@ -3039,6 +4796,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
   }
   function cleanupEventListeners(instance) {
+    endDragSeek(instance, false);
     const registered = instance.interaction._registeredListeners || [];
     registered.forEach(({ target, type, handler, options }) => {
       target.removeEventListener(type, handler, options);
@@ -3049,6 +4807,142 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       instance.viewport.resizeObserver = null;
     }
   }
+  const HALO_CLASS = "gram-frame-selection-halo";
+  const SELECTED_LABEL_CLASS = "gram-frame-selected-label";
+  const HALO_COLOR = "rgba(255, 255, 255, 0.6)";
+  const HALO_GROWTH = 5;
+  const ID_ATTRIBUTES = {
+    marker: "data-marker-id",
+    harmonicSet: "data-harmonic-set-id",
+    sidebandSet: "data-sideband-set-id"
+  };
+  function applySelectionHalo(instance) {
+    const group = instance.ui.cursorGroup;
+    if (!group) {
+      return;
+    }
+    clearSelectionHalo(group);
+    const selection = instance.state.selection;
+    const attribute = selection && selection.selectedType ? ID_ATTRIBUTES[selection.selectedType] : void 0;
+    if (!attribute || !selection.selectedId) {
+      return;
+    }
+    const targets = /* @__PURE__ */ new Set();
+    group.querySelectorAll(`[${attribute}="${selection.selectedId}"]`).forEach((element) => {
+      const target = topLevel(group, element);
+      if (target) {
+        targets.add(target);
+      }
+    });
+    targets.forEach((target) => decorate(group, target));
+  }
+  function topLevel(group, element) {
+    let node = element;
+    while (node.parentNode instanceof Element && node.parentNode !== group) {
+      node = node.parentNode;
+    }
+    return node.parentNode === group ? node : null;
+  }
+  function clearSelectionHalo(group) {
+    group.querySelectorAll(`.${HALO_CLASS}`).forEach((halo) => halo.remove());
+    group.querySelectorAll(`.${SELECTED_LABEL_CLASS}`).forEach((label) => {
+      label.classList.remove(SELECTED_LABEL_CLASS);
+    });
+  }
+  function decorate(group, target) {
+    plates(target).forEach((plate) => plate.classList.add(SELECTED_LABEL_CLASS));
+    const halo = buildHalo(target);
+    if (halo) {
+      group.insertBefore(halo, target);
+    }
+  }
+  function plates(target) {
+    const found = Array.from(target.querySelectorAll(".gram-frame-label-plated"));
+    return target.classList.contains("gram-frame-label-plated") ? [target, ...found] : found;
+  }
+  function buildHalo(target) {
+    if (target.classList.contains("gram-frame-label-plated")) {
+      return null;
+    }
+    const halo = (
+      /** @type {Element} */
+      target.cloneNode(true)
+    );
+    plates(halo).forEach((plate) => plate.remove());
+    const parts = [halo, ...Array.from(halo.querySelectorAll("*"))];
+    if (parts.length === 1 && halo.tagName === "g" && halo.children.length === 0) {
+      return null;
+    }
+    parts.forEach(recolour);
+    halo.setAttribute("class", HALO_CLASS);
+    return halo;
+  }
+  function recolour(element) {
+    Array.from(element.attributes).filter((attribute) => attribute.name.startsWith("data-")).forEach((attribute) => element.removeAttribute(attribute.name));
+    element.removeAttribute("class");
+    element.setAttribute("pointer-events", "none");
+    const stroke = element.getAttribute("stroke");
+    const fill = element.getAttribute("fill");
+    const width = Number(element.getAttribute("stroke-width") || 0);
+    if (fill && fill !== "none") {
+      element.setAttribute("fill", HALO_COLOR);
+    }
+    if (stroke === null && fill && fill !== "none") {
+      element.setAttribute("stroke", HALO_COLOR);
+      element.setAttribute("stroke-width", String(HALO_GROWTH));
+    } else if (stroke && stroke !== "none") {
+      element.setAttribute("stroke", HALO_COLOR);
+      element.setAttribute("stroke-width", String(width + HALO_GROWTH));
+    }
+    element.setAttribute("opacity", "1");
+  }
+  function setSelection(instance, type, id, index) {
+    setFocusedInstance(instance);
+    const state = instance.state;
+    const selection = state.selection;
+    selection.selectedType = type;
+    selection.selectedId = id;
+    selection.selectedIndex = index;
+    state.styleTarget = "selected";
+    updateSelectionVisuals(instance);
+    if (instance.interaction.syncStyleControls) {
+      instance.interaction.syncStyleControls();
+    }
+    const selected = describeSelection(instance);
+    if (selected) {
+      revealTime(instance, selected.time);
+    }
+    dispatch(instance);
+  }
+  function toggleSelection(instance, type, id, index) {
+    if (isFeatureSelected(instance, type, id)) {
+      clearSelection(instance);
+    } else {
+      setSelection(instance, type, id, index);
+    }
+  }
+  function isFeatureSelected(instance, type, id) {
+    const selection = instance.state.selection;
+    return selection.selectedType === type && selection.selectedId === id;
+  }
+  function clearSelection(instance) {
+    const state = instance.state;
+    const selection = state.selection;
+    selection.selectedType = null;
+    selection.selectedId = null;
+    selection.selectedIndex = null;
+    state.styleTarget = "new";
+    updateSelectionVisuals(instance);
+    if (instance.interaction.syncStyleControls) {
+      instance.interaction.syncStyleControls();
+    }
+    dispatch(instance);
+  }
+  function updateSelectionVisuals(instance) {
+    refreshPanels(instance);
+    refreshReadoutTarget(instance);
+    applySelectionHalo(instance);
+  }
   function setupAllEventListeners(instance) {
     setupEventListeners(instance);
     setupResizeObserver(instance);
@@ -3058,6 +4952,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       removeSidebandSet: (id) => removeSidebandSet(instance, id),
       setSelection: (type, id, index) => setSelection(instance, type, id, index),
       clearSelection: () => clearSelection(instance),
+      toggleSelection: (type, id, index) => toggleSelection(instance, type, id, index),
+      isFeatureSelected: (type, id) => isFeatureSelected(instance, type, id),
       updateSelectionVisuals: () => updateSelectionVisuals(instance),
       applyColorToSelectedFeature: (color) => applyColorToSelectedFeature(instance, color),
       applySymbolToSelectedFeature: (symbol) => applySymbolToSelectedFeature(instance, symbol),
@@ -3132,6 +5028,18 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      *   when the pointer is not over the image
      */
     updateLEDs(_coords) {
+    }
+    /**
+     * Whether a drag in this mode keeps working when the pointer is not over the
+     * gram itself.
+     *
+     * `false` for every mode that places or moves a feature: a marker has to land
+     * on the gram, so an off-image pointer is a mistake and the drag is cancelled.
+     * Panning an audio-sourced gram is the exception — see `PanMode`.
+     * @returns {boolean} True when the mode wants pointer events off the image
+     */
+    acceptsOffImageDrag() {
+      return false;
     }
     /**
      * Get guidance content for this mode
@@ -3213,7 +5121,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         imageDetails: this.instance.state.imageDetails,
         config: this.instance.state.config,
         zoom: this.instance.state.zoom,
-        rate: this.instance.state.rate
+        frequencyRate: this.instance.state.frequencyRate
       };
     }
     /**
@@ -3233,6 +5141,27 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       if (this.instance.ui.svg) {
         this.instance.ui.svg.style.cursor = style;
       }
+    }
+  }
+  function revealTableRow(wrapper, headerRow, tbody, index, allowUpward = false) {
+    const tr = (
+      /** @type {HTMLElement|undefined} */
+      tbody.children[index]
+    );
+    if (!tr) return;
+    const bottom = tr.offsetTop + tr.offsetHeight - wrapper.clientHeight;
+    if (bottom > wrapper.scrollTop) {
+      wrapper.scrollTop = bottom;
+      return;
+    }
+    if (!allowUpward) return;
+    const headerCell = (
+      /** @type {HTMLElement|null} */
+      headerRow.firstElementChild
+    );
+    const top = tr.offsetTop - (headerCell ? headerCell.offsetHeight : 0);
+    if (top < wrapper.scrollTop) {
+      wrapper.scrollTop = Math.max(0, top);
     }
   }
   function createDiffingTable(container, spec) {
@@ -3261,6 +5190,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     container.appendChild(area);
     let currentRows = [];
     let renderedKeys = /* @__PURE__ */ new Set();
+    let renderedSelectedKey = null;
     function setCellContent(cell, content) {
       if (content instanceof Node) {
         cell.replaceChildren(content);
@@ -3309,7 +5239,27 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         tbody.appendChild(buildRow(rows[i], i));
       }
     }
+    let emptyRow = null;
+    function setEmptyState(empty) {
+      if (!spec.emptyMessage) {
+        return;
+      }
+      if (!emptyRow) {
+        emptyRow = document.createElement("tr");
+        emptyRow.className = "gram-frame-table-empty";
+        const cell = document.createElement("td");
+        cell.colSpan = spec.columns.length;
+        cell.textContent = spec.emptyMessage;
+        emptyRow.appendChild(cell);
+      }
+      if (empty) {
+        tbody.appendChild(emptyRow);
+      } else if (emptyRow.parentNode) {
+        emptyRow.remove();
+      }
+    }
     function applyDiff() {
+      setEmptyState(false);
       const existing = tbody.querySelectorAll("tr");
       for (let index = 0; index < currentRows.length; index++) {
         const tr = (
@@ -3326,17 +5276,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       for (let i = currentRows.length; i < existing.length; i++) {
         existing[i].remove();
-      }
-    }
-    function revealRow(index) {
-      const tr = (
-        /** @type {HTMLElement|undefined} */
-        tbody.children[index]
-      );
-      if (!tr) return;
-      const bottom = tr.offsetTop + tr.offsetHeight - wrapper.clientHeight;
-      if (bottom > wrapper.scrollTop) {
-        wrapper.scrollTop = bottom;
       }
     }
     const rowActions = [];
@@ -3377,7 +5316,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       element: table,
       /**
        * Diff `rows` against what is rendered, apply the difference, and keep any
-       * newly added row in view.
+       * newly added or newly selected row in view.
        *
        * Idempotent: calling it twice with equal input performs no DOM writes and
        * no scrolling.
@@ -3387,6 +5326,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         currentRows = rows || [];
         const keys = currentRows.map((row, index) => spec.rowKey(row, index));
         applyDiff();
+        setEmptyState(currentRows.length === 0);
         let lastAdded = -1;
         for (let index = 0; index < keys.length; index++) {
           if (!renderedKeys.has(keys[index])) {
@@ -3394,9 +5334,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           }
         }
         if (renderedKeys.size > 0 && lastAdded !== -1) {
-          revealRow(lastAdded);
+          revealTableRow(wrapper, headerRow, tbody, lastAdded);
+        }
+        const isSelected = spec.isSelected;
+        const selectedIndex = isSelected ? keys.findIndex((key) => isSelected(key)) : -1;
+        const selectedKey = selectedIndex === -1 ? null : keys[selectedIndex];
+        if (renderedKeys.size > 0 && selectedKey !== null && selectedKey !== renderedSelectedKey) {
+          revealTableRow(wrapper, headerRow, tbody, selectedIndex, true);
         }
         renderedKeys = new Set(keys);
+        renderedSelectedKey = selectedKey;
       },
       /**
        * Remove the table and its listener.
@@ -3408,79 +5355,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       }
     };
-  }
-  function showMarkerLabelModal(currentLabel, onSave) {
-    const overlay = document.createElement("div");
-    overlay.className = "gram-frame-modal-overlay gram-frame-marker-label-modal";
-    const modal = document.createElement("div");
-    modal.className = "gram-frame-modal";
-    const header = document.createElement("div");
-    header.className = "gram-frame-modal-header";
-    const heading = document.createElement("h3");
-    heading.textContent = currentLabel ? "Edit Marker Label" : "Add Marker Label";
-    header.appendChild(heading);
-    const body = document.createElement("div");
-    body.className = "gram-frame-modal-body";
-    const inputGroup = document.createElement("div");
-    inputGroup.className = "gram-frame-modal-input-group";
-    const inputLabel = document.createElement("label");
-    inputLabel.setAttribute("for", "gram-frame-marker-label-input");
-    inputLabel.textContent = "Label:";
-    const input = document.createElement("input");
-    input.type = "text";
-    input.id = "gram-frame-marker-label-input";
-    input.className = "gram-frame-marker-label-input";
-    input.maxLength = MAX_MARKER_LABEL_LENGTH;
-    input.placeholder = "Enter a label for this marker";
-    input.value = currentLabel || "";
-    const hint = document.createElement("div");
-    hint.className = "gram-frame-modal-hint";
-    hint.textContent = "Leave empty to remove the label.";
-    inputGroup.appendChild(inputLabel);
-    inputGroup.appendChild(input);
-    inputGroup.appendChild(hint);
-    body.appendChild(inputGroup);
-    const footer = document.createElement("div");
-    footer.className = "gram-frame-modal-footer";
-    const cancelButton = document.createElement("button");
-    cancelButton.className = "gram-frame-modal-btn gram-frame-modal-cancel";
-    cancelButton.textContent = "Cancel";
-    const saveButton = document.createElement("button");
-    saveButton.className = "gram-frame-modal-btn gram-frame-modal-add gram-frame-modal-save";
-    saveButton.textContent = "Save";
-    footer.appendChild(cancelButton);
-    footer.appendChild(saveButton);
-    modal.appendChild(header);
-    modal.appendChild(body);
-    modal.appendChild(footer);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    function closeModal() {
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
-    }
-    function save() {
-      onSave(normalizeMarkerLabel(input.value));
-      closeModal();
-    }
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        save();
-      } else if (e.key === "Escape") {
-        closeModal();
-      }
-    });
-    cancelButton.addEventListener("click", closeModal);
-    saveButton.addEventListener("click", save);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) {
-        closeModal();
-      }
-    });
-    input.focus();
-    input.select();
-    return overlay;
   }
   const DEFAULT_TOLERANCE = {
     // Hit radius in rendered image pixels, applied to both axes
@@ -3504,7 +5378,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return config.fallbackDataTolerance;
     }
     const timeRange = dataConfig.timeMax - dataConfig.timeMin;
-    const freqRange = dataConfig.freqMax - dataConfig.freqMin;
+    const { freqMin, freqMax } = dataFrequencyRange(viewport);
+    const freqRange = freqMax - freqMin;
     const effectiveZoom = (zoom == null ? void 0 : zoom.level) || 1;
     return {
       time: config.pixelRadius / renderHeight * timeRange / effectiveZoom,
@@ -3539,6 +5414,49 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function getUniformTolerance(viewport, spectrogramImage) {
     return calculateDataTolerance(viewport, spectrogramImage, DEFAULT_TOLERANCE);
   }
+  const SVG_NS$2 = "http://www.w3.org/2000/svg";
+  const CROSSHAIR_SIZE = 15;
+  const MARKER_SYMBOL_SIZE = 14;
+  function drawsCrosshair(marker) {
+    return isSymbolLess(marker.symbol);
+  }
+  function markerSymbolSize(marker) {
+    return MARKER_SYMBOL_SIZE * resolveSymbolScale(marker);
+  }
+  function createCrosshair(marker, cx, cy) {
+    const arm = (x1, y1, x2, y2) => {
+      const line2 = document.createElementNS(SVG_NS$2, "line");
+      line2.setAttribute("x1", String(x1));
+      line2.setAttribute("y1", String(y1));
+      line2.setAttribute("x2", String(x2));
+      line2.setAttribute("y2", String(y2));
+      line2.setAttribute("stroke", marker.color);
+      line2.setAttribute("stroke-width", "2");
+      line2.setAttribute("stroke-linecap", "round");
+      return line2;
+    };
+    const circle = document.createElementNS(SVG_NS$2, "circle");
+    circle.setAttribute("cx", String(cx));
+    circle.setAttribute("cy", String(cy));
+    circle.setAttribute("r", "3");
+    circle.setAttribute("fill", marker.color);
+    circle.setAttribute("stroke", "#fff");
+    circle.setAttribute("stroke-width", "1");
+    return [
+      arm(cx - CROSSHAIR_SIZE, cy, cx + CROSSHAIR_SIZE, cy),
+      arm(cx, cy - CROSSHAIR_SIZE, cx, cy + CROSSHAIR_SIZE),
+      circle
+    ];
+  }
+  function createMarkerMarks(marker, cx, cy) {
+    const symbolMark = createSymbolMark(marker.symbol, cx, cy, markerSymbolSize(marker), marker.color);
+    if (!symbolMark) {
+      return createCrosshair(marker, cx, cy);
+    }
+    symbolMark.setAttribute("class", "gram-frame-marker-symbol");
+    symbolMark.setAttribute("data-marker-id", marker.id);
+    return [symbolMark];
+  }
   const SVG_NS$1 = "http://www.w3.org/2000/svg";
   function createMarkerLabel(marker, cx, cy, symbolSize) {
     if (!marker.label) {
@@ -3560,56 +5478,21 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     text.textContent = marker.label;
     return plateLabel(text);
   }
-  const SVG_NS = "http://www.w3.org/2000/svg";
   function createMarkerDeleteButton() {
-    const button = document.createElement("button");
-    button.textContent = "×";
-    button.className = "gram-frame-marker-delete-btn";
-    button.style.background = "none";
-    button.style.border = "none";
-    button.style.color = "#ff4444";
-    button.style.cursor = "pointer";
-    button.style.fontSize = "16px";
-    button.style.fontWeight = "bold";
-    return button;
-  }
-  function createMarkerLabelButton(marker) {
-    const button = document.createElement("button");
-    button.className = "gram-frame-marker-label-btn";
-    button.title = marker.label ? `Edit label: ${marker.label}` : "Add label";
-    button.setAttribute("aria-label", button.title);
-    const icon = document.createElementNS(SVG_NS, "svg");
-    icon.setAttribute("viewBox", "0 0 16 16");
-    icon.setAttribute("width", "13");
-    icon.setAttribute("height", "13");
-    icon.setAttribute("aria-hidden", "true");
-    const body = document.createElementNS(SVG_NS, "path");
-    body.setAttribute("d", "M8.5 1H15v6.5L7.5 15 1 8.5 8.5 1z");
-    body.setAttribute("fill", "none");
-    body.setAttribute("stroke", "currentColor");
-    body.setAttribute("stroke-width", "1.6");
-    body.setAttribute("stroke-linejoin", "round");
-    const hole = document.createElementNS(SVG_NS, "circle");
-    hole.setAttribute("cx", "11.5");
-    hole.setAttribute("cy", "4.5");
-    hole.setAttribute("r", "1.2");
-    hole.setAttribute("fill", "currentColor");
-    icon.appendChild(body);
-    icon.appendChild(hole);
-    button.appendChild(icon);
-    return button;
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.textContent = "×";
+    button2.className = "gram-frame-marker-delete-btn";
+    button2.title = "Delete marker";
+    return button2;
   }
   function createMarkerLabelCell(marker) {
-    const content = document.createElement("div");
-    content.className = "gram-frame-marker-label-content";
     const text = document.createElement("span");
     text.className = "gram-frame-marker-label-text";
     text.textContent = formatMarkerLabelForTable(marker.label);
-    content.appendChild(text);
-    content.appendChild(createMarkerLabelButton(marker));
-    return content;
+    return text;
   }
-  const _AnalysisMode = class _AnalysisMode extends BaseMode {
+  class AnalysisMode extends BaseMode {
     /**
      * Initialize AnalysisMode with drag handler
      * @param {GramFrame} instance - GramFrame instance
@@ -3716,12 +5599,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     getGuidanceText() {
       return {
-        title: "Cross Cursor Mode",
         items: [
-          "Click to place persistent markers",
-          "Drag existing markers to reposition them",
-          "Right-click markers to delete them",
-          "Click table row + arrow keys (Shift for larger steps)"
+          { trigger: "Click", outcome: "to add a persistent cross" },
+          { trigger: "Drag", outcome: "an existing cross to reposition it" },
+          { trigger: "Right-click", outcome: "a cross to delete it" },
+          { trigger: "Row + ← →", outcome: "to nudge (Shift for larger steps)" }
         ]
       };
     }
@@ -3821,9 +5703,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       const existingMarkers = this.instance.ui.cursorGroup.querySelectorAll(".gram-frame-analysis-marker");
       existingMarkers.forEach((marker) => marker.remove());
-      this.markers.forEach((marker) => {
-        this.renderMarker(marker);
-      });
+      this.markers.forEach((marker) => this.renderMarker(marker));
     }
     /**
      * Render a single marker as a crosshair
@@ -3840,40 +5720,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const markerGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       markerGroup.setAttribute("class", "gram-frame-analysis-marker");
       markerGroup.setAttribute("data-marker-id", marker.id);
-      const symbolSize = _AnalysisMode.MARKER_SYMBOL_SIZE * resolveSymbolScale(marker);
-      const symbolMark = createSymbolMark(marker.symbol, currentX, currentY, symbolSize, marker.color);
-      if (symbolMark) {
-        symbolMark.setAttribute("class", "gram-frame-marker-symbol");
-        symbolMark.setAttribute("data-marker-id", marker.id);
-        markerGroup.appendChild(symbolMark);
-      } else {
-        const crosshairSize = 15;
-        const hLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        hLine.setAttribute("x1", String(currentX - crosshairSize));
-        hLine.setAttribute("y1", String(currentY));
-        hLine.setAttribute("x2", String(currentX + crosshairSize));
-        hLine.setAttribute("y2", String(currentY));
-        hLine.setAttribute("stroke", marker.color);
-        hLine.setAttribute("stroke-width", "2");
-        hLine.setAttribute("stroke-linecap", "round");
-        const vLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        vLine.setAttribute("x1", String(currentX));
-        vLine.setAttribute("y1", String(currentY - crosshairSize));
-        vLine.setAttribute("x2", String(currentX));
-        vLine.setAttribute("y2", String(currentY + crosshairSize));
-        vLine.setAttribute("stroke", marker.color);
-        vLine.setAttribute("stroke-width", "2");
-        vLine.setAttribute("stroke-linecap", "round");
-        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        circle.setAttribute("cx", String(currentX));
-        circle.setAttribute("cy", String(currentY));
-        circle.setAttribute("r", "3");
-        circle.setAttribute("fill", marker.color);
-        circle.setAttribute("stroke", "#fff");
-        circle.setAttribute("stroke-width", "1");
-        markerGroup.appendChild(hLine);
-        markerGroup.appendChild(vLine);
-        markerGroup.appendChild(circle);
+      const symbolSize = markerSymbolSize(marker);
+      for (const mark of createMarkerMarks(marker, currentX, currentY)) {
+        markerGroup.appendChild(mark);
       }
       const label = createMarkerLabel(marker, currentX, currentY, symbolSize);
       if (label) {
@@ -3909,18 +5758,19 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return;
       }
       this.markersTable = createDiffingTable(markersContainer, {
-        // Widths rebalanced when the label button moved into the Label cell: that
-        // column now has to hold an icon as well as the text, and the actions
-        // column no longer stacks two controls, so 3% moves from each of Time,
-        // Freq and actions to Label. Time and Freq both show five characters
-        // ("00:42", "24.71") and still have room for them.
+        // The only five-column table in the panel, and it sits in the narrowest
+        // of the three columns, so the tracks are deliberately tight. Time and
+        // Freq both show five characters ("00:42", "24.71") and are right-aligned
+        // and tabular; the units moved out of the headings, which had to carry
+        // "Time (mm:ss)" across 23% of a third of the tables' width.
         columns: [
-          { label: "", width: "12%", cellClassName: "gram-frame-marker-color" },
-          { label: "Label", width: "30%", cellClassName: "gram-frame-marker-label-cell" },
-          { label: "Time (mm:ss)", width: "23%" },
-          { label: "Freq (Hz)", width: "23%" },
-          { label: "", width: "12%" }
+          { label: "", width: "10%", cellClassName: "gram-frame-marker-color" },
+          { label: "Label", width: "32%", cellClassName: "gram-frame-marker-label-cell" },
+          { label: "Time", width: "24%", cellClassName: "gram-frame-cell-numeric" },
+          { label: "Freq", width: "24%", cellClassName: "gram-frame-cell-numeric" },
+          { label: "", width: "10%", cellClassName: "gram-frame-cell-action" }
         ],
+        emptyMessage: "Click the gram to add a cross",
         rowAttribute: "data-marker-id",
         rowKey: (marker) => marker.id,
         cells: (marker) => [
@@ -3936,22 +5786,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           createMarkerDeleteButton()
         ],
         deleteSelector: ".gram-frame-marker-delete-btn",
-        actions: [
-          {
-            selector: ".gram-frame-marker-label-btn",
-            handler: (markerId) => this.editMarkerLabel(markerId)
-          }
-        ],
-        onSelect: (markerId, _marker, index) => {
-          const selection = this.instance.state.selection;
-          if (selection.selectedType === "marker" && selection.selectedId === markerId) {
-            this.instance.interaction.clearSelection();
-          } else {
-            this.instance.interaction.setSelection("marker", markerId, index);
-          }
-        },
+        onSelect: (markerId, _marker, index) => this.instance.interaction.toggleSelection("marker", markerId, index),
         onDelete: (markerId) => this.removeMarker(markerId),
-        isSelected: (markerId) => this.instance.state.selection.selectedType === "marker" && this.instance.state.selection.selectedId === markerId
+        isSelected: (markerId) => this.instance.interaction.isFeatureSelected("marker", markerId)
       });
       this.uiElements.markersTable = this.markersTable.element;
       this.updateMarkersTable();
@@ -3995,18 +5832,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @param {AnalysisMarker} marker - Marker object with all properties
      */
     addMarker(marker) {
-      if (!this.instance.state.analysis) {
-        this.instance.state.analysis = { markers: [] };
+      const state = this.instance.state;
+      if (!state.analysis) {
+        state.analysis = { markers: [] };
       }
-      this.instance.state.analysis.markers.push(marker);
-      markAnnotationsChanged(this.instance);
-      const index = this.instance.state.analysis.markers.length - 1;
+      state.analysis.markers.push(marker);
+      const index = state.analysis.markers.length - 1;
       this.instance.interaction.setSelection("marker", marker.id, index);
-      this.updateMarkersTable();
-      if (this.instance.featureRenderer) {
-        this.instance.featureRenderer.renderAllPersistentFeatures();
-      }
-      dispatch(this.instance, { frame: true });
+      commitAnnotationChange(this.instance, () => this.updateMarkersTable(), { frame: true });
     }
     /**
      * Remove a marker by ID
@@ -4016,29 +5849,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const markers = this.markers;
       const index = markers.findIndex((m) => m.id === markerId);
       if (index !== -1) {
-        if (this.instance.state.selection.selectedType === "marker" && this.instance.state.selection.selectedId === markerId) {
+        if (this.instance.interaction.isFeatureSelected("marker", markerId)) {
           this.instance.interaction.clearSelection();
         }
         markers.splice(index, 1);
-        markAnnotationsChanged(this.instance);
-        this.updateMarkersTable();
-        if (this.instance.featureRenderer) {
-          this.instance.featureRenderer.renderAllPersistentFeatures();
-        }
-        dispatch(this.instance, { frame: true });
+        recordDeletion(this.instance, "markers", markerId);
+        commitAnnotationChange(this.instance, () => this.updateMarkersTable(), { frame: true });
       }
-    }
-    /**
-     * Open the label dialog for a marker (feature 231).
-     *
-     * Does nothing when the marker has gone — a row's controls are rebuilt from
-     * state, but a click can still race a deletion.
-     * @param {string} markerId - ID of the marker to label
-     */
-    editMarkerLabel(markerId) {
-      const marker = this.findMarker(markerId);
-      if (!marker) return;
-      showMarkerLabelModal(marker.label, (label) => this.setMarkerLabel(markerId, label));
     }
     /**
      * Set (or clear) a marker's label and re-render everything that shows it.
@@ -4057,12 +5874,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       } else {
         delete marker.label;
       }
-      markAnnotationsChanged(this.instance);
-      this.updateMarkersTable();
-      if (this.instance.featureRenderer) {
-        this.instance.featureRenderer.renderAllPersistentFeatures();
-      }
-      dispatch(this.instance);
+      commitAnnotationChange(this.instance, () => this.updateMarkersTable());
     }
     /**
      * Find marker at given position (with tolerance)
@@ -4080,10 +5892,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         )) {
           return true;
         }
+        if (!drawsCrosshair(candidate)) {
+          return false;
+        }
         const markerPoint = { freq: candidate.freq, time: candidate.time };
         const markerSVG = dataToSVG(markerPoint, this.getViewport(), this.instance.ui.spectrogramImage);
         const clickSVG = dataToSVG(position, this.getViewport(), this.instance.ui.spectrogramImage);
-        const crosshairSize = 15;
+        const crosshairSize = CROSSHAIR_SIZE;
         const lineThickness = 3;
         const onHorizontalLine = Math.abs(clickSVG.y - markerSVG.y) <= lineThickness && Math.abs(clickSVG.x - markerSVG.x) <= crosshairSize;
         const onVerticalLine = Math.abs(clickSVG.x - markerSVG.x) <= lineThickness && Math.abs(clickSVG.y - markerSVG.y) <= crosshairSize;
@@ -4120,16 +5935,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     resetState() {
     }
-  };
-  /**
-   * Base pixel size (width/height) of a marker's symbol mark when it carries a
-   * shaped symbol (feature 161). Roughly matches the crosshair's visual weight.
-   * The drawn size is this scaled by the temporary "Large" toggle, so a
-   * marker's symbol tracks the harmonic pins' symbols.
-   * @type {number}
-   */
-  __publicField(_AnalysisMode, "MARKER_SYMBOL_SIZE", 14);
-  let AnalysisMode = _AnalysisMode;
+  }
   const MAX_VISIBLE_PINS = 25;
   const NICE_STEPS = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1e3, 2500, 5e3];
   function countMultiples(minHarmonic, maxHarmonic, step) {
@@ -4156,7 +5962,64 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return { step, harmonics };
   }
   const MIN_PIN_SPACING = 0.1;
-  const _PinSetMode = class _PinSetMode extends BaseMode {
+  class PinSetMode extends BaseMode {
+    /**
+     * Base pixel size (width/height) of a pin's symbol mark. The effective size is
+     * this scaled by the "Large" symbol-size experiment toggle — use
+     * {@link PinSetMode#symbolSize} rather than reading this directly.
+     * @type {number}
+     */
+    static SYMBOL_SIZE = 10;
+    /**
+     * Height of a pin line, as a fraction of the *base* (unzoomed) render height.
+     *
+     * The resulting height is a fixed pixel length, not a span of time: it is
+     * derived from the viewport's base render size (which tracks expand, not zoom)
+     * rather than from the zoomed image element. Pins therefore keep the same
+     * on-screen height at every zoom level, growing/shrinking only when the
+     * component itself is resized.
+     * @type {number}
+     */
+    static PIN_HEIGHT_RATIO = 0.2;
+    /**
+     * Height (px) of a mini-pin: the stub line drawn under each member of a set
+     * whose full pin is hidden.
+     *
+     * Fixed rather than derived, by design (spec: issue #232). It is half the
+     * height of a "Large" symbol mark (SYMBOL_SIZE * LARGE_SYMBOL_SCALE = 20px),
+     * which is enough to tie each pin to the data beneath it without reinstating
+     * the clutter the pin toggle exists to remove.
+     * @type {number}
+     */
+    static MINI_PIN_HEIGHT = 10;
+    /**
+     * Maximum pin lines rendered per set. At the 0.1 Hz minimum spacing a
+     * standard 0–20 kHz config has 200,000 visible members; drawing an SVG line
+     * for each — rebuilt on every drag frame — locked the browser (BH-2). Past
+     * this cap the drawn lines are a regular sample of the range; well beyond
+     * typical screen widths, adjacent pins merge on screen anyway, so the thinning
+     * is invisible until the set is already a solid block.
+     * @type {number}
+     */
+    static MAX_PIN_LINES = 1e3;
+    /**
+     * Font size (px) of a pin's number label. The plate the label sits on is
+     * sized from it too, so it also fixes how much room the stack leaves above
+     * and below the text (see `utils/labelPlate.js`).
+     * @type {number}
+     */
+    static LABEL_FONT_SIZE = 12;
+    /**
+     * Vertical gap (px) between the edge of the pin label's plate and its symbol.
+     * @type {number}
+     */
+    static LABEL_GAP = 3;
+    /**
+     * Minimum padding (px) kept between the top of a pin's label and the top edge
+     * of the spectrogram image.
+     * @type {number}
+     */
+    static STACK_TOP_PAD = 1;
     /**
      * Wire up the one drag handler both pin-set drags run through.
      *
@@ -4213,6 +6076,21 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     get selectionType() {
       throw new Error(`${this.constructor.name} must implement the "selectionType" getter`);
+    }
+    /**
+     * Which stored collection this mode's sets live in, and therefore which
+     * tombstone family a deletion belongs to (issue #269).
+     *
+     * Derived from `selectionType` rather than declared again: the two are the
+     * same fact -- `harmonicSet` sets live in `harmonicSets` -- and a subclass
+     * that had to state both could state them inconsistently.
+     * @returns {'harmonicSets'|'sidebandSets'} Stored collection name
+     */
+    get tombstoneCollection() {
+      return (
+        /** @type {'harmonicSets'|'sidebandSets'} */
+        `${this.selectionType}s`
+      );
     }
     /**
      * Prefix for generated set ids, and the DOM naming stem for this mode's pins.
@@ -4443,7 +6321,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     addSet(geometry) {
       const id = `${this.pinNames.idPrefix}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-      const palette = _PinSetMode.SET_COLORS;
+      const palette = PinSetMode.SET_COLORS;
       const color = this.instance.state.selectedColor || palette[this.sets.length % palette.length];
       const set = (
         /** @type {PinSet} */
@@ -4462,13 +6340,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       );
       this.sets.push(set);
-      markAnnotationsChanged(this.instance);
       this.instance.interaction.setSelection(this.selectionType, set.id, this.sets.length - 1);
-      this.updatePanel();
-      if (this.instance.featureRenderer) {
-        this.instance.featureRenderer.renderAllPersistentFeatures();
-      }
-      dispatch(this.instance, { frame: true });
+      commitAnnotationChange(this.instance, () => this.updatePanel(), { frame: true });
       return set;
     }
     /**
@@ -4482,12 +6355,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return;
       }
       Object.assign(this.sets[setIndex], updates);
-      markAnnotationsChanged(this.instance);
-      this.updatePanel();
-      if (this.instance.featureRenderer) {
-        this.instance.featureRenderer.renderAllPersistentFeatures();
-      }
-      dispatch(this.instance, { frame: true });
+      commitAnnotationChange(this.instance, () => this.updatePanel(), { frame: true });
     }
     /**
      * Remove a set.
@@ -4503,22 +6371,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         this.instance.interaction.clearSelection();
       }
       this.sets.splice(setIndex, 1);
-      markAnnotationsChanged(this.instance);
-      this.updatePanel();
-      if (this.instance.featureRenderer) {
-        this.instance.featureRenderer.renderAllPersistentFeatures();
-      }
-      dispatch(this.instance);
+      recordDeletion(this.instance, this.tombstoneCollection, id);
+      commitAnnotationChange(this.instance, () => this.updatePanel());
     }
     /**
-     * The frequency-axis half of a keyboard nudge: what an arrow key worth of
-     * horizontal movement changes.
+     * Nudging a set's spacing with the arrow keys.
      *
-     * The default adjusts the spacing, which is what both pin-set modes want. A
-     * mode overrides it to change the floor, or to nudge something else.
+     * The floor is `MIN_PIN_SPACING`, the same one `freqUpdatesForDrag` clamps a
+     * *drag* to. HarmonicsMode used to override this method for no other reason
+     * than to raise its own floor to 1 Hz, so the same set reached 0.1 Hz under
+     * the mouse and stopped at 1.0 Hz under the arrow keys -- the drift the
+     * August review predicted and the September one found (R9-13). The 1 Hz
+     * comment cited a hang; that class of failure is held by `MAX_PIN_LINES`
+     * now, which is what makes a full-width drag to the floor safe, and a
+     * keypress at a time is gentler than a drag.
      * @param {PinSet} set - The set being nudged
      * @param {number} freqDelta - What the keypress is worth in Hz, signed
-     * @returns {Partial<PinSet>} Updates to apply
+     * @returns {Partial<PinSet>} Spacing update
      */
     nudgeFreqUpdates(set, freqDelta) {
       return { spacing: Math.max(MIN_PIN_SPACING, set.spacing + freqDelta) };
@@ -4561,7 +6430,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         const labelled = this.labelledIndices(minIndex, maxIndex);
         const pinDrawn = set.showPin !== false;
         const lineFrom = pinDrawn ? lineTop : stack.symbolBottom;
-        const lineTo = lineFrom + (pinDrawn ? lineHeight : _PinSetMode.MINI_PIN_HEIGHT);
+        const lineTo = lineFrom + (pinDrawn ? lineHeight : PinSetMode.MINI_PIN_HEIGHT);
         const tolerance = getUniformTolerance(this.getViewport(), this.instance.ui.spectrogramImage);
         const cursorSVG = dataToSVG(
           { freq, time },
@@ -4625,19 +6494,21 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * The height is a fixed pixel length taken from the *base* (unzoomed) render
      * height, so a pin covers the same number of screen pixels no matter how far
      * the user has zoomed in — it is not a span of time that stretches with the
-     * image. Only the centre is zoom-aware: the pin stays centred on the set's
-     * anchor time (the original click location), so it tracks the feature while
-     * keeping a constant height.
+     * image. Only the top is zoom-aware: the pin hangs from the set's anchor
+     * time (the original click location), so it tracks the feature while keeping
+     * a constant height. The anchor is the symbol/pin junction — the point the
+     * analyst aimed at — whichever pin style is on, so pin height never moves
+     * where the feature lands (issue #284).
      *
      * @param {PinSet} set - The set being drawn
      * @returns {{lineHeight: number, lineTop: number}} Fixed pixel height and top Y position
      */
     pinLineDimensions(set) {
       const { renderHeight } = getRenderDimensions(this.instance.state);
-      const lineHeight = renderHeight * _PinSetMode.PIN_HEIGHT_RATIO;
+      const lineHeight = renderHeight * PinSetMode.PIN_HEIGHT_RATIO;
       const anchorPoint = { freq: this.freqForIndex(set, 1), time: set.anchorTime };
       const anchorSVG = dataToSVG(anchorPoint, this.getViewport(), this.instance.ui.spectrogramImage);
-      const lineTop = anchorSVG.y - lineHeight / 2;
+      const lineTop = anchorSVG.y;
       return { lineHeight, lineTop };
     }
     /**
@@ -4659,7 +6530,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {number} Symbol diameter in px
      */
     symbolSize(set) {
-      return _PinSetMode.SYMBOL_SIZE * resolveSymbolScale(set);
+      return PinSetMode.SYMBOL_SIZE * resolveSymbolScale(set);
     }
     /**
      * Compute the shared vertical layout of a pin's label/symbol stack.
@@ -4683,13 +6554,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     labelStackPositions(lineTop, imageTop, set) {
       const r = this.symbolSize(set) / 2;
-      const gap = _PinSetMode.LABEL_GAP;
-      const plate = labelPlateExtents(_PinSetMode.LABEL_FONT_SIZE);
+      const gap = PinSetMode.LABEL_GAP;
+      const plate = labelPlateExtents(PinSetMode.LABEL_FONT_SIZE);
       const below = labelSitsBelowSymbol(set.symbol);
       let symbolCy = lineTop - r;
       let labelY = below ? symbolCy + r + gap + plate.above : symbolCy - r - gap - plate.below;
       const stackTop = below ? symbolCy - r : labelY - plate.above;
-      const minTop = imageTop + _PinSetMode.STACK_TOP_PAD;
+      const minTop = imageTop + PinSetMode.STACK_TOP_PAD;
       if (stackTop < minTop) {
         const shift = minTop - stackTop;
         symbolCy += shift;
@@ -4722,7 +6593,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const r = this.symbolSize(set) / 2;
       const below = labelSitsBelowSymbol(set.symbol);
       const symbolBottom = symbolCy + r;
-      const plate = labelPlateExtents(_PinSetMode.LABEL_FONT_SIZE);
+      const plate = labelPlateExtents(PinSetMode.LABEL_FONT_SIZE);
       return {
         // The top of the label's plate — unless the label hangs below, in which
         // case the symbol leads the stack.
@@ -4746,7 +6617,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {number} Half-width in SVG pixels
      */
     labelStackHalfWidth(set, index) {
-      const fontSize = _PinSetMode.LABEL_FONT_SIZE;
+      const fontSize = PinSetMode.LABEL_FONT_SIZE;
       const plate = labelPlateRect({
         x: 0,
         y: 0,
@@ -4770,19 +6641,19 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     createPinLine(index, set, lineX, lineTop, lineHeight) {
       const names = this.pinNames;
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("class", names.lineClass);
-      line.setAttribute(names.setIdAttribute, set.id);
-      line.setAttribute(names.indexAttribute, String(index));
-      line.setAttribute("x1", String(lineX));
-      line.setAttribute("y1", String(lineTop));
-      line.setAttribute("x2", String(lineX));
-      line.setAttribute("y2", String(lineTop + lineHeight));
-      line.setAttribute("stroke", set.color);
-      line.setAttribute("stroke-width", "2");
-      line.setAttribute("stroke-linecap", "round");
-      line.setAttribute("opacity", "0.9");
-      return line;
+      const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line2.setAttribute("class", names.lineClass);
+      line2.setAttribute(names.setIdAttribute, set.id);
+      line2.setAttribute(names.indexAttribute, String(index));
+      line2.setAttribute("x1", String(lineX));
+      line2.setAttribute("y1", String(lineTop));
+      line2.setAttribute("x2", String(lineX));
+      line2.setAttribute("y2", String(lineTop + lineHeight));
+      line2.setAttribute("stroke", set.color);
+      line2.setAttribute("stroke-width", "2");
+      line2.setAttribute("stroke-linecap", "round");
+      line2.setAttribute("opacity", "0.9");
+      return line2;
     }
     /**
      * Create the short stub line drawn under a member when the set's full pin is
@@ -4800,7 +6671,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {SVGLineElement} SVG line element
      */
     createMiniPin(index, set, lineX, top) {
-      const miniPin = this.createPinLine(index, set, lineX, top, _PinSetMode.MINI_PIN_HEIGHT);
+      const miniPin = this.createPinLine(index, set, lineX, top, PinSetMode.MINI_PIN_HEIGHT);
       miniPin.setAttribute("class", this.pinNames.miniPinClass);
       return miniPin;
     }
@@ -4836,7 +6707,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       label.setAttribute("x", String(lineX));
       label.setAttribute("y", String(labelY));
       label.setAttribute("text-anchor", "middle");
-      label.setAttribute("font-size", String(_PinSetMode.LABEL_FONT_SIZE));
+      label.setAttribute("font-size", String(PinSetMode.LABEL_FONT_SIZE));
       label.setAttribute("font-weight", "bold");
       label.setAttribute("font-family", "Arial, sans-serif");
       label.textContent = this.labelTextFor(index);
@@ -4883,7 +6754,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const existingLines = this.instance.ui.cursorGroup.querySelectorAll(
         `.${names.lineClass}, .${names.miniPinClass}`
       );
-      existingLines.forEach((line) => line.remove());
+      existingLines.forEach((line2) => line2.remove());
       const existingSymbols = this.instance.ui.cursorGroup.querySelectorAll(
         `.gram-frame-harmonic-symbol[${names.setIdAttribute}]`
       );
@@ -4921,12 +6792,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const { symbolCy, labelY } = this.labelStackPositions(lineTop, imageTop, set);
       const pinDrawn = set.showPin !== false;
       const visibleCount = maxIndex - minIndex + 1;
-      const stride = Math.max(1, Math.ceil(visibleCount / _PinSetMode.MAX_PIN_LINES));
+      const stride = Math.max(1, Math.ceil(visibleCount / PinSetMode.MAX_PIN_LINES));
       const miniPinTop = symbolCy + this.symbolSize(set) / 2;
       for (let index = minIndex; index <= maxIndex; index += stride) {
         const lineX = this.pinX(set, index);
-        const line = pinDrawn ? this.createPinLine(index, set, lineX, lineTop, lineHeight) : this.createMiniPin(index, set, lineX, miniPinTop);
-        this.instance.ui.cursorGroup.appendChild(line);
+        const line2 = pinDrawn ? this.createPinLine(index, set, lineX, lineTop, lineHeight) : this.createMiniPin(index, set, lineX, miniPinTop);
+        this.instance.ui.cursorGroup.appendChild(line2);
       }
       this.labelledIndices(minIndex, maxIndex).forEach((index) => {
         const lineX = this.pinX(set, index);
@@ -4938,70 +6809,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         this.instance.ui.cursorGroup.appendChild(label);
       });
     }
-  };
-  /**
-   * Base pixel size (width/height) of a pin's symbol mark. The effective size is
-   * this scaled by the "Large" symbol-size experiment toggle — use
-   * {@link PinSetMode#symbolSize} rather than reading this directly.
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "SYMBOL_SIZE", 10);
-  /**
-   * Height of a pin line, as a fraction of the *base* (unzoomed) render height.
-   *
-   * The resulting height is a fixed pixel length, not a span of time: it is
-   * derived from the viewport's base render size (which tracks expand, not zoom)
-   * rather than from the zoomed image element. Pins therefore keep the same
-   * on-screen height at every zoom level, growing/shrinking only when the
-   * component itself is resized.
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "PIN_HEIGHT_RATIO", 0.2);
-  /**
-   * Height (px) of a mini-pin: the stub line drawn under each member of a set
-   * whose full pin is hidden.
-   *
-   * Fixed rather than derived, by design (spec: issue #232). It is half the
-   * height of a "Large" symbol mark (SYMBOL_SIZE * LARGE_SYMBOL_SCALE = 20px),
-   * which is enough to tie each pin to the data beneath it without reinstating
-   * the clutter the pin toggle exists to remove.
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "MINI_PIN_HEIGHT", 10);
-  /**
-   * Maximum pin lines rendered per set. At the 0.1 Hz minimum spacing a
-   * standard 0–20 kHz config has 200,000 visible members; drawing an SVG line
-   * for each — rebuilt on every drag frame — locked the browser (BH-2). Past
-   * this cap the drawn lines are a regular sample of the range; well beyond
-   * typical screen widths, adjacent pins merge on screen anyway, so the thinning
-   * is invisible until the set is already a solid block.
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "MAX_PIN_LINES", 1e3);
-  /**
-   * Font size (px) of a pin's number label. The plate the label sits on is
-   * sized from it too, so it also fixes how much room the stack leaves above
-   * and below the text (see `utils/labelPlate.js`).
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "LABEL_FONT_SIZE", 12);
-  /**
-   * Vertical gap (px) between the edge of the pin label's plate and its symbol.
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "LABEL_GAP", 3);
-  /**
-   * Minimum padding (px) kept between the top of a pin's label and the top edge
-   * of the spectrogram image.
-   * @type {number}
-   */
-  __publicField(_PinSetMode, "STACK_TOP_PAD", 1);
-  /**
-   * Colour palette used when the style panel offers no explicit choice.
-   * @type {string[]}
-   */
-  __publicField(_PinSetMode, "SET_COLORS", ["#ff6b6b", "#2ecc71", "#f39c12", "#9b59b6", "#ffc93c", "#ff9ff3", "#45b7d1", "#e67e22"]);
-  let PinSetMode = _PinSetMode;
+    /**
+     * Colour palette used when the style panel offers no explicit choice.
+     * @type {string[]}
+     */
+    static SET_COLORS = ["#ff6b6b", "#2ecc71", "#f39c12", "#9b59b6", "#ffc93c", "#ff9ff3", "#45b7d1", "#e67e22"];
+  }
   const panelTables$1 = /* @__PURE__ */ new WeakMap();
   function createSymbolSwatch(harmonicSet) {
     return createColorIndicator(harmonicSet.symbol, harmonicSet.color);
@@ -5013,47 +6826,55 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     colorDiv.appendChild(createSymbolSwatch(harmonicSet));
     return colorDiv;
   }
+  function createSpacingCellContent(harmonicSet) {
+    const wrapper = document.createElement("span");
+    wrapper.textContent = `${harmonicSet.spacing.toFixed(2)} `;
+    const unit = document.createElement("span");
+    unit.className = "gram-frame-cell-unit";
+    unit.textContent = "Hz";
+    wrapper.appendChild(unit);
+    return wrapper;
+  }
   function formatRatio(harmonicSet, instance) {
-    if (instance.state.cursorPosition && instance.state.cursorPosition.freq > 0) {
-      return (instance.state.cursorPosition.freq / harmonicSet.spacing).toFixed(3);
+    const cursor = instance.state.cursorPosition;
+    if (cursor && cursor.freq > 0) {
+      return (cursor.freq / harmonicSet.spacing).toFixed(3);
     }
     return "5.000";
   }
   function createHarmonicDeleteButton(harmonicSet) {
-    const button = document.createElement("button");
-    button.className = "gram-frame-harmonic-delete";
-    button.setAttribute("data-harmonic-id", harmonicSet.id);
-    button.title = "Delete harmonic set";
-    button.textContent = "×";
-    return button;
+    const button2 = document.createElement("button");
+    button2.className = "gram-frame-harmonic-delete";
+    button2.setAttribute("data-harmonic-id", harmonicSet.id);
+    button2.title = "Delete harmonic set";
+    button2.textContent = "×";
+    return button2;
   }
   function createHarmonicPanel(container, instance) {
     const table = createDiffingTable(container, {
       columns: [
-        { label: "", width: "15%" },
-        { label: "Spacing (Hz)", width: "35%", cellClassName: "gram-frame-harmonic-spacing" },
-        { label: "Ratio", width: "35%", cellClassName: "gram-frame-harmonic-rate" },
-        { label: "", width: "15%" }
+        { label: "", width: "14%" },
+        // "Hz" rides each value rather than the heading: the unit belongs to the
+        // number, and the heading is what an analyst scans down the row of three
+        // tables to find the right one.
+        { label: "Spacing", width: "40%", cellClassName: "gram-frame-harmonic-spacing" },
+        { label: "Ratio", width: "32%", cellClassName: "gram-frame-harmonic-ratio gram-frame-cell-numeric" },
+        { label: "", width: "14%", cellClassName: "gram-frame-cell-action" }
       ],
+      emptyMessage: "Drag on the gram to add a harmonic set",
       rowAttribute: "data-harmonic-id",
       rowClassName: "gram-frame-harmonic-row",
       rowKey: (harmonicSet) => harmonicSet.id,
       cells: (harmonicSet) => [
         createColorCellContent$1(harmonicSet),
-        harmonicSet.spacing.toFixed(2),
+        createSpacingCellContent(harmonicSet),
         formatRatio(harmonicSet, instance),
         createHarmonicDeleteButton(harmonicSet)
       ],
       deleteSelector: ".gram-frame-harmonic-delete",
-      onSelect: (harmonicSetId, _harmonicSet, index) => {
-        if (instance.state.selection.selectedType === "harmonicSet" && instance.state.selection.selectedId === harmonicSetId) {
-          instance.interaction.clearSelection();
-        } else {
-          instance.interaction.setSelection("harmonicSet", harmonicSetId, index);
-        }
-      },
+      onSelect: (harmonicSetId, _harmonicSet, index) => instance.interaction.toggleSelection("harmonicSet", harmonicSetId, index),
       onDelete: (harmonicSetId) => instance.interaction.removeHarmonicSet(harmonicSetId),
-      isSelected: (harmonicSetId) => instance.state.selection.selectedType === "harmonicSet" && instance.state.selection.selectedId === harmonicSetId
+      isSelected: (harmonicSetId) => instance.interaction.isFeatureSelected("harmonicSet", harmonicSetId)
     });
     const panel = (
       /** @type {HTMLElement} */
@@ -5072,6 +6893,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     table.update(instance.state.harmonics.harmonicSets);
   }
+  const MIN_MANUAL_SPACING = 0.1;
   function calculateVisibleTimePeriodCenter(state, instance) {
     const ZOOM_EPSILON = 1e-3;
     if (Math.abs(state.zoom.level - 1) < ZOOM_EPSILON) {
@@ -5082,46 +6904,59 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   }
   function showManualHarmonicModal(state, addHarmonicSet, instance) {
     const overlay = document.createElement("div");
-    overlay.className = "gram-frame-modal-overlay";
+    overlay.className = "gram-frame-modal-overlay gram-frame-manual-harmonic-modal";
     const modal = document.createElement("div");
     modal.className = "gram-frame-modal";
-    modal.innerHTML = `
-    <div class="gram-frame-modal-header">
-      <h3>Add Manual Harmonics</h3>
-    </div>
-    <div class="gram-frame-modal-body">
-      <label for="harmonic-spacing-input">Harmonic spacing (Hz):</label>
-      <input type="number" id="harmonic-spacing-input" min="0.1" step="0.1" placeholder="Enter spacing in Hz">
-      <div class="gram-frame-modal-error" id="spacing-error" style="display: none; color: red; font-size: 12px; margin-top: 5px;">
-        Please enter a number ≥ 0.1
-      </div>
-    </div>
-    <div class="gram-frame-modal-footer">
-      <button class="gram-frame-modal-cancel" id="cancel-button">Cancel</button>
-      <button class="gram-frame-modal-add" id="add-button" disabled>Add</button>
-    </div>
-  `;
+    const header = document.createElement("div");
+    header.className = "gram-frame-modal-header";
+    const heading = document.createElement("h3");
+    heading.textContent = "Add Manual Harmonics";
+    header.appendChild(heading);
+    const body = document.createElement("div");
+    body.className = "gram-frame-modal-body";
+    const inputGroup = document.createElement("div");
+    inputGroup.className = "gram-frame-modal-input-group";
+    const inputLabel = document.createElement("label");
+    inputLabel.appendChild(document.createTextNode("Harmonic spacing (Hz):"));
+    const spacingInput = document.createElement("input");
+    spacingInput.type = "number";
+    spacingInput.className = "gram-frame-harmonic-spacing-input";
+    spacingInput.min = String(MIN_MANUAL_SPACING);
+    spacingInput.step = String(MIN_MANUAL_SPACING);
+    spacingInput.placeholder = "Enter spacing in Hz";
+    inputLabel.appendChild(spacingInput);
+    const errorDiv = document.createElement("div");
+    errorDiv.className = "gram-frame-modal-error gram-frame-spacing-error";
+    errorDiv.style.display = "none";
+    errorDiv.textContent = `Please enter a number ≥ ${MIN_MANUAL_SPACING}`;
+    inputGroup.appendChild(inputLabel);
+    inputGroup.appendChild(errorDiv);
+    body.appendChild(inputGroup);
+    const footer = document.createElement("div");
+    footer.className = "gram-frame-modal-footer";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "gram-frame-modal-btn gram-frame-modal-cancel";
+    cancelButton.textContent = "Cancel";
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "gram-frame-modal-btn gram-frame-modal-add";
+    addButton.textContent = "Add";
+    addButton.disabled = true;
+    footer.appendChild(cancelButton);
+    footer.appendChild(addButton);
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
     overlay.appendChild(modal);
+    const opener = (
+      /** @type {HTMLElement|null} */
+      document.activeElement
+    );
     document.body.appendChild(overlay);
-    const spacingInput = (
-      /** @type {HTMLInputElement} */
-      modal.querySelector("#harmonic-spacing-input")
-    );
-    const errorDiv = (
-      /** @type {HTMLDivElement} */
-      modal.querySelector("#spacing-error")
-    );
-    const cancelButton = (
-      /** @type {HTMLButtonElement} */
-      modal.querySelector("#cancel-button")
-    );
-    const addButton = (
-      /** @type {HTMLButtonElement} */
-      modal.querySelector("#add-button")
-    );
     const validateInput = () => {
       const value = parseFloat(spacingInput.value);
-      const isValid = !isNaN(value) && value >= 0.1;
+      const isValid = !isNaN(value) && value >= MIN_MANUAL_SPACING;
       if (spacingInput.value.trim() === "") {
         errorDiv.style.display = "none";
         addButton.disabled = true;
@@ -5133,20 +6968,18 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         addButton.disabled = false;
       }
     };
-    spacingInput.addEventListener("input", validateInput);
-    spacingInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !addButton.disabled) {
-        addHarmonic();
-      } else if (e.key === "Escape") {
-        closeModal();
-      }
-    });
     function closeModal() {
-      document.body.removeChild(overlay);
+      document.removeEventListener("keydown", onDocumentKeydown, true);
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+      if (opener && typeof opener.focus === "function" && opener.isConnected) {
+        opener.focus();
+      }
     }
     function addHarmonic() {
       const spacing = parseFloat(spacingInput.value);
-      if (!isNaN(spacing) && spacing >= 0.1) {
+      if (!isNaN(spacing) && spacing >= MIN_MANUAL_SPACING) {
         let anchorTime;
         if (state.cursorPosition) {
           anchorTime = state.cursorPosition.time;
@@ -5157,6 +6990,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         closeModal();
       }
     }
+    function onDocumentKeydown(e) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        e.preventDefault();
+        closeModal();
+      }
+    }
+    spacingInput.addEventListener("input", validateInput);
+    spacingInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !addButton.disabled) {
+        addHarmonic();
+      }
+    });
+    document.addEventListener("keydown", onDocumentKeydown, true);
     cancelButton.addEventListener("click", closeModal);
     addButton.addEventListener("click", addHarmonic);
     overlay.addEventListener("click", (e) => {
@@ -5165,6 +7012,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
     });
     spacingInput.focus();
+    return overlay;
   }
   class HarmonicsMode extends PinSetMode {
     /**
@@ -5294,30 +7142,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return { spacing };
     }
     /**
-     * Nudging a harmonic set's spacing with the arrow keys.
-     *
-     * The 1 Hz floor is inherited from before the pin machinery was shared: a
-     * harmonic set nudged below it draws so many pins that the keypress is
-     * indistinguishable from a hang, and the analyst has no way back.
-     * @param {PinSet} set - Harmonic set being nudged
-     * @param {number} freqDelta - What the keypress is worth in Hz, signed
-     * @returns {Partial<PinSet>} Spacing update
-     */
-    nudgeFreqUpdates(set, freqDelta) {
-      return { spacing: Math.max(1, set.spacing + freqDelta) };
-    }
-    /**
      * Get guidance content for harmonics mode
      * @returns {Object} Structured guidance content
      */
     getGuidanceText() {
       return {
-        title: "Harmonics Mode",
         items: [
-          "Click & drag to generate harmonic lines",
-          "Drag existing harmonic lines to adjust spacing intervals",
-          "Manually add harmonic lines using [+ Manual] button",
-          "Click table row + arrow keys (Shift for larger steps)"
+          { trigger: "Click & drag", outcome: "to generate harmonic lines" },
+          { trigger: "Drag", outcome: "existing harmonic lines to adjust spacing intervals" },
+          { trigger: "[+ Manual]", outcome: "to add harmonic lines manually" },
+          { trigger: "Row + ← →", outcome: "to nudge (Shift for larger steps)" }
         ]
       };
     }
@@ -5423,14 +7257,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {HTMLElement} The manual button element
      */
     createManualButton() {
-      const button = document.createElement("button");
-      button.className = "gram-frame-manual-button";
-      button.textContent = "+ Manual";
-      button.title = "Manually add a set of harmonics at a specific spacing";
-      button.addEventListener("click", () => {
+      const button2 = document.createElement("button");
+      button2.className = "gram-frame-manual-button";
+      button2.textContent = "+ Manual";
+      button2.title = "Manually add a set of harmonics at a specific spacing";
+      button2.addEventListener("click", () => {
         this.showManualHarmonicModal();
       });
-      return button;
+      return button2;
     }
     /**
      * Show manual harmonic modal dialog
@@ -5482,21 +7316,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return colorDiv;
   }
   function createSidebandDeleteButton(sidebandSet) {
-    const button = document.createElement("button");
-    button.className = "gram-frame-sideband-delete";
-    button.setAttribute("data-sideband-id", sidebandSet.id);
-    button.title = "Delete sideband set";
-    button.textContent = "×";
-    return button;
+    const button2 = document.createElement("button");
+    button2.className = "gram-frame-sideband-delete";
+    button2.setAttribute("data-sideband-id", sidebandSet.id);
+    button2.title = "Delete sideband set";
+    button2.textContent = "×";
+    return button2;
   }
   function createSidebandPanel(container, instance) {
     const table = createDiffingTable(container, {
       columns: [
-        { label: "", width: "15%" },
-        { label: "Freq (Hz)", width: "35%", cellClassName: "gram-frame-sideband-freq" },
-        { label: "Spacing (Hz)", width: "35%", cellClassName: "gram-frame-sideband-spacing" },
-        { label: "", width: "15%" }
+        { label: "", width: "14%" },
+        { label: "Freq", width: "36%", cellClassName: "gram-frame-sideband-freq gram-frame-cell-numeric" },
+        { label: "Spacing", width: "36%", cellClassName: "gram-frame-sideband-spacing gram-frame-cell-numeric" },
+        { label: "", width: "14%", cellClassName: "gram-frame-cell-action" }
       ],
+      emptyMessage: "Click to set the sideband origin",
       rowAttribute: "data-sideband-id",
       rowClassName: "gram-frame-sideband-row",
       rowKey: (sidebandSet) => sidebandSet.id,
@@ -5507,15 +7342,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         createSidebandDeleteButton(sidebandSet)
       ],
       deleteSelector: ".gram-frame-sideband-delete",
-      onSelect: (sidebandSetId, _sidebandSet, index) => {
-        if (instance.state.selection.selectedType === "sidebandSet" && instance.state.selection.selectedId === sidebandSetId) {
-          instance.interaction.clearSelection();
-        } else {
-          instance.interaction.setSelection("sidebandSet", sidebandSetId, index);
-        }
-      },
+      onSelect: (sidebandSetId, _sidebandSet, index) => instance.interaction.toggleSelection("sidebandSet", sidebandSetId, index),
       onDelete: (sidebandSetId) => instance.interaction.removeSidebandSet(sidebandSetId),
-      isSelected: (sidebandSetId) => instance.state.selection.selectedType === "sidebandSet" && instance.state.selection.selectedId === sidebandSetId
+      isSelected: (sidebandSetId) => instance.interaction.isFeatureSelected("sidebandSet", sidebandSetId)
     });
     const panel = (
       /** @type {HTMLElement} */
@@ -5535,7 +7364,18 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     table.update(instance.state.sidebands.sidebandSets);
   }
-  const _SidebandMode = class _SidebandMode extends PinSetMode {
+  class SidebandMode extends PinSetMode {
+    /**
+     * Number of sidebands a newly placed set spreads across the frequency axis.
+     *
+     * The seed spacing is the axis span divided by this, so a set dropped in the
+     * middle of the gram shows about this many members — an equal count each side
+     * when the fundamental is central, and more on the roomier side when it is
+     * not. It is only a starting point: the analyst drags a sideband onto the
+     * data immediately afterwards, which is what actually sets the spacing.
+     * @type {number}
+     */
+    static INITIAL_SIDEBAND_COUNT = 8;
     /**
      * Initialize SidebandMode
      * @param {GramFrame} instance - GramFrame instance
@@ -5634,9 +7474,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {DragTarget|null} A create-kind target, or null if a set cannot be made
      */
     createSetTarget(dataCoords) {
-      const { freqMin, freqMax } = this.instance.state.config;
+      const { freqMin, freqMax } = dataFrequencyRange(this.getViewport());
       const span = Math.abs(freqMax - freqMin);
-      const initialSpacing = Math.max(span / _SidebandMode.INITIAL_SIDEBAND_COUNT, MIN_PIN_SPACING);
+      const initialSpacing = Math.max(span / SidebandMode.INITIAL_SIDEBAND_COUNT, MIN_PIN_SPACING);
       const sidebandSet = this.addSidebandSet(dataCoords.time, dataCoords.freq, initialSpacing);
       if (!sidebandSet) {
         return null;
@@ -5669,7 +7509,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     freqUpdatesForDrag(set, clickedIndex, currentPos) {
       if (clickedIndex === 0) {
-        const { freqMin, freqMax } = this.instance.state.config;
+        const { freqMin, freqMax } = dataFrequencyRange(this.getViewport());
         const lower = Math.min(freqMin, freqMax);
         const upper = Math.max(freqMin, freqMax);
         return { fundamentalFreq: Math.max(lower, Math.min(upper, currentPos.freq)) };
@@ -5716,12 +7556,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     getGuidanceText() {
       return {
-        title: "Sidebands Mode",
         items: [
-          "Click & drag to place a sideband set at that frequency",
-          "Drag the 0 line to move the fundamental",
-          "Drag any other line to adjust sideband spacing",
-          "Click table row + arrow keys (Shift for larger steps)"
+          { trigger: "Click & drag", outcome: "to place a sideband set at that frequency" },
+          { trigger: "Drag the 0 line", outcome: "to move the fundamental" },
+          { trigger: "Drag any other line", outcome: "to adjust sideband spacing" },
+          { trigger: "Row + ← →", outcome: "to nudge (Shift for larger steps)" }
         ]
       };
     }
@@ -5786,27 +7625,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       };
     }
-  };
-  /**
-   * Number of sidebands a newly placed set spreads across the frequency axis.
-   *
-   * The seed spacing is the axis span divided by this, so a set dropped in the
-   * middle of the gram shows about this many members — an equal count each side
-   * when the fundamental is central, and more on the roomier side when it is
-   * not. It is only a starting point: the analyst drags a sideband onto the
-   * data immediately afterwards, which is what actually sets the spacing.
-   * @type {number}
-   */
-  __publicField(_SidebandMode, "INITIAL_SIDEBAND_COUNT", 8);
-  let SidebandMode = _SidebandMode;
+  }
   const MS_TO_KNOTS = 1.94384;
+  const DEFAULT_SPEED_OF_SOUND = 1500;
   function calculateMidpoint(fPlus, fMinus) {
     return {
       time: (fPlus.time + fMinus.time) / 2,
       freq: (fPlus.freq + fMinus.freq) / 2
     };
   }
-  function calculateDopplerSpeed(fPlus, fMinus, fZero = null, speedOfSound = 1481) {
+  function calculateDopplerSpeed(fPlus, fMinus, fZero = null, speedOfSound = DEFAULT_SPEED_OF_SOUND) {
     const f0 = fZero ? fZero.freq : calculateMidpoint(fPlus, fMinus).freq;
     const deltaF = (fPlus.freq - fMinus.freq) / 2;
     const speed = speedOfSound / f0 * deltaF;
@@ -6006,12 +7834,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     getGuidanceText() {
       return {
-        title: "Doppler Mode",
         items: [
-          "Click & drag to place markers for f+ and f-",
-          "Drag markers to adjust positions",
-          "f₀ marker shows automatically at the midpoint",
-          "Right-click to reset all markers"
+          { trigger: "Click & drag", outcome: "to place f+ and f− in one gesture; the curve previews during the drag" },
+          { trigger: "Drag f+ or f−", outcome: "to adjust; f₀ can be dragged independently" },
+          { trigger: "f₀ marker", outcome: "is placed automatically at the midpoint" },
+          { trigger: "Right-click", outcome: "to reset all doppler markers" }
         ]
       };
     }
@@ -6114,14 +7941,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * Reset doppler-specific state
      */
     resetState() {
-      this.instance.state.doppler.fPlus = null;
-      this.instance.state.doppler.fMinus = null;
-      this.instance.state.doppler.fZero = null;
-      this.instance.state.doppler.speed = null;
-      this.instance.state.doppler.color = null;
-      this.instance.state.doppler.tempFirst = null;
-      this.instance.state.doppler.previewEnd = null;
+      const doppler = this.instance.state.doppler;
+      doppler.fPlus = null;
+      doppler.fMinus = null;
+      doppler.fZero = null;
+      doppler.speed = null;
+      doppler.color = null;
+      doppler.tempFirst = null;
+      doppler.previewEnd = null;
       this.dragHandler.reset();
+      recordDopplerDeletion(this.instance);
       markAnnotationsChanged(this.instance);
       dispatch(this.instance, { frame: true });
     }
@@ -6129,8 +7958,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * Clean up doppler-specific state when switching away from doppler mode
      */
     cleanup() {
-      this.instance.state.doppler.tempFirst = null;
-      this.instance.state.doppler.previewEnd = null;
+      const doppler = this.instance.state.doppler;
+      doppler.tempFirst = null;
+      doppler.previewEnd = null;
       this.dragHandler.reset();
     }
     /**
@@ -6367,11 +8197,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.renderDopplerFeatures();
     }
   }
-  const WHEEL_NAV_GUIDANCE = [
-    "Ctrl + scroll to zoom around the pointer",
-    "Scroll to pan when zoomed in",
-    "Wheel-button drag to pan when zoomed in"
-  ];
   class PanMode extends BaseMode {
     /**
      * Constructor for pan mode
@@ -6380,6 +8205,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     constructor(instance) {
       super(instance);
       this.lastPointer = { x: 0, y: 0 };
+      this.pressOrigin = null;
       this.dragHandler = new BaseDragHandler(instance, {
         resolveTarget: () => this.resolvePanDrag(),
         onDragStart: (_target, _position, event) => this.onPanStart(event),
@@ -6401,17 +8227,43 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {DragTarget|null} A pan-kind target, or null to decline
      */
     resolvePanDrag() {
-      if (this.instance.state.zoom.level <= 1) {
+      if (!this.canPan()) {
         return null;
       }
       return { kind: "pan", id: null, type: null };
+    }
+    /**
+     * Whether there is anything to pan: an image zoomed in, or an audio-sourced
+     * gram at any zoom — its view is a window onto the recording, so a paused
+     * analyst can always scroll back through what has played (spec 168, FR-016).
+     * @returns {boolean} True when a drag would move the view
+     */
+    canPan() {
+      return isZoomedIn(this.instance) || isPlayerActive(this.instance);
+    }
+    /**
+     * Panning an audio-sourced gram keeps working off the image.
+     *
+     * Scrolling back to the very start of a recording *means* putting blank space
+     * on screen: the top edge is the playhead, so the first second only reaches
+     * it once the whole window below is empty. A pan that stopped the moment the
+     * pointer left the gram would strand the analyst partway, with the opening
+     * seconds visible but unreachable.
+     *
+     * Only for the player, and only for panning. On an image-backed gram there is
+     * no blank inside the axes to drag from, and every other mode places or moves
+     * a feature, which must land on the gram.
+     * @returns {boolean} True on an audio-sourced gram
+     */
+    acceptsOffImageDrag() {
+      return isPlayerActive(this.instance);
     }
     /**
      * The cursor pan mode rests at: a grab hand when there is something to pan.
      * @returns {string} Cursor style
      */
     idleCursor() {
-      return this.instance.state.zoom.level > 1 ? PAN_IDLE_CURSOR : IDLE_CURSOR;
+      return this.canPan() ? PAN_IDLE_CURSOR : IDLE_CURSOR;
     }
     /**
      * Record where the pan began, in screen pixels.
@@ -6428,7 +8280,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @param {MouseEvent} [event] - Originating mousemove
      */
     onPanMove(event) {
-      if (!event || this.instance.state.zoom.level <= 1) {
+      if (!event || !this.canPan()) {
         return;
       }
       const deltaX = event.clientX - this.lastPointer.x;
@@ -6447,7 +8299,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * Activate pan mode
      */
     activate() {
-      if (this.instance.state.zoom.level > 1) {
+      if (this.canPan()) {
         this.updateCursorStyle(PAN_IDLE_CURSOR);
       }
       this.dragHandler.reset();
@@ -6465,6 +8317,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @param {DataCoordinates} dataCoords - Data coordinates
      */
     handleMouseDown(event, dataCoords) {
+      this.pressOrigin = { x: event.clientX, y: event.clientY };
       this.dragHandler.startDrag(dataCoords, event);
     }
     /**
@@ -6482,39 +8335,41 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      */
     handleMouseUp(event, dataCoords) {
       this.dragHandler.endDrag(dataCoords, event);
+      const origin = this.pressOrigin;
+      this.pressOrigin = null;
+      if (origin && isPlayerActive(this.instance)) {
+        resumeFromClick(this.instance, origin, event);
+      }
     }
     /**
      * Handle mouse leave events
      */
     handleMouseLeave() {
+      this.pressOrigin = null;
       this.dragHandler.cancelDrag();
     }
     /**
      * Get guidance content for pan mode.
      *
-     * Pan is the initial mode, so its guidance carries the global mouse-wheel
-     * instructions (which apply in every mode) as their own titled section, plus a
-     * section for the pan-specific interactions.
-     *
-     * "available in all modes" is a heading qualifier, not a bullet: it qualifies
-     * the whole section rather than standing beside the individual instructions,
-     * and folding it into the heading buys back a line of the control row's
-     * height.
-     * @returns {Object} Structured guidance content (multi-section)
+     * Its own gestures only. The cross-mode ones used to be a second section
+     * here, because Pan is the initial mode and the old panel had room for them
+     * nowhere else — which meant an analyst who armed Cross Cursor first never
+     * learnt that Shift + drag zooms. The guidance column appends them to every
+     * mode now (see `utils/guidanceContent.js`).
+     * @returns {Object} Structured guidance content
      */
     getGuidanceText() {
       return {
         sections: [
           {
-            title: "Mouse-Wheel",
-            qualifier: "available in all modes",
-            items: WHEEL_NAV_GUIDANCE
-          },
-          {
-            title: "Pan Mode",
             items: [
-              "Click and drag to pan the view (when zoomed in)",
-              "Use + / − to zoom in and out",
+              { trigger: "Drag", outcome: "to pan the view when zoomed in" },
+              { trigger: "Click", outcome: "on an audio gram, to pause or resume playback" },
+              // Named by shape, not by the glyph itself: a character in the
+              // guidance would depend on the reader's font, which is the reason
+              // the button draws its own (issue #310).
+              { trigger: "+ / −", outcome: "to zoom in and out" },
+              { trigger: "Fit", outcome: "to bring the whole gram back in one click" },
               `GramFrame v${getVersion()}`
             ]
           }
@@ -6525,6 +8380,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * Reset pan-specific state
      */
     resetState() {
+      this.pressOrigin = null;
       this.dragHandler.reset();
     }
     /**
@@ -6549,13 +8405,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           label: "−",
           title: "Zoom Out",
           action: () => zoomOut(this.instance),
-          isEnabled: () => this.instance.state.zoom.level > 1
+          isEnabled: () => isZoomedIn(this.instance)
         },
         {
           label: "+",
           title: "Zoom In",
           action: () => zoomIn(this.instance),
-          isEnabled: () => this.instance.state.zoom.level < 10
+          isEnabled: () => zoomLevel(this.instance) < 10
+        },
+        {
+          // The exit from a region zoom: one gesture in, one click out (spec 170,
+          // FR-014). Disabled at 1x, where the whole gram is already shown (FR-015).
+          label: "Fit",
+          icon: "fit",
+          title: "Fit Whole Gram",
+          action: () => fitView(this.instance),
+          isEnabled: () => isZoomedIn(this.instance)
         }
       ];
     }
@@ -6579,6 +8444,25 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       minVersion: 86,
       test: function() {
         return typeof Element !== "undefined" && !!Element.prototype && typeof Element.prototype.replaceChildren === "function";
+      }
+    },
+    {
+      // The spectrograph player (spec 168, FR-008) plays through an <audio>
+      // element. Present since Chrome 3; listed so a browser without it gets the
+      // warning rather than a player that cannot play.
+      name: "HTMLAudioElement",
+      minVersion: 3,
+      test: function() {
+        return typeof HTMLAudioElement === "function" || typeof HTMLAudioElement === "object";
+      }
+    },
+    {
+      // The player encodes the analysed spectrogram as a PNG through a canvas
+      // (spec 168, D6). Present since Chrome 1.
+      name: "HTMLCanvasElement.prototype.toDataURL",
+      minVersion: 1,
+      test: function() {
+        return typeof HTMLCanvasElement !== "undefined" && !!HTMLCanvasElement.prototype && typeof HTMLCanvasElement.prototype.toDataURL === "function";
       }
     }
   ];
@@ -6642,6 +8526,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     configTable.parentNode.replaceChild(warning, configTable);
     return warning;
   }
+  const MODE_CLASSES = {
+    pan: PanMode,
+    analysis: AnalysisMode,
+    harmonics: HarmonicsMode,
+    sideband: SidebandMode,
+    doppler: DopplerMode
+  };
   class ModeFactory {
     /**
      * Create a mode instance based on mode name
@@ -6656,20 +8547,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     static createMode(modeName, instance) {
       var _a;
       try {
-        switch (modeName) {
-          case "analysis":
-            return new AnalysisMode(instance);
-          case "harmonics":
-            return new HarmonicsMode(instance);
-          case "sideband":
-            return new SidebandMode(instance);
-          case "doppler":
-            return new DopplerMode(instance);
-          case "pan":
-            return new PanMode(instance);
-          default:
-            throw new Error(`Invalid mode name: ${modeName}. Valid modes are: analysis, harmonics, sideband, doppler, pan`);
+        const ModeClass = Object.prototype.hasOwnProperty.call(MODE_CLASSES, modeName) ? MODE_CLASSES[modeName] : null;
+        if (!ModeClass) {
+          throw new Error(`Invalid mode name: ${modeName}. Valid modes are: ${MODE_NAMES.join(", ")}`);
         }
+        return new ModeClass(instance);
       } catch (error) {
         console.error(`CRITICAL ERROR: Failed to create mode "${modeName}":`, error);
         console.error("Error details:", {
@@ -6699,18 +8581,21 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * rather than importing the mode classes itself, which is what breaks the
      * state ⇄ modes cycle (spec 167, FR-002, ADR-014).
      *
-     * Merge order is fixed and explicit: analysis, harmonics, sideband, doppler, pan.
+     * Merge order is the roster's, so it cannot drift from the roster the rest
+     * of the component uses. The order is immaterial in practice -- each mode
+     * contributes a slice named after itself -- but a collision between two
+     * modes would resolve by it, and `assertNoCoreKeyCollision` covers the core
+     * keys either way.
      * @returns {Partial<GramFrameState>} Merged mode slices
      */
     static getModeInitialStates() {
-      const slices = Object.assign(
-        {},
-        AnalysisMode.getInitialState(),
-        HarmonicsMode.getInitialState(),
-        SidebandMode.getInitialState(),
-        DopplerMode.getInitialState(),
-        PanMode.getInitialState()
-      );
+      const slices = Object.assign({}, ...MODE_NAMES.map((name) => {
+        const ModeClass = (
+          /** @type {any} */
+          MODE_CLASSES[name]
+        );
+        return typeof ModeClass.getInitialState === "function" ? ModeClass.getInitialState() : {};
+      }));
       assertNoCoreKeyCollision(slices);
       return slices;
     }
@@ -6719,7 +8604,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
      * @returns {ModeType[]} Array of mode names
      */
     static getAvailableModes() {
-      return ["analysis", "harmonics", "sideband", "doppler", "pan"];
+      return [...MODE_NAMES];
     }
     /**
      * Validate if a mode name is supported
@@ -6763,49 +8648,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       this.instance.ui.cursorGroup.innerHTML = "";
       Object.values(this.instance.modes).filter(isPersistentFeatureProvider).filter((mode) => mode.hasPersistentFeatures()).forEach((mode) => mode.renderPersistentFeatures());
-    }
-  }
-  function renderSecureGuidance(container, content) {
-    container.replaceChildren();
-    const sections = Array.isArray(content.sections) ? content.sections : [{ title: content.title, items: content.items }];
-    sections.forEach((section) => {
-      if (section.title) {
-        const title = document.createElement("h4");
-        title.textContent = section.title;
-        if (section.qualifier) {
-          const qualifier = document.createElement("span");
-          qualifier.className = "gram-frame-guidance-qualifier";
-          qualifier.textContent = ` (${section.qualifier})`;
-          title.appendChild(qualifier);
-        }
-        container.appendChild(title);
-      }
-      if (section.items && Array.isArray(section.items)) {
-        section.items.forEach((item) => {
-          const paragraph = document.createElement("p");
-          paragraph.textContent = `• ${item}`;
-          container.appendChild(paragraph);
-        });
-      }
-    });
-  }
-  function updateGuidancePanel(guidancePanel, content) {
-    if (!guidancePanel) {
-      console.warn("Guidance panel element not found");
-      return;
-    }
-    if (!content) {
-      console.warn("No guidance content provided");
-      return;
-    }
-    try {
-      renderSecureGuidance(guidancePanel, content);
-    } catch (error) {
-      console.error("Error updating guidance panel:", error);
-      guidancePanel.replaceChildren();
-      const errorMsg = document.createElement("p");
-      errorMsg.textContent = "Error loading guidance content";
-      guidancePanel.appendChild(errorMsg);
+      applySelectionHalo(this.instance);
     }
   }
   function initializeModeInfrastructure(instance) {
@@ -6816,14 +8659,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     });
     return { modes, featureRenderer };
   }
-  function setupModeUI(instance, modes, panelContainers, guidancePanel) {
+  function setupModeUI(instance, modes, panelContainers) {
     Object.entries(panelContainers).forEach(([modeName, container]) => {
       if (modes[modeName]) {
         modes[modeName].createUI(container);
       }
     });
     const currentMode = modes[instance.state.mode] || modes["pan"];
-    updateGuidancePanel(guidancePanel, currentMode.getGuidanceText());
+    showGuidanceForMode(instance, currentMode);
     return currentMode;
   }
   const MAX_IMAGE_WIDTH = 1200;
@@ -6867,28 +8710,49 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     modeCell.appendChild(readoutPanel);
     return layout;
   }
-  function setupPersistentContainers(instance, modeColumn, guidanceColumn) {
-    const tempContainer = document.createElement("div");
-    const modeUI = createModeSwitchingUI(tempContainer, instance.state, (mode) => instance._switchMode(mode));
-    modeColumn.appendChild(modeUI.modesContainer);
-    guidanceColumn.appendChild(modeUI.guidancePanel);
-    return modeUI;
+  function setupPersistentContainers(instance, modeColumn) {
+    return createModeSwitchingUI(modeColumn, instance.state.mode, (mode) => instance._switchMode(mode));
   }
-  function updateModeUIWithCommands(instance, previous, modes, currentMode, modeColumn, guidanceColumn) {
+  function updateModeUIWithCommands(instance, previous, modes, currentMode, modeColumn) {
     modeColumn.removeChild(previous.modesContainer);
-    guidanceColumn.removeChild(previous.guidancePanel);
-    const tempContainer2 = document.createElement("div");
-    const modeUIWithButtons = createModeSwitchingUI(tempContainer2, instance.state, (mode) => instance._switchMode(mode), modes);
-    modeColumn.appendChild(modeUIWithButtons.modesContainer);
-    guidanceColumn.appendChild(modeUIWithButtons.guidancePanel);
-    const guidanceContent = currentMode.getGuidanceText();
-    updateGuidancePanel(modeUIWithButtons.guidancePanel, guidanceContent);
+    const armed = instance.state.mode;
+    const modeUIWithButtons = createModeSwitchingUI(modeColumn, armed, (mode) => instance._switchMode(mode), modes);
+    showGuidanceForMode(instance, currentMode);
+    applyGuidanceCollapsed(instance);
     return modeUIWithButtons;
   }
   function setupSpectrogramIfAvailable(instance) {
-    if (instance.state.imageDetails.url) {
-      setupSpectrogramImage(instance, instance.state.imageDetails.url);
+    const { imageDetails, player } = instance.state;
+    if (imageDetails.url && !player.active) {
+      setupSpectrogramImage(instance, imageDetails.url);
     }
+  }
+  function createErrorIndicator(errorMsg) {
+    const errorDiv = document.createElement("div");
+    errorDiv.className = "gramframe-error-indicator";
+    errorDiv.style.cssText = `
+    position: relative;
+    background-color: #ffe6e6;
+    border: 2px solid #ff6b6b;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+    color: #d32f2f;
+    font-family: monospace;
+    font-size: 14px;
+  `;
+    const strongElement = document.createElement("strong");
+    strongElement.textContent = "GramFrame Initialization Error:";
+    const errorText = document.createElement("div");
+    errorText.textContent = errorMsg;
+    const smallElement = document.createElement("small");
+    smallElement.textContent = "Check the browser console for detailed error information.";
+    errorDiv.appendChild(strongElement);
+    errorDiv.appendChild(document.createElement("br"));
+    errorDiv.appendChild(errorText);
+    errorDiv.appendChild(document.createElement("br"));
+    errorDiv.appendChild(smallElement);
+    return errorDiv;
   }
   function isDebugEnabled() {
     return typeof window !== "undefined" && /** @type {any} */
@@ -6911,6 +8775,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
     api.__test__getInstance = function(instanceId) {
       return this._getInstances().find((instance) => instance.instanceId === instanceId) || null;
+    };
+    api.__test__getGlobalStateListeners = function() {
+      return getGlobalStateListeners();
+    };
+    api.__test__clearGlobalStateListeners = function() {
+      clearGlobalStateListeners();
     };
   }
   function createGramFrameAPI(GramFrame2) {
@@ -7064,6 +8934,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return removeGlobalStateListener(callback);
       },
       /**
+       * The transport of an audio-sourced instance (spec 168, FR-020).
+       * @param {number} [index=0] - Which live instance, in page order
+       * @returns {PlayerController|null} Its player, or null when the instance is image-backed or absent
+       */
+      getPlayer(index = 0) {
+        const instance = this._getInstances()[index];
+        return instance && instance.player ? instance.player : null;
+      },
+      /**
        * Get the current expand state of the first GramFrame instance.
        * @returns {boolean} True if the image is currently expanded
        */
@@ -7120,30 +8999,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       _addErrorIndicator(table, errorMsg) {
         try {
           table.classList.add("gram-frame-config-error");
-          const errorDiv = document.createElement("div");
-          errorDiv.className = "gramframe-error-indicator";
-          errorDiv.style.cssText = `
-          position: relative;
-          background-color: #ffe6e6;
-          border: 2px solid #ff6b6b;
-          border-radius: 4px;
-          padding: 10px;
-          margin: 10px 0;
-          color: #d32f2f;
-          font-family: monospace;
-          font-size: 14px;
-        `;
-          const strongElement = document.createElement("strong");
-          strongElement.textContent = "GramFrame Initialization Error:";
-          const errorText = document.createElement("div");
-          errorText.textContent = errorMsg;
-          const smallElement = document.createElement("small");
-          smallElement.textContent = "Check the browser console for detailed error information.";
-          errorDiv.appendChild(strongElement);
-          errorDiv.appendChild(document.createElement("br"));
-          errorDiv.appendChild(errorText);
-          errorDiv.appendChild(document.createElement("br"));
-          errorDiv.appendChild(smallElement);
+          const errorDiv = createErrorIndicator(errorMsg);
           if (table.parentNode) {
             table.parentNode.insertBefore(errorDiv, table.nextSibling);
           }
@@ -7157,78 +9013,1697 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     return api;
   }
+  const SCHEMA_VERSION = 1;
+  const STUDENT_TTL_MS = 24 * 60 * 60 * 1e3;
+  const KEY_PREFIX = "gramframe::";
+  const TRAINER_FLAG_SELECTOR = "#gf-persistent, .gf-persistent, [data-gf-persistent]";
+  function isAnnotationExpired(savedAt, nowMs) {
+    const t = Date.parse(
+      /** @type {string} */
+      savedAt
+    );
+    if (Number.isNaN(t)) {
+      return true;
+    }
+    const age = nowMs - t;
+    if (age < -3e5) {
+      return true;
+    }
+    return age > STUDENT_TTL_MS;
+  }
+  function describeUserContext() {
+    const flag = document.querySelector(TRAINER_FLAG_SELECTOR);
+    if (flag) {
+      return {
+        context: "trainer",
+        matchedBy: "flag",
+        reason: `matched the persistence flag on <${describeFlagElement(flag)}>`
+      };
+    }
+    const anchors = document.querySelectorAll("a");
+    for (let i = 0; i < anchors.length; i++) {
+      const text = anchors[i].textContent;
+      if (text && text.trim() === "ANALYSIS") {
+        return {
+          context: "trainer",
+          matchedBy: "legacy-anchor",
+          reason: 'matched the legacy "ANALYSIS" anchor (no gf-persistent flag on the page)'
+        };
+      }
+    }
+    return {
+      context: "student",
+      matchedBy: "none",
+      reason: 'no gf-persistent flag (id, class or data-attribute) and no "ANALYSIS" anchor was on the page when the component initialised'
+    };
+  }
+  function detectUserContext() {
+    return describeUserContext().context;
+  }
+  function describeFlagElement(el) {
+    const parts = [el.tagName.toLowerCase()];
+    if (el.id === "gf-persistent") parts.push('id="gf-persistent"');
+    if (el.classList.contains("gf-persistent")) parts.push('class="gf-persistent"');
+    if (el.hasAttribute("data-gf-persistent")) parts.push("data-gf-persistent");
+    return parts.join(" ");
+  }
+  function getStorage(context) {
+    try {
+      const storage = context === "trainer" ? localStorage : sessionStorage;
+      const testKey = "__gramframe_test__";
+      storage.setItem(testKey, "1");
+      storage.removeItem(testKey);
+      return storage;
+    } catch (error) {
+      console.warn(`GramFrame: ${context} storage is unavailable — annotations will not persist:`, error);
+      return null;
+    }
+  }
+  function buildStorageKey(instanceIndex) {
+    const pathname = window.location.pathname;
+    if (instanceIndex != null && instanceIndex > 0) {
+      return `${KEY_PREFIX}${pathname}::${instanceIndex}`;
+    }
+    return `${KEY_PREFIX}${pathname}`;
+  }
+  function hasPersistableAnnotations(state) {
+    const hasMarkers = !!(state.analysis && state.analysis.markers && state.analysis.markers.length > 0);
+    const hasHarmonics = !!(state.harmonics && state.harmonics.harmonicSets && state.harmonics.harmonicSets.length > 0);
+    const hasSidebands = !!(state.sidebands && state.sidebands.sidebandSets && state.sidebands.sidebandSets.length > 0);
+    const hasDoppler = !!(state.doppler && (state.doppler.fPlus !== null || state.doppler.fMinus !== null || state.doppler.fZero !== null));
+    return hasMarkers || hasHarmonics || hasSidebands || hasDoppler;
+  }
+  function isFiniteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+  function isNonEmptyString(value) {
+    return typeof value === "string" && value.length > 0;
+  }
+  function isValidStoredPoint(point) {
+    if (point === null || point === void 0) return true;
+    return !!point && isFiniteNumber(point.time) && isFiniteNumber(point.freq);
+  }
+  function sanitizeStoredAnnotations(data) {
+    let dropped = 0;
+    let markers = [];
+    if (data && data.analysis && Array.isArray(data.analysis.markers)) {
+      markers = data.analysis.markers.filter((m) => {
+        const valid = !!m && isNonEmptyString(m.id) && isNonEmptyString(m.color) && isFiniteNumber(m.time) && isFiniteNumber(m.freq);
+        if (!valid) dropped++;
+        return valid;
+      }).map((m) => {
+        const label = normalizeMarkerLabel(m.label);
+        const { label: _rawLabel, ...rest } = m;
+        return label ? { ...rest, label } : rest;
+      });
+    } else if (data && data.analysis && data.analysis.markers != null) {
+      dropped++;
+    }
+    let harmonicSets = [];
+    if (data && data.harmonics && Array.isArray(data.harmonics.harmonicSets)) {
+      harmonicSets = data.harmonics.harmonicSets.filter((hs) => {
+        const valid = !!hs && isNonEmptyString(hs.id) && isNonEmptyString(hs.color) && isFiniteNumber(hs.anchorTime) && // Strictly positive: spacing 0 makes the harmonic range infinite.
+        isFiniteNumber(hs.spacing) && hs.spacing > 0;
+        if (!valid) dropped++;
+        return valid;
+      });
+    } else if (data && data.harmonics && data.harmonics.harmonicSets != null) {
+      dropped++;
+    }
+    let sidebandSets = [];
+    if (data && data.sidebands && Array.isArray(data.sidebands.sidebandSets)) {
+      sidebandSets = data.sidebands.sidebandSets.filter((sb) => {
+        const valid = !!sb && isNonEmptyString(sb.id) && isNonEmptyString(sb.color) && isFiniteNumber(sb.anchorTime) && isFiniteNumber(sb.fundamentalFreq) && // Strictly positive, for the same reason a harmonic set's is: a spacing
+        // of zero makes the sideband index range infinite.
+        isFiniteNumber(sb.spacing) && sb.spacing > 0;
+        if (!valid) dropped++;
+        return valid;
+      });
+    } else if (data && data.sidebands && data.sidebands.sidebandSets != null) {
+      dropped++;
+    }
+    const rawDoppler = data && data.doppler || {};
+    const doppler = { fPlus: null, fMinus: null, fZero: null, color: null };
+    for (
+      const key of
+      /** @type {const} */
+      ["fPlus", "fMinus", "fZero"]
+    ) {
+      if (isValidStoredPoint(rawDoppler[key])) {
+        doppler[key] = rawDoppler[key] || null;
+      } else {
+        dropped++;
+      }
+    }
+    doppler.color = isNonEmptyString(rawDoppler.color) ? rawDoppler.color : null;
+    const annotations = {
+      version: data && data.version,
+      savedAt: data && data.savedAt,
+      gram: data && data.gram,
+      analysis: { markers },
+      harmonics: { harmonicSets },
+      sidebands: { sidebandSets },
+      doppler,
+      // Carried through rather than validated field by field: a tombstone is an
+      // id and a time, and a damaged one costs at most one resurrected feature.
+      // Dropping the set wholesale would resurrect every deletion in it, which is
+      // the failure this exists to prevent (issue #269).
+      tombstones: tombstonesOf(data)
+    };
+    return { annotations, dropped };
+  }
+  const TOMBSTONE_TTL_MS = 7 * 24 * 60 * 60 * 1e3;
+  function tombstonesOf(source) {
+    const raw = source && source.tombstones;
+    if (!raw || typeof raw !== "object") {
+      return { markers: {}, harmonicSets: {}, sidebandSets: {}, doppler: null };
+    }
+    return {
+      markers: raw.markers && typeof raw.markers === "object" ? raw.markers : {},
+      harmonicSets: raw.harmonicSets && typeof raw.harmonicSets === "object" ? raw.harmonicSets : {},
+      sidebandSets: raw.sidebandSets && typeof raw.sidebandSets === "object" ? raw.sidebandSets : {},
+      doppler: isNonEmptyString(raw.doppler) ? raw.doppler : null
+    };
+  }
+  function mergeTombstoneMap(mine, theirs) {
+    const merged = { ...theirs };
+    for (const [id, at] of Object.entries(mine || {})) {
+      merged[id] = merged[id] && merged[id] < at ? merged[id] : at;
+    }
+    return merged;
+  }
+  function pruneTombstoneMap(map, now) {
+    const kept = {};
+    for (const [id, at] of Object.entries(map || {})) {
+      const when = Date.parse(at);
+      if (!Number.isFinite(when) || now - when < TOMBSTONE_TTL_MS) {
+        kept[id] = at;
+      }
+    }
+    return kept;
+  }
+  function mergeCollection(mine, theirs, tombstones, mineIsNewer) {
+    const byId = /* @__PURE__ */ new Map();
+    const older = mineIsNewer ? theirs : mine;
+    const newer = mineIsNewer ? mine : theirs;
+    for (const feature of older || []) {
+      if (feature && feature.id) byId.set(feature.id, feature);
+    }
+    for (const feature of newer || []) {
+      if (feature && feature.id) byId.set(feature.id, feature);
+    }
+    return Array.from(byId.values()).filter((feature) => !(feature.id in tombstones));
+  }
+  function mergeStoredAnnotations(mine, theirs, now = Date.now()) {
+    if (!mine) return theirs;
+    if (!theirs) return mine;
+    const mineAt = Date.parse(mine.savedAt || "");
+    const theirsAt = Date.parse(theirs.savedAt || "");
+    const mineIsNewer = !Number.isFinite(theirsAt) || Number.isFinite(mineAt) && mineAt >= theirsAt;
+    const myTombs = tombstonesOf(mine);
+    const theirTombs = tombstonesOf(theirs);
+    const tombstones = {
+      markers: pruneTombstoneMap(mergeTombstoneMap(myTombs.markers, theirTombs.markers), now),
+      harmonicSets: pruneTombstoneMap(mergeTombstoneMap(myTombs.harmonicSets, theirTombs.harmonicSets), now),
+      sidebandSets: pruneTombstoneMap(mergeTombstoneMap(myTombs.sidebandSets, theirTombs.sidebandSets), now),
+      doppler: myTombs.doppler && theirTombs.doppler ? myTombs.doppler < theirTombs.doppler ? myTombs.doppler : theirTombs.doppler : myTombs.doppler || theirTombs.doppler
+    };
+    const newer = mineIsNewer ? mine : theirs;
+    const older = mineIsNewer ? theirs : mine;
+    const newerDoppler = newer.doppler || null;
+    const olderDoppler = older.doppler || null;
+    const newerHasCurve = !!(newerDoppler && (newerDoppler.fPlus || newerDoppler.fMinus || newerDoppler.fZero));
+    const doppler = tombstones.doppler ? { fPlus: null, fMinus: null, fZero: null, color: null } : newerHasCurve ? newerDoppler : olderDoppler || newerDoppler;
+    return {
+      version: newer.version,
+      savedAt: newer.savedAt,
+      gram: newer.gram || older.gram,
+      analysis: {
+        markers: mergeCollection(
+          mine.analysis && mine.analysis.markers,
+          theirs.analysis && theirs.analysis.markers,
+          tombstones.markers,
+          mineIsNewer
+        )
+      },
+      harmonics: {
+        harmonicSets: mergeCollection(
+          mine.harmonics && mine.harmonics.harmonicSets,
+          theirs.harmonics && theirs.harmonics.harmonicSets,
+          tombstones.harmonicSets,
+          mineIsNewer
+        )
+      },
+      sidebands: {
+        sidebandSets: mergeCollection(
+          mine.sidebands && mine.sidebands.sidebandSets,
+          theirs.sidebands && theirs.sidebands.sidebandSets,
+          tombstones.sidebandSets,
+          mineIsNewer
+        )
+      },
+      doppler: doppler || { fPlus: null, fMinus: null, fZero: null, color: null },
+      tombstones
+    };
+  }
+  function buildGramFingerprint(state) {
+    const url = state.imageDetails && state.imageDetails.url || "";
+    const config = state.config || { timeMin: 0, timeMax: 0, freqMin: 0, freqMax: 0 };
+    return {
+      image: url.split("/").pop() || "",
+      timeMin: config.timeMin,
+      timeMax: config.timeMax,
+      freqMin: config.freqMin,
+      freqMax: config.freqMax
+    };
+  }
+  function fingerprintMatches(stored, expected) {
+    if (!stored) {
+      return true;
+    }
+    return stored.image === expected.image && stored.timeMin === expected.timeMin && stored.timeMax === expected.timeMax && stored.freqMin === expected.freqMin && stored.freqMax === expected.freqMax;
+  }
+  function saveAnnotations(state, instanceIndex, context) {
+    try {
+      const storage = getStorage(context || detectUserContext());
+      if (!storage) return false;
+      if (!hasPersistableAnnotations(state) && !hasTombstones(state)) {
+        const key2 = buildStorageKey(instanceIndex);
+        storage.removeItem(key2);
+        return true;
+      }
+      const data = snapshotAnnotations(state);
+      const key = buildStorageKey(instanceIndex);
+      const existing = readMergeableRecord(storage, key, data.gram);
+      const merged = existing ? mergeStoredAnnotations(data, existing) : data;
+      storage.setItem(key, JSON.stringify(merged));
+      return true;
+    } catch (error) {
+      console.warn("GramFrame: Failed to save annotations — they exist in memory only:", error);
+      return false;
+    }
+  }
+  function hasTombstones(state) {
+    const tombs = tombstonesOf(state);
+    return Object.keys(tombs.markers).length > 0 || Object.keys(tombs.harmonicSets).length > 0 || Object.keys(tombs.sidebandSets).length > 0 || !!tombs.doppler;
+  }
+  function snapshotAnnotations(state) {
+    const data = {
+      version: SCHEMA_VERSION,
+      savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      // `gram` is an ADDITIVE field (which gram this record belongs to). It
+      // MUST NOT trigger a SCHEMA_VERSION bump: legacy records simply lack it
+      // and restore without the identity check (BH-6, BH-23).
+      gram: buildGramFingerprint(state),
+      analysis: {
+        markers: (state.analysis && state.analysis.markers || []).map((m) => {
+          const label = normalizeMarkerLabel(m.label);
+          return {
+            id: m.id,
+            color: m.color,
+            time: m.time,
+            freq: m.freq,
+            // `symbol` is an ADDITIVE field (feature 161). It MUST NOT trigger a
+            // SCHEMA_VERSION bump: legacy records simply lack it and default to
+            // 'cross' (no drawn symbol) on restore.
+            symbol: m.symbol || "cross",
+            // `label` is likewise ADDITIVE (feature 231) and MUST NOT bump
+            // SCHEMA_VERSION. Written only when the marker carries one, so an
+            // unlabelled marker's record is identical to what it was before
+            // labels existed, and restores as unlabelled.
+            ...label ? { label } : {}
+          };
+        })
+      },
+      harmonics: {
+        harmonicSets: (state.harmonics && state.harmonics.harmonicSets || []).map((hs) => ({
+          id: hs.id,
+          color: hs.color,
+          anchorTime: hs.anchorTime,
+          spacing: hs.spacing,
+          // `symbol` is an ADDITIVE field (feature 157-harmonic-pin-symbols). It
+          // MUST NOT trigger a SCHEMA_VERSION bump: the strict version guard in
+          // loadAnnotations would otherwise discard all pre-existing v1 records.
+          // Legacy records simply lack this key and default to 'cross' (the
+          // symbol-less default, feature 161) on restore.
+          symbol: hs.symbol || "cross",
+          // `showPin` is likewise ADDITIVE (harmonic-pin toggle) and MUST NOT
+          // bump SCHEMA_VERSION. Records written before it simply lack the key
+          // and restore as `true` (pin shown), matching their original look.
+          showPin: hs.showPin !== false
+        }))
+      },
+      // `sidebands` is an ADDITIVE section (issue #241). It MUST NOT trigger a
+      // SCHEMA_VERSION bump: the strict version guard in loadAnnotations would
+      // otherwise discard every pre-existing v1 record. Records written before
+      // sidebands existed simply lack the key and restore with none.
+      sidebands: {
+        sidebandSets: (state.sidebands && state.sidebands.sidebandSets || []).map((sb) => ({
+          id: sb.id,
+          color: sb.color,
+          anchorTime: sb.anchorTime,
+          fundamentalFreq: sb.fundamentalFreq,
+          spacing: sb.spacing,
+          symbol: sb.symbol || "cross",
+          showPin: sb.showPin !== false
+        }))
+      },
+      doppler: {
+        fPlus: state.doppler && state.doppler.fPlus ? { time: state.doppler.fPlus.time, freq: state.doppler.fPlus.freq } : null,
+        fMinus: state.doppler && state.doppler.fMinus ? { time: state.doppler.fMinus.time, freq: state.doppler.fMinus.freq } : null,
+        fZero: state.doppler && state.doppler.fZero ? { time: state.doppler.fZero.time, freq: state.doppler.fZero.freq } : null,
+        color: state.doppler && state.doppler.color || null
+      },
+      // `tombstones` is an ADDITIVE field (issue #269). It MUST NOT trigger a
+      // SCHEMA_VERSION bump: records written before multi-tab merging simply
+      // lack it and merge as having deleted nothing, which is true of them.
+      tombstones: tombstonesOf(state)
+    };
+    return data;
+  }
+  function mergeForeignRecord(raw, state) {
+    let theirs = null;
+    try {
+      theirs = JSON.parse(raw);
+    } catch (error) {
+      console.warn("GramFrame: ignoring an unreadable record from another tab:", error);
+      return null;
+    }
+    if (!theirs || theirs.version !== SCHEMA_VERSION) {
+      return null;
+    }
+    if (theirs.gram && !fingerprintMatches(theirs.gram, buildGramFingerprint(state))) {
+      return null;
+    }
+    return mergeStoredAnnotations(snapshotAnnotations(state), theirs);
+  }
+  function readMergeableRecord(storage, key, expectedGram) {
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) return null;
+      const existing = JSON.parse(raw);
+      if (!existing || existing.version !== SCHEMA_VERSION) return null;
+      if (expectedGram && !fingerprintMatches(existing.gram, expectedGram)) return null;
+      return existing;
+    } catch (error) {
+      console.warn("GramFrame: could not read the stored record to merge with — saving without merging:", error);
+      return null;
+    }
+  }
+  function loadResult(outcome, annotations = null, dropped = 0) {
+    return { annotations, outcome, dropped };
+  }
+  function loadAnnotations(instanceIndex, context, expectedGram) {
+    try {
+      const resolvedContext = context || detectUserContext();
+      const storage = getStorage(resolvedContext);
+      if (!storage) return loadResult("none");
+      const key = buildStorageKey(instanceIndex);
+      const raw = storage.getItem(key);
+      if (!raw) return loadResult("none");
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (parseError) {
+        console.warn("GramFrame: Stored annotations could not be parsed — leaving the record in place:", parseError);
+        return loadResult("unreadable");
+      }
+      if (!data || data.version !== SCHEMA_VERSION) {
+        console.warn("GramFrame: Ignoring stored annotations — unrecognised schema version:", data && data.version);
+        return loadResult("unknown-version");
+      }
+      if (resolvedContext === "student" && isAnnotationExpired(data.savedAt, Date.now())) {
+        console.info("GramFrame: Discarding student annotations — older than the 24-hour persistence limit");
+        storage.removeItem(key);
+        return loadResult("expired");
+      }
+      if (expectedGram && !fingerprintMatches(data.gram, expectedGram)) {
+        console.warn("GramFrame: Ignoring stored annotations — they belong to a different spectrogram (image or axis ranges differ).");
+        return loadResult("wrong-gram");
+      }
+      const { annotations, dropped } = sanitizeStoredAnnotations(data);
+      if (dropped > 0) {
+        console.warn(`GramFrame: Discarded ${dropped} invalid stored annotation entr${dropped === 1 ? "y" : "ies"} — restoring the rest.`);
+        return loadResult("partial", annotations, dropped);
+      }
+      return loadResult("restored", annotations);
+    } catch (error) {
+      console.warn("GramFrame: Failed to load stored annotations — data discarded:", error);
+      return loadResult("unreadable");
+    }
+  }
+  function describeLoadOutcome(outcome, dropped = 0) {
+    switch (outcome) {
+      case "partial":
+        return `${dropped} saved annotation${dropped === 1 ? "" : "s"} could not be restored and ${dropped === 1 ? "was" : "were"} skipped — the rest are shown.`;
+      case "unreadable":
+        return "Saved annotations could not be read and were not restored — the stored data is damaged. It has been left in browser storage, so nothing has been overwritten yet.";
+      case "unknown-version":
+        return "Saved annotations were not restored — they were written by a different version of this component. They have been left in browser storage.";
+      case "wrong-gram":
+        return "Saved annotations were not restored — they belong to a different spectrogram. They have been left in browser storage.";
+      case "expired":
+        return "Saved annotations were not restored — they were more than 24 hours old and have been discarded.";
+      case "none":
+      case "restored":
+      default:
+        return null;
+    }
+  }
+  function clearAnnotations(instanceIndex, context) {
+    try {
+      const storage = getStorage(context || detectUserContext());
+      if (!storage) return false;
+      const key = buildStorageKey(instanceIndex);
+      storage.removeItem(key);
+      return true;
+    } catch (error) {
+      console.warn("GramFrame: Failed to clear stored annotations:", error);
+      return false;
+    }
+  }
+  function sidecarKey(src) {
+    const path = src.split("#")[0].split("?")[0];
+    return decodeURIComponent(path.split("/").pop() || path);
+  }
+  function base64ToArrayBuffer(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+  function loadSidecar(src, doc) {
+    const key = sidecarKey(src);
+    const registry = (
+      /** @type {SidecarRegistry|undefined} */
+      /** @type {any} */
+      window.GramFrameAudio
+    );
+    if (registry && typeof registry[key] === "string") {
+      return Promise.resolve(base64ToArrayBuffer(registry[key]));
+    }
+    const sidecarUrl = `${src.split("#")[0]}.js`;
+    return new Promise((resolve, reject) => {
+      const script = doc.createElement("script");
+      script.async = true;
+      script.src = sidecarUrl;
+      const cleanup = () => {
+        script.onload = null;
+        script.onerror = null;
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+      script.onload = () => {
+        cleanup();
+        const loaded = (
+          /** @type {SidecarRegistry|undefined} */
+          /** @type {any} */
+          window.GramFrameAudio
+        );
+        if (loaded && typeof loaded[key] === "string") {
+          resolve(base64ToArrayBuffer(loaded[key]));
+        } else {
+          reject(new Error(
+            `${sidecarUrl} loaded but did not register "${key}". Regenerate it with: node scripts/wav2js.mjs <file.wav>`
+          ));
+        }
+      };
+      script.onerror = () => {
+        cleanup();
+        reject(new Error(
+          `Could not load ${src} (fetch is unavailable on this page — file:// or a network error) and no sidecar was found at ${sidecarUrl}. For file:// distribution generate one with: node scripts/wav2js.mjs <file.wav>`
+        ));
+      };
+      doc.head.appendChild(script);
+    });
+  }
+  function looksLikeWav(bytes) {
+    if (bytes.byteLength < 12) return false;
+    const head = new Uint8Array(bytes, 0, 12);
+    let text = "";
+    for (let i = 0; i < head.length; i++) text += String.fromCharCode(head[i]);
+    return text.startsWith("RIFF") && text.slice(8) === "WAVE";
+  }
+  async function loadAudioBytes(src, options = {}) {
+    const doc = options.doc || document;
+    let fetched = null;
+    try {
+      const response = await fetch(src);
+      if (response.ok) {
+        fetched = await response.arrayBuffer();
+        if (looksLikeWav(fetched)) {
+          return fetched;
+        }
+        console.warn(`GramFrame: fetch of ${src} returned ${fetched.byteLength} bytes that are not a WAV; trying the sidecar`);
+      } else {
+        console.warn(`GramFrame: fetch of ${src} returned ${response.status}; trying the sidecar`);
+      }
+    } catch (error) {
+      console.warn(`GramFrame: fetch of ${src} failed (${error instanceof Error ? error.message : String(error)}); trying the sidecar`);
+    }
+    try {
+      return await loadSidecar(src, doc);
+    } catch (sidecarError) {
+      if (fetched) {
+        return fetched;
+      }
+      throw sidecarError;
+    }
+  }
+  const FORMAT_PCM = 1;
+  const FORMAT_IEEE_FLOAT = 3;
+  const FORMAT_EXTENSIBLE = 65534;
+  function fourCC(view, offset) {
+    return String.fromCharCode(
+      view.getUint8(offset),
+      view.getUint8(offset + 1),
+      view.getUint8(offset + 2),
+      view.getUint8(offset + 3)
+    );
+  }
+  function decodeWav(buffer) {
+    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 12) {
+      throw new Error("Not a WAV file: too short to hold a RIFF header");
+    }
+    const view = new DataView(buffer);
+    if (fourCC(view, 0) !== "RIFF" || fourCC(view, 8) !== "WAVE") {
+      throw new Error(`Not a WAV file: expected a RIFF/WAVE header, found "${fourCC(view, 0)}"/"${fourCC(view, 8)}"`);
+    }
+    let format = null;
+    let data = null;
+    let offset = 12;
+    while (offset + 8 <= view.byteLength) {
+      const id = fourCC(view, offset);
+      const size = view.getUint32(offset + 4, true);
+      const body = offset + 8;
+      if (id === "fmt ") {
+        if (size < 16) {
+          throw new Error(`Malformed WAV: "fmt " chunk is ${size} bytes, expected at least 16`);
+        }
+        let formatTag2 = view.getUint16(body, true);
+        const channels2 = view.getUint16(body + 2, true);
+        const sampleRate2 = view.getUint32(body + 4, true);
+        const bitsPerSample2 = view.getUint16(body + 14, true);
+        if (formatTag2 === FORMAT_EXTENSIBLE) {
+          if (size < 26) {
+            throw new Error("Malformed WAV: WAVE_FORMAT_EXTENSIBLE header is truncated");
+          }
+          formatTag2 = view.getUint16(body + 24, true);
+        }
+        format = { formatTag: formatTag2, channels: channels2, sampleRate: sampleRate2, bitsPerSample: bitsPerSample2 };
+      } else if (id === "data") {
+        const available = view.byteLength - body;
+        const length = size === 0 || size === 4294967295 || size > available ? available : size;
+        data = { offset: body, length };
+      }
+      offset = body + size + size % 2;
+    }
+    if (!format) {
+      throw new Error('Malformed WAV: no "fmt " chunk');
+    }
+    if (!data) {
+      throw new Error('Malformed WAV: no "data" chunk');
+    }
+    if (format.channels < 1) {
+      throw new Error("Malformed WAV: channel count is 0");
+    }
+    if (format.sampleRate < 1) {
+      throw new Error("Malformed WAV: sample rate is 0");
+    }
+    const { formatTag, channels, sampleRate, bitsPerSample } = format;
+    const isFloat = formatTag === FORMAT_IEEE_FLOAT;
+    if (formatTag !== FORMAT_PCM && !isFloat) {
+      throw new Error(`Unsupported WAV format tag ${formatTag}: only PCM (1) and IEEE float (3) are supported`);
+    }
+    if (isFloat && bitsPerSample !== 32) {
+      throw new Error(`Unsupported WAV: ${bitsPerSample}-bit float; only 32-bit float is supported`);
+    }
+    if (!isFloat && ![8, 16, 24, 32].includes(bitsPerSample)) {
+      throw new Error(`Unsupported WAV: ${bitsPerSample}-bit PCM; only 8, 16, 24 and 32-bit PCM are supported`);
+    }
+    const bytesPerSample = bitsPerSample / 8;
+    const frameBytes = bytesPerSample * channels;
+    const frameCount = Math.floor(data.length / frameBytes);
+    if (frameCount === 0) {
+      throw new Error('Malformed WAV: the "data" chunk holds no complete sample frame');
+    }
+    const samples = new Float32Array(frameCount);
+    const scale = 1 / channels;
+    let pos = data.offset;
+    if (isFloat) {
+      for (let i = 0; i < frameCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) {
+          sum += view.getFloat32(pos, true);
+          pos += 4;
+        }
+        samples[i] = sum * scale;
+      }
+    } else if (bitsPerSample === 16) {
+      const k = scale / 32768;
+      for (let i = 0; i < frameCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) {
+          sum += view.getInt16(pos, true);
+          pos += 2;
+        }
+        samples[i] = sum * k;
+      }
+    } else if (bitsPerSample === 8) {
+      const k = scale / 128;
+      for (let i = 0; i < frameCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) {
+          sum += view.getUint8(pos) - 128;
+          pos += 1;
+        }
+        samples[i] = sum * k;
+      }
+    } else if (bitsPerSample === 24) {
+      const k = scale / 8388608;
+      for (let i = 0; i < frameCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) {
+          const raw = view.getUint8(pos) | view.getUint8(pos + 1) << 8 | view.getUint8(pos + 2) << 16;
+          sum += raw << 8 >> 8;
+          pos += 3;
+        }
+        samples[i] = sum * k;
+      }
+    } else {
+      const k = scale / 2147483648;
+      for (let i = 0; i < frameCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) {
+          sum += view.getInt32(pos, true);
+          pos += 4;
+        }
+        samples[i] = sum * k;
+      }
+    }
+    return { samples, sampleRate, channels, duration: frameCount / sampleRate };
+  }
+  function planAnalysis(request) {
+    const { sampleRate, sampleCount, fftSize, hopSize } = request;
+    if (!isPowerOfTwo(fftSize)) {
+      throw new Error(`fft-size must be a power of two, got ${fftSize}`);
+    }
+    if (!Number.isInteger(hopSize) || hopSize < 1) {
+      throw new Error(`hop-size must be a positive integer, got ${hopSize}`);
+    }
+    const frames = Math.floor((sampleCount - fftSize) / hopSize) + 1;
+    if (frames < 1) {
+      throw new Error(`The recording (${sampleCount} samples) is shorter than one analysis frame (${fftSize} samples)`);
+    }
+    const nyquist = sampleRate / 2;
+    const binWidth = sampleRate / fftSize;
+    const requestedEnd = request.freqEnd === null || request.freqEnd === void 0 ? nyquist : request.freqEnd;
+    const clamped = requestedEnd > nyquist;
+    const freqEndTarget = clamped ? nyquist : requestedEnd;
+    if (request.freqStart < 0) {
+      throw new Error(`freq-start must not be negative, got ${request.freqStart}`);
+    }
+    if (request.freqStart >= freqEndTarget) {
+      throw new Error(`freq-start (${request.freqStart}) must be below freq-end (${freqEndTarget})`);
+    }
+    const firstBin = Math.ceil(request.freqStart / binWidth);
+    const lastBin = Math.min(fftSize / 2, Math.floor(freqEndTarget / binWidth));
+    const columns = lastBin - firstBin + 1;
+    if (columns < 1) {
+      throw new Error(`The frequency range ${request.freqStart}–${freqEndTarget} Hz holds no whole bin at ${binWidth} Hz per bin; widen it or raise fft-size`);
+    }
+    return {
+      sampleRate,
+      fftSize,
+      hopSize,
+      frames,
+      binWidth,
+      firstBin,
+      lastBin,
+      columns,
+      freqStart: firstBin * binWidth,
+      freqEnd: lastBin * binWidth,
+      clamped
+    };
+  }
+  function analyseFrames(samples, plan, grid, scratch, from, to) {
+    const { fftSize, hopSize, firstBin, columns } = plan;
+    const { fft, window: window2, re, im } = scratch;
+    for (let f = from; f < to; f++) {
+      const offset = f * hopSize;
+      for (let i = 0; i < fftSize; i++) {
+        re[i] = samples[offset + i] * window2[i];
+        im[i] = 0;
+      }
+      fft.forward(re, im);
+      const row = f * columns;
+      for (let k = 0; k < columns; k++) {
+        const bin = firstBin + k;
+        grid[row + k] = re[bin] * re[bin] + im[bin] * im[bin];
+      }
+    }
+  }
+  function makeScratch(plan) {
+    const { fftSize } = plan;
+    const window2 = new Float32Array(fftSize);
+    for (let i = 0; i < fftSize; i++) {
+      window2[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fftSize - 1));
+    }
+    return {
+      fft: createFFT(fftSize),
+      window: window2,
+      re: new Float32Array(fftSize),
+      im: new Float32Array(fftSize)
+    };
+  }
+  async function analyse(samples, plan, options = {}) {
+    const sliceMs = options.sliceMs === void 0 ? 12 : options.sliceMs;
+    const onProgress = options.onProgress || (() => {
+    });
+    const yieldToLoop = options.yieldToLoop || (() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const now = typeof performance !== "undefined" && performance.now ? () => performance.now() : () => Date.now();
+    const grid = new Float32Array(plan.frames * plan.columns);
+    const scratch = makeScratch(plan);
+    const batch = Math.max(1, Math.round(4096 / plan.fftSize) * 8);
+    let frame = 0;
+    while (frame < plan.frames) {
+      const sliceStart = now();
+      do {
+        const to = Math.min(plan.frames, frame + batch);
+        analyseFrames(samples, plan, grid, scratch, frame, to);
+        frame = to;
+      } while (frame < plan.frames && now() - sliceStart < sliceMs);
+      onProgress(frame / plan.frames);
+      if (frame < plan.frames) {
+        await yieldToLoop();
+      }
+    }
+    return grid;
+  }
+  const painted = /* @__PURE__ */ new WeakMap();
+  function rememberPaintedLevels(instance, levels, frames, columns, map) {
+    painted.set(instance, { levels, frames, columns, map });
+  }
+  function paintedMap(instance) {
+    const kept = painted.get(instance);
+    return kept ? kept.map : "colour";
+  }
+  function repaintGram(instance, map) {
+    const kept = painted.get(instance);
+    if (!kept) {
+      return false;
+    }
+    const url = paintGram(kept.levels, kept.frames, kept.columns, map);
+    kept.map = map;
+    instance.ui.spectrogramImage.setAttributeNS("http://www.w3.org/1999/xlink", "href", url);
+    return true;
+  }
+  function averagedRowCount(frames, count) {
+    return Math.ceil(frames / Math.max(1, Math.floor(count)));
+  }
+  function averageFrames(grid, frames, columns, count) {
+    const n = Math.max(1, Math.floor(count));
+    if (n === 1) {
+      return { grid, frames };
+    }
+    const rows = averagedRowCount(frames, n);
+    const out = new Float32Array(rows * columns);
+    for (let r = 0; r < rows; r++) {
+      const from = r * n;
+      const to = Math.min(frames, from + n);
+      const rowOut = r * columns;
+      for (let f = from; f < to; f++) {
+        const rowIn = f * columns;
+        for (let k = 0; k < columns; k++) out[rowOut + k] += grid[rowIn + k];
+      }
+      const divisor = to - from;
+      for (let k = 0; k < columns; k++) out[rowOut + k] /= divisor;
+    }
+    return { grid: out, frames: rows };
+  }
+  function renderBookmarks(instance, snapshot, flags, list, count) {
+    const bookmarks = snapshot.bookmarks || [];
+    const duration = snapshot.player.duration;
+    count.textContent = `${bookmarks.length} saved`;
+    count.disabled = bookmarks.length === 0;
+    if (bookmarks.length === 0) {
+      list.hidden = true;
+      count.setAttribute("aria-expanded", "false");
+    }
+    flags.replaceChildren();
+    list.replaceChildren();
+    bookmarks.forEach((mark) => {
+      const at = duration > 0 ? mark.time / duration * 100 : 0;
+      const flag = document.createElement("button");
+      flag.type = "button";
+      flag.className = "gram-frame-transport-flag";
+      flag.style.left = `${at}%`;
+      flag.title = `Jump to ${formatTime(mark.time)}`;
+      const plate = document.createElement("span");
+      plate.className = "gram-frame-transport-flag-plate";
+      plate.textContent = mark.label;
+      const stem = document.createElement("span");
+      stem.className = "gram-frame-transport-flag-stem";
+      flag.appendChild(plate);
+      flag.appendChild(stem);
+      flag.addEventListener("click", () => {
+        var _a;
+        return (_a = instance.player) == null ? void 0 : _a.seek(mark.time);
+      });
+      flags.appendChild(flag);
+      const row = document.createElement("div");
+      row.className = "gram-frame-transport-saved-row";
+      const jump = document.createElement("button");
+      jump.type = "button";
+      jump.className = "gram-frame-transport-saved-jump";
+      jump.textContent = `${mark.label} · ${formatTime(mark.time)}`;
+      jump.addEventListener("click", () => {
+        var _a;
+        return (_a = instance.player) == null ? void 0 : _a.seek(mark.time);
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "gram-frame-transport-saved-remove";
+      remove.textContent = "×";
+      remove.title = "Remove this bookmark";
+      remove.addEventListener("click", () => removeBookmark(instance, mark.id));
+      row.appendChild(jump);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+  }
+  const PLAYBACK_RATES = [[0.25, "0.25×"], [0.5, "0.5×"], [1, "1×"], [1.5, "1.5×"], [2, "2×"], [4, "4×"]];
+  const ANNOUNCE_INTERVAL_MS = 5e3;
+  function button(className, title, icon, text) {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `gram-frame-transport-btn ${className}`;
+    el.title = title;
+    el.setAttribute("aria-label", title);
+    const glyph = createIcon(icon);
+    if (glyph) {
+      el.appendChild(glyph);
+    } else if (text) {
+      el.textContent = text;
+    }
+    return el;
+  }
+  function setGlyph(el, icon) {
+    const glyph = createIcon(icon);
+    const existing = el.querySelector("svg");
+    if (glyph && existing) {
+      existing.replaceWith(glyph);
+    }
+  }
+  function createTransportBar(instance) {
+    const controller = instance.player;
+    if (!controller) {
+      throw new Error("GramFrame: the transport bar needs a player");
+    }
+    const state = instance.state;
+    const player = state.player;
+    const bar = document.createElement("div");
+    bar.className = "gram-frame-transport";
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", "Playback controls");
+    const restart = button("gram-frame-transport-restart", "Restart", "restart");
+    const play = button("gram-frame-transport-play gram-frame-transport-primary", "Play", "play");
+    const elapsed = document.createElement("span");
+    elapsed.className = "gram-frame-transport-time";
+    const seek = document.createElement("input");
+    seek.type = "range";
+    seek.className = "gram-frame-transport-seek";
+    seek.min = "0";
+    seek.max = String(player.duration);
+    seek.step = "0.01";
+    seek.value = "0";
+    seek.title = "Seek";
+    seek.setAttribute("aria-label", "Seek");
+    const flags = document.createElement("div");
+    flags.className = "gram-frame-transport-flags";
+    const track = document.createElement("div");
+    track.className = "gram-frame-transport-track";
+    track.appendChild(seek);
+    track.appendChild(flags);
+    const duration = document.createElement("span");
+    duration.className = "gram-frame-transport-duration";
+    const divider = document.createElement("span");
+    divider.className = "gram-frame-transport-divider";
+    const bookmark = button("gram-frame-transport-bookmark", "Bookmark this moment (B)", "bookmark");
+    const bookmarkWord = document.createElement("span");
+    bookmarkWord.textContent = "Bookmark";
+    bookmark.appendChild(bookmarkWord);
+    const saved = document.createElement("button");
+    saved.type = "button";
+    saved.className = "gram-frame-transport-saved";
+    saved.setAttribute("aria-haspopup", "true");
+    saved.setAttribute("aria-expanded", "false");
+    const savedList = document.createElement("div");
+    savedList.className = "gram-frame-transport-saved-list";
+    savedList.hidden = true;
+    const loop = button("gram-frame-transport-loop", "Loop", void 0, "⟲");
+    loop.setAttribute("aria-pressed", "false");
+    const rateLabel = document.createElement("span");
+    rateLabel.className = "gram-frame-transport-rate-label";
+    rateLabel.textContent = "Rate";
+    const playbackRate = document.createElement("select");
+    playbackRate.className = "gram-frame-transport-playback-rate";
+    playbackRate.title = "Playback rate";
+    playbackRate.setAttribute("aria-label", "Playback rate");
+    PLAYBACK_RATES.forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = label;
+      if (value === 1) option.selected = true;
+      playbackRate.appendChild(option);
+    });
+    const span = document.createElement("span");
+    span.className = "gram-frame-transport-span";
+    span.title = "Visible time span";
+    const mute = button("gram-frame-transport-mute", "Mute", "volume");
+    mute.setAttribute("aria-pressed", "false");
+    const volume = document.createElement("input");
+    volume.type = "range";
+    volume.className = "gram-frame-transport-volume";
+    volume.min = "0";
+    volume.max = "1";
+    volume.step = "0.01";
+    volume.value = "1";
+    volume.title = "Volume";
+    volume.setAttribute("aria-label", "Volume");
+    const status = document.createElement("span");
+    status.className = "gram-frame-transport-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    const transportGroup = document.createElement("div");
+    transportGroup.className = "gram-frame-transport-group";
+    transportGroup.appendChild(restart);
+    transportGroup.appendChild(play);
+    const bookmarkGroup = document.createElement("div");
+    bookmarkGroup.className = "gram-frame-transport-group gram-frame-transport-bookmarks";
+    bookmarkGroup.appendChild(bookmark);
+    bookmarkGroup.appendChild(saved);
+    bookmarkGroup.appendChild(savedList);
+    const outputGroup = document.createElement("div");
+    outputGroup.className = "gram-frame-transport-group";
+    outputGroup.appendChild(mute);
+    outputGroup.appendChild(volume);
+    [
+      transportGroup,
+      elapsed,
+      track,
+      duration,
+      divider,
+      bookmarkGroup,
+      loop,
+      rateLabel,
+      playbackRate,
+      span,
+      outputGroup,
+      status
+    ].forEach((el) => bar.appendChild(el));
+    bar.addEventListener("mousedown", () => setFocusedInstance(instance));
+    play.addEventListener("click", () => {
+      controller.toggle().catch((error) => {
+        console.warn("GramFrame: playback could not start:", error instanceof Error ? error.message : String(error));
+      });
+    });
+    restart.addEventListener("click", () => controller.restart());
+    let scrubbing = false;
+    seek.addEventListener("pointerdown", () => {
+      scrubbing = true;
+    });
+    seek.addEventListener("pointerup", () => {
+      scrubbing = false;
+    });
+    seek.addEventListener("pointercancel", () => {
+      scrubbing = false;
+    });
+    seek.addEventListener("input", () => controller.seek(parseFloat(seek.value)));
+    seek.addEventListener("change", () => {
+      scrubbing = false;
+      controller.seek(parseFloat(seek.value));
+    });
+    loop.addEventListener("click", () => controller.setLoop(!player.loop));
+    playbackRate.addEventListener("change", () => controller.setPlaybackRate(parseFloat(playbackRate.value)));
+    mute.addEventListener("click", () => controller.setMute(!player.muted));
+    volume.addEventListener("input", () => controller.setVolume(parseFloat(volume.value)));
+    bookmark.addEventListener("click", () => addBookmark(instance));
+    saved.addEventListener("click", () => {
+      savedList.hidden = !savedList.hidden;
+      saved.setAttribute("aria-expanded", savedList.hidden ? "false" : "true");
+    });
+    document.addEventListener("mousedown", (event) => {
+      const target = (
+        /** @type {Node|null} */
+        event.target
+      );
+      if (!savedList.hidden && target && !bookmarkGroup.contains(target)) {
+        savedList.hidden = true;
+        saved.setAttribute("aria-expanded", "false");
+      }
+    }, true);
+    let announced = { playing: player.playing, at: 0 };
+    const announce = (p) => {
+      const now = Date.now();
+      const changed = p.playing !== announced.playing;
+      if (!changed && (!p.playing || now - announced.at < ANNOUNCE_INTERVAL_MS)) {
+        return;
+      }
+      announced = { playing: p.playing, at: now };
+      status.textContent = `${p.playing ? "Playing" : "Paused"} at ${formatTime(p.playhead)} of ${formatTime(p.duration)}`;
+    };
+    const reflect = (snapshot) => {
+      const p = snapshot.player;
+      setGlyph(play, p.playing ? "pause" : "play");
+      play.title = p.playing ? "Pause" : "Play";
+      play.setAttribute("aria-label", play.title);
+      play.setAttribute("aria-pressed", p.playing ? "true" : "false");
+      if (!scrubbing) {
+        seek.max = String(p.duration);
+        seek.value = String(p.playhead);
+      }
+      const played = p.duration > 0 ? p.playhead / p.duration * 100 : 0;
+      seek.style.setProperty("--gf-played", `${played}%`);
+      elapsed.textContent = formatTime(p.playhead);
+      duration.textContent = formatTime(p.duration);
+      const visibleSeconds = p.windowSeconds / snapshot.zoom.level;
+      span.textContent = `${visibleSeconds.toFixed(1)} s span`;
+      loop.setAttribute("aria-pressed", p.loop ? "true" : "false");
+      playbackRate.value = String(p.playbackRate);
+      mute.setAttribute("aria-pressed", p.muted ? "true" : "false");
+      setGlyph(mute, p.muted ? "muted" : "volume");
+      mute.title = p.muted ? "Unmute" : "Mute";
+      mute.setAttribute("aria-label", mute.title);
+      if (document.activeElement !== volume) {
+        volume.value = String(p.volume);
+      }
+      renderBookmarks(instance, snapshot, flags, savedList, saved);
+      announce(p);
+    };
+    reflect(state);
+    instance.stateListeners.push(reflect);
+    instance.ui.mainCell.appendChild(bar);
+    return bar;
+  }
+  const DEFAULT_DISPLAY_RANGE = { floor: 0, ceiling: 1 };
+  const MIN_DISPLAY_SPAN = 0.02;
+  function settleDisplayRange(floor, ceiling, moved = "floor") {
+    const lo = clamp01(Number.isFinite(floor) ? floor : 0);
+    const hi = clamp01(Number.isFinite(ceiling) ? ceiling : 1);
+    if (hi - lo >= MIN_DISPLAY_SPAN) {
+      return { floor: lo, ceiling: hi };
+    }
+    if (moved === "floor") {
+      const settledFloor = Math.min(lo, 1 - MIN_DISPLAY_SPAN);
+      return { floor: settledFloor, ceiling: settledFloor + MIN_DISPLAY_SPAN };
+    }
+    const settledCeiling = Math.max(hi, MIN_DISPLAY_SPAN);
+    return { floor: settledCeiling - MIN_DISPLAY_SPAN, ceiling: settledCeiling };
+  }
+  function isDefaultDisplayRange(range) {
+    return range.floor === DEFAULT_DISPLAY_RANGE.floor && range.ceiling === DEFAULT_DISPLAY_RANGE.ceiling;
+  }
+  function displayTransfer(range, darkForLoud = false) {
+    const { floor, ceiling } = settleDisplayRange(range.floor, range.ceiling);
+    const slope = 1 / (ceiling - floor);
+    return { slope, intercept: darkForLoud ? 1 - slope * (1 - floor) : -floor * slope };
+  }
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+  }
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function applyDisplayRange(instance, range) {
+    const image = instance.ui.spectrogramImage;
+    if (!image) {
+      return;
+    }
+    if (isDefaultDisplayRange(range)) {
+      image.removeAttribute("filter");
+      return;
+    }
+    const { slope, intercept } = displayTransfer(range, isDarkForLoud(paintedMap(instance)));
+    const filter = ensureFilter(instance);
+    filter.querySelectorAll("feComponentTransfer > *").forEach((func) => {
+      func.setAttribute("slope", String(slope));
+      func.setAttribute("intercept", String(intercept));
+    });
+    image.setAttribute("filter", `url(#${filter.getAttribute("id")})`);
+  }
+  function ensureFilter(instance) {
+    const svg = instance.ui.svg;
+    const existing = svg.querySelector("filter.gram-frame-display-filter");
+    if (existing) {
+      return (
+        /** @type {SVGFilterElement} */
+        existing
+      );
+    }
+    const filter = document.createElementNS(SVG_NS, "filter");
+    filter.setAttribute("class", "gram-frame-display-filter");
+    filter.setAttribute("id", `gramDisplay-${instance.instanceId}`);
+    filter.setAttribute("x", "0%");
+    filter.setAttribute("y", "0%");
+    filter.setAttribute("width", "100%");
+    filter.setAttribute("height", "100%");
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+    const transfer = document.createElementNS(SVG_NS, "feComponentTransfer");
+    ["feFuncR", "feFuncG", "feFuncB"].forEach((name) => {
+      const func = document.createElementNS(SVG_NS, name);
+      func.setAttribute("type", "linear");
+      func.setAttribute("slope", "1");
+      func.setAttribute("intercept", "0");
+      transfer.appendChild(func);
+    });
+    filter.appendChild(transfer);
+    const defs = svg.querySelector("defs") || svg.insertBefore(document.createElementNS(SVG_NS, "defs"), svg.firstChild);
+    defs.appendChild(filter);
+    return filter;
+  }
+  function slider(className, label, value) {
+    const wrap = document.createElement("label");
+    wrap.className = `gram-frame-display-control ${className}`;
+    const text = document.createElement("span");
+    text.className = "gram-frame-display-label";
+    text.textContent = label;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = "0";
+    input.max = "1";
+    input.step = "0.01";
+    input.value = String(value);
+    input.className = "gram-frame-display-slider";
+    input.setAttribute("aria-label", `Contrast ${label.toLowerCase()}`);
+    wrap.appendChild(text);
+    wrap.appendChild(input);
+    return { wrap, input };
+  }
+  function createDisplayRangeControls(instance, bar, display) {
+    const group = document.createElement("div");
+    group.className = "gram-frame-display-range";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", "Contrast");
+    const floor = slider("gram-frame-display-floor", "Floor", display.floor);
+    const ceiling = slider("gram-frame-display-ceiling", "Ceiling", display.ceiling);
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "gram-frame-transport-btn gram-frame-display-reset";
+    reset.title = "Reset contrast";
+    reset.setAttribute("aria-label", "Reset contrast");
+    reset.textContent = "Reset";
+    [floor.wrap, ceiling.wrap, reset].forEach((el) => group.appendChild(el));
+    bar.appendChild(group);
+    const setRange = (nextFloor, nextCeiling, moved) => {
+      const settled = settleDisplayRange(nextFloor, nextCeiling, moved);
+      display.floor = settled.floor;
+      display.ceiling = settled.ceiling;
+      floor.input.value = String(settled.floor);
+      ceiling.input.value = String(settled.ceiling);
+      applyDisplayRange(instance, display);
+      dispatch(instance, { frame: true });
+    };
+    group.addEventListener("mousedown", () => setFocusedInstance(instance));
+    floor.input.addEventListener("input", () => {
+      setRange(parseFloat(floor.input.value), display.ceiling, "floor");
+    });
+    ceiling.input.addEventListener("input", () => {
+      setRange(display.floor, parseFloat(ceiling.input.value), "ceiling");
+    });
+    reset.addEventListener("click", () => {
+      setRange(DEFAULT_DISPLAY_RANGE.floor, DEFAULT_DISPLAY_RANGE.ceiling, "floor");
+    });
+    return group;
+  }
+  const LABELS = {
+    colour: "Colour",
+    grey: "Grey",
+    inferno: "Inferno",
+    magma: "Magma",
+    viridis: "Viridis",
+    plasma: "Plasma"
+  };
+  let groupCounter = 0;
+  function createColourMapChoice(instance, bar, analysis, display) {
+    const group = document.createElement("div");
+    group.className = "gram-frame-colour-map";
+    group.setAttribute("role", "radiogroup");
+    group.setAttribute("aria-label", "Colour map");
+    const name = `gram-frame-colour-map-${++groupCounter}`;
+    COLOUR_MAPS.forEach((map) => {
+      const label = document.createElement("label");
+      label.className = "gram-frame-colour-map-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = map;
+      input.checked = map === analysis.colourMap;
+      const text = document.createElement("span");
+      text.textContent = LABELS[map];
+      label.appendChild(input);
+      label.appendChild(text);
+      group.appendChild(label);
+      input.addEventListener("change", () => {
+        if (!input.checked || analysis.colourMap === map) {
+          return;
+        }
+        analysis.colourMap = map;
+        repaintGram(instance, map);
+        applyDisplayRange(instance, display);
+        dispatch(instance);
+      });
+    });
+    group.addEventListener("mousedown", () => setFocusedInstance(instance));
+    bar.appendChild(group);
+    return group;
+  }
+  class PlayerController {
+    /**
+     * @param {GramFrame} instance - The owning instance
+     * @param {HTMLAudioElement} audio - The element to drive
+     */
+    constructor(instance, audio) {
+      this.instance = instance;
+      this.audio = audio;
+      this.playerState = instance.state.player;
+      this._listeners = [];
+      this._onVisibility = null;
+      this._bind();
+    }
+    /**
+     * Mirror the element's events into state.
+     */
+    _bind() {
+      const { audio } = this;
+      const on = (type, handler) => {
+        audio.addEventListener(type, handler);
+        this._listeners.push({ type, handler });
+      };
+      on("play", () => {
+        const player = this.playerState;
+        player.playing = true;
+        player.ended = false;
+        updatePlayingClass(this.instance);
+        startFollow(this.instance);
+        dispatch(this.instance);
+      });
+      on("pause", () => {
+        this.playerState.playing = false;
+        updatePlayingClass(this.instance);
+        stopFollow(this.instance);
+        dispatch(this.instance);
+      });
+      on("ended", () => {
+        const player = this.playerState;
+        player.playing = false;
+        player.ended = true;
+        updatePlayingClass(this.instance);
+        stopFollow(this.instance);
+        dispatch(this.instance);
+      });
+      on("seeked", () => syncViewToPlayhead(this.instance));
+      on("timeupdate", () => {
+        if (this.playerState.playing) {
+          syncViewToPlayhead(this.instance);
+        }
+      });
+      on("volumechange", () => {
+        const player = this.playerState;
+        player.volume = audio.volume;
+        player.muted = audio.muted;
+        dispatch(this.instance);
+      });
+      on("ratechange", () => {
+        this.playerState.playbackRate = audio.playbackRate;
+        dispatch(this.instance);
+      });
+      if (typeof document !== "undefined") {
+        this._onVisibility = () => {
+          if (document.visibilityState === "visible" && this.playerState.playing) {
+            syncViewToPlayhead(this.instance);
+          }
+        };
+        document.addEventListener("visibilitychange", this._onVisibility);
+      }
+    }
+    /**
+     * Whether the gram is analysed and the transport may be used.
+     * @returns {boolean} True once ready
+     */
+    isReady() {
+      return this.playerState.ready;
+    }
+    /**
+     * Start playback from the playhead.
+     *
+     * The view snaps to the playhead first (Story 4, AS-4): a paused analyst who
+     * panned away resumes where the audio is, not where they were looking. The
+     * element's promise is returned as-is, so an autoplay refusal
+     * (`NotAllowedError`) rejects rather than failing silently (FR-023).
+     * @returns {Promise<void>} Resolves when playback starts
+     */
+    play() {
+      if (!this.isReady()) {
+        return Promise.reject(new Error("GramFrame: the recording is still being analysed"));
+      }
+      this.playerState.ended = false;
+      syncViewToPlayhead(this.instance);
+      const result = this.audio.play();
+      return result && typeof result.then === "function" ? result : Promise.resolve();
+    }
+    /**
+     * Pause playback. The follow loop ends after one final sync.
+     */
+    pause() {
+      this.audio.pause();
+    }
+    /**
+     * Play if paused, pause if playing.
+     * @returns {Promise<void>} The `play()` promise, or resolved when pausing
+     */
+    toggle() {
+      if (this.audio.paused) {
+        return this.play();
+      }
+      this.pause();
+      return Promise.resolve();
+    }
+    /**
+     * Move the playhead. Reveals rows up to the target and puts the view there,
+     * without starting playback (spec edge case "seek while paused").
+     * @param {number} seconds - Target time; clamped to the recording
+     */
+    seek(seconds) {
+      if (!this.isReady()) {
+        return;
+      }
+      const duration = this.playerState.duration;
+      const target = Math.max(0, Math.min(duration, Number.isFinite(seconds) ? seconds : 0));
+      this.playerState.ended = false;
+      this.audio.currentTime = target;
+      const player = this.playerState;
+      player.playhead = target;
+      syncViewToPlayhead(this.instance);
+    }
+    /**
+     * Return to the start. Keeps playing if it was playing.
+     */
+    restart() {
+      this.seek(0);
+    }
+    /**
+     * @param {boolean} loop - Whether to restart at the end
+     */
+    setLoop(loop) {
+      this.audio.loop = !!loop;
+      this.playerState.loop = !!loop;
+      dispatch(this.instance);
+    }
+    /**
+     * @param {number} playbackRate - Playback speed; the gram is never re-analysed (FR-022)
+     */
+    setPlaybackRate(playbackRate) {
+      if (Number.isFinite(playbackRate) && playbackRate > 0) {
+        applyPreservesPitch(this.audio, this.playerState.preservesPitch);
+        this.audio.playbackRate = playbackRate;
+        this.playerState.playbackRate = playbackRate;
+        dispatch(this.instance);
+      }
+    }
+    /**
+     * @param {number} volume - 0..1
+     */
+    setVolume(volume) {
+      if (Number.isFinite(volume)) {
+        const clamped = Math.max(0, Math.min(1, volume));
+        this.audio.volume = clamped;
+        this.playerState.volume = clamped;
+        dispatch(this.instance);
+      }
+    }
+    /**
+     * @param {boolean} muted - Whether to silence output; the gram still scrolls (AS-5.5)
+     */
+    setMute(muted) {
+      this.audio.muted = !!muted;
+      this.playerState.muted = !!muted;
+      dispatch(this.instance);
+    }
+    /**
+     * Pause, detach every listener and drop the element.
+     */
+    destroy() {
+      try {
+        this.audio.pause();
+      } catch (_e) {
+      }
+      stopFollow(this.instance);
+      this._listeners.forEach(({ type, handler }) => this.audio.removeEventListener(type, handler));
+      this._listeners = [];
+      if (this._onVisibility) {
+        document.removeEventListener("visibilitychange", this._onVisibility);
+        this._onVisibility = null;
+      }
+      this.audio.removeAttribute("src");
+      if (this.audio.parentNode) {
+        this.audio.parentNode.removeChild(this.audio);
+      }
+    }
+  }
+  function applyPreservesPitch(audio, preserve) {
+    const element = (
+      /** @type {HTMLAudioElement & {mozPreservesPitch?: boolean, webkitPreservesPitch?: boolean}} */
+      audio
+    );
+    element.preservesPitch = preserve;
+    if ("mozPreservesPitch" in element) element.mozPreservesPitch = preserve;
+    if ("webkitPreservesPitch" in element) element.webkitPreservesPitch = preserve;
+  }
+  function createTransport(instance) {
+    const audio = document.createElement("audio");
+    audio.className = "gram-frame-audio-element";
+    audio.preload = "auto";
+    audio.style.display = "none";
+    instance.ui.container.appendChild(audio);
+    const controller = new PlayerController(instance, audio);
+    applyPreservesPitch(audio, controller.playerState.preservesPitch);
+    audio.src = controller.playerState.source;
+    instance.player = controller;
+    return controller;
+  }
+  function createDegradedNote(degraded) {
+    const note = document.createElement("div");
+    note.className = "gram-frame-degraded-note";
+    note.setAttribute("role", "note");
+    note.textContent = `This recording is too long to render at ${degraded.parameter} ${degraded.requested}; it is drawn at ${degraded.parameter} ${degraded.used}.`;
+    return note;
+  }
+  function setProgress(instance, fraction, stage) {
+    instance.state.player.progress = fraction;
+    if (instance.ui.mainCell) {
+      instance.ui.mainCell.dataset.gramProgress = `${stage} ${Math.round(fraction * 100)}%`;
+    }
+  }
+  function failAudioSetup(instance, error) {
+    var _a, _b;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`GramFrame: could not prepare the audio-sourced gram (${(_a = instance.configTable.querySelector("audio")) == null ? void 0 : _a.getAttribute("src")}): ${message}`, error);
+    const container = instance.ui.container;
+    const parent = container && container.parentNode;
+    const next = container ? container.nextSibling : null;
+    instance.destroy();
+    const table = instance.configTable;
+    if (parent) {
+      parent.insertBefore(table, next);
+      table.classList.add("gram-frame-config-error");
+      const source = ((_b = table.querySelector("audio")) == null ? void 0 : _b.getAttribute("src")) || "";
+      parent.insertBefore(createErrorIndicator(`Audio-sourced gram failed (${source}): ${message}`), table.nextSibling);
+    }
+  }
+  function planFittingAnalysis(player, decoded) {
+    const planAt = (hopSize) => planAnalysis({
+      sampleRate: decoded.sampleRate,
+      sampleCount: decoded.samples.length,
+      fftSize: player.analysis.fftSize,
+      hopSize,
+      freqStart: player.analysis.freqStart,
+      freqEnd: player.analysis.freqEnd
+    });
+    let plan = planAt(player.analysis.hopSize);
+    if (plan.clamped) {
+      console.warn(`GramFrame: freq-end ${player.analysis.freqEnd} Hz is above this recording's Nyquist frequency (${decoded.sampleRate / 2} Hz); clamped to ${plan.freqEnd} Hz`);
+    }
+    const rows = () => averagedRowCount(plan.frames, player.analysis.frameAverage);
+    const degraded = fitGramSize(rows(), plan.columns, plan);
+    if (degraded) {
+      console.warn(`GramFrame: ${rows()} painted rows is above the render limit; ${degraded.parameter} raised from ${degraded.requested} to ${degraded.used}`);
+      plan = planAt(degraded.used);
+      player.analysis.hopSize = degraded.used;
+      player.degraded = degraded;
+    }
+    checkGramSize(rows(), plan.columns, plan);
+    return plan;
+  }
+  async function setupAudioSource(instance) {
+    var _a;
+    const state = instance.state;
+    const player = state.player;
+    const container = instance.ui.container;
+    container.classList.add("gram-frame-audio", "gram-frame-analysing");
+    setProgress(instance, 0, "Loading audio");
+    try {
+      const bytes = await loadAudioBytes(player.source);
+      setProgress(instance, 0.1, "Decoding audio");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const decoded = decodeWav(bytes);
+      player.duration = decoded.duration;
+      player.sampleRate = decoded.sampleRate;
+      player.channels = decoded.channels;
+      setProgress(instance, 0.2, "Analysing audio");
+      const plan = planFittingAnalysis(player, decoded);
+      const grid = await analyse(decoded.samples, plan, {
+        onProgress: (fraction) => setProgress(instance, 0.2 + 0.7 * fraction, "Analysing audio")
+      });
+      setProgress(instance, 0.9, "Painting spectrogram");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const averaged = averageFrames(grid, plan.frames, plan.columns, player.analysis.frameAverage);
+      const levels = powerToLevels(averaged.grid, {
+        normalisation: player.analysis.normalisation,
+        windowBins: player.analysis.normalisationWindow === null ? void 0 : splitWindowBinsFor(player.analysis.normalisationWindow, plan.binWidth),
+        frames: averaged.frames,
+        columns: plan.columns,
+        floorPercentile: player.analysis.levelFloor,
+        ceilingPercentile: player.analysis.levelCeiling,
+        levelSpan: player.analysis.levelSpan,
+        levelScope: player.analysis.levelScope
+      });
+      const url = paintGram(levels, averaged.frames, plan.columns, player.analysis.colourMap);
+      rememberPaintedLevels(instance, levels, averaged.frames, plan.columns, player.analysis.colourMap);
+      if (!container.isConnected) {
+        return;
+      }
+      const imageDetails = state.imageDetails;
+      imageDetails.naturalWidth = plan.columns;
+      imageDetails.naturalHeight = averaged.frames;
+      imageDetails.renderWidth = PLAYER_RENDER_WIDTH;
+      imageDetails.renderHeight = PLAYER_RENDER_HEIGHT;
+      imageDetails.timeStretch = decoded.duration / player.windowSeconds;
+      instance.ui.spectrogramImage.setAttributeNS("http://www.w3.org/1999/xlink", "href", url);
+      state.config.timeMin = 0;
+      state.config.timeMax = decoded.duration;
+      state.config.freqMin = plan.freqStart;
+      state.config.freqMax = plan.freqEnd;
+      player.analysis.freqStart = plan.freqStart;
+      player.analysis.freqEnd = plan.freqEnd;
+      player.analysis.columns = plan.columns;
+      player.analysis.frames = averaged.frames;
+      player.playhead = 0;
+      player.viewTop = Math.min(player.windowSeconds, decoded.duration);
+      player.progress = 1;
+      player.ready = true;
+      createTransport(instance);
+      const bar = createTransportBar(instance);
+      createDisplayRangeControls(instance, bar, player.display);
+      createColourMapChoice(instance, bar, player.analysis, player.display);
+      if (player.degraded) {
+        (_a = bar.parentElement) == null ? void 0 : _a.insertBefore(createDegradedNote(player.degraded), bar);
+      }
+      container.classList.remove("gram-frame-loading", "gram-frame-analysing");
+      delete instance.ui.mainCell.dataset.gramProgress;
+      updateSVGLayout(instance);
+      createExpandToggle(instance);
+      instance._restoreAnnotations();
+      refreshPanels(instance);
+      if (instance.featureRenderer) {
+        instance.featureRenderer.renderAllPersistentFeatures();
+      }
+      instance._setupStorageSaveListener();
+      dispatch(instance);
+    } catch (error) {
+      if (container.isConnected) {
+        failAudioSetup(instance, error);
+      }
+    }
+  }
   class GramFrame {
+    /**
+     * Every DOM element handle this component owns.
+     *
+     * Grouped rather than kept as 28 flat fields (spec 167, US5): they share a
+     * lifetime — built during construction, torn down together — and reading
+     * `instance.ui.svg` says which of the instance's concerns you are reaching
+     * into, where `instance.svg` said only that you were reaching.
+     * @type {GramFrameUI}
+     */
+    ui;
+    /**
+     * Selection, restyling and the transient pointer state behind them.
+     * @type {GramFrameInteraction}
+     */
+    interaction = {
+      setSelection: () => {
+      },
+      clearSelection: () => {
+      },
+      toggleSelection: () => {
+      },
+      isFeatureSelected: () => false,
+      updateSelectionVisuals: () => {
+      },
+      applyColorToSelectedFeature: () => false,
+      applySymbolToSelectedFeature: () => false,
+      applyPinToSelectedFeature: () => false,
+      applyLargeSymbolsToSelectedFeature: () => false,
+      removeHarmonicSet: () => {
+      },
+      removeSidebandSet: () => {
+      },
+      // Replaced by the colour picker when it mounts; a no-op until then, so a
+      // caller arriving early does nothing rather than throwing.
+      syncStyleControls: () => {
+      },
+      _registeredListeners: [],
+      _wheelPanHandler: null,
+      _wheelPanLast: null
+    };
+    /**
+     * How the component watches for size changes.
+     * @type {GramFrameViewport}
+     */
+    viewport = { resizeObserver: null, _boundHandleResize: null };
+    /**
+     * Where this instance's annotations are saved, and under which context.
+     * @type {GramFramePersistence}
+     */
+    persistence = { _storageInstanceIndex: 0, _isTrainerContext: false, _crossTabHandler: null };
+    // Core properties
+    /** @type {GramFrameState} */
+    state;
+    /** @type {HTMLTableElement} */
+    configTable;
+    /** @type {StateListener[]} */
+    stateListeners;
+    /** @type {string} */
+    instanceId;
+    // Mode system
+    /** @type {Object<string, BaseMode>} */
+    modes;
+    /** @type {BaseMode} */
+    currentMode;
+    /** @type {FeatureRenderer} */
+    featureRenderer;
+    /**
+     * The transport of an audio-sourced instance (spec 168), or null on an
+     * image-backed one. A grouped sub-object like `ui` and `interaction`: the
+     * audio element, its controller and the follow loop share one lifetime.
+     * @type {PlayerController|null}
+     */
+    player = null;
     /**
      * Creates a new GramFrame instance
      * @param {HTMLTableElement} configTable - Configuration table element to replace
      */
     constructor(configTable) {
-      /**
-       * Every DOM element handle this component owns.
-       *
-       * Grouped rather than kept as 28 flat fields (spec 167, US5): they share a
-       * lifetime — built during construction, torn down together — and reading
-       * `instance.ui.svg` says which of the instance's concerns you are reaching
-       * into, where `instance.svg` said only that you were reaching.
-       * @type {GramFrameUI}
-       */
-      __publicField(this, "ui");
-      /**
-       * Selection, restyling and the transient pointer state behind them.
-       * @type {GramFrameInteraction}
-       */
-      __publicField(this, "interaction", {
-        setSelection: () => {
-        },
-        clearSelection: () => {
-        },
-        updateSelectionVisuals: () => {
-        },
-        applyColorToSelectedFeature: () => false,
-        applySymbolToSelectedFeature: () => false,
-        applyPinToSelectedFeature: () => false,
-        applyLargeSymbolsToSelectedFeature: () => false,
-        removeHarmonicSet: () => {
-        },
-        removeSidebandSet: () => {
-        },
-        // Replaced by the colour picker when it mounts; a no-op until then, so a
-        // caller arriving early does nothing rather than throwing.
-        syncStyleControls: () => {
-        },
-        _symbolControl: null,
-        _pinControl: null,
-        _largeSymbolsControl: null,
-        _registeredListeners: [],
-        _wheelPanHandler: null,
-        _wheelPanLast: null
-      });
-      /**
-       * How the component watches for size changes.
-       * @type {GramFrameViewport}
-       */
-      __publicField(this, "viewport", { resizeObserver: null, _boundHandleResize: null });
-      /**
-       * Where this instance's annotations are saved, and under which context.
-       * @type {GramFramePersistence}
-       */
-      __publicField(this, "persistence", { _storageInstanceIndex: 0, _isTrainerContext: false });
-      // Core properties
-      /** @type {GramFrameState} */
-      __publicField(this, "state");
-      /** @type {HTMLTableElement} */
-      __publicField(this, "configTable");
-      /** @type {StateListener[]} */
-      __publicField(this, "stateListeners");
-      /** @type {string} */
-      __publicField(this, "instanceId");
-      // Mode system
-      /** @type {Object<string, BaseMode>} */
-      __publicField(this, "modes");
-      /** @type {BaseMode} */
-      __publicField(this, "currentMode");
-      /** @type {FeatureRenderer} */
-      __publicField(this, "featureRenderer");
       this.configTable = configTable;
       if (!isBrowserSupported()) {
         showCompatibilityWarning(configTable);
@@ -7239,10 +10714,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.stateListeners = [];
       this.instanceId = "";
       this.persistence._storageInstanceIndex = document.querySelectorAll(".gram-frame-container").length;
-      this.persistence._isTrainerContext = detectUserContext() === "trainer";
+      const detectedContext = describeUserContext();
+      this.persistence._isTrainerContext = detectedContext.context === "trainer";
       const dom = setupSpectrogramComponents(this, configTable);
+      dom.container.dataset.gfContext = detectedContext.context;
+      console.info(
+        `GramFrame: instance ${this.persistence._storageInstanceIndex} is on a ${detectedContext.context} page (${detectedContext.reason}) — ` + (this.persistence._isTrainerContext ? "annotations persist in localStorage" : "annotations are session-only and expire after 24 hours")
+      );
       const layout = createUnifiedLayoutStructure(this, dom.readoutPanel, dom.modeCell);
-      const initialModeUI = setupPersistentContainers(this, layout.modeColumn, layout.guidanceColumn);
+      const initialModeUI = setupPersistentContainers(this, layout.modeColumn);
       this.ui = {
         container: dom.container,
         table: dom.table,
@@ -7258,6 +10738,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         imageClipRect: dom.imageClipRect,
         cursorClipRect: dom.cursorClipRect,
         modeColumn: layout.modeColumn,
+        guidanceColumn: layout.guidanceColumn,
+        guidancePanel: layout.guidancePanel,
+        guidanceTitle: layout.guidanceTitle,
+        readoutColumn: layout.readoutColumn,
+        kicker: layout.kicker,
         markersContainer: layout.markersContainer,
         harmonicsContainer: layout.harmonicsContainer,
         sidebandsContainer: layout.sidebandsContainer,
@@ -7268,16 +10753,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         modesContainer: initialModeUI.modesContainer,
         modeButtons: initialModeUI.modeButtons,
         commandButtons: initialModeUI.commandButtons,
-        guidancePanel: initialModeUI.guidancePanel,
         // Mounted later, or not at all: the harmonics and sidebands panels
         // arrive with their modes' UI, the expand toggle only for a landscape
-        // image, and nothing assigns the mode/rate LEDs at all — every read of
+        // image, and nothing assigns the mode/frequency-rate LEDs at all — every read of
         // them is guarded.
         harmonicPanel: null,
         sidebandPanel: null,
         expandToggleButton: null,
         modeLED: null,
-        rateLED: null
+        frequencyRateLED: null
       };
       setupSpectrogramIfAvailable(this);
       const { modes, featureRenderer } = initializeModeInfrastructure(this);
@@ -7287,38 +10771,35 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         analysis: layout.markersContainer,
         harmonics: layout.harmonicsContainer,
         sideband: layout.sidebandsContainer
-      }, initialModeUI.guidancePanel);
-      const modeUI = updateModeUIWithCommands(
-        this,
-        initialModeUI,
-        modes,
-        this.currentMode,
-        layout.modeColumn,
-        layout.guidanceColumn
-      );
+      });
+      const modeUI = updateModeUIWithCommands(this, initialModeUI, modes, this.currentMode, layout.modeColumn);
       this.ui.modesContainer = modeUI.modesContainer;
       this.ui.modeButtons = modeUI.modeButtons;
       this.ui.commandButtons = modeUI.commandButtons;
-      this.ui.guidancePanel = modeUI.guidancePanel;
       const controls = setupAllEventListeners(this);
       this.interaction.removeHarmonicSet = controls.removeHarmonicSet;
       this.interaction.removeSidebandSet = controls.removeSidebandSet;
       this.interaction.setSelection = controls.setSelection;
       this.interaction.clearSelection = controls.clearSelection;
+      this.interaction.toggleSelection = controls.toggleSelection;
+      this.interaction.isFeatureSelected = controls.isFeatureSelected;
       this.interaction.updateSelectionVisuals = controls.updateSelectionVisuals;
       this.interaction.applyColorToSelectedFeature = controls.applyColorToSelectedFeature;
       this.interaction.applySymbolToSelectedFeature = controls.applySymbolToSelectedFeature;
       this.interaction.applyPinToSelectedFeature = controls.applyPinToSelectedFeature;
       this.interaction.applyLargeSymbolsToSelectedFeature = controls.applyLargeSymbolsToSelectedFeature;
-      if (this.persistence._isTrainerContext) {
-        this._addClearGramButton();
+      mountClearAllButton(this, () => this._clearGram());
+      if (this.state.player.active) {
+        setupAudioSource(this);
+      } else {
+        this._restoreAnnotations();
+        refreshPanels(this);
+        if (this.featureRenderer) {
+          this.featureRenderer.renderAllPersistentFeatures();
+        }
+        this._setupStorageSaveListener();
+        this._setupCrossTabListener();
       }
-      this._restoreAnnotations();
-      updatePersistentPanels(this);
-      if (this.featureRenderer) {
-        this.featureRenderer.renderAllPersistentFeatures();
-      }
-      this._setupStorageSaveListener();
       dispatch(this);
     }
     /**
@@ -7344,36 +10825,35 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       handleResize(this);
     }
     /**
-     * Add a "Clear gram" button to the controls area (trainer pages only)
+     * Cancel any feature drag in progress, through the engine — the single owner
+     * of the drag record. Writing `state.drag` directly instead left the engine
+     * saying *dragging* while the projection said *idle*, and the next publish
+     * resurrected the stale drag (M4). One place now, not two (issue #268).
+     * @returns {void}
      */
-    _addClearGramButton() {
-      const btn = document.createElement("button");
-      btn.className = "gram-frame-clear-btn";
-      btn.textContent = "Clear gram";
-      btn.title = "Remove all annotations for this gram";
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        this._clearGram();
-      });
-      if (this.ui.modeColumn) {
-        this.ui.modeColumn.appendChild(btn);
-      }
-    }
-    /**
-     * Clear all annotations from state and storage
-     */
-    _clearGram() {
+    _cancelAllDrags() {
       Object.values(this.modes || {}).forEach((modeInstance) => {
         if (modeInstance && modeInstance.dragHandler) {
           modeInstance.dragHandler.cancelDrag();
         }
       });
+    }
+    /**
+     * Clear all annotations from state and storage
+     */
+    _clearGram() {
+      var _a, _b, _c;
+      this._cancelAllDrags();
       if (this.interaction._wheelPanHandler) {
         this.interaction._wheelPanHandler.cancelDrag();
       }
       if (this.interaction.clearSelection) {
         this.interaction.clearSelection();
       }
+      (((_a = this.state.analysis) == null ? void 0 : _a.markers) || []).forEach((marker) => recordDeletion(this, "markers", marker.id));
+      (((_b = this.state.harmonics) == null ? void 0 : _b.harmonicSets) || []).forEach((set) => recordDeletion(this, "harmonicSets", set.id));
+      (((_c = this.state.sidebands) == null ? void 0 : _c.sidebandSets) || []).forEach((set) => recordDeletion(this, "sidebandSets", set.id));
+      recordDopplerDeletion(this);
       const fresh = createInitialState(ModeFactory.getModeInitialStates());
       this.state.analysis = fresh.analysis;
       this.state.harmonics = fresh.harmonics;
@@ -7392,7 +10872,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         this.currentMode.cleanup();
         this.currentMode.activate();
       }
-      updatePersistentPanels(this);
+      refreshPanels(this);
       updateLEDDisplays(this, this.state);
       if (this.ui.speedLED) {
         setLEDValue(this.ui.speedLED, "0.0");
@@ -7409,17 +10889,32 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return this.persistence._isTrainerContext ? "trainer" : "student";
     }
     /**
-     * Restore saved annotations from browser storage into state
+     * Restore saved annotations from browser storage into state.
+     *
+     * A load that does not restore what was stored is reported to the analyst
+     * through the same banner a failed *save* uses (R9-01). The two paths were
+     * asymmetric: a quota-full save said so in a sentence, while a damaged,
+     * superseded or wrongly-fingerprinted record produced an empty gram and a
+     * console line nobody reads — and the next save then overwrote the record
+     * for good. The banner clears itself as soon as a save succeeds, which is
+     * the point at which the analyst has knowingly started again.
      */
     _restoreAnnotations() {
-      const saved = loadAnnotations(
+      const { annotations: saved, outcome, dropped } = loadAnnotations(
         this.persistence._storageInstanceIndex,
         this._storageContext(),
         // Refuse records fingerprinted for a different gram (BH-6, BH-23)
         buildGramFingerprint(this.state)
       );
+      const message = describeLoadOutcome(outcome, dropped);
+      if (message) {
+        showStorageWarning(this, message);
+      }
       if (!saved) return;
       markAnnotationsChanged(this);
+      if (saved.tombstones) {
+        this.state.tombstones = saved.tombstones;
+      }
       if (saved.analysis && Array.isArray(saved.analysis.markers)) {
         this.state.analysis.markers = saved.analysis.markers.map((m) => ({
           ...m,
@@ -7449,15 +10944,126 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         if (saved.doppler.color) {
           this.state.doppler.color = saved.doppler.color;
         }
-        const { fPlus, fMinus, fZero } = this.state.doppler;
-        if (fPlus && fMinus && fZero) {
-          const speed = calculateDopplerSpeed(fPlus, fMinus, fZero);
-          this.state.doppler.speed = Number.isFinite(speed) ? speed : null;
-          if (this.ui.speedLED && this.state.doppler.speed !== null) {
-            setLEDValue(this.ui.speedLED, (this.state.doppler.speed * MS_TO_KNOTS).toFixed(1));
-          }
-        }
+        this._refreshDopplerSpeed();
       }
+    }
+    /**
+     * Recompute the doppler speed from the curve now in state, and show it.
+     *
+     * Speed is derived, not persisted, so every path that puts a curve into
+     * state without a drag has to do this: a restored curve otherwise read 0.0
+     * until a marker was nudged (BH-15). Guarded against f₀ = 0, which divides
+     * to Infinity (BH-8). Shared by the restore path and the cross-tab merge,
+     * which have exactly the same problem.
+     * @returns {void}
+     */
+    _refreshDopplerSpeed() {
+      const { fPlus, fMinus, fZero } = this.state.doppler;
+      if (!fPlus || !fMinus || !fZero) {
+        this.state.doppler.speed = null;
+        return;
+      }
+      const speed = calculateDopplerSpeed(fPlus, fMinus, fZero);
+      this.state.doppler.speed = Number.isFinite(speed) ? speed : null;
+      if (this.ui.speedLED && this.state.doppler.speed !== null) {
+        setLEDValue(this.ui.speedLED, (this.state.doppler.speed * MS_TO_KNOTS).toFixed(1));
+      }
+    }
+    /**
+     * Adopt another tab's save into this tab, live.
+     *
+     * The `storage` event fires in every *other* tab of the origin when one
+     * writes, so this is how the tab that did not save learns about it. Without
+     * it, merging on save would still keep both tabs' work in the record -- the
+     * data would be safe -- but each screen would show only its own half until
+     * someone reloaded, which reads exactly like the loss it replaced.
+     *
+     * The merge itself is the same one the save path uses, so the two cannot
+     * disagree about what a union means. What arrives is treated as another
+     * tab's record, not as authority: a foreign gram, an unreadable payload or a
+     * different schema version is ignored here for the same reasons the load
+     * path refuses it.
+     * @returns {void}
+     */
+    _setupCrossTabListener() {
+      const key = buildStorageKey(this.persistence._storageInstanceIndex);
+      const onStorage = (event) => {
+        if (!event.key || event.key !== key || !event.newValue) {
+          return;
+        }
+        this._adoptForeignRecord(event.newValue);
+      };
+      window.addEventListener("storage", onStorage);
+      this.persistence._crossTabHandler = onStorage;
+    }
+    /**
+     * Merge a record another tab just wrote into this tab's live state.
+     * @param {string} raw - The record as stored
+     * @returns {boolean} True if anything changed on screen
+     */
+    _adoptForeignRecord(raw) {
+      const merged = mergeForeignRecord(raw, this.state);
+      if (!merged) {
+        return false;
+      }
+      const before = JSON.stringify(snapshotAnnotations(this.state));
+      this._applyMergedAnnotations(merged);
+      if (JSON.stringify(snapshotAnnotations(this.state)) === before) {
+        return false;
+      }
+      if (this.state.selection && this.state.selection.selectedId && !this._selectionStillExists()) {
+        this.interaction.clearSelection();
+      }
+      markAnnotationsChanged(this);
+      refreshPanels(this);
+      if (this.featureRenderer) {
+        this.featureRenderer.renderAllPersistentFeatures();
+      }
+      dispatch(this);
+      return true;
+    }
+    /**
+     * Replace this instance's annotations with a merged record's.
+     * @param {StoredAnnotations} merged - The merged record
+     * @returns {void}
+     */
+    _applyMergedAnnotations(merged) {
+      var _a, _b, _c;
+      this.state.analysis.markers = (((_a = merged.analysis) == null ? void 0 : _a.markers) || []).map((m) => ({
+        ...m,
+        symbol: m.symbol || "cross"
+      }));
+      this.state.harmonics.harmonicSets = (((_b = merged.harmonics) == null ? void 0 : _b.harmonicSets) || []).map((hs) => ({
+        ...hs,
+        symbol: hs.symbol || "cross",
+        showPin: hs.showPin !== false
+      }));
+      this.state.sidebands.sidebandSets = (((_c = merged.sidebands) == null ? void 0 : _c.sidebandSets) || []).map((sb) => ({
+        ...sb,
+        symbol: sb.symbol || "cross",
+        showPin: sb.showPin !== false
+      }));
+      const doppler = merged.doppler || { fPlus: null, fMinus: null, fZero: null, color: null };
+      this.state.doppler.fPlus = doppler.fPlus || null;
+      this.state.doppler.fMinus = doppler.fMinus || null;
+      this.state.doppler.fZero = doppler.fZero || null;
+      this.state.doppler.color = doppler.color || null;
+      this._refreshDopplerSpeed();
+      if (merged.tombstones) {
+        this.state.tombstones = merged.tombstones;
+      }
+    }
+    /**
+     * Whether the current selection still names a feature that exists.
+     * @returns {boolean} True when the selection is still valid
+     */
+    _selectionStillExists() {
+      const { selectedType, selectedId } = this.state.selection || {};
+      if (!selectedType || !selectedId) {
+        return true;
+      }
+      const family = selectedType === "marker" ? this.state.analysis.markers || [] : selectedType === "harmonicSet" ? this.state.harmonics.harmonicSets || [] : this.state.sidebands.sidebandSets || [];
+      return family.some((feature) => feature.id === selectedId);
     }
     /**
      * Set up a state listener that saves annotations on relevant state changes
@@ -7520,6 +11126,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       cleanupEventListeners(this);
       cleanupKeyboardControl(this);
+      if (this.persistence._crossTabHandler) {
+        window.removeEventListener("storage", this.persistence._crossTabHandler);
+        this.persistence._crossTabHandler = null;
+      }
+      if (this.player) {
+        this.player.destroy();
+        this.player = null;
+      }
       if (this.ui.container && this.ui.container.parentNode) {
         this.ui.container.parentNode.removeChild(this.ui.container);
       }
@@ -7531,22 +11145,18 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     _switchMode(mode) {
       this.state.previousMode = this.state.mode;
       this.state.mode = mode;
-      Object.values(this.modes || {}).forEach((modeInstance) => {
-        if (modeInstance && modeInstance.dragHandler) {
-          modeInstance.dragHandler.cancelDrag();
-        }
-      });
+      this._cancelAllDrags();
       if (this.state.selection && this.state.selection.selectedType && this.interaction.clearSelection) {
         this.interaction.clearSelection();
       }
       if (this.ui.modeButtons) {
         Object.keys(this.ui.modeButtons).forEach((m) => {
-          const button = this.ui.modeButtons[m];
-          if (button) {
+          const button2 = this.ui.modeButtons[m];
+          if (button2) {
             if (m === mode) {
-              button.classList.add("active");
+              button2.classList.add("active");
             } else {
-              button.classList.remove("active");
+              button2.classList.remove("active");
             }
           }
         });
@@ -7563,16 +11173,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       this.currentMode = this.modes[mode];
       this.currentMode.activate();
-      if (this.ui.guidancePanel) {
-        const guidanceContent = this.currentMode.getGuidanceText();
-        updateGuidancePanel(this.ui.guidancePanel, guidanceContent);
-      }
+      showGuidanceForMode(this, this.currentMode);
       this.currentMode.updateLEDs(this.state.cursorPosition);
       updateLEDDisplays(this, this.state);
       if (this.ui.modeLED) {
         setLEDValue(this.ui.modeLED, getModeDisplayName(mode));
       }
-      updatePersistentPanels(this);
+      refreshPanels(this);
       if (this.featureRenderer) {
         this.featureRenderer.renderAllPersistentFeatures();
       }
@@ -7580,8 +11187,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
   }
   const GramFrameAPI = createGramFrameAPI(GramFrame);
-  document.addEventListener("DOMContentLoaded", () => {
-    window.GramFrame = GramFrameAPI;
+  const bootstrap = () => {
     GramFrameAPI.init();
     const stateDisplay = document.getElementById("state-display");
     if (stateDisplay) {
@@ -7592,6 +11198,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       );
     }
-  });
+  };
   window.GramFrame = GramFrameAPI;
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrap);
+  } else {
+    bootstrap();
+  }
 })();
