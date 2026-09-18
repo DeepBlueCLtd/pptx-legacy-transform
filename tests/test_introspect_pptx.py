@@ -27,7 +27,7 @@ class IntrospectTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         TMP.mkdir(parents=True, exist_ok=True)
-        corpus = conftest_helpers.make_mock_corpus(TMP / "introspect_mock")
+        corpus = conftest_helpers.copy_mock_corpus(TMP / "introspect_mock")
         cls.pptx = conftest_helpers.first_pptx(corpus)
         cls.default_path = TMP / "introspect_report_default.txt"
         cls.verbose_path = TMP / "introspect_report_verbose.txt"

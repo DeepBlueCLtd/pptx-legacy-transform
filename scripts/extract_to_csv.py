@@ -270,12 +270,16 @@ def resolve_glc_path(href: str, content_root: Path, source_dir: Path | None = No
     rel = Path(decoded.replace("\\", "/"))
     candidates: list[Path] = []
     if source_dir is not None:
-        candidates.append((source_dir / rel).resolve(strict=False))
-    candidates.append((content_root / rel).resolve(strict=False))
-    candidates.append((content_root / rel.name).resolve(strict=False))
+        candidates.append(source_dir / rel)
+    candidates.append(content_root / rel)
+    candidates.append(content_root / rel.name)
+    # Probe before resolving: ``Path.resolve`` walks every component through
+    # the OS (a real-path syscall per segment on Windows), and this runs once
+    # per hyperlink per deck, so resolving all three candidates up front made
+    # it the extractor's single hottest line. Only the hit is resolved.
     for candidate in candidates:
         if candidate.is_file():
-            return candidate
+            return candidate.resolve(strict=False)
     LOGGER.warning("GLC not found: %s", href)
     return None
 

@@ -854,7 +854,7 @@ class GroupingAgainstMockCorpusTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         TMP.mkdir(parents=True, exist_ok=True)
-        cls.corpus = conftest_helpers.make_mock_corpus(TMP / "extract_corpus")
+        cls.corpus = conftest_helpers.copy_mock_corpus(TMP / "extract_corpus")
         cls.week1_dir = cls.corpus / "Instructor Week 1 Grams"
 
     def test_grouping_emits_one_analysis_row_per_gram(self) -> None:
@@ -1009,7 +1009,7 @@ class OnlyChapterScopingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         TMP.mkdir(parents=True, exist_ok=True)
-        cls.corpus = conftest_helpers.make_mock_corpus(TMP / "extract_only_corpus")
+        cls.corpus = conftest_helpers.copy_mock_corpus(TMP / "extract_only_corpus")
 
     def _read(self, csv_path: Path) -> list[dict]:
         with csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
@@ -1092,7 +1092,7 @@ class GlcViewFieldMainTests(unittest.TestCase):
         import xml.etree.ElementTree as ET
 
         TMP.mkdir(parents=True, exist_ok=True)
-        corpus = conftest_helpers.make_mock_corpus(TMP / "extract_glcview_corpus")
+        corpus = conftest_helpers.copy_mock_corpus(TMP / "extract_glcview_corpus")
         cls.week1_dir = corpus / "Instructor Week 1 Grams"
         # Strip the time + band view fields from every referenced GLC (keeping
         # its original image inner asset) so each GLC gram row triggers.
@@ -1508,7 +1508,7 @@ class MissingAssetMainTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         TMP.mkdir(parents=True, exist_ok=True)
-        cls.corpus = conftest_helpers.make_mock_corpus(
+        cls.corpus = conftest_helpers.copy_mock_corpus(
             TMP / "extract_missing_asset_corpus")
 
     def _extract(self, out_csv: Path, *extra: str) -> int:
@@ -1613,7 +1613,7 @@ class DeletedGramFolderMainTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         TMP.mkdir(parents=True, exist_ok=True)
-        cls.corpus = conftest_helpers.make_mock_corpus(
+        cls.corpus = conftest_helpers.copy_mock_corpus(
             TMP / "extract_deleted_folder_corpus")
 
     def _extract(self, out_csv: Path, *extra: str) -> int:

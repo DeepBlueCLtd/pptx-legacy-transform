@@ -276,11 +276,15 @@ builds use the default `per-week`. The old letter-suffix auto-disambiguation is
 
 Per-gram exclude-audience tags ride a 17th CSV `audience` column → an
 `audience="…"` attribute on the gram's **topicref** (never on the topic root) →
-DITAVAL profiles the generator emits at build time (`trainee.ditaval`,
-`student-own.ditaval`, `student-other.ditaval`). `publish_html.py` runs DITA-OT
-once per edition, producing `html/instructor/`, `html/student-own/`, and
-`html/student-other/` plus a shared `html/index.html`. Audience consistency
-across a gram's rows is enforced fail-fast in the generator.
+DITAVAL profiles the generator emits at build time. There are **two editions**
+and two DITAVAL files (feature 004 originally sketched three; the
+`student-own` / `student-other` split was never built): `trainee.ditaval`
+excludes everything tagged `-trainee` and drives the **student** edition;
+`instructor.ditaval` is its mirror and drives the **instructor** edition.
+`publish_html.py` runs DITA-OT once per edition (`EDITIONS`), producing
+`html/instructor/` and `html/student/` plus a shared `html/index.html`, and the
+two Oxygen scenarios in `pptx-transform.xpr` are the same pair. Audience
+consistency across a gram's rows is enforced fail-fast in the generator.
 
 ### Static common pages and the publication nav (feature 010)
 
@@ -353,7 +357,12 @@ Two things are decided at **build time**, not inferred from page content:
 - **The protective marking** (`webhelp.show.protection`,
   `webhelp.protection.text`, `webhelp.protection.background.color`) — a bar top
   and bottom of every page, the same text and colour in both editions. These
-  *are* scenario parameters, and the template ships working defaults.
+  *are* scenario parameters, and the template ships working defaults. The
+  default text, `COMMERCIALLY SENSITIVE`, is a **placeholder** — it exercises
+  the mechanism, it is not a classification anyone has assigned. Its presence
+  on the public gh-pages copy of the sample builds (and on the sanitised
+  corpus generally) is expected and is **not an issue** to raise; the real
+  marking is set on the target's scenarios at publish time.
 - **Search-box visibility** — hidden in the student edition, shown in the
   instructor's. Derived from **`args.filter`**, by opening the DITAVAL and
   asking whether it excludes `audience="-trainee"`. There is **no parameter of

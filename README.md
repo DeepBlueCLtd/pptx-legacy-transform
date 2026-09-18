@@ -1270,7 +1270,10 @@ never overwrites a previous publication's output.
 
 Every published page carries a marking bar top and bottom, reading
 **COMMERCIALLY SENSITIVE**. It is the *same on both editions* — it describes
-the material, not the audience.
+the material, not the audience. That default text is a **placeholder** that
+proves the mechanism works; it is not a classification anyone has assigned,
+so seeing it on the sample builds (including the public gh-pages copy) is
+expected and not a problem. The real marking is set here, on the scenario.
 
 To publish at a different marking, change it **on the scenario, on this
 machine** — not in the template:
