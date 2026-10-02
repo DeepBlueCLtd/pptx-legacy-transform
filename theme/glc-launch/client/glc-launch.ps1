@@ -1,6 +1,7 @@
 # Open a glc: link from a published gram page in the legacy replay tool
-# (issue #199). Registered as the handler for the glc: URL scheme by
-# glc-protocol.reg; see theme/glc-launch/README.md.
+# (issue #199). Registered as the handler for the glc: URL scheme by Group
+# Policy (HKLM, installed under C:\Program Files\AAAC\), or on a stand-alone
+# PC by glc-protocol.reg; see theme/glc-launch/README.md.
 #
 # The page sends  glc:<percent-encoded full Windows path of the .glc>.
 # This decodes it once and asks Windows to open the file, which runs whatever
