@@ -1383,8 +1383,8 @@ which is why it is emitted despite having no styling attached.
 A WAV gram links to its `.glc`. Opened from the mapped drive, the page turns
 that link into a `glc:` link that hands the `.glc`'s full path to the legacy
 replay tool, and adds a **Copy path** fallback (paste into Win+R). Each student
-PC needs a one-off, per-user handler install for the link itself — see
-`theme/glc-launch/README.md` (issue #199).
+PC needs the `glc:` handler, which the system administrator deploys by Group
+Policy — see `theme/glc-launch/README.md` (issue #199).
 
 #### Resulting folder layout
 

@@ -4,6 +4,11 @@ Windows Registry Editor Version 5.00
 ; page's "WAV N" link opens the .glc in the legacy replay tool.
 ; Per-user (HKEY_CURRENT_USER): no administrator rights needed.
 ;
+; STAND-ALONE PCs ONLY. Domain PCs get the handler from Group Policy (HKLM,
+; script under C:\Program Files\AAAC\, no -ExecutionPolicy switch); see
+; theme/glc-launch/README.md. -ExecutionPolicy Bypass is here only because a
+; stand-alone PC has no policy permitting the script.
+;
 ; BEFORE IMPORTING: the path below must be where glc-launch.ps1 was copied.
 ; Edit it if you used another folder - every backslash written twice.
 ; See theme/glc-launch/README.md.
