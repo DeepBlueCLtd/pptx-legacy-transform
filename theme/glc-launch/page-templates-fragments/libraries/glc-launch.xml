@@ -1,0 +1,25 @@
+<!-- <html>/<body> are ignored - only <body>'s children are copied into the page. -->
+<!--
+    .glc launcher loader for the Oxygen WebHelp Responsive template (issue #199).
+
+    glc-launch.js rewrites each WAV gram's .glc link into a glc: URL carrying
+    the file's full Windows path, and adds a "Copy path" fallback beside it.
+    See theme/glc-launch/README.md.
+
+    Bind this fragment to "webhelp.fragment.after.topic.content" - directly
+    after the topic body on TOPIC pages. The links it rewrites are inside that
+    body, so they are already parsed when the script runs, and no other
+    fragment has claimed this placeholder (Oxygen binds one per placeholder;
+    see pptx-transform.opt). It no-ops on pages with no WAV gram, and on any
+    page not opened from a drive or file share.
+
+    The <html>/<body> wrapper is not decoration: Oxygen's includeCustomHTMLContent
+    copies only <body>'s children when it finds that wrapper, and copies the WHOLE
+    document - these comments included - when it does not.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <body>
+        <script
+            src="${oxygen-webhelp-assets-dir}/template/resources/glc-launch.js?buildId=${oxygen-webhelp-build-number}"></script>
+    </body>
+</html>

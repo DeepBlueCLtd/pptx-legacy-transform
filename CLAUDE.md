@@ -328,6 +328,8 @@ cheap). Overlay styling therefore targets Oxygen's own chrome, and lives in
 per-concern overlay folders (`theme/gram-nav-bar/`, `theme/gram-fill-width/`,
 `theme/oxygen-hide-search/`, `theme/search-in-header/`,
 `theme/oxygen-dark-mode/`, `theme/oxygen-protection/`,
+`theme/oxygen-student-only/`, `theme/oxygen-chrome-trim/`,
+`theme/oxygen-logo/`, `theme/glc-launch/`,
 `theme/gramframe-oxygen/`), each a `README.md` plus its payload.
 `theme/pptx-transform/` is the **wired template** carrying a byte-identical copy
 of every payload; `tests/test_package_release.py` enforces that.

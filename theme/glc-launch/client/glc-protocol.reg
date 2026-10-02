@@ -1,0 +1,20 @@
+Windows Registry Editor Version 5.00
+
+; Register the glc: URL scheme for the current user (issue #199), so a gram
+; page's "WAV N" link opens the .glc in the legacy replay tool.
+; Per-user (HKEY_CURRENT_USER): no administrator rights needed.
+;
+; BEFORE IMPORTING: the path below must be where glc-launch.ps1 was copied.
+; Edit it if you used another folder - every backslash written twice.
+; See theme/glc-launch/README.md.
+
+[HKEY_CURRENT_USER\Software\Classes\glc]
+@="URL:Gram replay link"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\glc\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\glc\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\glc\shell\open\command]
+@="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\aaac\\glc-launch.ps1\" \"%1\""

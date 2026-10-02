@@ -46,6 +46,11 @@ DEPLOYED_TEMPLATE = "oxygen-webhelp/template"
 # Files that describe an overlay rather than being part of its payload.
 NOT_PAYLOAD = {"README.md"}
 
+# Overlay subfolders installed somewhere other than the template - e.g.
+# glc-launch/client/, the per-PC URL handler (issue #199). They ship in the
+# release zip with the rest of theme/, but never belong in the WebHelp output.
+NOT_PAYLOAD_DIRS = {"client"}
+
 # Not overlays, though they sit alongside them. __pycache__ is the one that
 # bites: importing this module (rather than running it) leaves a directory
 # here that otherwise reads as an overlay whose "payload" is a .pyc, and the
@@ -72,8 +77,11 @@ def overlay_payloads():
         if overlay.name in NOT_OVERLAY:
             continue
         for src in sorted(overlay.rglob("*")):
+            rel = src.relative_to(overlay)
+            if rel.parts[0] in NOT_PAYLOAD_DIRS:
+                continue
             if src.is_file() and src.name not in NOT_PAYLOAD:
-                yield src, src.relative_to(overlay)
+                yield src, rel
 
 
 def _copy(src: Path, dest: Path) -> bool:
