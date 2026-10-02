@@ -121,10 +121,18 @@
             rule stays in the stylesheet where it can be read and overridden
             like any other style.
         -->
+        <!--
+            The second class names the EDITION itself, for overlays that key
+            off it for reasons other than search (issue #198: theme/
+            oxygen-student-only/ hides student-only content when the
+            instructor scenario is published with no DITAVAL at all). Same
+            test, same safe direction: anything not positively identified as
+            the student edition is the instructor's.
+        -->
         <div hidden="hidden"
             class="wh_search_visibility {if ($is-student-edition)
-                                         then 'wh-search-hidden'
-                                         else 'wh-search-shown'}"/>
+                                         then 'wh-search-hidden wh-edition-student'
+                                         else 'wh-search-shown wh-edition-instructor'}"/>
     </xsl:template>
 
 </xsl:stylesheet>
