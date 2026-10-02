@@ -1,0 +1,26 @@
+/* Suppress the WebHelp theme picker — production Oxygen WebHelp overlay.
+ *
+ * The publication ships dark, full stop (issue #173): the reader gets no
+ * light/dark choice, so the control that offers one is removed from view.
+ * dark-mode.js pins the theme; this file removes the only affordance in the
+ * published output that could unpin it.
+ *
+ * Oxygen renders the picker as
+ *
+ *   <div class="wh_theme">
+ *     <button id="wh_theme_button" class="wh_theme_btn" data-wh-theme="auto" …>
+ *   </div>
+ *
+ * in the header of every page type, and topic.js appends the Auto / Light /
+ * Dark dropdown items (#webhelp_theme_auto, #webhelp_theme_light,
+ * #webhelp_theme_dark) into that wrapper on first click. Hiding the wrapper
+ * therefore takes the button and the menu with it.
+ *
+ * Self-contained, like the sibling overlays. Install per ../README.md (copy
+ * into your publishing template's resources/ and reference it from the .opt
+ * <resources> so it loads last and wins the cascade).
+ */
+
+.wh_theme {
+    display: none !important;
+}
