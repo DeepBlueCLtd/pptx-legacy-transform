@@ -5,7 +5,7 @@
   document.head.appendChild(style);
 
   "use strict";
-  const VERSION = "0.3.0";
+  const VERSION = "0.3.1";
   function getVersion() {
     return VERSION;
   }
@@ -1063,7 +1063,7 @@
     const button2 = document.createElement("button");
     button2.type = "button";
     button2.className = "gram-frame-clear-btn";
-    button2.textContent = "Clear all annotations";
+    button2.textContent = "Clear all";
     button2.title = "Remove every cross, harmonic set and sideband set";
     button2.addEventListener("click", (event) => {
       event.preventDefault();
@@ -1080,6 +1080,260 @@
     Object.values(instance.modes).filter(isPanelOwner).forEach((mode) => mode.refreshPanel());
     refreshTableCounts(instance);
   }
+  function decimalsForInterval(interval) {
+    if (!Number.isFinite(interval) || interval <= 0) {
+      return 0;
+    }
+    for (let decimals = 0; decimals < 3; decimals++) {
+      const scaled = interval * Math.pow(10, decimals);
+      if (Math.abs(scaled - Math.round(scaled)) < 1e-9) {
+        return decimals;
+      }
+    }
+    return 3;
+  }
+  function formatAtInterval(value, interval) {
+    if (!Number.isFinite(interval) || interval <= 0) {
+      return String(Math.round(value));
+    }
+    return value.toFixed(decimalsForInterval(interval));
+  }
+  function formatFrequencyLabel(frequency, interval = 1) {
+    return formatAtInterval(frequency, interval) + "Hz";
+  }
+  function precisionIntervalFor(span) {
+    if (!Number.isFinite(span) || span <= 0) {
+      return 1;
+    }
+    return Math.pow(10, Math.floor(Math.log10(span)) - 1);
+  }
+  function formatTime(seconds) {
+    const sign = seconds < 0 ? "-" : "";
+    const magnitude = Math.abs(seconds);
+    const minutes = Math.floor(magnitude / 60);
+    const remainingSeconds = Math.floor(magnitude % 60);
+    const paddedMinutes = minutes.toString().padStart(2, "0");
+    const paddedSeconds = remainingSeconds.toString().padStart(2, "0");
+    return `${sign}${paddedMinutes}:${paddedSeconds}`;
+  }
+  function formatAxisTime(seconds, interval) {
+    const decimals = decimalsForInterval(interval);
+    if (decimals === 0) {
+      return formatTime(seconds);
+    }
+    const sign = seconds < 0 ? "-" : "";
+    const magnitude = Math.abs(seconds);
+    const minutes = Math.floor(magnitude / 60);
+    const remainingSeconds = magnitude % 60;
+    const paddedMinutes = minutes.toString().padStart(2, "0");
+    const secondsText = remainingSeconds.toFixed(decimals).padStart(decimals + 3, "0");
+    return `${sign}${paddedMinutes}:${secondsText}`;
+  }
+  const SVG_NS$5 = "http://www.w3.org/2000/svg";
+  const LABEL_PLATE_CLASS = "gram-frame-label-plate";
+  const LABEL_PLATE_GROUP_CLASS = "gram-frame-label-plated";
+  const LABEL_PLATE_FILL = "#fff";
+  const LABEL_TEXT_FILL = "#000";
+  const LABEL_PLATE_PADDING_X = 3;
+  const LABEL_PLATE_RADIUS = 3;
+  const PLATE_ABOVE_RATIO = 0.95;
+  const PLATE_BELOW_RATIO = 0.3;
+  const FALLBACK_CHAR_WIDTH_RATIO = 0.6;
+  function labelPlateExtents(fontSize) {
+    return {
+      above: roundToHalfPixel(fontSize * PLATE_ABOVE_RATIO),
+      below: roundToHalfPixel(fontSize * PLATE_BELOW_RATIO)
+    };
+  }
+  function roundToHalfPixel(value) {
+    return Math.round(value * 2) / 2;
+  }
+  function labelPlateRect({ x, y, textAnchor, width, fontSize }) {
+    const { above, below } = labelPlateExtents(fontSize);
+    let left = x;
+    if (textAnchor === "middle") {
+      left = x - width / 2;
+    } else if (textAnchor === "end") {
+      left = x - width;
+    }
+    return {
+      x: left - LABEL_PLATE_PADDING_X,
+      y: y - above,
+      width: width + LABEL_PLATE_PADDING_X * 2,
+      height: above + below
+    };
+  }
+  let measurementContext;
+  function textMeasurementContext() {
+    if (measurementContext === void 0) {
+      try {
+        measurementContext = document.createElement("canvas").getContext("2d");
+      } catch {
+        measurementContext = null;
+      }
+    }
+    return measurementContext;
+  }
+  function measureLabelWidth(content, fontSize, font = {}) {
+    const { fontFamily = "Arial, sans-serif", fontWeight = "bold" } = font;
+    const text = content || "";
+    const context = textMeasurementContext();
+    if (context) {
+      context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      const measured = context.measureText(text).width;
+      if (measured > 0) {
+        return measured;
+      }
+    }
+    return text.length * fontSize * FALLBACK_CHAR_WIDTH_RATIO;
+  }
+  function plateLabel(text, options = {}) {
+    const { fill = LABEL_PLATE_FILL, textFill = LABEL_TEXT_FILL } = options;
+    const fontSize = Number(text.getAttribute("font-size"));
+    const width = measureLabelWidth(text.textContent || "", fontSize, {
+      fontFamily: text.getAttribute("font-family") || void 0,
+      fontWeight: text.getAttribute("font-weight") || void 0
+    });
+    const box = labelPlateRect({
+      x: Number(text.getAttribute("x")),
+      y: Number(text.getAttribute("y")),
+      textAnchor: text.getAttribute("text-anchor") || "start",
+      width,
+      fontSize
+    });
+    text.setAttribute("fill", textFill);
+    text.removeAttribute("stroke");
+    text.removeAttribute("stroke-width");
+    text.removeAttribute("paint-order");
+    const plate = document.createElementNS(SVG_NS$5, "rect");
+    plate.setAttribute("class", LABEL_PLATE_CLASS);
+    plate.setAttribute("x", String(box.x));
+    plate.setAttribute("y", String(box.y));
+    plate.setAttribute("width", String(box.width));
+    plate.setAttribute("height", String(box.height));
+    plate.setAttribute("rx", String(LABEL_PLATE_RADIUS));
+    plate.setAttribute("ry", String(LABEL_PLATE_RADIUS));
+    plate.setAttribute("fill", fill);
+    const group = (
+      /** @type {SVGGElement} */
+      document.createElementNS(SVG_NS$5, "g")
+    );
+    group.setAttribute("class", LABEL_PLATE_GROUP_CLASS);
+    group.appendChild(plate);
+    group.appendChild(text);
+    return group;
+  }
+  const MAX_MARKER_LABEL_LENGTH = 32;
+  const TABLE_LABEL_FULL_LENGTH = 5;
+  const TABLE_LABEL_HEAD_LENGTH = 3;
+  function normalizeMarkerLabel(raw) {
+    if (typeof raw !== "string") {
+      return void 0;
+    }
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      return void 0;
+    }
+    return trimmed.slice(0, MAX_MARKER_LABEL_LENGTH);
+  }
+  function formatMarkerLabelForTable(label) {
+    const normalized = normalizeMarkerLabel(label);
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.length <= TABLE_LABEL_FULL_LENGTH) {
+      return normalized;
+    }
+    return `${normalized.slice(0, TABLE_LABEL_HEAD_LENGTH)}..`;
+  }
+  const QUADRANT_GAP = 5;
+  const ABOVE_SYMBOL_GAP = 4;
+  const MARKER_LABEL_FONT_SIZE = 12;
+  function markerLabelPlacement(symbol, cx, cy, symbolSize) {
+    const plate = labelPlateExtents(MARKER_LABEL_FONT_SIZE);
+    if (resolveSymbolType(symbol) === "cross") {
+      return {
+        x: cx + QUADRANT_GAP + LABEL_PLATE_PADDING_X,
+        y: cy - QUADRANT_GAP - plate.below,
+        textAnchor: "start"
+      };
+    }
+    if (labelSitsBelowSymbol(symbol)) {
+      const y = cy + symbolSize / 2 + ABOVE_SYMBOL_GAP + plate.above;
+      return { x: cx, y, textAnchor: "middle" };
+    }
+    return { x: cx, y: cy - symbolSize / 2 - ABOVE_SYMBOL_GAP - plate.below, textAnchor: "middle" };
+  }
+  function describeSelection(instance) {
+    const { selection, analysis, harmonics, sidebands } = instance.state;
+    if (!selection || !selection.selectedType || !selection.selectedId) {
+      return null;
+    }
+    const ordinal = (selection.selectedIndex ?? 0) + 1;
+    if (selection.selectedType === "marker") {
+      const marker = (analysis ? analysis.markers : []).find((candidate) => candidate.id === selection.selectedId);
+      if (!marker) {
+        return null;
+      }
+      return {
+        label: normalizeMarkerLabel(marker.label) || `Marker ${ordinal}`,
+        time: marker.time,
+        freq: marker.freq
+      };
+    }
+    if (selection.selectedType === "harmonicSet") {
+      const set2 = (harmonics ? harmonics.harmonicSets : []).find((candidate) => candidate.id === selection.selectedId);
+      return set2 ? { label: `Harmonics ${ordinal}`, time: set2.anchorTime, freq: set2.spacing } : null;
+    }
+    const set = (sidebands ? sidebands.sidebandSets : []).find((candidate) => candidate.id === selection.selectedId);
+    return set ? { label: `Sidebands ${ordinal}`, time: set.anchorTime, freq: set.spacing } : null;
+  }
+  function createCursorReadout() {
+    const column = document.createElement("div");
+    column.className = "gram-frame-readout-column";
+    const kicker = document.createElement("div");
+    kicker.className = "gram-frame-kicker gram-frame-readout-kicker";
+    kicker.textContent = "Cursor";
+    column.appendChild(kicker);
+    const freqLED = createLEDDisplay("Frequency (Hz)", "0.0", "HZ");
+    freqLED.classList.add("gram-frame-led-accent");
+    column.appendChild(freqLED);
+    const timeLED = createLEDDisplay("Time (mm:ss)", formatTime(0), "MM:SS", "Time");
+    timeLED.classList.add("gram-frame-led-secondary");
+    column.appendChild(timeLED);
+    const spacer = document.createElement("div");
+    spacer.className = "gram-frame-readout-spacer";
+    column.appendChild(spacer);
+    const speedLED = createLEDDisplay("Doppler Speed (kts)", "0.0", "KTS", "Doppler");
+    speedLED.classList.add("gram-frame-led-secondary", "gram-frame-led-inline");
+    column.appendChild(speedLED);
+    return { column, timeLED, freqLED, speedLED, kicker };
+  }
+  function refreshReadoutTarget(instance) {
+    const { kicker, timeLED, freqLED } = instance.ui;
+    if (!kicker) {
+      return;
+    }
+    const selected = describeSelection(instance);
+    kicker.replaceChildren();
+    if (!selected) {
+      kicker.textContent = "Cursor";
+      return;
+    }
+    const word = document.createElement("span");
+    word.textContent = "Selected";
+    kicker.appendChild(word);
+    const name = document.createElement("span");
+    name.className = "gram-frame-readout-target";
+    name.textContent = selected.label;
+    kicker.appendChild(name);
+    if (timeLED) {
+      setLEDValue(timeLED, formatTime(selected.time));
+    }
+    if (freqLED) {
+      setLEDValue(freqLED, selected.freq.toFixed(2));
+    }
+  }
   function commitAnnotationChange(instance, refreshPanel = null, dispatchOptions = void 0) {
     markAnnotationsChanged(instance);
     if (typeof refreshPanel === "function") {
@@ -1088,6 +1342,7 @@
     if (instance.featureRenderer) {
       instance.featureRenderer.renderAllPersistentFeatures();
     }
+    refreshReadoutTarget(instance);
     dispatch(instance, dispatchOptions);
   }
   function renderSize(imageDetails) {
@@ -1559,55 +1814,6 @@
     cleanup() {
       this.reset();
     }
-  }
-  function decimalsForInterval(interval) {
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return 0;
-    }
-    for (let decimals = 0; decimals < 3; decimals++) {
-      const scaled = interval * Math.pow(10, decimals);
-      if (Math.abs(scaled - Math.round(scaled)) < 1e-9) {
-        return decimals;
-      }
-    }
-    return 3;
-  }
-  function formatAtInterval(value, interval) {
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return String(Math.round(value));
-    }
-    return value.toFixed(decimalsForInterval(interval));
-  }
-  function formatFrequencyLabel(frequency, interval = 1) {
-    return formatAtInterval(frequency, interval) + "Hz";
-  }
-  function precisionIntervalFor(span) {
-    if (!Number.isFinite(span) || span <= 0) {
-      return 1;
-    }
-    return Math.pow(10, Math.floor(Math.log10(span)) - 1);
-  }
-  function formatTime(seconds) {
-    const sign = seconds < 0 ? "-" : "";
-    const magnitude = Math.abs(seconds);
-    const minutes = Math.floor(magnitude / 60);
-    const remainingSeconds = Math.floor(magnitude % 60);
-    const paddedMinutes = minutes.toString().padStart(2, "0");
-    const paddedSeconds = remainingSeconds.toString().padStart(2, "0");
-    return `${sign}${paddedMinutes}:${paddedSeconds}`;
-  }
-  function formatAxisTime(seconds, interval) {
-    const decimals = decimalsForInterval(interval);
-    if (decimals === 0) {
-      return formatTime(seconds);
-    }
-    const sign = seconds < 0 ? "-" : "";
-    const magnitude = Math.abs(seconds);
-    const minutes = Math.floor(magnitude / 60);
-    const remainingSeconds = magnitude % 60;
-    const paddedMinutes = minutes.toString().padStart(2, "0");
-    const secondsText = remainingSeconds.toFixed(decimals).padStart(decimals + 3, "0");
-    return `${sign}${paddedMinutes}:${secondsText}`;
   }
   function renderAxes(instance) {
     if (!instance.ui.axesGroup) {
@@ -2393,211 +2599,6 @@
     selected.feature.largeSymbols = large;
     refreshFeatureVisuals(instance, selected.type);
     return true;
-  }
-  const SVG_NS$5 = "http://www.w3.org/2000/svg";
-  const LABEL_PLATE_CLASS = "gram-frame-label-plate";
-  const LABEL_PLATE_GROUP_CLASS = "gram-frame-label-plated";
-  const LABEL_PLATE_FILL = "#fff";
-  const LABEL_TEXT_FILL = "#000";
-  const LABEL_PLATE_PADDING_X = 3;
-  const LABEL_PLATE_RADIUS = 3;
-  const PLATE_ABOVE_RATIO = 0.95;
-  const PLATE_BELOW_RATIO = 0.3;
-  const FALLBACK_CHAR_WIDTH_RATIO = 0.6;
-  function labelPlateExtents(fontSize) {
-    return {
-      above: roundToHalfPixel(fontSize * PLATE_ABOVE_RATIO),
-      below: roundToHalfPixel(fontSize * PLATE_BELOW_RATIO)
-    };
-  }
-  function roundToHalfPixel(value) {
-    return Math.round(value * 2) / 2;
-  }
-  function labelPlateRect({ x, y, textAnchor, width, fontSize }) {
-    const { above, below } = labelPlateExtents(fontSize);
-    let left = x;
-    if (textAnchor === "middle") {
-      left = x - width / 2;
-    } else if (textAnchor === "end") {
-      left = x - width;
-    }
-    return {
-      x: left - LABEL_PLATE_PADDING_X,
-      y: y - above,
-      width: width + LABEL_PLATE_PADDING_X * 2,
-      height: above + below
-    };
-  }
-  let measurementContext;
-  function textMeasurementContext() {
-    if (measurementContext === void 0) {
-      try {
-        measurementContext = document.createElement("canvas").getContext("2d");
-      } catch {
-        measurementContext = null;
-      }
-    }
-    return measurementContext;
-  }
-  function measureLabelWidth(content, fontSize, font = {}) {
-    const { fontFamily = "Arial, sans-serif", fontWeight = "bold" } = font;
-    const text = content || "";
-    const context = textMeasurementContext();
-    if (context) {
-      context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-      const measured = context.measureText(text).width;
-      if (measured > 0) {
-        return measured;
-      }
-    }
-    return text.length * fontSize * FALLBACK_CHAR_WIDTH_RATIO;
-  }
-  function plateLabel(text, options = {}) {
-    const { fill = LABEL_PLATE_FILL, textFill = LABEL_TEXT_FILL } = options;
-    const fontSize = Number(text.getAttribute("font-size"));
-    const width = measureLabelWidth(text.textContent || "", fontSize, {
-      fontFamily: text.getAttribute("font-family") || void 0,
-      fontWeight: text.getAttribute("font-weight") || void 0
-    });
-    const box = labelPlateRect({
-      x: Number(text.getAttribute("x")),
-      y: Number(text.getAttribute("y")),
-      textAnchor: text.getAttribute("text-anchor") || "start",
-      width,
-      fontSize
-    });
-    text.setAttribute("fill", textFill);
-    text.removeAttribute("stroke");
-    text.removeAttribute("stroke-width");
-    text.removeAttribute("paint-order");
-    const plate = document.createElementNS(SVG_NS$5, "rect");
-    plate.setAttribute("class", LABEL_PLATE_CLASS);
-    plate.setAttribute("x", String(box.x));
-    plate.setAttribute("y", String(box.y));
-    plate.setAttribute("width", String(box.width));
-    plate.setAttribute("height", String(box.height));
-    plate.setAttribute("rx", String(LABEL_PLATE_RADIUS));
-    plate.setAttribute("ry", String(LABEL_PLATE_RADIUS));
-    plate.setAttribute("fill", fill);
-    const group = (
-      /** @type {SVGGElement} */
-      document.createElementNS(SVG_NS$5, "g")
-    );
-    group.setAttribute("class", LABEL_PLATE_GROUP_CLASS);
-    group.appendChild(plate);
-    group.appendChild(text);
-    return group;
-  }
-  const MAX_MARKER_LABEL_LENGTH = 32;
-  const TABLE_LABEL_FULL_LENGTH = 5;
-  const TABLE_LABEL_HEAD_LENGTH = 3;
-  function normalizeMarkerLabel(raw) {
-    if (typeof raw !== "string") {
-      return void 0;
-    }
-    const trimmed = raw.trim();
-    if (trimmed === "") {
-      return void 0;
-    }
-    return trimmed.slice(0, MAX_MARKER_LABEL_LENGTH);
-  }
-  function formatMarkerLabelForTable(label) {
-    const normalized = normalizeMarkerLabel(label);
-    if (!normalized) {
-      return "";
-    }
-    if (normalized.length <= TABLE_LABEL_FULL_LENGTH) {
-      return normalized;
-    }
-    return `${normalized.slice(0, TABLE_LABEL_HEAD_LENGTH)}..`;
-  }
-  const QUADRANT_GAP = 5;
-  const ABOVE_SYMBOL_GAP = 4;
-  const MARKER_LABEL_FONT_SIZE = 12;
-  function markerLabelPlacement(symbol, cx, cy, symbolSize) {
-    const plate = labelPlateExtents(MARKER_LABEL_FONT_SIZE);
-    if (resolveSymbolType(symbol) === "cross") {
-      return {
-        x: cx + QUADRANT_GAP + LABEL_PLATE_PADDING_X,
-        y: cy - QUADRANT_GAP - plate.below,
-        textAnchor: "start"
-      };
-    }
-    if (labelSitsBelowSymbol(symbol)) {
-      const y = cy + symbolSize / 2 + ABOVE_SYMBOL_GAP + plate.above;
-      return { x: cx, y, textAnchor: "middle" };
-    }
-    return { x: cx, y: cy - symbolSize / 2 - ABOVE_SYMBOL_GAP - plate.below, textAnchor: "middle" };
-  }
-  function describeSelection(instance) {
-    const { selection, analysis, harmonics, sidebands } = instance.state;
-    if (!selection || !selection.selectedType || !selection.selectedId) {
-      return null;
-    }
-    const ordinal = (selection.selectedIndex ?? 0) + 1;
-    if (selection.selectedType === "marker") {
-      const marker = (analysis ? analysis.markers : []).find((candidate) => candidate.id === selection.selectedId);
-      if (!marker) {
-        return null;
-      }
-      return {
-        label: normalizeMarkerLabel(marker.label) || `Marker ${ordinal}`,
-        time: marker.time,
-        freq: marker.freq
-      };
-    }
-    if (selection.selectedType === "harmonicSet") {
-      const set2 = (harmonics ? harmonics.harmonicSets : []).find((candidate) => candidate.id === selection.selectedId);
-      return set2 ? { label: `Harmonics ${ordinal}`, time: set2.anchorTime, freq: set2.spacing } : null;
-    }
-    const set = (sidebands ? sidebands.sidebandSets : []).find((candidate) => candidate.id === selection.selectedId);
-    return set ? { label: `Sidebands ${ordinal}`, time: set.anchorTime, freq: set.fundamentalFreq } : null;
-  }
-  function createCursorReadout() {
-    const column = document.createElement("div");
-    column.className = "gram-frame-readout-column";
-    const kicker = document.createElement("div");
-    kicker.className = "gram-frame-kicker gram-frame-readout-kicker";
-    kicker.textContent = "Cursor";
-    column.appendChild(kicker);
-    const freqLED = createLEDDisplay("Frequency (Hz)", "0.0", "HZ");
-    freqLED.classList.add("gram-frame-led-accent");
-    column.appendChild(freqLED);
-    const timeLED = createLEDDisplay("Time (mm:ss)", formatTime(0), "MM:SS", "Time");
-    timeLED.classList.add("gram-frame-led-secondary");
-    column.appendChild(timeLED);
-    const spacer = document.createElement("div");
-    spacer.className = "gram-frame-readout-spacer";
-    column.appendChild(spacer);
-    const speedLED = createLEDDisplay("Doppler Speed (kts)", "0.0", "KTS", "Doppler");
-    speedLED.classList.add("gram-frame-led-secondary", "gram-frame-led-inline");
-    column.appendChild(speedLED);
-    return { column, timeLED, freqLED, speedLED, kicker };
-  }
-  function refreshReadoutTarget(instance) {
-    const { kicker, timeLED, freqLED } = instance.ui;
-    if (!kicker) {
-      return;
-    }
-    const selected = describeSelection(instance);
-    kicker.replaceChildren();
-    if (!selected) {
-      kicker.textContent = "Cursor";
-      return;
-    }
-    const word = document.createElement("span");
-    word.textContent = "Selected";
-    kicker.appendChild(word);
-    const name = document.createElement("span");
-    name.className = "gram-frame-readout-target";
-    name.textContent = selected.label;
-    kicker.appendChild(name);
-    if (timeLED) {
-      setLEDValue(timeLED, formatTime(selected.time));
-    }
-    if (freqLED) {
-      setLEDValue(freqLED, selected.freq.toFixed(2));
-    }
   }
   function describeStyleTarget(instance) {
     const { selection, styleTarget } = instance.state;
@@ -3391,6 +3392,79 @@
     }
     return value;
   }
+  const LEGACY_MAX_WIDTH = 1200;
+  function fitImageSize(source, sizing, room) {
+    const { width, height } = source;
+    if (sizing === "legacy") {
+      if (width <= LEGACY_MAX_WIDTH) return { width, height };
+      return { width: LEGACY_MAX_WIDTH, height: Math.round(height * LEGACY_MAX_WIDTH / width) };
+    }
+    const ratio = sizing === "screen" && room.pixelRatio > 0 ? room.pixelRatio : 1;
+    const fits = !(room.availableWidth > 0) || width / ratio <= room.availableWidth;
+    const scale = fits ? 1 / ratio : room.availableWidth / width;
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale))
+    };
+  }
+  const IMAGE_SIZINGS = ["legacy", "native", "screen"];
+  const DEFAULT_IMAGE_SIZING = "screen";
+  const records = /* @__PURE__ */ new WeakMap();
+  function setImageSizing(instance, sizing) {
+    records.set(instance, { sizing, sourceWidth: 0, sourceHeight: 0 });
+  }
+  function expandsAnyShape(instance) {
+    const record = records.get(instance);
+    return (record ? record.sizing : DEFAULT_IMAGE_SIZING) !== "legacy";
+  }
+  function measureAvailableWidth(instance, margins) {
+    const { mainCell, svg } = instance.ui;
+    if (!mainCell || !svg) return 0;
+    const cellStyle = window.getComputedStyle(mainCell);
+    const svgStyle = window.getComputedStyle(svg);
+    const previousDisplay = svg.style.display;
+    svg.style.display = "none";
+    const inner = mainCell.clientWidth - (parseFloat(cellStyle.paddingLeft) || 0) - (parseFloat(cellStyle.paddingRight) || 0);
+    svg.style.display = previousDisplay;
+    const border = (parseFloat(svgStyle.borderLeftWidth) || 0) + (parseFloat(svgStyle.borderRightWidth) || 0);
+    return Math.max(0, Math.floor(inner - border - margins.left - margins.right));
+  }
+  function applySize(instance, viewport) {
+    const record = records.get(instance);
+    if (!record || !record.sourceWidth) return false;
+    const size = fitImageSize(
+      { width: record.sourceWidth, height: record.sourceHeight },
+      record.sizing,
+      { availableWidth: measureAvailableWidth(instance, viewport.margins), pixelRatio: window.devicePixelRatio || 1 }
+    );
+    const details = viewport.imageDetails;
+    if (size.width === details.naturalWidth && size.height === details.naturalHeight) return false;
+    details.naturalWidth = size.width;
+    details.naturalHeight = size.height;
+    if (!viewport.imageExpanded) {
+      details.renderWidth = size.width;
+      details.renderHeight = size.height;
+    }
+    return true;
+  }
+  function sizeLoadedImage(instance, viewport, source) {
+    const record = records.get(instance) || { sizing: DEFAULT_IMAGE_SIZING, sourceWidth: 0, sourceHeight: 0 };
+    record.sourceWidth = source.width;
+    record.sourceHeight = source.height;
+    records.set(instance, record);
+    applySize(instance, viewport);
+    const { naturalWidth, naturalHeight } = viewport.imageDetails;
+    if (naturalWidth !== source.width) {
+      const verb = naturalWidth < source.width ? "Scaling down large image" : "Scaling image";
+      const sizing = record.sizing === "legacy" ? "" : `, image-sizing: ${record.sizing}`;
+      console.log(`GramFrame: ${verb} from ${source.width}x${source.height} to ${naturalWidth}x${naturalHeight} (scale factor: ${(naturalWidth / source.width).toFixed(3)}${sizing})`);
+    }
+  }
+  function refitImage(instance, viewport) {
+    const record = records.get(instance);
+    if (!record || record.sizing === "legacy") return;
+    applySize(instance, viewport);
+  }
   function readParameterRows(configTable) {
     const params = /* @__PURE__ */ new Map();
     configTable.querySelectorAll("tr").forEach((row, index) => {
@@ -3437,6 +3511,7 @@
     }
     config.freqMin = freqStart;
     config.freqMax = freqEnd;
+    setImageSizing(instance, choiceParam(params, "image-sizing", IMAGE_SIZINGS) || DEFAULT_IMAGE_SIZING);
   }
   function readPaintingParams(params, player) {
     const frameAverage = numberParam(params, "frame-average");
@@ -3964,6 +4039,9 @@
     const { width, height } = baseRenderSize(instance);
     return width > 0 && height > 0 && width > height;
   }
+  function canExpand(instance) {
+    return isLandscape(instance) || expandsAnyShape(instance);
+  }
   function computeAvailableRenderSize(instance) {
     const margins = instance.state.margins;
     const { width: baseWidth, height: baseHeight } = baseRenderSize(instance);
@@ -4019,7 +4097,7 @@
     button2.textContent = expanded ? "⤢" : "⤡";
   }
   function setImageExpanded(instance, expanded) {
-    if (!isLandscape(instance)) {
+    if (!canExpand(instance)) {
       return;
     }
     instance.state.imageExpanded = !!expanded;
@@ -4030,16 +4108,16 @@
     }
   }
   function refreshExpandedLayout(instance) {
-    if (!instance.state.imageExpanded) {
+    const { imageExpanded, imageDetails } = instance.state;
+    if (!imageExpanded) {
       return;
     }
     const { width, height } = computeAvailableRenderSize(instance);
-    const imageDetails = instance.state.imageDetails;
     imageDetails.renderWidth = width;
     imageDetails.renderHeight = height;
   }
   function createExpandToggle(instance) {
-    if (!isLandscape(instance)) {
+    if (!canExpand(instance)) {
       return null;
     }
     const button2 = document.createElement("button");
@@ -4200,6 +4278,7 @@
   }
   function handleResize(instance) {
     if (instance.ui.svg) {
+      refitImage(instance, instance.state);
       refreshExpandedLayout(instance);
       updateSVGLayout(instance);
       renderAxes(instance);
@@ -4664,6 +4743,7 @@
       }
     });
     listen(window, "resize", instance.viewport._boundHandleResize);
+    listen(window, "blur", () => cancelActiveDrag(instance));
     instance.interaction._registeredListeners = registered;
   }
   function setupResizeObserver(instance) {
@@ -7640,6 +7720,27 @@
     const speed = speedOfSound / f0 * deltaF;
     return Math.abs(speed);
   }
+  function isCompleteCurve(doppler) {
+    return !!(doppler && doppler.fPlus && doppler.fMinus && doppler.fZero);
+  }
+  function snapshotCurve(doppler) {
+    if (!isCompleteCurve(doppler)) {
+      return null;
+    }
+    return {
+      fPlus: { .../** @type {DataCoordinates} */
+      doppler.fPlus },
+      fMinus: { .../** @type {DataCoordinates} */
+      doppler.fMinus },
+      fZero: { .../** @type {DataCoordinates} */
+      doppler.fZero },
+      speed: doppler.speed,
+      color: doppler.color
+    };
+  }
+  function replacedCurveOf(target) {
+    return target.data && target.data.replaced || null;
+  }
   const DopplerDraggedMarker = {
     fPlus: "fPlus",
     fMinus: "fMinus",
@@ -7739,7 +7840,7 @@
      */
     onMarkerDragEnd(target, _position) {
       if (target && target.kind === "place") {
-        this.completeMarkerPlacement();
+        this.completeMarkerPlacement(replacedCurveOf(target));
       }
     }
     /**
@@ -7748,69 +7849,77 @@
      * Cancel and end used to share one callback, so a cancelled placement —
      * mode switch or Escape mid-gesture — *committed* the half-placed f⁺/f⁻
      * curve the user thought was discarded (BH-9). A cancelled placement now
-     * discards the markers it seeded; a cancelled move leaves the marker at its
-     * last position, like the other modes.
+     * puts back the curve it was replacing (or clears what it seeded); a
+     * cancelled move leaves the marker at its last position, like the other modes.
      * @param {DragTarget} target - Drag target from the engine
      */
     onMarkerDragCancel(target) {
       if (target && target.kind === "place") {
-        const doppler = this.instance.state.doppler;
-        doppler.fPlus = null;
-        doppler.fMinus = null;
-        doppler.fZero = null;
-        doppler.speed = null;
-        doppler.tempFirst = null;
-        doppler.previewEnd = null;
-        this.updateSpeedLED();
-        this.renderDopplerFeatures();
-        dispatch(this.instance, { frame: true });
+        this.restoreCurve(replacedCurveOf(target));
       }
     }
     /**
-     * Resolve what a mousedown in doppler mode starts: moving one of the placed
-     * markers, or — with nothing placed yet — laying down f+ and dragging out f-.
+     * Resolve what a mousedown in doppler mode starts: moving the placed marker
+     * under the pointer, or — anywhere else — laying down f+ and dragging out f-,
+     * replacing whatever curve there was. Placement used to be offered only while
+     * *no* marker existed, so once one did every drag clear of it was ignored.
      * @param {DataCoordinates} position - Position of the mousedown
-     * @returns {DragTarget|null} A move- or place-kind target
+     * @returns {DragTarget} A move- or place-kind target
      */
     resolveDopplerDrag(position) {
-      const doppler = this.instance.state.doppler;
-      if (doppler.fPlus || doppler.fMinus || doppler.fZero) {
-        return this.findDopplerMarkerAtPosition(position);
-      }
-      return this.startMarkerPlacement(position);
+      return this.findDopplerMarkerAtPosition(position) || this.startMarkerPlacement(position);
     }
     /**
      * Seed f+ at the mousedown position and return a `place`-kind target, so the
      * rest of the placement is an ordinary drag with f- following the pointer.
      *
      * `tempFirst` and `previewEnd` stay on state.doppler: they are placement
-     * geometry the renderer needs, not drag bookkeeping (data-model.md §2).
+     * geometry the renderer needs, not drag bookkeeping (data-model.md §2). The
+     * curve being replaced rides on the target, so a cancelled or moveless
+     * placement can put it back.
      * @param {DataCoordinates} dataCoords - Data coordinates {freq, time}
      * @returns {DragTarget} A place-kind target
      */
     startMarkerPlacement(dataCoords) {
       const doppler = this.instance.state.doppler;
+      const replaced = snapshotCurve(doppler);
       doppler.fPlus = { time: dataCoords.time, freq: dataCoords.freq };
+      Object.assign(doppler, { fMinus: null, fZero: null, speed: null, color: null });
       doppler.tempFirst = doppler.fPlus;
       doppler.previewEnd = { time: dataCoords.time, freq: dataCoords.freq };
+      this.updateSpeedLED();
       this.renderDopplerFeatures();
       return {
         kind: "place",
         id: DopplerDraggedMarker.fMinus,
         type: "dopplerMarker",
         position: dataCoords,
-        data: { markerType: DopplerDraggedMarker.fMinus }
+        data: { markerType: DopplerDraggedMarker.fMinus, replaced }
       };
     }
     /**
-     * Finalise a placement drag: order the markers, derive f₀, and clear the
-     * placement geometry.
+     * Put back the curve a placement was replacing, or with none to put back
+     * clear what it seeded. The state is what it was before the press either
+     * way, so nothing is marked changed.
+     * @param {DopplerCurveSnapshot|null} replaced - The curve to restore, or null
      */
-    completeMarkerPlacement() {
+    restoreCurve(replaced) {
+      const empty = { fPlus: null, fMinus: null, fZero: null, speed: null, color: null };
+      Object.assign(this.instance.state.doppler, replaced || empty, { tempFirst: null, previewEnd: null });
+      this.updateSpeedLED();
+      this.renderDopplerFeatures();
+      dispatch(this.instance, { frame: true });
+    }
+    /**
+     * Finalise a placement drag: order the markers, derive f₀, and clear the
+     * placement geometry. A release before any movement is a click, not a curve,
+     * and restores what was there: it used to leave an invisible f+ behind.
+     * @param {DopplerCurveSnapshot|null} replaced - The curve the placement replaced
+     */
+    completeMarkerPlacement(replaced) {
       const doppler = this.instance.state.doppler;
       if (!doppler.tempFirst || !doppler.fPlus || !doppler.fMinus) {
-        doppler.tempFirst = null;
-        doppler.previewEnd = null;
+        this.restoreCurve(replaced);
         return;
       }
       if (doppler.fPlus.time <= doppler.fMinus.time) {
@@ -7835,7 +7944,7 @@
     getGuidanceText() {
       return {
         items: [
-          { trigger: "Click & drag", outcome: "to place f+ and f− in one gesture; the curve previews during the drag" },
+          { trigger: "Click & drag", outcome: "to place f+ and f− in one gesture; the curve previews during the drag. A drag that starts clear of the markers draws a new curve in place of the old one" },
           { trigger: "Drag f+ or f−", outcome: "to adjust; f₀ can be dragged independently" },
           { trigger: "f₀ marker", outcome: "is placed automatically at the midpoint" },
           { trigger: "Right-click", outcome: "to reset all doppler markers" }
@@ -7941,14 +8050,7 @@
      * Reset doppler-specific state
      */
     resetState() {
-      const doppler = this.instance.state.doppler;
-      doppler.fPlus = null;
-      doppler.fMinus = null;
-      doppler.fZero = null;
-      doppler.speed = null;
-      doppler.color = null;
-      doppler.tempFirst = null;
-      doppler.previewEnd = null;
+      this.restoreCurve(null);
       this.dragHandler.reset();
       recordDopplerDeletion(this.instance);
       markAnnotationsChanged(this.instance);
@@ -8184,11 +8286,10 @@
      * Half of the `PersistentFeatureProvider` capability. Lived on
      * `FeatureRenderer` as `hasDopplerFeatures()` until spec 167 moved it onto
      * the mode that owns the state it reads.
-     * @returns {boolean} True if any doppler marker has been placed
+     * @returns {boolean} True if a complete doppler curve has been placed
      */
     hasPersistentFeatures() {
-      const doppler = this.instance.state.doppler;
-      return !!(doppler && (doppler.fPlus || doppler.fMinus || doppler.fZero));
+      return isCompleteCurve(this.instance.state.doppler);
     }
     /**
      * Render persistent features (for FeatureRenderer)
@@ -8669,7 +8770,6 @@
     showGuidanceForMode(instance, currentMode);
     return currentMode;
   }
-  const MAX_IMAGE_WIDTH = 1200;
   function setupSpectrogramImage(instance, imageUrl) {
     if (!instance.ui.spectrogramImage || !imageUrl) {
       return;
@@ -8679,19 +8779,7 @@
     const tempImg = new Image();
     tempImg.onload = function() {
       instance.ui.container.classList.remove("gram-frame-loading");
-      let imageWidth = tempImg.naturalWidth;
-      let imageHeight = tempImg.naturalHeight;
-      if (imageWidth > MAX_IMAGE_WIDTH) {
-        const scaleFactor = MAX_IMAGE_WIDTH / imageWidth;
-        imageWidth = MAX_IMAGE_WIDTH;
-        imageHeight = Math.round(imageHeight * scaleFactor);
-        console.log(`GramFrame: Scaling down large image from ${tempImg.naturalWidth}x${tempImg.naturalHeight} to ${imageWidth}x${imageHeight} (scale factor: ${scaleFactor.toFixed(3)})`);
-      }
-      const imageDetails = instance.state.imageDetails;
-      imageDetails.naturalWidth = imageWidth;
-      imageDetails.naturalHeight = imageHeight;
-      imageDetails.renderWidth = imageWidth;
-      imageDetails.renderHeight = imageHeight;
+      sizeLoadedImage(instance, instance.state, { width: tempImg.naturalWidth, height: tempImg.naturalHeight });
       updateSVGLayout(instance);
       renderAxes(instance);
       createExpandToggle(instance);
@@ -8951,13 +9039,13 @@
         return !!(instance && instance.state && instance.state.imageExpanded);
       },
       /**
-       * Programmatically expand or collapse all landscape GramFrame instances.
-       * No-op for portrait/square images (mirrors the toggle's landscape gate).
+       * Programmatically expand or collapse every GramFrame instance that has the
+       * expand toggle; a no-op for those that do not (mirrors the toggle's gate).
        * @param {boolean} expanded - Desired expand state
        */
       setExpandState(expanded) {
         this._getInstances().forEach((instance) => {
-          if (isLandscape(instance)) {
+          if (canExpand(instance)) {
             setImageExpanded(instance, expanded);
           }
         });
@@ -9090,7 +9178,7 @@
     const hasMarkers = !!(state.analysis && state.analysis.markers && state.analysis.markers.length > 0);
     const hasHarmonics = !!(state.harmonics && state.harmonics.harmonicSets && state.harmonics.harmonicSets.length > 0);
     const hasSidebands = !!(state.sidebands && state.sidebands.sidebandSets && state.sidebands.sidebandSets.length > 0);
-    const hasDoppler = !!(state.doppler && (state.doppler.fPlus !== null || state.doppler.fMinus !== null || state.doppler.fZero !== null));
+    const hasDoppler = isCompleteCurve(state.doppler);
     return hasMarkers || hasHarmonics || hasSidebands || hasDoppler;
   }
   function isFiniteNumber(value) {
@@ -10829,6 +10917,8 @@
      * of the drag record. Writing `state.drag` directly instead left the engine
      * saying *dragging* while the projection said *idle*, and the next publish
      * resurrected the stale drag (M4). One place now, not two (issue #268).
+     * Ends with the engine's own cancellation point, which reaches the region
+     * and wheel-pan handlers a mode switch could not.
      * @returns {void}
      */
     _cancelAllDrags() {
@@ -10837,6 +10927,7 @@
           modeInstance.dragHandler.cancelDrag();
         }
       });
+      cancelActiveDrag(this);
     }
     /**
      * Clear all annotations from state and storage
@@ -10844,9 +10935,6 @@
     _clearGram() {
       var _a, _b, _c;
       this._cancelAllDrags();
-      if (this.interaction._wheelPanHandler) {
-        this.interaction._wheelPanHandler.cancelDrag();
-      }
       if (this.interaction.clearSelection) {
         this.interaction.clearSelection();
       }
