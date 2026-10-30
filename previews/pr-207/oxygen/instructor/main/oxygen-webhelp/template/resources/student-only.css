@@ -1,0 +1,32 @@
+/*
+ * Keep student-only content out of the instructor edition (issue #198).
+ *
+ * generate_dita.py stamps the in-body 7 Questions section on every gram page
+ * with audience="student-only", plus a matching "7 Questions" jump link in the
+ * gram-nav bar. instructor.ditaval excludes that audience, so a build filtered
+ * with it never carries either. But the Oxygen instructor scenario is normally
+ * run with NO DITAVAL at all ("instructor.ditaval, or blank" -
+ * theme/oxygen-hide-search/README.md), and an unfiltered build keeps every
+ * student-only block - so the instructor saw the 7 Questions image on every
+ * gram page.
+ *
+ * Re-tagging the content would not help: what is missing is the filter, not
+ * the tag. So this hides it at render time, keyed off the edition marker
+ * xslt/inc/customSearchFlag.xsl already injects on EVERY page: the instructor
+ * edition is anything whose DITAVAL does not exclude audience="-trainee",
+ * blank included. In the student edition nothing below matches.
+ *
+ * Instructors still reach the image through the root-level "7 Questions" nav
+ * topic (7_questions.html), which is unfiltered by design and untouched here:
+ * its links point at "7_questions.html", which the [href*] test below cannot
+ * match.
+ *
+ * Hooks are the DITA-source ones: outputclass="seven-questions" on the section
+ * (rendered as a class), and the section's id inside the jump link's href
+ * (DITA-OT renders "#topic/seven-questions" as "#topic__seven-questions").
+ */
+
+body:has(.wh-edition-instructor) .seven-questions,
+body:has(.wh-edition-instructor) .gram-nav a[href*="seven-questions"] {
+    display: none !important;
+}
