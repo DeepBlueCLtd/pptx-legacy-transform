@@ -84,5 +84,5 @@ it in Explorer would.
 - **Stand-alone PC:** delete `HKEY_CURRENT_USER\Software\Classes\glc` and the
   script.
 
-`client/` is PC-side install material, not template payload: `theme/sync.py`
+`client/` (including the trial plan, [TRIAL.md](client/TRIAL.md)) is PC-side install material, not template payload: `theme/sync.py`
 does not copy it into `theme/pptx-transform/`.
