@@ -36,8 +36,21 @@ Each stage removes one unknown; move on only when the previous stage passes.
 On a VM without the replay tool, associate `.glc` with Notepad: Notepad opening
 the `.glc` proves the chain, but not that the `.wav` loads.
 
-The gh-pages copy cannot be used for stage C: it predates the launcher, and
-over `https` the script deliberately does nothing.
+For stage C no Oxygen run is needed: the committed builds under
+`demo/oxygen-sample/published/` already load `glc-launch.js`. Copy
+`published/` to a mapped drive (a `subst` drive letter works too) and open
+`instructor/main/week-1/gram-03/gram_03.html` from there. The gh-pages copy
+cannot be used: it loads the script, but over `https` the script deliberately
+does nothing.
+
+**The sample data opens the replay tool but displays nothing.** The committed
+corpus is sanitised: its `.glc` files are stripped down (no `channel`,
+`replay_speed` or `displays`, so they fail the GLC schema that ships with the
+replay tool) and its `.wav` files are 0.1 s stubs. That proves the launch chain,
+not the replay. To check that "the `.wav` loads", use a known-good pair: the
+replay tool's own default configuration file with a
+`<data_source><filename>good.wav</filename>` element added as its first child,
+beside a WAV of at least a few seconds (steady tones show as clear lines).
 
 ## Setup steps
 
@@ -47,6 +60,20 @@ and removed with one command.
 1. **Check for a name clash.** In `cmd`, run `assoc .glc`. Any answer other
    than `.glc=glc` is fine. If it is `.glc=glc`, stop: the `.reg` would
    overwrite how `.glc` files open.
+   If it answers *File association not found*, `.glc` files do not open with
+   the replay tool yet; associate them for the current user first, under a
+   ProgID that is **anything but `glc`** (`HKCU\Software\Classes\glc` is the
+   URL-scheme key the next steps create, so a `.glc=glc` association would
+   collide with it). The replay tool takes the `.glc` path as its argument:
+
+   ```bat
+   reg add "HKCU\Software\Classes\.glc" /ve /d "ReplayTool.glc" /f
+   reg add "HKCU\Software\Classes\ReplayTool.glc" /ve /d "Replay tool configuration" /f
+   reg add "HKCU\Software\Classes\ReplayTool.glc\shell\open\command" /ve /d "\"<replay tool>.exe\" \"%1\"" /f
+   ```
+
+   Replace `<replay tool>.exe` with the tool's full path. Check it by
+   double-clicking a `.glc` in Explorer before going on.
 2. **Copy the script** from this folder to `C:\aaac\glc-launch.ps1`. For another
    folder, edit the last line of the `.reg`, doubling every backslash.
 3. **Import the handler.** Double-click `glc-protocol.reg`. It creates
@@ -89,14 +116,50 @@ Record the `assoc .glc` result and the outcome of each check on issue #199.
 - **A VM pass does not guarantee a domain pass.** Group Policy can override
   `-ExecutionPolicy Bypass`; rollout uses HKLM, a signed script under
   `C:\Program Files\AAAC\`, and no Bypass.
-- **Browser prompt on every click.** Unknown whether the
-  `AutoLaunchProtocolsFromOrigins` policy accepts `file://` as an origin; the
-  trial should find out.
+- **Browser prompt.** Edge offers *Always allow* on the "Open Windows
+  PowerShell?" prompt for a `file://` page (2026-10-30 result), so a student is
+  asked once, not on every click. Still unknown: whether the
+  `AutoLaunchProtocolsFromOrigins` policy accepts `file://` as an origin, to
+  remove even that first prompt.
 - **PowerShell may be blocked outright.** If so, reconsider the handler (e.g. a
   `.cmd` adapter) rather than the page script.
 - **Accepted risk:** any page or document can send a `glc:` link; the script
   limits this to opening existing `.glc` files, in any folder.
 - **Fallback** with no handler: **Copy path**, Win+R, paste, Enter.
+
+## Results
+
+**2026-10-30, stand-alone Windows 11 PC, Edge, the real replay tool run from a
+network share** (stages A and B in one: real tool, but no domain policy), using
+the per-user route. `assoc .glc` reported no association, so one was added as in
+setup step 1.
+
+| Check | Outcome |
+| --- | --- |
+| Replay tool from `cmd`, `.glc` path as argument | Pass: opens the gram with its `.wav` |
+| Handler alone (Win+R) | Pass |
+| From the browser | Pass: "Open Windows PowerShell?" asked once; *Always allow* offered for a `file://` page; no prompt after that |
+| Negative test | Not recorded; repeat on the domain PC |
+| Real page (stage C) | Pass, against a local copy of the committed `demo/oxygen-sample/published/` build: **Copy path** showed the right path and **WAV 1** opened the replay tool. The display was blank, as expected for the sanitised sample data (see *Trial stages*) |
+
+Still to do: the domain PC under Group Policy (HKLM, signed script, no
+Bypass).
+
+## Diagnostics
+
+**The replay tool opens but shows nothing.** Validate the `.glc` against the
+GLC schema (`.xsd`) installed alongside the replay tool. The `.wav` must also be
+long enough to fill at least one FFT.
+
+```powershell
+$set = New-Object System.Xml.Schema.XmlSchemaSet
+[void]$set.Add($null, '<replay tool folder>\<GLC schema>.xsd')
+$st = New-Object System.Xml.XmlReaderSettings
+$st.ValidationType = 'Schema'; $st.Schemas = $set
+$st.add_ValidationEventHandler({ param($s, $e) $e.Message })
+$r = [System.Xml.XmlReader]::Create('Z:\path\to\gram.glc', $st)
+while ($r.Read()) {}; $r.Close()   # prints one line per schema error
+```
 
 ## Rollback
 
@@ -104,4 +167,11 @@ One command removes the trial handler; then delete `C:\aaac\glc-launch.ps1`.
 
 ```bat
 reg delete "HKCU\Software\Classes\glc" /f
+```
+
+If setup step 1 added a `.glc` association, remove it too:
+
+```bat
+reg delete "HKCU\Software\Classes\.glc" /f
+reg delete "HKCU\Software\Classes\ReplayTool.glc" /f
 ```

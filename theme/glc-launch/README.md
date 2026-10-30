@@ -52,9 +52,14 @@ Notes for the administrator:
 - **Browser prompt.** Edge/Chrome ask "Open Windows PowerShell?" on each click
   unless pre-approved. The `AutoLaunchProtocolsFromOrigins` browser policy can
   pre-approve `glc`; whether it accepts `file://` pages as an origin needs
-  testing on one PC first. Otherwise students tick *Always allow* once.
+  testing on one PC first. Otherwise students tick *Always allow* once — Edge
+  does offer it for a `file://` page (trial, 2026-10-30).
 - **Association.** `.glc` files must already open with the replay tool when
   double-clicked in Explorer (they do on a PC that runs the PowerPoint decks).
+  Where they don't, associate `.glc` with the replay tool (it takes the path as
+  `"%1"`) under a ProgID that is **not** `glc` — `Classes\glc` is the URL-scheme
+  key above, and a `.glc=glc` association would collide with it. The trial's
+  setup step 1 ([client/TRIAL.md](client/TRIAL.md)) has the commands.
 - **Check.** Open a WAV gram page from the mapped drive and click **WAV N**.
   If the script is blocked by policy the link does nothing — use the fallback
   below.
