@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+   <url>
+      <loc>welcome.html</loc>
+      <lastmod>2000-01-01T00:00:00Z</lastmod>
+   </url>
+   <url>
+      <loc>security.html</loc>
+      <lastmod>2000-01-01T00:00:00Z</lastmod>
+   </url>
+   <url>
+      <loc>7_questions.html</loc>
+      <lastmod>2000-01-01T00:00:00Z</lastmod>
+   </url>
+   <url>
+      <loc>week-1/week_1.html</loc>
+      <lastmod>2000-01-01T00:00:00Z</lastmod>
+   </url>
+   <url>
+      <loc>week-2/week_2.html</loc>
+      <lastmod>2000-01-01T00:00:00Z</lastmod>
+   </url>
+</urlset>
