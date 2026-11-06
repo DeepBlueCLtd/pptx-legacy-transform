@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map>
+   <appContext helpID="welcome" path="welcome.html"/>
+   <appContext helpID="security" path="security.html"/>
+   <appContext helpID="seven-questions" path="7_questions.html"/>
+   <appContext helpID="week_1" path="week-1/week_1.html"/>
+   <appContext helpID="week_2" path="week-2/week_2.html"/>
+</map>
