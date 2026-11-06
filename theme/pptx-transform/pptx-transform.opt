@@ -214,19 +214,8 @@
             <tag type="other">dark-mode</tag>
         </tags>
     </webhelp>
-    <pdf>
-        <preview-image file="oxygen.png"/>
-        <tags>
-            <tag type="color">white</tag>
-        </tags>
-        <resources>
-            <css file="oxygen-theme.css"/>
-            <css file="oxygen-print.css"/>
-            <css file="notes.css"/>
-            <fileset>
-                <include name="*.css"/>
-                <include name="resources/**/*.ttf"/>
-            </fileset>
-        </resources>
-    </pdf>
+    <!-- No <pdf> section, deliberately: we publish WebHelp only, and the
+         stock section's <resources><fileset> fails to load on Oxygen 28.0
+         ("Unexpected element fileset. Expected elements are css"), which
+         rejects the whole template. 28.1 accepts it. -->
 </publishing-template>

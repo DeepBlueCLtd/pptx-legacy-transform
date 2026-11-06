@@ -165,8 +165,8 @@ a wrong marking is worse than a missing one.
 
 ## Scope
 
-WebHelp only. The `.opt`'s `<pdf>` section is untouched; whether PDF output
-should carry the marking is unconfirmed.
+WebHelp only. The `.opt` has no `<pdf>` section: it fails to load on Oxygen
+28.0. Whether PDF output should carry the marking is unconfirmed.
 
 ## Reference
 
