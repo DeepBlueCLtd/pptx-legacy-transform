@@ -54,6 +54,13 @@ from pathlib import Path
 
 REPO = "DeepBlueCLtd/GramFrame"
 LATEST_API = "https://api.github.com/repos/{}/releases/latest".format(REPO)
+# Fallback when the API is refused (a repo-scoped Claude Code cloud session
+# gets 403; so can a rate-limited anonymous runner).  GitHub answers any
+# ``/releases/latest/download/<name>`` with a 302 to
+# ``/releases/download/<tag>/<name>`` -- the same "latest" as the API (formal
+# releases only), readable from the Location header without following it.
+LATEST_DOWNLOAD = "https://github.com/{}/releases/latest/download/".format(REPO)
+DOWNLOAD_URL = "https://github.com/{repo}/releases/download/{tag}/{name}"
 BUNDLE_NAME = "gramframe.bundle.js"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -101,14 +108,57 @@ def _read_url(url: str, accept: str = "") -> bytes:
         return response.read()
 
 
+def _release_for_tag(tag: str) -> dict:
+    """Describe a release from its tag alone, by the asset naming convention
+    (``gramframe-<version>.zip``, see the module docstring).  If GramFrame
+    ever renames the zip, ``fetch_bundle`` fails loudly on the download --
+    never a silent wrong bundle."""
+    name = "gramframe-{}.zip".format(tag[1:] if tag.startswith("v") else tag)
+    return {"tag": tag, "name": name,
+            "zip_url": DOWNLOAD_URL.format(repo=REPO, tag=tag, name=name)}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # surface the 3xx as an HTTPError so we can read Location
+
+
+def _tag_from_redirect() -> str:
+    """The latest formal release tag, from the ``/releases/latest/download``
+    redirect.  Raises RuntimeError when the answer is not that redirect."""
+    url = LATEST_DOWNLOAD + BUNDLE_NAME
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        opener.open(urllib.request.Request(url, method="HEAD"), timeout=60)
+    except urllib.error.HTTPError as exc:
+        location = exc.headers.get("Location", "") if exc.code in (301, 302, 303, 307, 308) else ""
+        marker = "/releases/download/"
+        if marker in location:
+            return location.split(marker, 1)[1].split("/", 1)[0]
+        raise RuntimeError("{} answered HTTP {} without a release redirect".format(url, exc.code))
+    raise RuntimeError("{} did not redirect to a release".format(url))
+
+
 def latest_release() -> dict:
     """The newest formal release: ``{"tag": ..., "zip_url": ..., "name": ...}``.
 
     Draft and pre-releases are excluded by GitHub's ``/releases/latest``
     endpoint itself, which is what makes "formal release" the default here.
+    The API is asked first; when it is unreachable or refused, the
+    ``/releases/latest/download`` redirect answers the same question.  Only
+    when both fail does the caller see the error.
     """
-    payload = json.loads(
-        _read_url(LATEST_API, accept="application/vnd.github+json"))
+    try:
+        payload = json.loads(
+            _read_url(LATEST_API, accept="application/vnd.github+json"))
+    except (urllib.error.URLError, OSError, ValueError) as api_exc:
+        try:
+            tag = _tag_from_redirect()
+        except (urllib.error.URLError, OSError, RuntimeError) as exc:
+            raise RuntimeError("API: {}; redirect: {}".format(api_exc, exc))
+        print("releases API unavailable ({}); latest tag {} read from the "
+              "download redirect".format(api_exc, tag))
+        return _release_for_tag(tag)
     assets = [a for a in payload.get("assets", [])
               if a["name"].endswith(".zip")]
     if not assets:
@@ -179,7 +229,7 @@ def main(argv=None) -> int:
         # Never fail a build because GitHub was unreachable: an offline dev
         # host and a flaky runner are both normal, and neither is evidence
         # that the pin is wrong.
-        print("could not reach the GramFrame releases API ({}); "
+        print("could not reach the GramFrame releases API or its download redirect ({}); "
               "pinned at {}".format(exc, pinned))
         return 0
 
