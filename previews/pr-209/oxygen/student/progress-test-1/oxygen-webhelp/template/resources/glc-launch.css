@@ -1,0 +1,22 @@
+/*
+ * The "Copy path" fallback beside a WAV gram's .glc link (issue #199).
+ * resources/glc-launch.js adds both elements, and only on pages opened from a
+ * drive or file share, so nothing here matches anywhere else.
+ */
+
+.wav-stage .glc-copy-path {
+    margin-left: 0.75em;
+    padding: 2px 8px;
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+/* The path itself, shown so it can still be selected by hand if the clipboard
+   is unavailable. */
+.wav-stage .glc-path {
+    display: block;
+    margin-top: 0.4em;
+    font-size: 0.8em;
+    opacity: 0.75;
+    word-break: break-all;
+}
