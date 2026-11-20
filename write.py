@@ -58,12 +58,12 @@ sys.argv = [
     "--out", str(DITA_OUT),
     "--image-root", str(SOURCE),
     "--stub-wav", "stock.wav",
-    # The source-provenance debug block is ON by default for now: each gram page
-    # carries a visible instructor-only block mapping its published week-N/gram-NN
-    # back to the source publication, source deck title and original gram number
-    # (plus the analysis image's source path) — so a published page (e.g. a
-    # missing analysis image) can be traced to the PPTX it came from. To turn it
-    # off once the debugging phase is over, uncomment the line below:
-    # "--no-debug-provenance",
+    # The source-provenance debug block is OFF by default. Uncomment the line
+    # below to stamp each gram page with a visible instructor-only block mapping
+    # its published week-N/gram-NN back to the source publication, source deck
+    # title and original gram number (plus the analysis image's source path) —
+    # so a published page (e.g. a missing analysis image) can be traced to the
+    # PPTX it came from:
+    # "--debug-provenance",
 ]
 runpy.run_path(str(WRITE), run_name="__main__")

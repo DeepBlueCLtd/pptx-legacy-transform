@@ -4,13 +4,6 @@
   <title>Gram 10<ph audience="-trainee" outputclass="vessel-name"> - FR Stargazer, Category 3, Risa</ph></title>
   <body>
     <p audience="-trainee" outputclass="gf-persistent" />
-    <note audience="-trainee" outputclass="debug-provenance" type="other" othertype="Source provenance (debug)">
-      <p>Source publication: progress-test-1</p>
-      <p>Source chapter (deck): </p>
-      <p>Source gram number: 10</p>
-      <p>Published as: progress-test-1 / gram 10</p>
-      <p>Analysis image source: source/Instructor Progress Test 1 Grams/Instructor Progress Test 1 Grams Files/Gram 10/Analysis.png</p>
-    </note>
     <section id="analysis-sheet" audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis.png" placement="break" align="center" />
