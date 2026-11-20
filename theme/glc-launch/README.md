@@ -53,8 +53,14 @@ Notes for the administrator:
   unless pre-approved. The `AutoLaunchProtocolsFromOrigins` browser policy can
   pre-approve `glc`; whether it accepts `file://` pages as an origin needs
   testing on one PC first. Otherwise students tick *Always allow* once.
-- **Association.** `.glc` files must already open with the replay tool when
-  double-clicked in Explorer (they do on a PC that runs the PowerPoint decks).
+- **Association.** The handler opens the `.glc` exactly as a double-click in
+  Explorer does, so it relies on `.glc` opening with the replay tool. That is
+  **not** managed centrally, by decision: users re-associate `.glc` themselves
+  after a system update or rebuild, as normal working practice. Until they do,
+  a click shows Windows' "How do you want to open this?" dialog; picking the
+  replay tool there fixes it for later clicks. The choice is per-user and is
+  stored as Explorer's `UserChoice`, so `assoc .glc` reports nothing even when
+  it works.
 - **Check.** Open a WAV gram page from the mapped drive and click **WAV N**.
   If the script is blocked by policy the link does nothing — use the fallback
   below.

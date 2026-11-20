@@ -74,12 +74,21 @@
         Emit a @style background-color ONLY when the scenario overrides it.
         Left empty (the shipped default), the bar takes the single fixed colour
         pinned in resources/protection.css - the same in light and dark mode.
+
+        The override MUST carry !important: protection.css pins its colour with
+        !important, and an important stylesheet rule beats a plain inline
+        style - the override was silently struck through until this was added.
+        An important inline style beats an important stylesheet rule. Trailing
+        semicolons/spaces are stripped, so a value typed as "#FCC;" still works.
     -->
     <xsl:template name="protection-background-colour">
-        <xsl:if test="oxyf:getParameter('webhelp.protection.background.color') != ''">
+        <xsl:variable name="colour"
+            select="replace(normalize-space(oxyf:getParameter('webhelp.protection.background.color')), '[;\s]+$', '')"/>
+        <xsl:if test="$colour != ''">
             <xsl:attribute name="style">
                 <xsl:text>background-color:</xsl:text>
-                <xsl:value-of select="oxyf:getParameter('webhelp.protection.background.color')"/>
+                <xsl:value-of select="$colour"/>
+                <xsl:text> !important</xsl:text>
             </xsl:attribute>
         </xsl:if>
     </xsl:template>
