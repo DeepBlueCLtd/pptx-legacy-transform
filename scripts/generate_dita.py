@@ -165,10 +165,9 @@ _STUB_WAV_PATH: "Path | None" = None
 # instructor-only block mapping its published path (``week-N/gram-NN``) back to
 # its source publication, source chapter/deck title and original ``gram_id`` —
 # so an operator staring at a published page (e.g. a missing analysis image) can
-# find the source PPTX it came from. ON by default during the current debugging
-# phase (``--no-debug-provenance`` suppresses it); flip the CLI default back off
-# once the phase is over.
-_DEBUG_PROVENANCE: bool = True
+# find the source PPTX it came from. OFF by default; pass ``--debug-provenance``
+# to stamp it while tracing a broken page.
+_DEBUG_PROVENANCE: bool = False
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -2189,18 +2188,17 @@ def main(argv: Iterable[str] | None = None) -> int:
              "still resolve). Slims the DITA tree for cross-system transit.")
     parser.add_argument(
         "--debug-provenance", action="store_true", dest="debug_provenance",
-        default=True,
+        default=False,
         help="Temporary debugging aid: stamp each gram topic with a visible "
              "instructor-only block mapping its published week-N/gram-NN back "
              "to the source publication, source chapter/deck title and original "
              "gram_id (plus the analysis image's source path). Helps trace a "
              "published page — e.g. a missing analysis image — to the PPTX it "
-             "came from. ON by default during the current debugging phase; pass "
-             "--no-debug-provenance to suppress the block.")
+             "came from. Off by default.")
     parser.add_argument(
         "--no-debug-provenance", action="store_false", dest="debug_provenance",
-        help="Suppress the source-provenance debug block (see "
-             "--debug-provenance), which is otherwise on by default for now.")
+        help="Suppress the source-provenance debug block (the default; "
+             "overrides an earlier --debug-provenance).")
     parser.add_argument(
         "--static-root", type=Path, dest="static_root", default=Path("static"),
         help="Folder of common static pages (welcome.dita, security.dita, …) "

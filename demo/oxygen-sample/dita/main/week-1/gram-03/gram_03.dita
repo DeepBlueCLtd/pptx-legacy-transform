@@ -4,13 +4,6 @@
   <title>Gram 03<ph audience="-trainee" outputclass="vessel-name"> - Razor Crest contact bearing 010, codename Bajor</ph></title>
   <body>
     <p audience="-trainee" outputclass="gf-persistent" />
-    <note audience="-trainee" outputclass="debug-provenance" type="other" othertype="Source provenance (debug)">
-      <p>Source publication: main</p>
-      <p>Source chapter (deck): Instructor Week 1 Grams</p>
-      <p>Source gram number: 13</p>
-      <p>Published as: Week 1 / gram 03</p>
-      <p>Analysis image source: source/Instructor Week 1 Grams/Instructor Week 1 Grams Files/Gram 13/Analysis Sheet.png</p>
-    </note>
     <section id="analysis-sheet" audience="-trainee" outputclass="analysis-sheet">
       <title>Analysis Sheet</title>
       <image href="analysis-sheet.png" placement="break" align="center" />
