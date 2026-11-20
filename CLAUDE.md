@@ -453,24 +453,16 @@ release blocks every later template release until the bump is merged.
 workflow*) and opens a PR on `bump/gramframe`. Check for that PR before
 opening another one.
 
-**In a Claude Code cloud session**, the session is scoped to this repo, so
-`api.github.com/repos/DeepBlueCLtd/GramFrame/releases/latest` returns 403 and
-`--check` prints "could not reach … API" and exits 0. That is **not** a
-current pin. The tag list (`git ls-remote --tags
-https://github.com/DeepBlueCLtd/gramframe`) and the release download URL
-still work, so pass the release to the script's own functions:
-
-```bash
-python -c "
-import sys; sys.path.insert(0, '.github/scripts'); import update_gramframe as u
-t = 'vX.Y.Z'; n = 'gramframe-' + t[1:] + '.zip'
-r = {'tag': t, 'name': n, 'zip_url': 'https://github.com/DeepBlueCLtd/GramFrame/releases/download/%s/%s' % (t, n)}
-u.write_copies(r, u.fetch_bundle(r))"
-```
-
-Then run `theme/sync.py` and the tests as above. Pick the newest tag that has
-a formal release (`/releases/latest` excludes pre-releases, and the release
-gate compares against it).
+**Release lookup.** The script asks the releases API for the latest
+release first. If the API refuses (a Claude Code cloud session is scoped to
+this repo, so it gets a 403), it reads the tag from the redirect that
+`https://github.com/DeepBlueCLtd/GramFrame/releases/latest/download/…` gives.
+That is the same "latest" (formal releases only), and the zip URL is built by
+the `gramframe-<version>.zip` naming convention. So the commands above work
+unchanged in a cloud session, and it prints "latest tag … read from the
+download redirect" when it took this route. Only when **both** lookups fail
+does `--check` print "could not reach …" and exit 0. Treat that as *unknown*,
+not *current*. The lookup logic is covered by `tests/test_update_gramframe.py`.
 
 **Review the bump; a passing suite isn't enough.** The suite treats the
 bundle as opaque, but the theme overlays override GramFrame's own DOM:

@@ -51,7 +51,9 @@ jobs:
       # must not carry a pin that is already behind (issue #181). A stale pin
       # fails the release; the step never updates anything itself, because the
       # bump has to be a reviewed, tested commit (see the script header and
-      # theme/gramframe-oxygen/README.md). An unreachable API passes.
+      # theme/gramframe-oxygen/README.md). The API is tried first, then the
+      # /releases/latest/download redirect; only when both are unreachable
+      # does the step pass without a verdict.
       - name: Refuse to ship a stale GramFrame
         env:
           GH_TOKEN: ${{ github.token }}
