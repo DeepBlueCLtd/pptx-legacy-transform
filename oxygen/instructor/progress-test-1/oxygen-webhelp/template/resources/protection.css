@@ -24,8 +24,9 @@
  *
  * A scenario may override the background per export via
  * webhelp.protection.background.color, which the XSLT emits as an inline
- * @style - inline styles beat these rules, so that override still works. The
- * text colour stays black in every case; pick an override light enough for it.
+ * @style carrying !important - it has to, because a plain inline style LOSES
+ * to the !important rule below; an important inline style wins. The text
+ * colour stays black in every case; pick an override light enough for it.
  */
 
 .wh_header_protection,
