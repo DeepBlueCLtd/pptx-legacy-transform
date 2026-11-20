@@ -421,6 +421,69 @@ publish cannot be verified locally** — it is a manual Oxygen run. The
 cross-file wiring guard in `test_package_release.py` is what stands between an
 edit and that run.
 
+### Upgrading the vendored GramFrame bundle
+
+GramFrame (`DeepBlueCLtd/GramFrame`) is the gram viewer. Its bundle is
+**committed and pinned**, never downloaded at package time, because the
+release zip has to be deterministic and the bundle has to be one the test
+suite has run against. The tag is recorded in each copy's `VERSION`, and
+every copy must be byte-identical (`tests/test_package_release.py`):
+`theme/gramframe-oxygen/resources/` (master), `scripts/vendor/gramframe/`,
+`presentation/assets/embeds/`, then `theme/pptx-transform/resources/` and the
+four `demo/oxygen-sample/published/**` builds via `theme/sync.py`.
+Full detail: `theme/gramframe-oxygen/README.md` — "Bumping GramFrame".
+
+**Do not edit the bundle or `VERSION` by hand.** The bump is always:
+
+```bash
+python .github/scripts/update_gramframe.py --check   # exit 1 = stale
+python .github/scripts/update_gramframe.py           # fetch zip, write every vendored copy + VERSION
+python theme/sync.py                                 # -> template + committed sample builds
+python -m unittest discover tests/
+```
+
+Commit all the resulting files (normally 16: a bundle and a `VERSION` in each
+of 8 places) as `Upgrade GramFrame to vX.Y.Z`, then open a PR. **Merging that
+PR is the template release**: it touches `theme/**`, so `package-release.yml`
+cuts a new `aaac-pipeline-v…` zip with the bundle in it. Nothing else needs
+doing, and no release is created by hand. That workflow also runs `--check`
+and **refuses to release a stale pin** (issue #181), so an upstream GramFrame
+release blocks every later template release until the bump is merged.
+`bump-gramframe.yml` runs the same sequence every Monday (or via *Run
+workflow*) and opens a PR on `bump/gramframe`. Check for that PR before
+opening another one.
+
+**In a Claude Code cloud session**, the session is scoped to this repo, so
+`api.github.com/repos/DeepBlueCLtd/GramFrame/releases/latest` returns 403 and
+`--check` prints "could not reach … API" and exits 0. That is **not** a
+current pin. The tag list (`git ls-remote --tags
+https://github.com/DeepBlueCLtd/gramframe`) and the release download URL
+still work, so pass the release to the script's own functions:
+
+```bash
+python -c "
+import sys; sys.path.insert(0, '.github/scripts'); import update_gramframe as u
+t = 'vX.Y.Z'; n = 'gramframe-' + t[1:] + '.zip'
+r = {'tag': t, 'name': n, 'zip_url': 'https://github.com/DeepBlueCLtd/GramFrame/releases/download/%s/%s' % (t, n)}
+u.write_copies(r, u.fetch_bundle(r))"
+```
+
+Then run `theme/sync.py` and the tests as above. Pick the newest tag that has
+a formal release (`/releases/latest` excludes pre-releases, and the release
+gate compares against it).
+
+**Review the bump; a passing suite isn't enough.** The suite treats the
+bundle as opaque, but the theme overlays override GramFrame's own DOM:
+`theme/gram-fill-width/` overrides the inline sizes on
+`.gram-frame-container` / `svg.gram-frame-svg`, and
+`tests/test_theme_gram_fill_width.py` hard-codes the bundle's z-index
+ceiling. Before merging, diff the upstream source between the old and new
+tags. A shallow clone is enough: `git log` / `git diff vOLD..vNEW -- src`,
+looking for z-index, inline width/height, and the two class names above. List
+the upstream changes in the PR body, and open a gram page in the committed
+sample build to check it visually. GramFrame is the renderer, so a bump is a
+visual change.
+
 ## Invariants to preserve
 
 - **Determinism / idempotency.** Re-running the same CSV produces byte-identical
