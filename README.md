@@ -1386,7 +1386,7 @@ replay tool, and adds a **Copy path** fallback (paste into Win+R). Each student
 PC needs the `glc:` handler, which the system administrator deploys by Group
 Policy — see `theme/glc-launch/README.md` (issue #199).
 
-##### Installing the `glc:` handler by hand (per-user)
+##### Installing the `glc:` handler by hand (whole PC)
 
 For a PC outside Group Policy, or to check or re-install the handler on one
 PC, use the two files in `theme/glc-launch/client/`. The release zip carries
@@ -1395,34 +1395,48 @@ them too, so on the target they are at `ROOT\theme\glc-launch\client\`:
 | File | What it is |
 | --- | --- |
 | `glc-launch.ps1` | The handler. Decodes the `glc:` link and opens the `.glc` with whatever opens `.glc` files (the replay tool). Refuses anything that is not an existing `.glc`. |
-| `glc-protocol.reg` | Registers `glc:` links for the **current user** (`HKCU\Software\Classes\glc`) to run the handler. No admin rights needed. |
+| `glc-protocol.reg` | Registers `glc:` links for **every user of the PC** (`HKLM\SOFTWARE\Classes\glc`) to run the handler. Imported once, by the administrator. |
 
-Verified on the target system (issue #199, trial stage B). To install:
+The handler is machine-wide because ordinary accounts on the target may have
+registry editing blocked: a per-user (`HKCU`) import works only for the account
+that ran it. To install:
 
-1. Copy `glc-launch.ps1` to `C:\aaac\glc-launch.ps1`. That is the path the
-   `.reg` names; to use another folder, edit the `.reg`'s last line in
-   Notepad, writing every backslash twice (`C:\\tools\\glc-launch.ps1`).
-2. Import the `.reg`: double-click it and accept the warning, or in `cmd`
-   run `reg import glc-protocol.reg`.
-3. Check: `reg query "HKCU\Software\Classes\glc" /s` should show a command
-   ending `-File "C:\aaac\glc-launch.ps1" "%1"`.
-4. Check the script runs: Win+R, paste `glc:C%3A%5Cnope.glc`, Enter. A
-   **"Gram file not found: C:\nope.glc"** box means the chain works; nothing
-   at all means PowerShell's execution policy is blocking it
+1. Put `glc-launch.ps1` where **every** user can reach it by the same path.
+   The `.reg` names `N:\legacy_config\glc-launch.ps1`; to use another
+   location, edit the `.reg`'s last line in Notepad, writing every backslash
+   twice (`N:\\legacy_config\\glc-launch.ps1`). A drive letter works only if
+   that drive is mapped in each user's logon; a `\\server\share\...` path
+   does not depend on it.
+2. Log in as the **administrator** and import the `.reg`: double-click it and
+   accept the warning, or in an elevated `cmd` run
+   `reg import glc-protocol.reg`.
+3. Check: `reg query "HKLM\SOFTWARE\Classes\glc" /s` should show a command
+   ending `-File "N:\legacy_config\glc-launch.ps1" "%1"`.
+4. Log in as an **ordinary user** and check the script runs: Win+R, paste
+   `glc:C%3A%5Cnope.glc`, Enter. A **"Gram file not found: C:\nope.glc"** box
+   means the chain works; nothing at all means the script path does not
+   resolve for that user, or PowerShell's execution policy is blocking it
    (`Get-ExecutionPolicy -List`).
 5. Click **WAV N** on a gram page opened from the mapped drive. The browser
-   asks once whether to open Windows PowerShell; the replay tool then opens.
+   asks once (per user) whether to open Windows PowerShell; the replay tool
+   then opens.
 
 `.glc` files must open with the replay tool when double-clicked. That
-association is per-user and is re-made by hand after a rebuild, as normal
-practice; until it is, a click shows Windows' "How do you want to open
-this?" dialog — pick the replay tool there. (`assoc .glc` reports nothing
-even when it works.)
+association is per-user, so each user makes it once (and again after a
+rebuild), as normal practice; until they do, a click shows Windows' "How do
+you want to open this?" dialog — pick the replay tool there. (`assoc .glc`
+reports nothing even when it works.)
 
-To remove the handler: `reg delete "HKCU\Software\Classes\glc" /f`, then
-delete the script. Do this before a PC moves to the Group Policy route: the
-per-user entry overrides the machine-wide one. If `.reg` files are blocked,
-`theme/glc-launch/client/TRIAL.md` has the equivalent `reg add` commands.
+A per-user entry overrides the machine-wide one. If an account imported the
+older per-user `.reg`, remove that entry while logged in as that account:
+`reg delete "HKCU\Software\Classes\glc" /f`.
+
+To remove the handler: as administrator,
+`reg delete "HKLM\SOFTWARE\Classes\glc" /f`, then delete the script. Do this
+before a PC moves to the Group Policy route. If `.reg` files are blocked, the
+`reg add` commands in `theme/glc-launch/client/TRIAL.md` work with
+`HKLM\SOFTWARE\Classes` in place of `HKCU\Software\Classes`, from an
+elevated `cmd`.
 
 #### Resulting folder layout
 
