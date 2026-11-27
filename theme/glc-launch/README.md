@@ -71,11 +71,15 @@ are recorded on issue #199.
 
 ### Stand-alone PC (outside the domain only)
 
-`client/glc-protocol.reg` registers the same handler for the **current user**
-(HKCU, no admin rights), pointing at `C:\aaac\glc-launch.ps1`, and passes
-`-ExecutionPolicy Bypass` because a stand-alone PC has no policy permitting the
-script. Copy the script there (or edit the path in the `.reg`, doubling every
-backslash), then double-click the `.reg`. Not for domain PCs: use Group Policy.
+`client/glc-protocol.reg` registers the same handler for **every user of the
+PC** (`HKLM\SOFTWARE\Classes\glc`), pointing at
+`N:\legacy_config\glc-launch.ps1`, and passes `-ExecutionPolicy Bypass`
+because a stand-alone PC has no policy permitting the script. Import it once,
+as the administrator: ordinary accounts may have registry editing blocked, so
+a per-user import would reach only the account that ran it. The script path
+must resolve for every user (a mapped drive letter only if each logon maps
+it); edit it in the `.reg` if needed, doubling every backslash. Not for domain
+PCs: use Group Policy.
 
 ## Fallback: no handler installed
 
@@ -87,8 +91,8 @@ it in Explorer would.
 
 - **Group Policy:** remove the GPP items, or set their action to *Delete*; the
   next policy refresh removes the key and the script everywhere.
-- **Stand-alone PC:** delete `HKEY_CURRENT_USER\Software\Classes\glc` and the
-  script.
+- **Stand-alone PC:** as administrator, delete
+  `HKEY_LOCAL_MACHINE\SOFTWARE\Classes\glc` and the script.
 
 `client/` (including the trial plan, [TRIAL.md](client/TRIAL.md)) is PC-side install material, not template payload: `theme/sync.py`
 does not copy it into `theme/pptx-transform/`.

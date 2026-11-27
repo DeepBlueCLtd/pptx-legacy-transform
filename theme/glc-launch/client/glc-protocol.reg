@@ -1,25 +1,28 @@
 Windows Registry Editor Version 5.00
 
-; Register the glc: URL scheme for the current user (issue #199), so a gram
-; page's "WAV N" link opens the .glc in the legacy replay tool.
-; Per-user (HKEY_CURRENT_USER): no administrator rights needed.
+; Register the glc: URL scheme for EVERY user of this PC (issue #199), so a
+; gram page's "WAV N" link opens the .glc in the legacy replay tool.
+; Machine-wide (HKEY_LOCAL_MACHINE): import it ONCE, logged in as the
+; administrator. Ordinary users then get the handler without importing
+; anything, even where registry editing is blocked for them.
 ;
-; STAND-ALONE PCs ONLY. Domain PCs get the handler from Group Policy (HKLM,
-; script under C:\Program Files\AAAC\, no -ExecutionPolicy switch); see
+; STAND-ALONE PCs ONLY. Domain PCs get the handler from Group Policy (script
+; under C:\Program Files\AAAC\, no -ExecutionPolicy switch); see
 ; theme/glc-launch/README.md. -ExecutionPolicy Bypass is here only because a
 ; stand-alone PC has no policy permitting the script.
 ;
-; BEFORE IMPORTING: the path below must be where glc-launch.ps1 was copied.
-; Edit it if you used another folder - every backslash written twice.
-; See theme/glc-launch/README.md.
+; BEFORE IMPORTING: the path below must be where glc-launch.ps1 lives, and it
+; must resolve for every user - a drive letter only works if that drive is
+; mapped in each user's logon. A \\server\share path avoids that. Edit it if
+; needed - every backslash written twice. See theme/glc-launch/README.md.
 
-[HKEY_CURRENT_USER\Software\Classes\glc]
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\glc]
 @="URL:Gram replay link"
 "URL Protocol"=""
 
-[HKEY_CURRENT_USER\Software\Classes\glc\shell]
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\glc\shell]
 
-[HKEY_CURRENT_USER\Software\Classes\glc\shell\open]
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\glc\shell\open]
 
-[HKEY_CURRENT_USER\Software\Classes\glc\shell\open\command]
-@="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\aaac\\glc-launch.ps1\" \"%1\""
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\glc\shell\open\command]
+@="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"N:\\legacy_config\\glc-launch.ps1\" \"%1\""
